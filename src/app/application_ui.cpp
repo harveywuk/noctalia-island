@@ -457,6 +457,8 @@ void Application::initInputDispatch() {
       return;
     if (m_hotCorners.onPointerEvent(event))
       return;
+    if (m_island.onPointerEvent(event))
+      return;
     m_notificationToast.onPointerEvent(event);
   });
 
@@ -506,6 +508,9 @@ void Application::initInputDispatch() {
       return;
     }
     if (m_overviewLauncherCapture.handleKeyboardEvent(event)) {
+      return;
+    }
+    if (m_island.onKeyboardEvent(event)) {
       return;
     }
     if (m_notificationToast.onKeyboardEvent(event)) {
@@ -733,6 +738,36 @@ void Application::initPanelManagerAndPanels() {
 }
 
 void Application::initNotificationAndOsd() {
+  m_island.initialize(
+      m_wayland, &m_configService, &m_renderContext, m_mprisService.get(), &m_notificationManager, &m_httpClient, m_bus.get(),
+      m_upowerService.get(), m_bluetoothService.get(), m_pipewireService.get()
+  );
+  m_panelManager.setIslandHost(&m_island);
+  m_screenshotService.setIslandHost(&m_island);
+  m_island.closeHostedPanel = [this] {
+    m_screenshotService.releaseIslandCapture();
+    if (m_panelManager.isIslandOpen())
+      m_panelManager.closePanel(false);
+  };
+  m_island.openPanel = [this](wl_output* output, const std::string& name) {
+    if (name == "noctalia/timer:panel" || name == "thepunkoff/pomodoro:panel") {
+      m_panelManager.openPanel(name, PanelOpenRequest{.output = output});
+    } else if (name == "control-center") {
+      m_panelManager.openPanel("control-center", PanelOpenRequest{.output = output});
+    } else {
+      m_panelManager.openPanel("control-center", PanelOpenRequest{.output = output, .context = name});
+    }
+  };
+  m_configService.addReloadCallback([this]() {
+    const auto& change = m_configService.lastChange();
+    if (change.island || change.accessibility || change.shell)
+      m_island.onConfigReload();
+  });
+  m_osdOverlay.presentationHandler = [this](const OsdContent& content) { return m_island.showOsd(content); };
+  m_osdOverlay.presentationVisible = [this]() { return m_island.osdVisible(); };
+  m_notificationToast.presentationHandler = [this](const Notification& n, NotificationEvent event) {
+    return m_island.onNotification(n, event);
+  };
   m_notificationToast.initialize(m_wayland, &m_configService, &m_notificationManager, &m_renderContext, &m_httpClient);
   m_configService.addReloadCallback([this]() { m_notificationToast.onConfigReload(); });
   auto applyNotificationFilterConfig = [this]() {
@@ -1117,6 +1152,7 @@ void Application::initWidgetControllersAndCallbacks() {
   if (m_pipewireService != nullptr) {
     m_audioOsd.suppressFor(std::chrono::milliseconds(2000));
     m_pipewireService->setChangeCallback([this, shouldRefreshControlCenter]() {
+      m_island.refresh();
       if (m_pipewireSpectrum != nullptr) {
         m_pipewireSpectrum->handleAudioStateChanged();
       }

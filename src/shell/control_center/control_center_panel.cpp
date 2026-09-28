@@ -11,6 +11,7 @@
 #include "render/scene/node.h"
 #include "shell/control_center/tabs/screen_time_tab.h"
 #include "shell/panel/panel_button_style.h"
+#include "shell/panel/panel_content_height.h"
 #include "shell/panel/panel_manager.h"
 #include "system/dependency_service.h"
 #include "system/easyeffects_service.h"
@@ -36,6 +37,13 @@ namespace {
   constexpr auto kMprisRefreshMinInterval = std::chrono::milliseconds(750);
   // Full-height cards need room for rounded-rect AA before the tab viewport clips them.
   constexpr float kTabViewportClipInset = 1.0F;
+
+  void configureIslandAction(Button& button, float scale) {
+    if (button.variant() != ButtonVariant::Destructive)
+      button.setVariant(ButtonVariant::Tab);
+    button.setGlyphSize(18.0F * scale);
+    button.setRadius(Style::scaledRadiusLg(scale));
+  }
 
   float tabContentHeight(float viewportHeight) {
     return std::max(1.0F, std::floor(viewportHeight - kTabViewportClipInset));
@@ -89,6 +97,19 @@ float ControlCenterPanel::preferredWidth() const {
   }
 }
 
+float ControlCenterPanel::fittedHeight() const {
+  if (!m_horizontalNavigation || !m_contentHeader || !m_content || !m_sidebar)
+    return preferredHeight();
+  const float body = m_activeTab == TabId::Calendar
+      ? static_cast<const CalendarTab*>(m_tabs[tabIndex(TabId::Calendar)].get())->fittedHeight()
+      : panel_content::height(m_tabContainers[tabIndex(m_activeTab)]);
+  const float navigation = panel_content::height(m_sidebar);
+  return std::max(
+      scaled(180),
+      body + kTabViewportClipInset + navigation + m_rootLayout->gap() + 2 * Style::panelPadding * contentScale()
+  );
+}
+
 PanelPlacement ControlCenterPanel::panelPlacement() const noexcept {
   return m_config == nullptr ? PanelPlacement::Attached : m_config->config().shell.panel.controlCenterPlacement;
 }
@@ -101,8 +122,9 @@ bool ControlCenterPanel::dismissTransientUi() {
 void ControlCenterPanel::create() {
   const float scale = contentScale();
   const ControlCenterSidebarMode sidebarMode = sidebarModeForOpen(pendingOpenContext());
-  m_compact = sidebarMode == ControlCenterSidebarMode::Compact;
-  m_showSidebar = sidebarMode != ControlCenterSidebarMode::None;
+  m_horizontalNavigation = PanelManager::instance().isIslandOpen();
+  m_compact = m_horizontalNavigation || sidebarMode == ControlCenterSidebarMode::Compact;
+  m_showSidebar = m_horizontalNavigation || sidebarMode != ControlCenterSidebarMode::None;
 
   for (auto& tab : m_tabs) {
     tab->setContentScale(scale);
@@ -116,19 +138,25 @@ void ControlCenterPanel::create() {
       .padding = 0.0F,
   });
 
+  if (m_horizontalNavigation)
+    rootLayout->setDirection(FlexDirection::Vertical);
+
   if (m_showSidebar) {
     auto sidebar = ui::column({
         .out = &m_sidebar,
-        .align = FlexAlign::Start,
-        .gap = 0.0F,
+        .align = m_horizontalNavigation ? FlexAlign::Center : FlexAlign::Start,
+        .gap = m_horizontalNavigation ? Style::spaceSm * scale : 0.0F,
         .padding = Style::spaceMd * scale,
-        .fillWidth = false,
-        .fillHeight = true,
+        .fillWidth = m_horizontalNavigation,
+        .fillHeight = !m_horizontalNavigation,
         .configure = [this, scale](Flex& column) {
           column.setFill(colorSpecFromRole(ColorRole::SurfaceVariant, panelCardOpacity()));
           column.setRadius(Style::scaledRadiusXl(scale));
         },
     });
+
+    if (m_horizontalNavigation)
+      sidebar->setDirection(FlexDirection::Horizontal);
 
     auto sidebarScrollArea = ui::inputArea({});
     sidebarScrollArea->setParticipatesInLayout(false);
@@ -138,26 +166,31 @@ void ControlCenterPanel::create() {
     sidebar->addChild(std::move(sidebarScrollArea));
 
     const std::optional<float> sidebarScrollWidth =
-        m_compact ? std::optional<float>{Style::controlHeightSm * scale} : std::nullopt;
+        m_compact && !m_horizontalNavigation ? std::optional<float>{Style::controlHeightSm * scale} : std::nullopt;
 
     auto sidebarScroll = ui::scrollView({
         .out = &m_sidebarScrollView,
         .state = &m_sidebarScrollState,
         .contentScale = scale,
-        .scrollbarVisible = true,
+        .scrollbarVisible = !m_horizontalNavigation,
         .viewportPaddingH = 0.0F,
         .viewportPaddingV = 0.0F,
         .fillWidth = false,
-        .fillHeight = true,
+        .fillHeight = !m_horizontalNavigation,
         .width = sidebarScrollWidth,
-        .configure = [](ScrollView& scrollView) {
+        .flexGrow = m_horizontalNavigation ? 1.0F : 0.0F,
+        .configure = [this, scale](ScrollView& scrollView) {
+          if (m_horizontalNavigation) {
+            scrollView.setOrientation(ScrollOrientation::Horizontal);
+            scrollView.setSize(0, Style::controlHeightSm * scale);
+          }
           scrollView.clearFill();
           scrollView.clearBorder();
         },
     });
 
     auto sidebarNav = std::make_unique<RovingListNavHost>(RovingListNavController::Options{
-        .axis = RovingListNavAxis::Vertical,
+        .axis = m_horizontalNavigation ? RovingListNavAxis::Horizontal : RovingListNavAxis::Vertical,
         .mode = RovingListNavMode::FollowFocus,
         .keepItemsInTabOrder = false,
         .wrap = true,
@@ -165,6 +198,8 @@ void ControlCenterPanel::create() {
         .syncIndexFromSelection = {},
     });
     sidebarNav->setTabFocusKey("control-center.sidebar");
+    if (m_horizontalNavigation)
+      sidebarNav->setDirection(FlexDirection::Horizontal);
     if (!m_compact) {
       sidebarNav->setAlign(FlexAlign::Stretch);
       sidebarNav->setFillWidth(true);
@@ -221,7 +256,7 @@ void ControlCenterPanel::create() {
   auto content = ui::column({
       .out = &m_content,
       .align = FlexAlign::Stretch,
-      .gap = Style::spaceMd * scale,
+      .gap = m_horizontalNavigation ? 0.0F : Style::spaceMd * scale,
       .clipChildren = true,
       .flexGrow = 4.0F,
   });
@@ -246,27 +281,46 @@ void ControlCenterPanel::create() {
       .gap = Style::spaceSm * scale,
   });
 
-  header->addChild(
-      ui::label({
-          .out = &m_contentTitle,
-          .text = i18n::tr("control-center.tabs.home"),
-          .fontSize = Style::fontSizeTitle * scale,
-          .fontWeight = FontWeight::Bold,
-          .color = colorSpecFromRole(ColorRole::Primary),
-          .flexGrow = 1.0F,
-      })
-  );
+  if (m_horizontalNavigation) {
+    header->addChild(
+        ui::separator({
+            .color = colorSpecFromRole(ColorRole::OnSurface, 0.2F),
+            .thickness = scale,
+            .spacing = 0.0F,
+            .orientation = SeparatorOrientation::VerticalRule,
+            .height = 20.0F * scale,
+        })
+    );
+  } else {
+    header->addChild(
+        ui::label({
+            .out = &m_contentTitle,
+            .text = i18n::tr("control-center.tabs.home"),
+            .fontSize = Style::fontSizeTitle * scale,
+            .fontWeight = FontWeight::Bold,
+            .color = colorSpecFromRole(ColorRole::Primary),
+            .flexGrow = 1.0F,
+        })
+    );
+  }
 
   auto headerActions = ui::row({
       .out = &m_contentHeaderActions,
       .align = FlexAlign::Center,
-      .gap = Style::spaceSm * scale,
+      .gap = (m_horizontalNavigation ? Style::spaceXs : Style::spaceSm) * scale,
   });
 
   for (std::size_t i = 0; i < kTabCount; ++i) {
     auto actions = m_tabs[i]->createHeaderActions();
     m_tabHeaderActions[i] = actions.get();
     if (actions != nullptr) {
+      if (m_horizontalNavigation) {
+        actions->setGap(Style::spaceXs * scale);
+        for (const auto& child : actions->children()) {
+          if (auto* button = dynamic_cast<Button*>(child.get()))
+            configureIslandAction(*button, scale);
+        }
+      }
       actions->setVisible(false);
       m_contentHeaderActions->addChild(std::move(actions));
     }
@@ -276,13 +330,22 @@ void ControlCenterPanel::create() {
       ui::button({
           .out = &m_closeButton,
           .glyph = "close",
+          .tooltip = i18n::tr("dock.actions.close"),
           .onClick = []() { PanelManager::instance().close(); },
-          .configure = [scale](Button& button) { panel_button_style::configureHeaderIconButton(button, scale); },
+          .configure =
+              [this, scale](Button& button) {
+                panel_button_style::configureHeaderIconButton(button, scale);
+                if (m_horizontalNavigation)
+                  configureIslandAction(button, scale);
+              },
       })
   );
   header->addChild(std::move(headerActions));
 
-  content->addChild(std::move(header));
+  if (m_horizontalNavigation)
+    m_sidebar->addChild(std::move(header));
+  else
+    content->addChild(std::move(header));
 
   auto bodies = ui::column({
       .out = &m_tabBodies,
@@ -336,6 +399,18 @@ void ControlCenterPanel::doLayout(Renderer& renderer, float width, float height)
 
   m_rootLayout->setSize(width, height);
   m_rootLayout->layout(renderer);
+  if (m_horizontalNavigation && m_sidebarScrollView && m_sidebar) {
+    const float navigationWidth = std::max(
+        1.0F,
+        m_sidebar->width()
+            - m_sidebar->paddingLeft()
+            - m_sidebar->paddingRight()
+            - m_contentHeader->width()
+            - m_sidebar->gap()
+    );
+    m_sidebarScrollView->setSize(navigationWidth, Style::controlHeightSm * contentScale());
+    m_sidebar->layout(renderer);
+  }
 
   const float contentInnerWidth =
       std::max(0.0F, m_content->width() - (m_content->paddingLeft() + m_content->paddingRight()));
@@ -353,7 +428,7 @@ void ControlCenterPanel::doLayout(Renderer& renderer, float width, float height)
     m_contentDismissArea->setFrameSize(m_content->width(), m_content->height());
   }
 
-  if (m_contentHeader != nullptr) {
+  if (m_contentHeader != nullptr && !m_horizontalNavigation) {
     m_contentHeader->setSize(contentInnerWidth, 0.0F);
   }
 
@@ -634,7 +709,9 @@ void ControlCenterPanel::layoutTabContainers(float bodyWidth, float bodyHeight) 
     float offsetY = 0.0F;
     float opacity = 1.0F;
     const auto tabId = static_cast<TabId>(i);
-    if (m_tabTransitionActive && travel > 0.0F) {
+    if (m_tabTransitionActive && m_horizontalNavigation) {
+      opacity = tabId == m_activeTab ? m_tabTransitionProgress : 1.0F - m_tabTransitionProgress;
+    } else if (m_tabTransitionActive && travel > 0.0F) {
       const auto direction = static_cast<float>(m_tabTransitionDirection);
       if (tabId == m_tabTransitionOutgoing) {
         offsetY = -direction * travel * m_tabTransitionProgress;

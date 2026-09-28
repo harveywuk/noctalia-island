@@ -103,10 +103,6 @@ namespace {
     return upgraded;
   }
 
-  [[nodiscard]] bool isYouTubeMusicSourceUrl(std::string_view sourceUrl) {
-    return sourceUrl.contains("music.youtube.com");
-  }
-
 } // namespace
 
 namespace mpris {
@@ -114,14 +110,11 @@ namespace mpris {
   bool isRemoteArtUrl(std::string_view url) { return uri::isRemoteUrl(url); }
 
   std::string effectiveArtUrl(const MprisPlayerInfo& player) {
-    // YouTube Music advertises a tiny Google-CDN album-art URL; bumping its size
-    // suffix only upscales a small source. The per-video i.ytimg thumbnail is the
-    // same album cover at far higher resolution, so prefer it when derivable.
-    if (isYouTubeMusicSourceUrl(player.sourceUrl)) {
-      std::string derived = deriveYouTubeThumbnailUrl(player.sourceUrl, "maxresdefault");
-      if (!derived.empty())
-        return derived;
-    }
+    // Browsers can export small local thumbnails for YouTube as well as tiny
+    // Google-CDN covers for YouTube Music. Prefer the full-resolution video
+    // thumbnail; artFetchCandidates supplies the lower-resolution fallback.
+    if (std::string derived = deriveYouTubeThumbnailUrl(player.sourceUrl, "maxresdefault"); !derived.empty())
+      return derived;
     if (!player.artUrl.empty()) {
       if (isRemoteArtUrl(player.artUrl)) {
         return upgradeGoogleArtUrl(player.artUrl);

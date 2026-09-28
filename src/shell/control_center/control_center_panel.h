@@ -98,6 +98,7 @@ public:
   [[nodiscard]] bool deferPointerRelayout() const override;
   [[nodiscard]] float preferredWidth() const override;
   [[nodiscard]] float preferredHeight() const override { return scaled(520.0F); }
+  [[nodiscard]] float fittedHeight() const override;
   [[nodiscard]] PanelPlacement panelPlacement() const noexcept override;
   [[nodiscard]] bool showsSidebar() const noexcept { return m_showSidebar; }
 
@@ -197,6 +198,7 @@ private:
   MprisService* m_mpris = nullptr;
   NotificationManager* m_notificationManager = nullptr;
   DependencyService* m_dependencies = nullptr;
+  bool m_horizontalNavigation = false;
   bool m_compact = false;
   bool m_showSidebar = true;
   bool m_hasPowerServices = false;

@@ -26,6 +26,7 @@
 #include "time/time_format.h"
 #include "ui/builders.h"
 #include "ui/controls/grid_view.h"
+#include "ui/controls/scroll_view.h"
 #include "ui/dialogs/file_dialog.h"
 
 #include <algorithm>
@@ -663,6 +664,79 @@ std::unique_ptr<Flex> HomeTab::create() {
   }
   tab->addChild(std::move(bottomRow));
 
+  const auto home =
+      m_config != nullptr ? m_config->config().controlCenter.homeTab : ControlCenterConfig::HomeTabConfig{};
+  m_stacked = home.stacked;
+  const std::pair<std::string_view, Node*> cards[] = {
+      {"profile", m_userCard}, {"media", m_mediaCard}, {"clock", m_dateTimeCard}, {"shortcuts", m_shortcutsGrid}
+  };
+  bool anyVisible = false;
+  for (const auto& [key, card] : cards) {
+    if (card != nullptr) {
+      const bool shown = std::ranges::contains(home.cards, key);
+      card->setVisible(shown);
+      anyVisible |= shown;
+    }
+  }
+  auto* mainColumn = m_mediaCard->parent();
+  mainColumn->setVisible(m_mediaCard->visible() || m_dateTimeCard->visible());
+  m_bottomRow->setVisible(mainColumn->visible() || (m_shortcutsGrid && m_shortcutsGrid->visible()));
+  if (!mainColumn->visible() && m_shortcutsGrid) {
+    m_shortcutsGrid->setColumns(3);
+    m_shortcutsGrid->setMinCellHeight(64.0F * scale);
+    m_shortcutsGrid->setFlexGrow(1.0F);
+  }
+
+  if (m_stacked) {
+    // Move each card once; unknown or repeated config entries cannot duplicate it.
+    std::unordered_set<std::string> added;
+    for (const auto& key : home.cards) {
+      if (!added.insert(key).second)
+        continue;
+      for (const auto& [id, card] : cards) {
+        if (id == key && card != nullptr) {
+          auto owned = card->parent()->removeChild(card);
+          card->setFlexGrow(0.0F);
+          if (auto* flex = dynamic_cast<Flex*>(card))
+            flex->setFillHeight(false);
+          tab->addChild(std::move(owned));
+        }
+      }
+    }
+    m_bottomRow->setVisible(false);
+    if (m_shortcutsGrid) {
+      m_shortcutsGrid->setColumns(3);
+      m_shortcutsGrid->setMinCellHeight(64.0F * scale);
+    }
+  }
+  if (!anyVisible) {
+    tab->addChild(
+        ui::label({
+            .text = i18n::tr("control-center.home.empty"),
+            .fontSize = Style::fontSizeBody * scale,
+            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+        })
+    );
+  }
+  if (m_stacked) {
+    auto wrapper = ui::column({.align = FlexAlign::Stretch});
+    auto scroll = ui::scrollView({
+        .out = &m_homeScroll,
+        .contentScale = scale,
+        .viewportPaddingH = 0.0F,
+        .viewportPaddingV = 0.0F,
+        .fillWidth = true,
+        .flexGrow = 1.0F,
+        .configure = [](ScrollView& view) {
+          view.clearFill();
+          view.clearBorder();
+        },
+    });
+    scroll->content()->setAlign(FlexAlign::Stretch);
+    scroll->content()->addChild(std::move(tab));
+    wrapper->addChild(std::move(scroll));
+    return wrapper;
+  }
   return tab;
 }
 
@@ -673,12 +747,14 @@ std::unique_ptr<Flex> HomeTab::createHeaderActions() {
       ui::button({
           .out = &m_settingsButton,
           .glyph = "settings",
-          .onClick = []() { PanelManager::instance().openSettingsWindow(); },
+          .tooltip = i18n::tr("control-center.home.customise"),
+          .onClick = []() { PanelManager::instance().openSettingsWindow("control-center"); },
           .configure = [scale](Button& button) { panel_button_style::configureHeaderIconButton(button, scale); },
       }),
       ui::button({
           .out = &m_sessionButton,
           .glyph = "shutdown",
+          .tooltip = i18n::tr("control-center.tabs.power"),
           .onClick = []() { PanelManager::instance().togglePanel("session"); },
           .configure = [scale](Button& button) { panel_button_style::configureHeaderIconButton(button, scale); },
       })
@@ -690,6 +766,15 @@ std::unique_ptr<Flex> HomeTab::createHeaderActions() {
 void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight) {
   if (m_rootLayout == nullptr) {
     return;
+  }
+
+  const bool standaloneShortcuts = !m_mediaCard->visible() && !m_dateTimeCard->visible();
+  if (standaloneShortcuts && m_shortcutsGrid) {
+    const auto rows = (m_shortcutPads.size() + 2) / 3;
+    const float gridHeight = static_cast<float>(rows) * 64.0F * contentScale()
+        + static_cast<float>(rows > 0 ? rows - 1 : 0) * m_shortcutsGrid->rowGap();
+    m_shortcutsGrid->setSize(contentWidth, gridHeight);
+    m_bottomRow->setMinHeight(gridHeight);
   }
 
   if (m_mediaCard != nullptr) {
@@ -705,7 +790,11 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
     m_userMain->setMinHeight(userMainHeight);
     m_userMain->setSize(m_userMain->width(), userMainHeight);
   }
-  if (m_shortcutsGrid != nullptr && !m_shortcutPads.empty()) {
+  if (!m_stacked
+      && !standaloneShortcuts
+      && m_shortcutsGrid != nullptr
+      && m_shortcutsGrid->visible()
+      && !m_shortcutPads.empty()) {
     const float scale = contentScale();
     const float bottomRowGap = m_bottomRow != nullptr ? m_bottomRow->gap() : 0.0F;
     const bool stacked = m_shortcutPads.size() <= kHomeStackedShortcutMax;
@@ -725,7 +814,8 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
     // user card (which content-overflows). Reserve the user card's natural height and cap the
     // square side to fit; cap the grid width to keep tiles square, handing the freed width to
     // the media/clock column.
-    const float userCardReserve = homeAvatarSize(scale) + 2.0F * (Style::spaceSm + Style::spaceXs) * scale;
+    const float userCardReserve =
+        m_userCard->visible() ? homeAvatarSize(scale) + 2.0F * (Style::spaceSm + Style::spaceXs) * scale : 0.0F;
     const float rootGap = m_rootLayout->gap();
     const float availForGrid = std::max(1.0F, bodyHeight - userCardReserve - rootGap);
     const float maxCellSide = std::max(
@@ -748,7 +838,41 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
       m_shortcutsGrid->setFlexGrow(kHomeShortcutsFlexGrow);
     }
   }
-  m_rootLayout->setSize(contentWidth, bodyHeight);
+  if (m_stacked) {
+    const float scale = contentScale();
+    const auto pinHeight = [](Flex* card, float height) {
+      if (!card)
+        return;
+      card->setMinHeight(height);
+      card->setMaxHeight(height);
+    };
+    pinHeight(m_userCard, homeAvatarSize(scale) + m_userCard->paddingTop() + m_userCard->paddingBottom());
+    pinHeight(m_mediaCard, 100.0F * scale);
+    pinHeight(m_dateTimeCard, 80.0F * scale);
+    if (m_shortcutsGrid) {
+      const auto rows = (m_shortcutPads.size() + 2) / 3;
+      m_shortcutsGrid->setSize(
+          contentWidth,
+          static_cast<float>(rows) * 64.0F * scale
+              + static_cast<float>(rows > 0 ? rows - 1 : 0) * m_shortcutsGrid->rowGap()
+      );
+    }
+    float naturalHeight = 0.0F;
+    int count = 0;
+    for (const auto& child : m_rootLayout->children()) {
+      if (child->visible() && child->participatesInLayout()) {
+        const auto* flex = dynamic_cast<const Flex*>(child.get());
+        naturalHeight += std::max(flex ? flex->minHeight() : child->height(), 32.0F * scale);
+        ++count;
+      }
+    }
+    naturalHeight += static_cast<float>(std::max(0, count - 1)) * m_rootLayout->gap();
+    m_rootLayout->setMinHeight(naturalHeight);
+    m_rootLayout->setMaxHeight(naturalHeight);
+    m_rootLayout->setSize(contentWidth, naturalHeight);
+  } else {
+    m_rootLayout->setSize(contentWidth, bodyHeight);
+  }
   m_rootLayout->layout(renderer);
 
   // Cap shortcut labels to the button's content width after cells are sized (avoids elide from grid math mismatch).
@@ -847,7 +971,11 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
 
   // Lock the shortcuts grid height to its square-cell natural size so it does not vary
   // when the media or clock cards change. The leftColumn stretches to match this height.
-  if (m_shortcutsGrid != nullptr && !m_shortcutPads.empty()) {
+  if (!m_stacked
+      && !standaloneShortcuts
+      && m_shortcutsGrid != nullptr
+      && m_shortcutsGrid->visible()
+      && !m_shortcutPads.empty()) {
     const float scale = contentScale();
     const float gridW = m_shortcutsGrid->width();
     const float innerGridW = std::max(1.0F, gridW - m_shortcutsGrid->paddingLeft() - m_shortcutsGrid->paddingRight());
@@ -885,10 +1013,13 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
 
     // Integer card heights track the snapped row height so top/bottom borders land on pixels.
     if (m_mediaCard != nullptr && m_dateTimeCard != nullptr) {
-      const float colGap = Style::spaceMd * contentScale();
+      const bool bothVisible = m_mediaCard->visible() && m_dateTimeCard->visible();
+      const float colGap = bothVisible ? Style::spaceMd * contentScale() : 0.0F;
       const float avail = std::max(0.0F, gridH - colGap);
-      const float cardGrowTotal = kHomeMediaCardFlexGrow + kHomeDateTimeCardFlexGrow;
-      const float mediaH = std::round(avail * (kHomeMediaCardFlexGrow / cardGrowTotal));
+      const float mediaGrow = m_mediaCard->visible() ? kHomeMediaCardFlexGrow : 0.0F;
+      const float dateGrow = m_dateTimeCard->visible() ? kHomeDateTimeCardFlexGrow : 0.0F;
+      const float cardGrowTotal = std::max(1.0F, mediaGrow + dateGrow);
+      const float mediaH = std::round(avail * (mediaGrow / cardGrowTotal));
       const float dateH = std::max(0.0F, avail - mediaH);
 
       m_mediaCard->setMinHeight(mediaH);
@@ -909,6 +1040,10 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
   if (artSizeChanged) {
     // Keep the final tree consistent even if an unusual layout combination hits the pass cap.
     m_rootLayout->layout(renderer);
+  }
+  if (m_homeScroll) {
+    m_homeScroll->setSize(contentWidth, bodyHeight);
+    m_homeScroll->layout(renderer);
   }
   layoutWallpaperBackground(renderer);
   layoutCardOverlays();
@@ -1295,6 +1430,8 @@ void HomeTab::onClose() {
   m_progressTimer.stop();
   m_clockTimer.stop();
   m_rootLayout = nullptr;
+  m_homeScroll = nullptr;
+  m_stacked = false;
   m_bottomRow = nullptr;
   m_dateTimeCard = nullptr;
   m_mediaCard = nullptr;

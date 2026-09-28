@@ -1,0 +1,606 @@
+#!/usr/bin/env python3
+"""Check island settings and resized media controls on a private Umbriel display."""
+import os, subprocess, sys, tempfile, time, pathlib, json, tomllib, ast
+from PIL import Image, ImageChops
+REPO = pathlib.Path(__file__).resolve().parents[1]
+if '--worker' not in sys.argv:
+    # Keep service activation from finding the real session's keyring daemon.
+    with tempfile.TemporaryDirectory(prefix='island-settings-bus-') as bus:
+        config = pathlib.Path(bus)/'bus.conf'
+        config.write_text('<busconfig><type>session</type><listen>unix:tmpdir=/tmp</listen><auth>EXTERNAL</auth><policy context="default"><allow send_destination="*"/><allow receive_sender="*"/><allow own="*"/></policy></busconfig>')
+        raise SystemExit(subprocess.call(['dbus-run-session','--config-file',str(config),'--',sys.executable,__file__,'--worker',*sys.argv[1:]]))
+out = REPO / 'build-rishot/island-settings-smoke'
+out.mkdir(exist_ok=True)
+(out/'player-actions.log').unlink(missing_ok=True)
+with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
+    base = pathlib.Path(tmp); runtime = base/'runtime'; runtime.mkdir(mode=0o700)
+    cfg = base/'config/noctalia'; cfg.mkdir(parents=True)
+    (cfg/'config.toml').write_text('[island]\nenabled=true\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n')
+    if '--polish-only' in sys.argv:
+        config_path=cfg/'config.toml'
+        config_path.write_text(config_path.read_text().replace('[island]','[island]\nscale=1.4'))
+    if '--timer-only' in sys.argv or '--polish-only' in sys.argv:
+        import shutil
+        timer_source=pathlib.Path(os.environ.get('ISLAND_TIMER_SOURCE','/tmp/noctalia-official-timer-review'))/'timer'
+        pomo_source=pathlib.Path(os.environ.get('ISLAND_POMODORO_SOURCE','/tmp/noctalia-community-timer-review'))/'pomodoro'
+        plugin_root=base/'timer-plugins';plugin_root.mkdir()
+        for source, name in [(timer_source,'timer'),(pomo_source,'pomodoro')]:
+            assert (source/'plugin.toml').exists(), 'Set ISLAND_TIMER_SOURCE and ISLAND_POMODORO_SOURCE to reviewed upstream checkouts'
+            target=plugin_root/name;shutil.copytree(source,target)
+            manifest=target/'plugin.toml'
+            manifest.write_text(manifest.read_text()+'\n[[service]]\nid="island-test"\nentry="island-test.luau"\n')
+            (target/'island-test.luau').write_text((REPO/'tests/fixtures/island_timer_probe.luau').read_text().replace('__POMODORO__','true' if name=='pomodoro' else 'false'))
+        with (cfg/'config.toml').open('a') as f:
+            f.write('\n[plugins]\nauto_update="none"\nenabled=["noctalia/timer","thepunkoff/pomodoro"]\n[[plugins.source]]\nname="timer-test"\nkind="path"\nlocation='+json.dumps(str(plugin_root))+'\nenabled=true\n')
+    (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
+    config = base/'umbriel.toml'; config.write_text('[output."HEADLESS-1"]\nmode="1280x720"\n')
+    env=dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(base/'config'), XDG_STATE_HOME=str(base/'state'), XDG_DATA_HOME=str(base/'data'), XDG_CACHE_HOME=str(base/'cache'), NOCTALIA_CONFIG_HOME=str(base/'config'), NOCTALIA_STATE_HOME=str(base/'state'), NOCTALIA_DATA_HOME=str(base/'data'), WLR_BACKENDS='headless', WLR_HEADLESS_OUTPUTS='1', WLR_LIBINPUT_NO_DEVICES='1', LIBGL_ALWAYS_SOFTWARE='1', XDG_VIDEOS_DIR=str(out))
+    env['NOCTALIA_ASSETS_DIR']=str(REPO/'assets')
+    env['HOME']=str(base)
+    env['DBUS_SYSTEM_BUS_ADDRESS']=env['DBUS_SESSION_BUS_ADDRESS']
+    env.pop('WAYLAND_DISPLAY',None); env.pop('DISPLAY',None)
+    processes=[]
+    def run(args): return subprocess.check_output(args,env=env,text=True,stderr=subprocess.STDOUT,timeout=15)
+    def start(args,name):
+        with (out/name).open('w') as f: p=subprocess.Popen(args,env=env,stdout=f,stderr=f)
+        processes.append(p); return p
+    def wait(check,reason):
+        for _ in range(150):
+            if check(): return
+            time.sleep(.1)
+        raise AssertionError(reason)
+    try:
+        if '--privacy-only' in sys.argv:
+            env['PIPEWIRE_RUNTIME_DIR']=str(runtime)
+            audio=start(['pipewire'],'privacy-pipewire.log')
+            wait(lambda:(runtime/'pipewire-0').exists(),'private PipeWire startup')
+        compositor=start(['/usr/local/bin/umbriel','-c',str(config)],'umbriel.log')
+        wait(lambda:list(runtime.glob('wayland-*.lock')),'headless compositor start')
+        env['WAYLAND_DISPLAY']=next(runtime.glob('wayland-*.lock')).name.removesuffix('.lock')
+        for kind,proto,libs in [('pointer',REPO/'tests/fixtures/wlr-virtual-pointer-unstable-v1.xml',[]),('keyboard',REPO/'protocols/virtual-keyboard-unstable-v1.xml',['-lxkbcommon'])]:
+            run(['wayland-scanner','client-header',str(proto),str(base/f'{kind}-client.h')])
+            run(['wayland-scanner','private-code',str(proto),str(base/f'{kind}-code.c')])
+            run(['cc','-I'+str(base),str(REPO/f'tests/fixtures/island_{kind}.c'),str(base/f'{kind}-code.c'),'-lwayland-client',*libs,'-o',str(base/kind)])
+        pointer=subprocess.Popen([str(base/'pointer')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True); processes.append(pointer)
+        keyboard=subprocess.Popen([str(base/'keyboard')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True); processes.append(keyboard)
+        def command(proc,text):
+            proc.stdin.write(text+'\n');proc.stdin.flush();assert proc.stdout.readline().strip()=='ok';time.sleep(.1)
+        def move(x,y): command(pointer,f'move {x} {y}')
+        def click(): command(pointer,'press');command(pointer,'release')
+        def key(code): command(keyboard,str(code))
+        if any(mode in sys.argv for mode in ('--battery-only','--privacy-only','--polish-only')):
+            env['DBUS_SYSTEM_BUS_ADDRESS'] = env['DBUS_SESSION_BUS_ADDRESS']
+            battery = subprocess.Popen([sys.executable, str(REPO/'tests/fixtures/island_battery.py')], env=env,
+                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            processes.append(battery)
+            assert battery.stdout.readline().strip() == 'ok'
+        binary=str(REPO/'build-rishot/noctalia'); shell=start([binary],'noctalia.log')
+        wait(lambda:(runtime/f"noctalia-{env['WAYLAND_DISPLAY']}.sock").exists(),'shell start')
+        def msg(*words): return run([binary,'msg',*words])
+        def ready():
+            assert shell.poll() is None, f'Shell exited: {shell.returncode}'
+            try: return msg('theme-mode-get').strip() in ('dark', 'light')
+            except subprocess.CalledProcessError: return False
+        wait(ready, 'shell IPC startup')
+        key(1)  # Dismiss Umbriel's first-run keybinding hint.
+        time.sleep(3)
+        if '--polish-only' in sys.argv:
+            def shot(name): run(['grim',str(out/('polish-'+name+'.png'))])
+            def state(name):
+                try: return json.loads((plugin_root/name/'test-state.json').read_text()) or {}
+                except (FileNotFoundError,json.JSONDecodeError): return {}
+            def dispatch(plugin,event,*payload): msg('plugin',plugin+':island-test','all',event,*payload)
+            wait(lambda:state('timer').get('state')=='IDLE' and 'isRunning' in state('pomodoro'),'Timer engines ready')
+            command(battery,json.dumps({'IsPresent':True,'Type':5,'PowerSupply':False,'Percentage':42.}))
+            publisher=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_downloads.py')],env=env,
+                                       stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(publisher)
+            def download(index,progress):
+                command(publisher,json.dumps({'uri':f'application://polish-long-download-name-{index}-with-extra-text.desktop',
+                    'properties':{'progress':progress,'progress-visible':True}}))
+            for index in range(4): download(index,.25)
+            dispatch('noctalia/timer','start','600');dispatch('thepunkoff/pomodoro','toggle')
+            time.sleep(1.2);move(1100,600);shot('compact');move(640,40);time.sleep(1);shot('busy-top')
+            # The footer must remain bounded even at a larger UI scale.
+            before=Image.open(out/'polish-busy-top.png').convert('RGB')
+            assert before.getpixel((640,715)) != before.getpixel((640,650)), 'Island must leave clearance at the bottom'
+            move(640,580);command(pointer,'scroll 100');time.sleep(.8);shot('busy-bottom')
+            bottom=Image.open(out/'polish-busy-bottom.png').convert('RGB')
+            assert ImageChops.difference(before.crop((410,430,870,690)),bottom.crop((410,430,870,690))).getbbox(), 'Crowded footer must scroll'
+            # Progress updates should not reset scroll position or the long name marquee.
+            download(0,.65);time.sleep(.3);shot('progress')
+            after=Image.open(out/'polish-progress.png').convert('RGB')
+            assert ImageChops.difference(bottom.crop((450,670,830,687)),after.crop((450,670,830,687))).getbbox() is None, 'Progress preserves footer position'
+            # Keyboard entry scrolls the first timer into view; reverse Tab reveals Close.
+            msg('island-focus');time.sleep(.7);shot('keyboard-first')
+            key('shift-tab');time.sleep(.5);shot('keyboard-last');key(28);time.sleep(.7);shot('closed')
+            closed=Image.open(out/'polish-closed.png').convert('RGB')
+            assert ImageChops.difference(after.crop((450,200,830,680)),closed.crop((450,200,830,680))).getbbox(), 'Keyboard Close collapses the crowded view'
+            msg('island-focus');time.sleep(.6);key(28)
+            wait(lambda:state('timer').get('state')=='PAUSED','First keyboard control pauses Timer after reopening')
+            key(1);assert shell.poll() is None
+            print('PASS: crowded scaled island, footer scrolling, stable progress updates, keyboard reveal/close/pause')
+            raise SystemExit(0)
+        if '--timer-only' in sys.argv:
+            def shot(name): run(['grim',str(out/('timer-'+name+'.png'))])
+            def state(name):
+                try: return json.loads((plugin_root/name/'test-state.json').read_text()) or {}
+                except (FileNotFoundError,json.JSONDecodeError): return {}
+            def dispatch(plugin,event,*payload): msg('plugin',plugin+':island-test','all',event,*payload)
+            wait(lambda: state('timer').get('state')=='IDLE' and 'isRunning' in state('pomodoro'),'Both plugin services ready')
+            move(1100,600);shot('idle');move(640,40);time.sleep(.8);shot('entry-points')
+            move(550,160);click();time.sleep(.8);shot('panel')
+            key(3);key(11);key(11);key(28)  # Enter 200 (2:00) in the actual plugin panel.
+            wait(lambda:state('timer').get('state')=='RUNNING','Timer starts from its panel');key(1);move(1100,600);time.sleep(1.1)
+            shot('running');move(640,40);time.sleep(.8);shot('hover')
+            move(536,207);click();wait(lambda:state('timer').get('state')=='PAUSED','Island pause reaches plugin')
+            before=state('timer')['remaining'];time.sleep(1.3);assert state('timer')['remaining']==before
+            shot('paused');click();wait(lambda:state('timer').get('state')=='RUNNING','Island resume reaches plugin')
+            time.sleep(1.1);assert state('timer')['remaining']<before
+            dispatch('thepunkoff/pomodoro','toggle');wait(lambda:state('pomodoro').get('isRunning') is True,'Concurrent Pomodoro start')
+            time.sleep(1.1);shot('both-hover')
+            move(536,207);click();wait(lambda:state('timer').get('state')=='PAUSED','Pause plain timer with both active')
+            time.sleep(1.1);click();wait(lambda:state('timer').get('state')=='RUNNING','Timer controls stay in place after compact priority changes')
+            assert state('pomodoro')['isRunning'] is True
+            dispatch('thepunkoff/pomodoro','resetAll');time.sleep(1.1)
+            move(640,207);click();wait(lambda:state('timer').get('state')=='IDLE','Island cancel reaches plugin')
+            move(1100,600);time.sleep(1.1)
+            dispatch('thepunkoff/pomodoro','toggle');wait(lambda:state('pomodoro').get('isRunning') is True,'Pomodoro start')
+            time.sleep(1.1);shot('pomodoro');move(640,40);time.sleep(.8);shot('pomodoro-hover')
+            move(536,207);click();wait(lambda:state('pomodoro').get('isRunning') is False,'Pomodoro pause from island')
+            dispatch('thepunkoff/pomodoro','skip');wait(lambda:state('pomodoro')['sessionPtr']['stage']==2,'Pomodoro break transition')
+            time.sleep(1.1);shot('break')
+            move(640,207);click();wait(lambda:state('pomodoro').get('isDirty') is False,'Pomodoro cancel resets cycle')
+            move(1100,600);dispatch('noctalia/timer','start','2')
+            wait(lambda:state('timer').get('state')=='NOTIFY','Timer completes through upstream service')
+            time.sleep(.7);shot('complete')
+            # Plugin notifications are internal and intentionally do not enter history.
+            before_toast=Image.open(out/'timer-idle.png').convert('RGB').crop((440,80,840,105))
+            after_toast=Image.open(out/'timer-complete.png').convert('RGB').crop((440,80,840,105))
+            assert ImageChops.difference(before_toast,after_toast).getbbox(), 'Completion toast must appear above the countdown'
+            msg('notification-clear-active');msg('notification-clear-history')
+            dispatch('noctalia/timer','RESET');time.sleep(1.1)
+            dispatch('noctalia/timer','start','120');time.sleep(1.1)
+            msg('plugins','disable','noctalia/timer');time.sleep(1.1);shot('disabled')
+            idle=Image.open(out/'timer-idle.png').convert('RGB').crop((400,8,880,72))
+            disabled=Image.open(out/'timer-disabled.png').convert('RGB').crop((400,8,880,72))
+            for image in [idle,disabled]: image.paste((0,0,0),(180,0,300,64))
+            assert ImageChops.difference(idle,disabled).getbbox() is None,'Disabled plugin must not leave a stale countdown'
+            assert shell.poll() is None
+            print('PASS: actual Timer/Pomodoro plugins, island pause/resume/cancel, break transition, completion notification and disabled-plugin cleanup')
+            raise SystemExit(0)
+        if '--privacy-only' in sys.argv:
+            def shot(name): run(['grim',str(out/('privacy-'+name+'.png'))])
+            def crop(name,bounds=(400,8,880,80)):
+                result=Image.open(out/('privacy-'+name+'.png')).convert('RGB').crop(bounds)
+                if bounds == (400,8,880,80): result.paste((0,0,0),(180,0,300,72))
+                return result
+            def differs(a,b,bounds=(400,8,880,80)):
+                return ImageChops.difference(crop(a,bounds),crop(b,bounds)).getbbox()
+            def capture(kind):
+                source='Audio/Source' if kind=='mic' else 'Video/Source'
+                consumer='Stream/Input/Audio' if kind=='mic' else 'Stream/Input/Video'
+                p=start(['pw-loopback','-n','privacy-'+kind,'-c','1','-m','MONO',
+                         '--capture-props',f'node.name=input-{kind} media.class={consumer} application.name="Privacy Test {kind}"',
+                         '--playback-props',f'node.name=output-{kind} media.class={source} media.name="'+('Screen capture' if kind=='screen' else 'Test source')+'"'],
+                        'privacy-'+kind+'.log')
+                time.sleep(.8)
+                assert p.poll() is None
+                nodes=json.loads(run(['pw-dump']))
+                for node in nodes:
+                    props=node.get('info',{}).get('props',{})
+                    if props.get('node.name') not in ('input-'+kind,'output-'+kind): continue
+                    direction='Input' if props['node.name']=='input-'+kind else 'Output'
+                    run(['pw-cli','set-param',str(node['id']),'PortConfig',
+                         '{ direction = '+direction+' mode = dsp format = { mediaType = audio mediaSubtype = raw format = F32P rate = 48000 channels = 1 position = [ MONO ] } }'])
+                time.sleep(.4)
+                outputs=run(['pw-link','-o']).splitlines();inputs=run(['pw-link','-i']).splitlines()
+                source_port=next(v.strip() for v in outputs if 'output-'+kind+':' in v)
+                input_port=next(v.strip() for v in inputs if 'input-'+kind+':' in v)
+                run(['pw-link',source_port,input_port]);time.sleep(2.5)
+                return p
+            move(1100,600);shot('idle')
+            mic=capture('mic');shot('mic')
+            assert differs('idle','mic'), 'Microphone capture must appear'
+            move(640,40);time.sleep(.8);shot('mic-hover')
+            move(1100,600);camera=capture('camera');screen=capture('screen');shot('all')
+            move(640,40);time.sleep(.8);shot('all-hover')
+            assert differs('mic-hover','all-hover',(400,135,880,330)), 'Each capture kind needs an expanded app row'
+            move(1100,600)
+            command(battery,json.dumps({'IsPresent':True,'Type':5,'PowerSupply':False,'Percentage':42.}))
+            publisher=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_downloads.py')],env=env,
+                                       stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(publisher)
+            command(publisher,json.dumps({'uri':'application://test-browser.desktop',
+                                          'properties':{'progress':.65,'progress-visible':True}}))
+            time.sleep(.8);shot('combined');move(640,40);time.sleep(.8);shot('combined-hover')
+            move(1100,600);publisher.terminate();publisher.wait(timeout=6)
+            command(battery,json.dumps({'IsPresent':False}));time.sleep(.8)
+            run(['notify-send','-a','Privacy test','-t','0','Test notification','Capture indicators remain visible.'])
+            time.sleep(.8);shot('notification')
+            msg('notification-clear-active');msg('notification-clear-history');time.sleep(.8)
+            settings=cfg/'config.toml';original=settings.read_text()
+            settings.write_text(original+'\n[shell.privacy]\nmic_filter_regex="Privacy Test mic"\n');msg('config-reload');time.sleep(1)
+            shot('filtered');assert differs('all','filtered'), 'Existing privacy filters must apply'
+            settings.write_text(original);msg('config-reload');time.sleep(.8)
+            camera.terminate();camera.wait(timeout=6);screen.terminate();screen.wait(timeout=6);time.sleep(2.5)
+            # Compact mic icon opens Noctalia's existing audio tab.
+            move(724,40);click();time.sleep(.8);shot('audio-controls')
+            assert differs('mic-hover','audio-controls',(400,90,880,330)), 'Microphone click must open the audio panel'
+            key(1);move(1100,600)
+            mic.terminate();mic.wait(timeout=6);time.sleep(2.5);shot('stopped')
+            assert not differs('idle','stopped'), 'Stopping captures must remove all indicators'
+            assert shell.poll() is None
+            print('PASS: isolated PipeWire mic/camera/screen detection, hover details, filtering and capture cleanup')
+            raise SystemExit(0)
+        if '--battery-only' in sys.argv:
+            def publish(**values): command(battery,json.dumps(values));time.sleep(.7)
+            def shot(name): run(['grim',str(out/('battery-'+name+'.png'))])
+            def crop(name, bounds=(400,8,880,64)):
+                image=Image.open(out/('battery-'+name+'.png')).convert('RGB').crop(bounds)
+                if bounds == (400,8,880,64): image.paste((0,0,0),(180,0,300,56))
+                return image
+            def differs(a,b,bounds=(400,8,880,64)):
+                return ImageChops.difference(crop(a,bounds),crop(b,bounds)).getbbox()
+            move(1100,600);shot('absent')
+            publish(IsPresent=True);shot('normal')
+            assert not differs('absent','normal'), 'A healthy discharging system pack stays quiet'
+            move(640,40);time.sleep(.8);shot('normal-hover')
+            publish(State=1);shot('charging-hover')
+            assert differs('normal-hover','charging-hover',(440,135,840,215)), 'Hover must update battery status and time estimate'
+            move(1100,600);time.sleep(.8);shot('charging')
+            assert differs('absent','charging'), 'Charging ring must be visible'
+            time.sleep(.5);shot('pulse')
+            assert differs('charging','pulse',(714,20,758,62)), 'Charging ring must pulse'
+            settings=cfg/'config.toml';original=settings.read_text()
+            settings.write_text(original+'\n[shell.animation]\nenabled=false\n');msg('config-reload');time.sleep(.8)
+            shot('reduced');time.sleep(.5);shot('reduced-later')
+            assert not differs('reduced','reduced-later',(714,20,758,62)), 'Disabled animations must stop the charging pulse'
+            settings.write_text(original);msg('config-reload');time.sleep(.7)
+            publish(State=2,Percentage=5.)
+            # Dismiss the existing low-battery notification so we can inspect the ring underneath.
+            msg('notification-clear-active');msg('notification-clear-history');time.sleep(.8);shot('low')
+            publish(Percentage=9.);msg('notification-clear-active');msg('notification-clear-history');time.sleep(.6);shot('low-updated')
+            assert differs('low','low-updated',(714,20,758,62)), 'Ring fill must track battery percentage'
+            publish(State=4,Percentage=100.);shot('full')
+            assert not differs('absent','full'), 'A fully charged system pack should leave the compact island'
+            publish(Type=5,PowerSupply=False,State=0,Percentage=42.);shot('mouse')
+            assert differs('absent','mouse'), 'Peripheral charge must be visible on desktop'
+            move(640,40);time.sleep(.8);shot('mouse-hover')
+            msg('theme-mode-set','light');time.sleep(.8);shot('mouse-light')
+            msg('theme-mode-set','dark');move(1100,600);time.sleep(.8)
+            env['ISLAND_TEST_ART']=(REPO/'assets/noctalia-wallpaper.png').as_uri()
+            env['ISLAND_TEST_EVENTS']=str(out/'player-actions.log')
+            player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'battery-player.log')
+            time.sleep(2);assert player.poll() is None
+            shot('media');move(640,40);time.sleep(.8);shot('media-hover')
+            assert differs('media-hover','mouse-hover',(440,75,840,260)), 'Media must remain visible above the battery row'
+            move(1100,600)
+            publisher=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_downloads.py')],env=env,
+                                       stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(publisher)
+            command(publisher,json.dumps({'uri':'application://test-browser.desktop',
+                                          'properties':{'progress':.65,'progress-visible':True}}))
+            time.sleep(.8);shot('download');move(640,40);time.sleep(.8);shot('download-hover')
+            move(1100,600);publisher.terminate();publisher.wait(timeout=6)
+            player.terminate();player.wait(timeout=6)
+            run(['notify-send','-a','Battery test','-t','0','Battery priority','Notifications still take priority.'])
+            time.sleep(.7);shot('notification');msg('notification-clear-active');time.sleep(.7);shot('unread')
+            msg('notification-clear-history');time.sleep(.7)
+            move(1100,600);publish(IsPresent=False);shot('removed')
+            assert not differs('absent','removed'), 'Disconnecting the battery must restore the original island'
+            assert shell.poll() is None
+            print('PASS: battery absence, quiet healthy pack, charge ring/pulse, hover details, low charge, full charge and peripheral disconnect')
+            raise SystemExit(0)
+        if '--downloads-only' in sys.argv:
+            import struct
+            move(1100,600)
+            run(['grim',str(out/'download-empty.png')])
+            publisher=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_downloads.py')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(publisher)
+            def publish(properties, app='test-browser.desktop'):
+                command(publisher,json.dumps({'uri':'application://'+app,'properties':properties}));time.sleep(.6)
+            def shot(name): run(['grim',str(out/name)])
+            def capsule(name):
+                image=Image.open(out/name).convert('RGB').crop((400,8,880,220))
+                image.paste((0,0,0),(180,0,300,55))  # Ignore minute changes in the centred clock.
+                return image
+            publish({'count':7,'count-visible':True})
+            shot('download-badge-only.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-badge-only.png')).getbbox() is None, 'Badge-only messages must not become downloads'
+            publish({'progress':.25,'progress-visible':True})
+            shot('download-compact.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-compact.png')).getbbox(), 'Transfer must appear'
+            publish({'progress':.65})
+            shot('download-updated.png')
+            assert ImageChops.difference(capsule('download-compact.png'),capsule('download-updated.png')).getbbox(), 'Partial progress update must retain visibility'
+            def ring_crop(name): return Image.open(out/name).convert('RGB').crop((502,20,542,60))
+            assert ImageChops.difference(ring_crop('download-compact.png'),ring_crop('download-updated.png')).getbbox(), 'Circular fill must reflect reported progress'
+            publish({'progress':'invalid'})
+            shot('download-invalid.png')
+            assert ImageChops.difference(capsule('download-updated.png'),capsule('download-invalid.png')).getbbox() is None, 'Malformed progress must not corrupt state'
+            move(640,40);time.sleep(.7);shot('download-expanded.png')
+            publish({'progress':.4,'progress-visible':True},'second-app.desktop')
+            shot('download-multiple.png')
+            assert ImageChops.difference(capsule('download-expanded.png'),capsule('download-multiple.png')).getbbox(), 'Multiple apps need separate rows'
+            move(1100,600);time.sleep(.7)
+            msg('island-focus');time.sleep(.7);key(1);time.sleep(.7)
+            run(['notify-send','-a','Download test','-t','0','Notification priority','Downloads resume after dismissal.']);time.sleep(.7)
+            shot('download-notification.png');msg('notification-clear-active');time.sleep(.7)
+            shot('download-restored.png')
+            publish({'progress-visible':False})
+            publisher.terminate();publisher.wait(timeout=6);time.sleep(.7)
+            msg('notification-clear-history');time.sleep(.7);shot('download-disconnected.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-disconnected.png')).getbbox() is None, 'Disconnected publishers must leave no stale progress'
+            # Exercise the actual Zen native-messaging framing, including split reads.
+            host=subprocess.Popen([sys.executable,str(REPO/'scripts/zen-download-progress.py')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            processes.append(host)
+            def native(count,progress):
+                payload=json.dumps(f'{count}:{progress}').encode();packet=struct.pack('=I',len(payload))+payload
+                host.stdin.write(packet[:2]);host.stdin.flush();time.sleep(.1)
+                host.stdin.write(packet[2:]);host.stdin.flush();time.sleep(.7)
+            native(1,0);shot('download-zen-start.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-zen-start.png')).getbbox(), 'Zen transfer at zero must be visible'
+            native(1,.72)
+            shell.terminate();shell.wait(timeout=6)
+            shell=start([binary],'noctalia-download-restart.log');wait(ready,'Restarted shell IPC');time.sleep(1)
+            shot('download-zen-restarted.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-zen-restarted.png')).getbbox(), 'Zen bridge must resend progress after shell restart'
+            move(640,40);time.sleep(.7);shot('download-zen-expanded.png')
+            move(1100,600);native(0,0);time.sleep(.7);shot('download-zen-finished.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-zen-finished.png')).getbbox() is None, 'Finished transfers must disappear'
+            host.stdin.close();host.wait(timeout=6)
+            assert host.returncode==0,host.stderr.read().decode()
+            steam=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_steam.py')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(steam)
+            command(steam,'Running Update,Downloading,Staging,');time.sleep(2.5)
+            shot('download-steam-compact.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-steam-compact.png')).getbbox(), 'Steam download activity must appear'
+            time.sleep(.3);shot('download-steam-spinning.png')
+            assert ImageChops.difference(ring_crop('download-steam-compact.png'),ring_crop('download-steam-spinning.png')).getbbox(), 'Steam activity ring must rotate'
+            move(640,40);time.sleep(.7);shot('download-steam-expanded.png')
+            command(steam,'Running Update,Staging,');time.sleep(2.5);shot('download-steam-installing.png')
+            assert ImageChops.difference(capsule('download-steam-expanded.png'),capsule('download-steam-installing.png')).getbbox(), 'Steam must show phase changes'
+            command(steam,'Running Update,Stopping,');move(1100,600);time.sleep(2.5);shot('download-steam-paused.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-steam-paused.png')).getbbox() is None, 'Paused Steam activity must clear'
+            command(steam,'Running Update,Downloading,');time.sleep(2.5)
+            steam.terminate();steam.wait(timeout=6);time.sleep(2.5);shot('download-steam-exited.png')
+            assert ImageChops.difference(capsule('download-empty.png'),capsule('download-steam-exited.png')).getbbox() is None, 'Exiting Steam must clear activity'
+            assert shell.poll() is None
+            print('PASS: desktop progress, Zen bridge/restart recovery, Steam phases, pause and process-exit cleanup')
+            raise SystemExit(0)
+        if '--keyboard-only' not in sys.argv:
+            msg('settings-open','island')
+            time.sleep(1)
+            run(['grim',str(out/'settings.png')])
+            move(1070,459);click();time.sleep(.5)
+            saved=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
+            assert saved['island']['reserve_space'] is False, saved
+            move(560,197);click();time.sleep(.5)
+            run(['grim',str(out/'clock-settings.png')])
+            msg('settings-close')
+            move(640,35); time.sleep(1)
+            run(['grim',str(out/'calendar-default.png')])
+            move(1100,600)
+            path=cfg/'config.toml'
+            text=path.read_text().replace('[island]','[island]\ncalendar_labels="initials"\nclock_offset=-12\nexpanded_clock_offset=-12\nmedia_artwork_size=80\nvolume_bar_height=24\nvolume_show_percentage=true')
+            path.write_text(text)
+            msg('config-reload');time.sleep(1)
+            run(['grim',str(out/'compact-offset.png')])
+            move(640,35);time.sleep(1)
+            run(['grim',str(out/'calendar-initials.png')])
+            move(1100,600)
+            # The private session intentionally has no audio server. Volume layout
+            # settings are covered by the schema tests; do not touch the real sink.
+            env['ISLAND_TEST_ART']=(REPO/'assets/noctalia-wallpaper.png').as_uri()
+            env['ISLAND_TEST_EVENTS']=str(out/'player-actions.log')
+            env['ISLAND_TEST_TITLE']='A little closer to home — a long track title that keeps scrolling as playback advances'
+            env['ISLAND_TEST_TICK']='1'
+            player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'player.log')
+            time.sleep(4)
+            move(640,35);time.sleep(1)
+            run(['grim',str(out/'media-large.png')])
+            time.sleep(2.2)
+            run(['grim',str(out/'media-scroll.png')])
+            before=Image.open(out/'media-large.png').convert('RGB')
+            after=Image.open(out/'media-scroll.png').convert('RGB')
+            assert ImageChops.difference(before.crop((601,47,777,70)),after.crop((601,47,777,70))).getbbox(), 'Long title must keep scrolling across playback updates'
+            assert ImageChops.difference(before.crop((505,150,570,165)),after.crop((505,150,570,165))).getbbox(), 'Playback time must keep updating'
+            # Switching to a short title should restore a stationary label.
+            move(707,187);click();time.sleep(1)
+            run(['grim',str(out/'media-short.png')])
+            time.sleep(1.2)
+            run(['grim',str(out/'media-short-later.png')])
+            short=Image.open(out/'media-short.png').convert('RGB').crop((601,47,777,70))
+            later=Image.open(out/'media-short-later.png').convert('RGB').crop((601,47,777,70))
+            assert ImageChops.difference(short,later).getbbox() is None, 'Short title must stay still'
+            # The larger cover shifts playback controls down by 24 pixels.
+            move(640,187);time.sleep(1)
+            run(['grim',str(out/'media-hover-pause.png')])
+            idle=Image.open(out/'media-short-later.png').convert('RGB')
+            hovered=Image.open(out/'media-hover-pause.png').convert('RGB')
+            assert ImageChops.difference(idle.crop((618,169,662,217)),hovered.crop((618,169,662,217))).getbbox(), 'Playback button must highlight on hover'
+            assert ImageChops.difference(idle.crop((580,223,700,280)),hovered.crop((580,223,700,280))).getbbox(), 'Delayed tooltip must appear below playback button'
+            command(pointer,'press');time.sleep(.2)
+            run(['grim',str(out/'media-pressed.png')])
+            move(780,190);command(pointer,'release');time.sleep(.2)
+            assert 'PlayPause' not in (out/'player-actions.log').read_text(), 'Releasing outside the button must cancel activation'
+            move(640,187);click();time.sleep(1)
+            run(['grim',str(out/'media-hover-play.png')])
+            events=(out/'player-actions.log').read_text()
+            assert 'PlayPause' in events,events
+            move(640,35);time.sleep(.5)
+            move(640,138);command(pointer,'press');time.sleep(.3)
+            run(['grim',str(out/'seek-preview-middle.png')])
+            time.sleep(1.3)
+            run(['grim',str(out/'seek-preview-held.png')])
+            def time_crop(name): return Image.open(out/name).convert('RGB').crop((505,150,570,165))
+            assert ImageChops.difference(time_crop('seek-preview-middle.png'),time_crop('seek-preview-held.png')).getbbox() is None, 'Preview must survive timer updates'
+            move(721,138);time.sleep(.3)
+            run(['grim',str(out/'seek-preview-later.png')])
+            assert ImageChops.difference(time_crop('seek-preview-middle.png'),time_crop('seek-preview-later.png')).getbbox(), 'Preview must follow the drag'
+            assert 'SetPosition' not in (out/'player-actions.log').read_text(), 'Dragging must not seek until release'
+            command(pointer,'release');time.sleep(.5)
+            seeks=[line for line in (out/'player-actions.log').read_text().splitlines() if line.startswith('SetPosition ')]
+            assert len(seeks)==1,seeks
+            target=ast.literal_eval(seeks[0].removeprefix('SetPosition '))[1]
+            assert abs(target-174400000)<100000,target
+            msg('theme-mode-set','light');time.sleep(1)
+            run(['grim',str(out/'media-light.png')])
+            # Source name shares the existing media-panel action.
+            move(650,99);click();time.sleep(1)
+            run(['grim',str(out/'media-panel.png')])
+            key(1);move(1100,600);time.sleep(.5)
+            long_body='\n'.join(f'Line {i:02}: A complete notification stays readable when expanded.' for i in range(1,61))+'\nEND OF FULL MESSAGE'
+            run(['notify-send','-a','Island test','-t','0','Long notification',long_body])
+            time.sleep(1)
+            run(['grim',str(out/'notification-collapsed.png')])
+            move(600,120);click();time.sleep(1)
+            run(['grim',str(out/'notification-expanded.png')])
+            collapsed=Image.open(out/'notification-collapsed.png').convert('RGB')
+            expanded=Image.open(out/'notification-expanded.png').convert('RGB')
+            assert ImageChops.difference(collapsed.crop((440,400,840,620)),expanded.crop((440,400,840,620))).getbbox(), 'Long notification must expand'
+            move(650,400);command(pointer,'scroll 100');time.sleep(1)
+            run(['grim',str(out/'notification-scrolled.png')])
+            # The complete body must survive D-Bus ingestion (formerly capped at 1 KiB).
+            history=base/'state/noctalia/notification_history.json'
+            wait(lambda: history.exists() and 'END OF FULL MESSAGE' in history.read_text(), 'Notification body retained in history')
+            scrolled=Image.open(out/'notification-scrolled.png').convert('RGB')
+            assert ImageChops.difference(expanded.crop((455,60,805,615)),scrolled.crop((455,60,805,615))).getbbox(), 'Full notification must scroll'
+            move(784,28);click();time.sleep(1)
+            run(['grim',str(out/'notification-recollapsed.png')])
+            recollapsed=Image.open(out/'notification-recollapsed.png').convert('RGB')
+            assert ImageChops.difference(collapsed.crop((440,400,840,620)),recollapsed.crop((440,400,840,620))).getbbox() is None, 'Collapse must restore compact height'
+            move(819,28);time.sleep(1)
+            run(['grim',str(out/'notification-dismiss-hover.png')])
+            click();time.sleep(.5)
+            move(1100,600)
+            notification=start(['notify-send','-a','Island test','-t','0','--wait','--action=confirm=Mark as read','Short notification','Everything fits.'],'notification-action.log')
+            time.sleep(1)
+            run(['grim',str(out/'notification-short.png')])
+            move(640,125);time.sleep(1)
+            run(['grim',str(out/'notification-action-hover.png')])
+            click()
+            wait(lambda: 'confirm' in (out/'notification-action.log').read_text(),'Notification action invocation')
+            move(1100,600)
+            msg('notification-clear-active');msg('notification-clear-history')
+            msg('notification-dnd-set','true');time.sleep(2.5)  # Let the DND OSD expire.
+            run(['grim',str(out/'badge-empty.png')])
+            for i in range(2):
+                run(['notify-send','-a','Badge test','-t','1000',f'Unread message {i+1}','Saved quietly during Do Not Disturb.'])
+            time.sleep(1.5)
+            history_entries=lambda: json.loads(history.read_text())['entries']
+            assert sum(not entry['seen'] for entry in history_entries())==2
+            run(['grim',str(out/'badge-two.png')])
+            empty=Image.open(out/'badge-empty.png').convert('RGB')
+            counted=Image.open(out/'badge-two.png').convert('RGB')
+            assert ImageChops.difference(empty.crop((686,28,710,52)),counted.crop((686,28,710,52))).getbbox(), 'Unread badge must appear'
+            move(698,40);time.sleep(1)
+            run(['grim',str(out/'badge-hover.png')])
+            hovered=Image.open(out/'badge-hover.png').convert('RGB')
+            assert ImageChops.difference(empty.crop((490,30,515,50)),hovered.crop((490,30,515,50))).getbbox() is None, 'Badge hover must keep the compact island still'
+            click();time.sleep(1)
+            run(['grim',str(out/'badge-history.png')])
+            wait(lambda: all(entry['seen'] for entry in history_entries()),'Badge opens history and marks notifications seen')
+            key(1);move(1100,600);time.sleep(1)
+            run(['grim',str(out/'badge-cleared.png')])
+            cleared=Image.open(out/'badge-cleared.png').convert('RGB')
+            assert ImageChops.difference(empty.crop((686,28,710,52)),cleared.crop((686,28,710,52))).getbbox() is None, 'Read badge must disappear'
+            for i in range(2):
+                run(['notify-send','-a','Hover count test','-t','1000',f'Unread message {i+1}','Shown in the expanded island.'])
+            time.sleep(1.5)
+            move(640,40);time.sleep(1)
+            run(['grim',str(out/'expanded-unread-count.png')])
+            move(640,156);click();time.sleep(1)
+            wait(lambda: all(entry['seen'] for entry in history_entries()),'Expanded unread-count row opens history')
+            # Polish pass at the normal artwork, clock and calendar sizes.
+            key(1);move(1100,600)
+            text=path.read_text().replace('calendar_labels="initials"','calendar_labels="abbreviated"').replace('clock_offset=-12','clock_offset=0').replace('media_artwork_size=80','media_artwork_size=56')
+            path.write_text(text);msg('config-reload');msg('theme-mode-set','dark')
+            msg('notification-dnd-set','false');time.sleep(2.5)
+            msg('notification-clear-active');msg('notification-clear-history');time.sleep(.7)
+            run(['grim',str(out/'polish-rest.png')])
+            for _ in range(5):
+                move(640,40);time.sleep(.08)
+                move(1100,600);time.sleep(.1)
+            move(640,40);time.sleep(.7)
+            run(['grim',str(out/'polish-calendar.png')])
+            move(1100,600);time.sleep(.7)
+            run(['grim',str(out/'polish-rest-after-hover.png')])
+            def lower_crop(name): return Image.open(out/name).convert('RGB').crop((450,85,830,250))
+            assert ImageChops.difference(lower_crop('polish-rest.png'),lower_crop('polish-rest-after-hover.png')).getbbox() is None, 'Rapid hover must leave no expanded content behind'
+            msg('media','play');time.sleep(.5)
+            move(640,40);time.sleep(.7)
+            run(['grim',str(out/'polish-media.png')])
+            move(640,163);click();time.sleep(.7)
+            run(['grim',str(out/'polish-media-paused.png')])
+            move(650,55);click();time.sleep(.7)
+            run(['grim',str(out/'polish-media-panel.png')])
+            key(1);move(1100,600);time.sleep(.7)
+            run(['grim',str(out/'polish-rest-after-panel.png')])
+            assert ImageChops.difference(lower_crop('polish-rest.png'),lower_crop('polish-rest-after-panel.png')).getbbox() is None, 'Closing the panel must restore the compact island'
+            run(['notify-send','-a','Polish test','-t','0','First card','Start a click here.']);time.sleep(.7)
+            move(640,60);command(pointer,'press')
+            run(['notify-send','-a','Polish test','-t','0','Replacement card','A new card must not inherit the held click.']);time.sleep(.7)
+            command(pointer,'release');time.sleep(.7)
+            run(['grim',str(out/'polish-replaced-during-click.png')])
+            assert history_entries() and all(not entry['seen'] for entry in history_entries()), 'Replacing a notification during a click must not open history'
+        else:
+            env['ISLAND_TEST_ART']=(REPO/'assets/noctalia-wallpaper.png').as_uri()
+            env['ISLAND_TEST_EVENTS']=str(out/'player-actions.log')
+            player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'player.log')
+            time.sleep(2);msg('media','pause');time.sleep(.5)
+        # Explicit keyboard focus keeps timed notifications alive, and Tab
+        # reaches their actions without moving the pointer into the island.
+        move(1100,600);msg('notification-clear-active')
+        run(['notify-send','-a','Keyboard test','-t','1200','Timed notification','Stay visible while keyboard focused.'])
+        assert msg('island-focus').strip()=='ok';time.sleep(.7)
+        run(['grim',str(out/'keyboard-timed-before.png')]);time.sleep(1.5)
+        run(['grim',str(out/'keyboard-timed-after.png')])
+        before_image=Image.open(out/'keyboard-timed-before.png').convert('RGB').crop((460,10,820,100))
+        after_image=Image.open(out/'keyboard-timed-after.png').convert('RGB').crop((460,10,820,100))
+        assert ImageChops.difference(before_image,after_image).getbbox() is None, 'Focused notification must not expire'
+        key(1);time.sleep(.5)
+        keyboard_notification=start(['notify-send','-a','Keyboard test','-t','0','--wait','--action=confirm=Confirm','Keyboard notification','Tab to Confirm, then Enter.'],'keyboard-notification.log')
+        time.sleep(.3);assert msg('island-focus').strip()=='ok';time.sleep(1.5)
+        assert keyboard_notification.poll() is None, 'Notification must await keyboard action'
+        run(['grim',str(out/'keyboard-notification.png')])
+        key(15);key(28)
+        wait(lambda: 'confirm' in (out/'keyboard-notification.log').read_text(),'Keyboard notification action')
+        msg('notification-clear-active');msg('notification-clear-history');time.sleep(.5)
+        # Paused media can also be opened explicitly. Focus survives the
+        # playback-status rebuild, including reverse Tab navigation.
+        assert msg('island-focus').strip()=='ok';time.sleep(.7)
+        key(15)
+        events_path=out/'player-actions.log'
+        before=events_path.read_text().count('PlayPause')
+        key(28);time.sleep(.7)
+        assert events_path.read_text().count('PlayPause')==before+1, 'Tab must reach playback'
+        run(['grim',str(out/'keyboard-media.png')])
+        key(28);time.sleep(.7)
+        assert events_path.read_text().count('PlayPause')==before+2, 'Playback focus must survive status updates'
+        key(15);command(keyboard,'shift-tab');key(28);time.sleep(.5)
+        assert events_path.read_text().count('PlayPause')==before+3, 'Shift+Tab must return to playback'
+        key(1);time.sleep(.7)
+        stopped=events_path.read_text();key(28);time.sleep(.3)
+        assert events_path.read_text()==stopped, 'Escape must release island keyboard control'
+        run(['grim',str(out/'keyboard-released.png')])
+        # A new automatic notification must never inherit media keyboard focus.
+        msg('island-focus');time.sleep(.7)
+        replacement=start(['notify-send','-a','Keyboard test','-t','0','--wait','--action=confirm=Confirm','Automatic notification','This card must not inherit focus.'],'keyboard-replacement.log')
+        time.sleep(.7);key(15);key(28);time.sleep(.3)
+        assert replacement.poll() is None, 'Incoming notification must release previous keyboard focus'
+        msg('island-focus');time.sleep(.7);key(1);time.sleep(.5)
+        wait(lambda: replacement.poll() is not None,'Escape dismisses focused notification')
+        player.terminate();player.wait(timeout=6);time.sleep(1)
+        msg('island-focus');time.sleep(.7)
+        run(['grim',str(out/'keyboard-calendar.png')])
+        key(1);time.sleep(.7)
+        assert shell.poll() is None
+        print('PASS: media, notifications, unread bell, transitions, keyboard actions, focus preservation and release')
+    finally:
+        for p in reversed(processes):
+            if p.poll() is None:
+                p.terminate()
+                try:p.wait(timeout=6)
+                except subprocess.TimeoutExpired:p.kill();p.wait()

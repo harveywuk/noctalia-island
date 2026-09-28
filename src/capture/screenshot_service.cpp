@@ -1,5 +1,6 @@
 #include "capture/screenshot_service.h"
 
+#include "capture/screen_recorder.h"
 #include "capture/screenshot_region_overlay.h"
 #include "compositors/compositor_platform.h"
 #include "config/config_service.h"
@@ -619,7 +620,7 @@ ScreenshotService::ScreenshotService(
     : m_wayland(wayland), m_platform(platform), m_notifications(notifications), m_configService(configService),
       m_clipboard(clipboard), m_capture(wayland) {}
 
-ScreenshotService::~ScreenshotService() = default;
+ScreenshotService::~ScreenshotService() { ScreenRecorder::instance().shutdown(); }
 
 void ScreenshotService::rememberRegion(const LogicalRect& region) {
   if (region.width < 2 || region.height < 2) {
@@ -710,7 +711,42 @@ ScreenshotService::OutputOptions ScreenshotService::outputOptionsFromConfig(cons
   return options;
 }
 
+std::string ScreenshotService::beginRecording(bool monitor) {
+  if (ScreenRecorder::instance().active())
+    return "error: recording already active\n";
+  if (overlayBusy())
+    return "error: a capture overlay is already active\n";
+  auto* context = PanelManager::instance().renderContext();
+  if (!context || !available())
+    return "error: capture unavailable\n";
+  m_regionRenderContext = context;
+  m_regionOutputOptions = {};
+  m_regionFullscreenPick = monitor;
+  m_recordSelection = true;
+  ensureRegionOverlay();
+  m_regionOverlay->setFrozenScreenshots({});
+  m_regionOverlay->begin(false, monitor, false);
+  return "ok\n";
+}
+
 void ScreenshotService::registerIpc(IpcService& ipc, const ConfigService& configService) {
+  ScreenRecorder::instance().completed = [this](bool success, const std::string& message) {
+    m_notifications.addInternal(
+        "Noctalia", success ? "Recording saved" : "Recording failed", message,
+        success ? Urgency::Normal : Urgency::Critical
+    );
+  };
+  ipc.bind(noctalia::cli::msg::recordRegion, [this](const std::string&) { return beginRecording(false); });
+  ipc.bind(noctalia::cli::msg::recordMonitor, [this](const std::string&) { return beginRecording(true); });
+  ipc.bind(noctalia::cli::msg::recordStop, [](const std::string&) {
+    ScreenRecorder::instance().stop();
+    return std::string("ok\n");
+  });
+  ipc.bind(noctalia::cli::msg::recordStatus, [](const std::string&) {
+    auto& recorder = ScreenRecorder::instance();
+    return recorder.active() ? recorder.label() + "\n" : std::string("idle\n");
+  });
+
   ipc.bind(noctalia::cli::msg::screenshotRegion, [this, &configService](const std::string& /*args*/) -> std::string {
     if (!available()) {
       return "error: screen capture is not available on this compositor\n";
@@ -934,11 +970,41 @@ void ScreenshotService::ensureRegionOverlay() {
   m_regionOverlay->setFailureCallback([this](const std::string& message) {
     m_frozenScreenshots.clear();
     m_regionFullscreenPick = false;
+    m_recordSelection = false;
     notifyError(message);
   });
 
   m_regionOverlay->setCompleteCallback(
       [this](std::optional<LogicalRect> region, wl_output* output, capture::ConfirmAction action) {
+        if (m_recordSelection) {
+          m_recordSelection = false;
+          const bool monitor = std::exchange(m_regionFullscreenPick, false);
+          if (!region)
+            return;
+          const WaylandOutput* selected = monitor ? findOutput(m_wayland, output) : nullptr;
+          if (!monitor) {
+            for (const auto& candidate : m_wayland.outputs()) {
+              if (region->x >= candidate.logicalX
+                  && region->y >= candidate.logicalY
+                  && region->x + region->width <= candidate.logicalX + candidate.logicalWidth
+                  && region->y + region->height <= candidate.logicalY + candidate.logicalHeight) {
+                selected = &candidate;
+                break;
+              }
+            }
+          }
+          if (!selected) {
+            m_notifications.addInternal("Noctalia", "Recording not started", "Select an area within one monitor");
+            return;
+          }
+          const auto geometry =
+              monitor ? std::string{} : std::format("{},{} {}x{}", region->x, region->y, region->width, region->height);
+          const auto error = ScreenRecorder::instance().start(selected->connectorName, geometry);
+          if (!error.empty())
+            m_notifications.addInternal("Noctalia", "Recording failed", error, Urgency::Critical);
+          return;
+        }
+
         if (!region.has_value()) {
           if (m_regionOverlay != nullptr) {
             if (auto abandoned = m_regionOverlay->takeAbandonedRegion();
@@ -1222,6 +1288,7 @@ void ScreenshotService::ensureAnnotationOverlay() {
   if (m_annotationOverlay == nullptr) {
     m_annotationOverlay = std::make_unique<capture::AnnotationOverlay>();
   }
+  m_annotationOverlay->setIslandHost(m_islandHost);
   m_annotationOverlay->initialize(m_wayland, m_regionRenderContext);
   m_annotationOverlay->setStateSetter([this](std::string_view key, std::string_view value) {
     persistAnnotationToolState(key, value);
@@ -1245,6 +1312,19 @@ void ScreenshotService::ensureAnnotationOverlay() {
     m_annotationOverlay->hideForCapture();
     m_freezeTarget = FreezeTarget::Annotation;
     beginFreezeCapture();
+  });
+  m_annotationOverlay->setRecordCallback([this](bool monitor) {
+    if (ScreenRecorder::instance().active()) {
+      ScreenRecorder::instance().stop();
+      return;
+    }
+    if (!m_annotationOverlay || !m_annotationOverlay->isActive())
+      return;
+    m_annotationOverlay->cancel();
+    const auto result = beginRecording(monitor);
+    if (result.starts_with("error:")) {
+      m_notifications.addInternal("Noctalia", "Recording not started", result, Urgency::Critical);
+    }
   });
   m_annotationOverlay->setCaptureRegionCallback([this]() {
     if (m_annotationOverlay == nullptr || !m_annotationOverlay->isActive()) {
@@ -1864,6 +1944,11 @@ void ScreenshotService::notifySaved(const std::filesystem::path& path) {
 
 void ScreenshotService::notifyError(const std::string& message) {
   m_notifications.addInternal("Noctalia", "Screenshot failed", message, Urgency::Critical);
+}
+
+void ScreenshotService::releaseIslandCapture() {
+  if (m_annotationOverlay && m_annotationOverlay->isActive())
+    m_annotationOverlay->cancel();
 }
 
 void ScreenshotService::setSoundPlayer(SoundPlayer* soundPlayer) { m_soundPlayer = soundPlayer; }

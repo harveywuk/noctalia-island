@@ -16,6 +16,7 @@
 class Flex;
 class Renderer;
 class RenderContext;
+class Island;
 class WaylandConnection;
 struct KeyboardEvent;
 struct PointerEvent;
@@ -55,6 +56,7 @@ namespace capture {
   public:
     using ExportCallback = std::function<void(ScreencopyImage image, AnnotationExport action)>;
     using FreezeCallback = std::function<void()>;
+    using RecordCallback = std::function<void(bool monitor)>;
     using CaptureRegionCallback = std::function<void()>;
     using ClosedCallback = std::function<void()>;
     using FailureCallback = std::function<void(const std::string& message)>;
@@ -65,8 +67,10 @@ namespace capture {
     ~AnnotationOverlay();
 
     void initialize(WaylandConnection& wayland, RenderContext* renderContext);
+    void setIslandHost(Island* island) { m_islandHost = island; }
     void setExportCallback(ExportCallback callback);
     void setFreezeCallback(FreezeCallback callback);
+    void setRecordCallback(RecordCallback callback);
     void setCaptureRegionCallback(CaptureRegionCallback callback);
     void setClosedCallback(ClosedCallback callback);
     void setFailureCallback(FailureCallback callback);
@@ -103,6 +107,8 @@ namespace capture {
     void prepareFrame(Instance& instance, bool needsUpdate, bool needsLayout);
     void buildScene(Instance& instance);
     [[nodiscard]] std::unique_ptr<Flex> buildToolbar(Instance& instance);
+    void buildToolbarMenus(Instance& instance);
+    void toggleToolbarMenu(Instance& instance, int menu);
     void refreshToolbar(Instance& instance, Renderer* renderer);
     void positionToolbar(Instance& instance);
     void syncToolbarPositionsForConnectedOutputs();
@@ -148,6 +154,7 @@ namespace capture {
     void requestExport(AnnotationExport action);
     void requestFreeze();
     void requestCaptureRegion();
+    void requestRecording(bool monitor);
     void toggleCursor(Instance* instance = nullptr);
     void closeOverlay();
     void persistToolState();
@@ -156,11 +163,13 @@ namespace capture {
     void markCommittedDirty(Instance& instance, const AnnotationRect& logicalBounds);
     void updateCropVisuals(Instance& instance);
 
+    Island* m_islandHost = nullptr;
     WaylandConnection* m_wayland = nullptr;
     RenderContext* m_renderContext = nullptr;
     ExportCallback m_onExport;
     FreezeCallback m_onFreeze;
     CaptureRegionCallback m_onCaptureRegion;
+    RecordCallback m_onRecord;
     ClosedCallback m_onClosed;
     FailureCallback m_onFailure;
     FeedbackCallback m_onFeedback;

@@ -1,5 +1,6 @@
 # Build
 build*/
+.deps/
 cmake-build-*/
 compile_commands.json
 

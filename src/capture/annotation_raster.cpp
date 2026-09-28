@@ -467,6 +467,68 @@ namespace capture {
       cairo_restore(cr);
     }
 
+    void renderRegionEffect(cairo_t* cr, const Annotation& annotation, cairo_surface_t* background, double scale) {
+      if (!background || cairo_surface_get_type(background) != CAIRO_SURFACE_TYPE_IMAGE)
+        return;
+      const auto a = annotation.points.front();
+      const auto b = annotation.points.back();
+      const double left = std::min(a.x, b.x), top = std::min(a.y, b.y);
+      const double width = std::abs(a.x - b.x), height = std::abs(a.y - b.y);
+      if (width < 1 || height < 1)
+        return;
+      double x0 = left, y0 = top, x1 = left + width, y1 = top + height;
+      cairo_user_to_device(cr, &x0, &y0);
+      cairo_user_to_device(cr, &x1, &y1);
+      cairo_save(cr);
+      cairo_rectangle(cr, left, top, width, height);
+      cairo_clip(cr);
+      cairo_identity_matrix(cr);
+      if (annotation.tool == AnnotationTool::Magnify) {
+        const double cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+        const double zoom = std::clamp(annotation.width, 1.0, 8.0);
+        cairo_translate(cr, cx, cy);
+        cairo_scale(cr, zoom, zoom);
+        cairo_set_source_surface(cr, background, -cx, -cy);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+        cairo_paint(cr);
+      } else {
+        cairo_surface_flush(background);
+        const int sw = cairo_image_surface_get_width(background), sh = cairo_image_surface_get_height(background);
+        const int stride = cairo_image_surface_get_stride(background);
+        const auto* data = cairo_image_surface_get_data(background);
+        const int bx = std::clamp(static_cast<int>(std::floor(std::min(x0, x1))), 0, sw);
+        const int by = std::clamp(static_cast<int>(std::floor(std::min(y0, y1))), 0, sh);
+        const int ex = std::clamp(static_cast<int>(std::ceil(std::max(x0, x1))), 0, sw);
+        const int ey = std::clamp(static_cast<int>(std::ceil(std::max(y0, y1))), 0, sh);
+        const int block = static_cast<int>(std::clamp(std::round(annotation.width * scale), 1.0, 1024.0));
+        for (int y = by; y < ey; y += block) {
+          for (int x = bx; x < ex; x += block) {
+            const int right = std::min(x + block, ex), bottom = std::min(y + block, ey);
+            std::uint64_t aSum = 0, r = 0, g = 0, bSum = 0;
+            for (int py = y; py < bottom; ++py) {
+              const auto* row = reinterpret_cast<const std::uint32_t*>(data + py * stride);
+              for (int px = x; px < right; ++px) {
+                const auto pixel = row[px];
+                aSum += pixel >> 24;
+                r += (pixel >> 16) & 255;
+                g += (pixel >> 8) & 255;
+                bSum += pixel & 255;
+              }
+            }
+            const double count = (right - x) * (bottom - y);
+            const double alpha = static_cast<double>(aSum);
+            cairo_set_source_rgba(
+                cr, alpha ? static_cast<double>(r) / alpha : 0, alpha ? static_cast<double>(g) / alpha : 0,
+                alpha ? static_cast<double>(bSum) / alpha : 0, alpha / (255 * count)
+            );
+            cairo_rectangle(cr, x, y, right - x, bottom - y);
+            cairo_fill(cr);
+          }
+        }
+      }
+      cairo_restore(cr);
+    }
+
     void argb32ToStraightRgba(const unsigned char* src, int srcStride, std::uint8_t* dst, int width, int height) {
       for (int y = 0; y < height; ++y) {
         const auto* row = reinterpret_cast<const std::uint32_t*>(
@@ -549,6 +611,12 @@ namespace capture {
       cairo_stroke(cr);
       return;
     }
+
+    case AnnotationTool::Pixelate:
+    case AnnotationTool::Magnify:
+      if (annotation.points.size() >= 2)
+        renderRegionEffect(cr, annotation, background, scale);
+      return;
 
     case AnnotationTool::Blur:
       if (annotation.points.size() >= 2) {

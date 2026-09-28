@@ -49,6 +49,7 @@ public:
   void requestRedraw();
 
   bool onPointerEvent(const PointerEvent& event);
+  std::function<bool(const Notification&, NotificationEvent)> presentationHandler;
   bool onKeyboardEvent(const KeyboardEvent& event);
 
   [[nodiscard]] float horizontalInnerPad(float scale) const;

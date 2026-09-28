@@ -86,12 +86,13 @@ namespace settings {
       return defaultKeybindSet(action);
     }
 
-    constexpr std::array<SettingsSectionDescriptor, 24> kSettingsSections{{
+    constexpr std::array<SettingsSectionDescriptor, 25> kSettingsSections{{
         {SettingsSection::Appearance, "appearance", "adjustments-horizontal"},
         {SettingsSection::Wallpaper, "wallpaper", "paint"},
         {SettingsSection::Templates, "templates", "color-swatch"},
         {SettingsSection::Desktop, "desktop", "layout-board"},
         {SettingsSection::Dock, "dock", "layout-bottombar-inactive"},
+        {SettingsSection::Island, "island", "layout-navbar"},
         {SettingsSection::Panels, "panels", "layout-bottombar"},
         {SettingsSection::Launcher, "launcher", "rocket"},
         {SettingsSection::ControlCenter, "control-center", "adjustments"},
@@ -893,6 +894,27 @@ namespace settings {
       entries.push_back(std::move(e));
     }
 
+    // Dynamic island
+    const auto islandSetting = [&](std::string group, std::string key, SettingControl control) {
+      const std::string prefix = "settings.schema.island." + key;
+      entries.push_back(makeEntry(
+          SettingsSection::Island, std::move(group), tr(prefix + ".label"), tr(prefix + ".description"),
+          {"island", key}, std::move(control), "dynamic island capsule hover"
+      ));
+    };
+    islandSetting("general", "enabled", ToggleSetting{cfg.island.enabled});
+    islandSetting("general", "reserve_space", ToggleSetting{cfg.island.reserveSpace});
+    islandSetting("layout", "height", SliderSetting{cfg.island.height, 44, 72, 1, true});
+    islandSetting("layout", "scale", sliderFor(cfg.island.scale, noctalia::config::schema::kScaleRange, false));
+    islandSetting("clock", "clock_size", SliderSetting{cfg.island.clockSize, 16, 36, 1, true});
+    islandSetting("clock", "clock_seconds", ToggleSetting{cfg.island.clockSeconds});
+    islandSetting("clock", "clock_offset", SliderSetting{cfg.island.clockOffset, -12, 12, 1, true});
+    islandSetting("clock", "expanded_clock_offset", SliderSetting{cfg.island.expandedClockOffset, -12, 12, 1, true});
+    islandSetting("calendar", "calendar_labels", enumSelect(kIslandCalendarLabels, cfg.island.calendarLabels));
+    islandSetting("media", "media_artwork_size", SliderSetting{cfg.island.mediaArtworkSize, 40, 80, 1, true});
+    islandSetting("osd", "volume_bar_height", SliderSetting{cfg.island.volumeBarHeight, 5, 24, 1, true});
+    islandSetting("osd", "volume_show_percentage", ToggleSetting{cfg.island.volumeShowPercentage});
+
     // Dock
     entries.push_back(makeEntry(
         SettingsSection::Dock, "general", tr("settings.schema.shared.enabled.label"),
@@ -1380,6 +1402,43 @@ namespace settings {
 
     // Control Center
     entries.push_back(makeEntry(
+        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-cards.label"),
+        tr("settings.schema.panels.home-cards.description"), {"control_center", "home", "cards"},
+        ListSetting{
+            .items = cfg.controlCenter.homeTab.cards,
+            .suggestedOptions =
+                {{"profile", tr("settings.options.home-cards.profile")},
+                 {"media", tr("settings.options.home-cards.media")},
+                 {"clock", tr("settings.options.home-cards.clock")},
+                 {"shortcuts", tr("settings.options.home-cards.shortcuts")}}
+        },
+        "home cards visible hide show reorder profile music clock weather shortcuts"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-stacked.label"),
+        tr("settings.schema.panels.home-stacked.description"), {"control_center", "home", "stacked"},
+        ToggleSetting{cfg.controlCenter.homeTab.stacked}, "home layout dashboard stacked column order"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-shortcuts.label"),
+        tr("settings.schema.panels.home-shortcuts.description"), {"control_center", "shortcuts"},
+        ShortcutListSetting{
+            .items = cfg.controlCenter.shortcuts, .suggestedOptions = controlCenterShortcutOptions(cfg), .maxItems = 6
+        },
+        "quick settings shortcuts toggles wifi bluetooth caffeine night light dnd power media weather clipboard"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-shortcuts-show-labels.label"),
+        tr("settings.schema.panels.home-shortcuts-show-labels.description"), {"control_center", "show_shortcut_labels"},
+        ToggleSetting{cfg.controlCenter.showShortcutLabels}, "shortcuts labels text hide show titles"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-session-button.label"),
+        tr("settings.schema.panels.home-session-button.description"), {"control_center", "show_session_button"},
+        ToggleSetting{cfg.controlCenter.showSessionButton}, "session button show hide"
+    ));
+
+    entries.push_back(makeEntry(
         SettingsSection::ControlCenter, "layout", tr("settings.schema.panels.placement-control-center.label"),
         tr("settings.schema.panels.placement-control-center.description"),
         {"shell", "panel", "control_center_placement"},
@@ -1438,24 +1497,6 @@ namespace settings {
           std::move(tabs), "tabs sections visible hide show display brightness media audio network power"
       ));
     }
-    entries.push_back(makeEntry(
-        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-shortcuts.label"),
-        tr("settings.schema.panels.home-shortcuts.description"), {"control_center", "shortcuts"},
-        ShortcutListSetting{
-            .items = cfg.controlCenter.shortcuts, .suggestedOptions = controlCenterShortcutOptions(cfg), .maxItems = 6
-        },
-        "quick settings shortcuts toggles wifi bluetooth caffeine night light dnd power media weather clipboard"
-    ));
-    entries.push_back(makeEntry(
-        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-shortcuts-show-labels.label"),
-        tr("settings.schema.panels.home-shortcuts-show-labels.description"), {"control_center", "show_shortcut_labels"},
-        ToggleSetting{cfg.controlCenter.showShortcutLabels}, "shortcuts labels text hide show titles"
-    ));
-    entries.push_back(makeEntry(
-        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-session-button.label"),
-        tr("settings.schema.panels.home-session-button.description"), {"control_center", "show_session_button"},
-        ToggleSetting{cfg.controlCenter.showSessionButton}, "session button show hide"
-    ));
 
     // Desktop
     entries.push_back(makeEntry(

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "app/deferred_call_poll_source.h"
 #include "app/timer_poll_source.h"
 #include "calendar/calendar_poll_source.h"
@@ -41,6 +40,7 @@
 #include "shell/desktop/desktop_widgets_controller.h"
 #include "shell/dock/dock.h"
 #include "shell/hot_corners/hot_corners.h"
+#include "shell/island/island.h"
 #include "shell/lockscreen/lock_screen.h"
 #include "shell/lockscreen/lockscreen_widgets_controller.h"
 #include "shell/notification/notification_toast.h"
@@ -353,6 +353,7 @@ private:
   KeyboardLayoutOsd m_keyboardLayoutOsd;
   PrivacyOsd m_privacyOsd;
   OsdOverlay m_osdOverlay;
+  Island m_island;
   HotCorners m_hotCorners{this};
   ScreenCorners m_screenCorners;
   TrayMenu m_trayMenu;

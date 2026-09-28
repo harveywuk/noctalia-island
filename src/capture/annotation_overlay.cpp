@@ -17,10 +17,12 @@
 #include "render/scene/input_area.h"
 #include "render/scene/input_dispatcher.h"
 #include "render/scene/node.h"
+#include "shell/island/island.h"
 #include "shell/tooltip/tooltip_manager.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
+#include "ui/controls/color_picker.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/image.h"
 #include "ui/controls/label.h"
@@ -91,7 +93,7 @@ namespace capture {
       const char* tooltipKey;
     };
 
-    constexpr std::array<ToolButtonSpec, 12> kToolButtons = {{
+    constexpr std::array<ToolButtonSpec, kAnnotationToolCount> kToolButtons = {{
         {AnnotationTool::Move, "arrows-move", "bar.annotate.tool-move"},
         {AnnotationTool::Brush, "brush", "bar.annotate.tool-brush"},
         {AnnotationTool::Highlighter, "highlight", "bar.annotate.tool-highlighter"},
@@ -104,6 +106,8 @@ namespace capture {
         {AnnotationTool::Blur, "blur", "bar.annotate.tool-blur"},
         {AnnotationTool::Eraser, "eraser", "bar.annotate.tool-eraser"},
         {AnnotationTool::Crop, "crop", "bar.annotate.tool-crop"},
+        {AnnotationTool::Pixelate, "grid-dots", "bar.annotate.tool-pixelate"},
+        {AnnotationTool::Magnify, "zoom-in", "bar.annotate.tool-magnify"},
     }};
 
     [[nodiscard]] std::size_t toolIndex(AnnotationTool tool) { return static_cast<std::size_t>(tool); }
@@ -269,7 +273,12 @@ namespace capture {
 
   struct AnnotationOverlay::Instance {
     wl_output* output = nullptr;
-    std::unique_ptr<LayerSurface> surface;
+    std::unique_ptr<LayerSurface> ownedSurface;
+    LayerSurface* surface = nullptr;
+    std::optional<IslandPanelSurface> islandHost;
+    Box* capsule = nullptr;
+    float capsuleWidth = 0, capsuleHeight = 0, targetWidth = 0, targetHeight = 0;
+    AnimationManager::Id capsuleAnimation = 0;
     // sceneRoot must be destroyed before `animations`: ~Node() calls cancelForOwner().
     AnimationManager animations;
     std::unique_ptr<Node> sceneRoot;
@@ -286,6 +295,15 @@ namespace capture {
     Box* dimRight = nullptr;
     Box* cropFrame = nullptr;
     Flex* toolbar = nullptr;
+    Flex* toolsPanel = nullptr;
+    Flex* stylePanel = nullptr;
+    InputArea* menuShield = nullptr;
+    ColorPicker* colorPicker = nullptr;
+    Button* toolsButton = nullptr;
+    Button* colorButton = nullptr;
+    int openMenu = 0;
+    std::optional<AnnotationColor> displayedColor;
+    std::optional<AnnotationTool> displayedTool;
     std::array<Button*, kAnnotationToolCount> toolButtons{};
     std::array<Button*, kSwatches.size()> swatchButtons{};
     Button* fillButton = nullptr;
@@ -328,6 +346,7 @@ namespace capture {
     bool pointerInside = false;
     // Toolbar glyph state, so a mark only moves (and forces a relayout) when it really changed.
     std::optional<std::size_t> markedSwatch;
+    bool swatchesInitialized = false;
     bool fillGlyphOn = false;
     const char* cursorTooltip = nullptr;
   };
@@ -349,6 +368,8 @@ namespace capture {
     m_onCaptureRegion = std::move(callback);
   }
 
+  void AnnotationOverlay::setRecordCallback(RecordCallback callback) { m_onRecord = std::move(callback); }
+
   void AnnotationOverlay::setClosedCallback(ClosedCallback callback) { m_onClosed = std::move(callback); }
 
   void AnnotationOverlay::setFailureCallback(FailureCallback callback) { m_onFailure = std::move(callback); }
@@ -361,7 +382,8 @@ namespace capture {
     m_tools = state;
     for (std::size_t i = 0; i < kAnnotationToolCount; ++i) {
       const auto tool = static_cast<AnnotationTool>(i);
-      const double limit = tool == AnnotationTool::Text ? kMaxTextWidth : kMaxToolWidth;
+      const double limit =
+          tool == AnnotationTool::Text ? kMaxTextWidth : (tool == AnnotationTool::Magnify ? 8.0 : kMaxToolWidth);
       const double floorWidth = tool == AnnotationTool::Text ? kMinTextWidth : kMinToolWidth;
       m_tools.width[i] = std::clamp(m_tools.width[i], floorWidth, limit);
     }
@@ -377,8 +399,7 @@ namespace capture {
   void AnnotationOverlay::setFrozenScreenshots(std::vector<FrozenScreenshot> frozen) {
     m_frozen = std::move(frozen);
     m_mode = m_frozen.empty() ? AnnotationMode::Live : AnnotationMode::Frozen;
-    if (m_mode == AnnotationMode::Live
-        && (m_tools.tool == AnnotationTool::Blur || m_tools.tool == AnnotationTool::Crop)) {
+    if (m_mode == AnnotationMode::Live && annotationToolNeedsBackground(m_tools.tool)) {
       m_tools.tool = AnnotationTool::Brush;
     }
   }
@@ -548,7 +569,19 @@ namespace capture {
           .defaultHeight = static_cast<std::uint32_t>(output.logicalHeight),
       };
 
-      inst->surface = std::make_unique<LayerSurface>(*m_wayland, std::move(config));
+      if (m_islandHost)
+        inst->islandHost = m_islandHost->acquirePanelSurface(output.output, true);
+      if (inst->islandHost) {
+        inst->surface = inst->islandHost->surface;
+        inst->surface->setLayer(LayerShellLayer::Overlay);
+        inst->surface->setKeyboardInteractivity(LayerShellKeyboard::Exclusive);
+        inst->surface->setInputRegion({InputRect{0, 0, output.logicalWidth, output.logicalHeight}});
+        inst->capsuleWidth = inst->islandHost->width;
+        inst->capsuleHeight = inst->islandHost->height;
+      } else {
+        inst->ownedSurface = std::make_unique<LayerSurface>(*m_wayland, std::move(config));
+        inst->surface = inst->ownedSurface.get();
+      }
       auto* instPtr = inst.get();
       inst->surface->setRenderContext(m_renderContext);
       inst->surface->setAnimationManager(&inst->animations);
@@ -559,11 +592,12 @@ namespace capture {
         prepareFrame(*instPtr, needsUpdate, needsLayout);
       });
 
-      if (!inst->surface->initialize(output.output)) {
+      if (inst->ownedSurface && !inst->surface->initialize(output.output)) {
         kLog.warn("failed to initialize annotation overlay on {}", output.connectorName);
         continue;
       }
 
+      inst->surface->requestLayout();
       m_documents.try_emplace(output.output);
       m_instances.push_back(std::move(inst));
     }
@@ -606,6 +640,12 @@ namespace capture {
       }
       inst->inputDispatcher.setSceneRoot(nullptr);
       inst->animations.cancelAll();
+      if (inst->surface)
+        inst->surface->setSceneRoot(nullptr);
+      if (inst->islandHost && m_islandHost) {
+        m_islandHost->releasePanelSurface(inst->output, inst->capsuleWidth, inst->capsuleHeight);
+        inst->surface = nullptr;
+      }
     }
     m_instances.clear();
     m_gestureInstance = nullptr;
@@ -794,6 +834,15 @@ namespace capture {
     inst.toolButtons.fill(nullptr);
     inst.swatchButtons.fill(nullptr);
     inst.fillButton = inst.freezeButton = inst.cursorButton = nullptr;
+    inst.toolsPanel = inst.stylePanel = nullptr;
+    inst.menuShield = nullptr;
+    inst.colorPicker = nullptr;
+    inst.toolsButton = inst.colorButton = nullptr;
+    inst.openMenu = 0;
+    inst.capsule = nullptr;
+    inst.targetWidth = inst.targetHeight = 0;
+    inst.displayedColor.reset();
+    inst.displayedTool.reset();
     inst.cursorTooltip = nullptr;
     inst.undoButton = inst.redoButton = inst.copyButton = inst.saveButton = inst.doneButton = nullptr;
     inst.exportSeparator = nullptr;
@@ -939,7 +988,14 @@ namespace capture {
 
     inst.canvas = canvas.get();
     inst.sceneRoot->addChild(std::move(canvas));
+    if (inst.islandHost) {
+      auto capsule = std::make_unique<Box>();
+      capsule->setFill(rgba(0.015F, 0.015F, 0.018F));
+      inst.capsule = capsule.get();
+      inst.sceneRoot->addChild(std::move(capsule));
+    }
     inst.sceneRoot->addChild(std::move(toolbar));
+    buildToolbarMenus(inst);
 
     inst.surface->setSceneRoot(inst.sceneRoot.get());
     inst.inputDispatcher.setSceneRoot(inst.sceneRoot.get());
@@ -1055,7 +1111,7 @@ namespace capture {
 
   std::unique_ptr<Flex> AnnotationOverlay::buildToolbar(Instance& inst) {
     Color toolbarFill = colorForRole(ColorRole::Surface);
-    toolbarFill.a = kToolbarFillAlpha;
+    toolbarFill.a = inst.islandHost ? 0.0F : kToolbarFillAlpha;
 
     auto toolbar = ui::row({
         .align = FlexAlign::Center,
@@ -1066,7 +1122,7 @@ namespace capture {
         .fill = fixedColorSpec(toolbarFill),
         .radius = Style::radiusXl,
         .border = colorSpecFromRole(ColorRole::Outline),
-        .borderWidth = Style::borderWidth,
+        .borderWidth = inst.islandHost ? 0.0F : Style::borderWidth,
     });
 
     const auto addSeparator = [&]() {
@@ -1093,6 +1149,8 @@ namespace capture {
     // pointer stream, which the pointer's implicit grab keeps pointed at this overlay.
     auto* instPtr = &inst;
     inst.dragHandle = addGhostButton("grip-vertical", "bar.annotate.move-toolbar", nullptr);
+    inst.dragHandle->setVisible(!inst.islandHost);
+    inst.dragHandle->setParticipatesInLayout(!inst.islandHost);
     inst.dragHandle->setCursorShape(WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_ALL_SCROLL);
     inst.dragHandle->setOnPress([this, instPtr](float /*localX*/, float /*localY*/, bool pressed) {
       if (pressed) {
@@ -1110,41 +1168,145 @@ namespace capture {
     }
     addSeparator();
 
+    addGhostButton("video", "bar.annotate.record-region", [this]() { requestRecording(false); });
+    addGhostButton("device-desktop", "bar.annotate.record-monitor", [this]() { requestRecording(true); });
+    addSeparator();
+    inst.toolsButton =
+        addGhostButton("brush", "bar.annotate.tools-menu", [this, instPtr]() { toggleToolbarMenu(*instPtr, 1); });
+    inst.colorButton =
+        addGhostButton("palette", "bar.annotate.style-menu", [this, instPtr]() { toggleToolbarMenu(*instPtr, 2); });
+
+    addSeparator();
     inst.undoButton = addGhostButton("arrow-back-up", "bar.annotate.undo", [this]() { undo(); });
     inst.redoButton = addGhostButton("arrow-forward-up", "bar.annotate.redo", [this]() { redo(); });
     addSeparator();
 
-    for (const auto& spec : kToolButtons) {
-      inst.toolButtons[toolIndex(spec.tool)] = static_cast<Button*>(toolbar->addChild(
-          ui::button({
-              .glyph = std::string(spec.glyph),
-              .selected = m_tools.tool == spec.tool,
-              .variant = ButtonVariant::Ghost,
-              .tooltip = i18n::tr(spec.tooltipKey),
-              .onClick = [this, tool = spec.tool]() { selectTool(tool); },
-          })
-      ));
-    }
+    inst.exportSeparator = addSeparator();
+    inst.copyButton = addGhostButton("copy", "bar.annotate.copy", [this]() { requestExport(AnnotationExport::Copy); });
+    inst.saveButton =
+        addGhostButton("device-floppy", "bar.annotate.save", [this]() { requestExport(AnnotationExport::Save); });
+    inst.doneButton = static_cast<Button*>(toolbar->addChild(
+        ui::button({
+            .glyph = std::string("check"),
+            .variant = ButtonVariant::Primary,
+            .tooltip = i18n::tr("bar.annotate.done"),
+            .onClick = [this]() { requestExport(AnnotationExport::Done); },
+        })
+    ));
+    addGhostButton("screenshot", "bar.annotate.capture-new-region", [this]() { requestCaptureRegion(); });
+    addGhostButton("x", "bar.annotate.close", [this]() { closeOverlay(); });
 
-    addSeparator();
-    inst.freezeButton = addGhostButton("snowflake", "bar.annotate.freeze", [this]() { requestFreeze(); });
-    inst.cursorButton = addGhostButton("pointer", "bar.annotate.cursor", [this, instPtr]() { toggleCursor(instPtr); });
-    if (const ScreenshotImage* image = screenshot(inst);
-        image != nullptr && !image->canToggleCursor() && image->cursorVisible) {
-      // Keep the captured-on state visible even when this capture cannot be toggled.
-      auto palette = Button::defaultPalette(ButtonVariant::Ghost);
-      if (palette.selected.has_value()) {
-        palette.disabled.bg = palette.selected->bg;
-        palette.disabled.border = palette.selected->border;
+    if (inst.islandHost)
+      toolbar->setMinHeight(64.0F * inst.islandHost->scale);
+    inst.toolbar = toolbar.get();
+    refreshToolbar(inst, nullptr);
+    return toolbar;
+  }
+
+  void AnnotationOverlay::buildToolbarMenus(Instance& inst) {
+    auto* target = &inst;
+    auto shield = ui::inputArea(
+        {.acceptedButtons = InputArea::buttonMask(BTN_LEFT),
+         .width = static_cast<float>(inst.surface->width()),
+         .height = static_cast<float>(inst.surface->height()),
+         .visible = false}
+    );
+    shield->setOnClick([this, target](const InputArea::PointerData& data) {
+      Flex* panel = target->openMenu == 1 ? target->toolsPanel : target->stylePanel;
+      if (panel
+          && data.localX >= panel->x()
+          && data.localX < panel->x() + panel->width()
+          && data.localY >= panel->y()
+          && data.localY < panel->y() + panel->height())
+        return;
+      toggleToolbarMenu(*target, 0);
+    });
+    inst.menuShield = static_cast<InputArea*>(inst.sceneRoot->addChild(std::move(shield)));
+    const auto makePanel = [&]() {
+      return ui::column(
+          {.align = FlexAlign::Stretch,
+           .gap = Style::spaceMd,
+           .padding = Style::spaceMd,
+           .fill = inst.islandHost ? fixedColorSpec(rgba(0, 0, 0, 0)) : colorSpecFromRole(ColorRole::Surface),
+           .radius = Style::radiusLg,
+           .border = colorSpecFromRole(ColorRole::Outline),
+           .borderWidth = inst.islandHost ? 0.0F : Style::borderWidth,
+           .visible = false}
+      );
+    };
+    const auto title = [this, target](Flex& panel, const char* key) {
+      panel.addChild(
+          ui::row(
+              {.align = FlexAlign::Center, .gap = Style::spaceMd},
+              ui::label({.text = i18n::tr(key), .color = colorSpecFromRole(ColorRole::OnSurface)}), ui::spacer(),
+              ui::button({.glyph = "x", .variant = ButtonVariant::Ghost, .onClick = [this, target]() {
+                            toggleToolbarMenu(*target, 0);
+                          }})
+          )
+      );
+    };
+    auto tools = makePanel();
+    title(*tools, "bar.annotate.tools-menu");
+    for (std::size_t offset = 0; offset < kToolButtons.size(); offset += 7) {
+      auto row = ui::row({.gap = Style::spaceSm});
+      for (std::size_t i = offset; i < std::min(offset + 7, kToolButtons.size()); ++i) {
+        const auto& spec = kToolButtons[i];
+        inst.toolButtons[toolIndex(spec.tool)] = static_cast<Button*>(row->addChild(
+            ui::button(
+                {.glyph = std::string(spec.glyph),
+                 .variant = ButtonVariant::Ghost,
+                 .tooltip = i18n::tr(spec.tooltipKey),
+                 .onClick = [this, target, tool = spec.tool]() {
+                   selectTool(tool);
+                   toggleToolbarMenu(*target, 0);
+                 }}
+            )
+        ));
       }
-      inst.cursorButton->setCustomPalette(palette);
+      tools->addChild(std::move(row));
     }
-    inst.fillButton = addGhostButton("paint-off", "bar.annotate.fill-off", [this]() { toggleFill(); });
-    addSeparator();
+    auto options = ui::row({.gap = Style::spaceSm});
+    inst.freezeButton = static_cast<Button*>(options->addChild(
+        ui::button(
+            {.glyph = "snowflake",
+             .variant = ButtonVariant::Ghost,
+             .tooltip = i18n::tr("bar.annotate.freeze"),
+             .onClick = [this, target]() {
+               toggleToolbarMenu(*target, 0);
+               requestFreeze();
+             }}
+        )
+    ));
+    inst.cursorButton = static_cast<Button*>(options->addChild(
+        ui::button(
+            {.glyph = "pointer",
+             .variant = ButtonVariant::Ghost,
+             .tooltip = i18n::tr("bar.annotate.cursor"),
+             .onClick = [this, target]() { toggleCursor(target); }}
+        )
+    ));
+    inst.fillButton = static_cast<Button*>(options->addChild(
+        ui::button(
+            {.glyph = "paint-off",
+             .variant = ButtonVariant::Ghost,
+             .tooltip = i18n::tr("bar.annotate.fill-off"),
+             .onClick = [this]() { toggleFill(); }}
+        )
+    ));
+    tools->addChild(std::move(options));
+    inst.toolsPanel = static_cast<Flex*>(inst.sceneRoot->addChild(std::move(tools)));
 
+    auto style = makePanel();
+    title(*style, "bar.annotate.style-menu");
+    auto picker = std::make_unique<ColorPicker>();
+    picker->setPickerWidth(320.0F);
+    picker->setOnColorChanged([this](const Color& color) { setToolColor({color.r, color.g, color.b, color.a}); });
+    inst.colorPicker = picker.get();
+    style->addChild(std::move(picker));
+    auto swatches = ui::row({.justify = FlexJustify::Center, .gap = Style::spaceSm});
     for (std::size_t i = 0; i < kSwatches.size(); ++i) {
       const AnnotationColor color = kSwatches[i].color;
-      inst.swatchButtons[i] = static_cast<Button*>(toolbar->addChild(
+      inst.swatchButtons[i] = static_cast<Button*>(swatches->addChild(
           ui::button({
               .glyph = std::string("check"),
               .glyphSize = kSwatchGlyphSize,
@@ -1163,8 +1325,20 @@ namespace capture {
       ));
     }
 
-    inst.sizeSeparator = addSeparator();
-    inst.sizePresets = static_cast<Segmented*>(toolbar->addChild(
+    style->addChild(std::move(swatches));
+    auto sizes = ui::row({.align = FlexAlign::Center, .justify = FlexJustify::Center, .gap = Style::spaceSm});
+    const auto addGhostButton = [&](const char* glyph, const char* key, std::function<void()> click) {
+      return static_cast<Button*>(sizes->addChild(
+          ui::button(
+              {.glyph = std::string(glyph),
+               .variant = ButtonVariant::Ghost,
+               .tooltip = i18n::tr(key),
+               .onClick = std::move(click)}
+          )
+      ));
+    };
+
+    inst.sizePresets = static_cast<Segmented*>(sizes->addChild(
         ui::segmented({
             .options =
                 std::vector<ui::SegmentedOption>{
@@ -1181,7 +1355,7 @@ namespace capture {
     inst.advancedButton =
         addGhostButton("adjustments-horizontal", "bar.annotate.size-advanced", [this]() { toggleAdvancedSize(); });
     inst.sizeDownButton = addGhostButton("minus", "bar.annotate.size-decrease", [this]() { adjustToolWidth(-1.0); });
-    inst.sizeLabel = static_cast<Label*>(toolbar->addChild(
+    inst.sizeLabel = static_cast<Label*>(sizes->addChild(
         ui::label({
             .fontSize = Style::fontSizeCaption,
             .color = colorSpecFromRole(ColorRole::OnSurface),
@@ -1191,29 +1365,47 @@ namespace capture {
     ));
     inst.sizeUpButton = addGhostButton("plus", "bar.annotate.size-increase", [this]() { adjustToolWidth(1.0); });
 
-    inst.exportSeparator = addSeparator();
-    inst.copyButton = addGhostButton("copy", "bar.annotate.copy", [this]() { requestExport(AnnotationExport::Copy); });
-    inst.saveButton =
-        addGhostButton("device-floppy", "bar.annotate.save", [this]() { requestExport(AnnotationExport::Save); });
-    inst.doneButton = static_cast<Button*>(toolbar->addChild(
-        ui::button({
-            .glyph = std::string("check"),
-            .variant = ButtonVariant::Primary,
-            .tooltip = i18n::tr("bar.annotate.done"),
-            .onClick = [this]() { requestExport(AnnotationExport::Done); },
-        })
-    ));
-    addGhostButton("screenshot", "bar.annotate.capture-new-region", [this]() { requestCaptureRegion(); });
-    addGhostButton("x", "bar.annotate.close", [this]() { closeOverlay(); });
+    style->addChild(std::move(sizes));
+    style->addChild(
+        ui::button(
+            {.text = i18n::tr("bar.annotate.style-done"),
+             .variant = ButtonVariant::Primary,
+             .onClick = [this, target]() { toggleToolbarMenu(*target, 0); }}
+        )
+    );
+    inst.stylePanel = static_cast<Flex*>(inst.sceneRoot->addChild(std::move(style)));
+    inst.displayedColor.reset();
+    inst.swatchesInitialized = false;
+  }
 
-    inst.toolbar = toolbar.get();
-    refreshToolbar(inst, nullptr);
-    return toolbar;
+  void AnnotationOverlay::toggleToolbarMenu(Instance& inst, int menu) {
+    commitPendingText();
+    inst.openMenu = inst.openMenu == menu ? 0 : menu;
+    inst.menuShield->setVisible(inst.openMenu != 0);
+    inst.toolsPanel->setVisible(inst.openMenu == 1);
+    inst.stylePanel->setVisible(inst.openMenu == 2);
+    inst.inputDispatcher.setFocus(inst.canvas);
+    TooltipManager::instance().onHoverChange(nullptr, inst.surface->layerSurface(), inst.output);
+    inst.surface->requestLayout();
+    requestRedrawAll();
   }
 
   void AnnotationOverlay::refreshToolbar(Instance& inst, Renderer* renderer) {
     if (inst.toolbar == nullptr) {
       return;
+    }
+    const auto color = m_tools.color[toolIndex(m_tools.tool)];
+    if (inst.colorButton && inst.displayedColor != color) {
+      inst.colorButton->setCustomPalette(swatchPalette(color));
+      if (inst.colorPicker)
+        inst.colorPicker->setColor(rgba(color.r, color.g, color.b, color.a));
+      inst.displayedColor = color;
+    }
+    if (inst.toolsButton && inst.displayedTool != m_tools.tool) {
+      for (const auto& spec : kToolButtons)
+        if (spec.tool == m_tools.tool)
+          inst.toolsButton->setGlyph(spec.glyph);
+      inst.displayedTool = m_tools.tool;
     }
     const bool frozenOrImage = m_mode != AnnotationMode::Live;
     const bool imageMode = m_mode == AnnotationMode::Image;
@@ -1235,7 +1427,7 @@ namespace capture {
       if (button == nullptr) {
         continue;
       }
-      const bool available = frozenOrImage || (spec.tool != AnnotationTool::Blur && spec.tool != AnnotationTool::Crop);
+      const bool available = frozenOrImage || !annotationToolNeedsBackground(spec.tool);
       show(button, available);
       button->setSelected(m_tools.tool == spec.tool);
     }
@@ -1309,7 +1501,7 @@ namespace capture {
         break;
       }
     }
-    if (markedSwatch != inst.markedSwatch) {
+    if (!inst.swatchesInitialized || markedSwatch != inst.markedSwatch) {
       for (std::size_t i = 0; i < kSwatches.size(); ++i) {
         Button* swatch = inst.swatchButtons[i];
         if (swatch == nullptr || swatch->glyph() == nullptr) {
@@ -1324,6 +1516,7 @@ namespace capture {
         }
       }
       inst.markedSwatch = markedSwatch;
+      inst.swatchesInitialized = true;
       needsLayout = true;
     }
 
@@ -1339,6 +1532,45 @@ namespace capture {
       inst.toolbar->layout(*renderer);
     }
     positionToolbar(inst);
+    if (renderer && inst.openMenu != 0) {
+      Flex* panel = inst.openMenu == 1 ? inst.toolsPanel : inst.stylePanel;
+      panel->layout(*renderer);
+      const float maxX = std::max(4.0F, static_cast<float>(inst.surface->width()) - panel->width() - 4.0F);
+      const float maxY = std::max(4.0F, static_cast<float>(inst.surface->height()) - panel->height() - 4.0F);
+      float y = inst.toolbar->y() + inst.toolbar->height() + Style::spaceSm;
+      if (y > maxY)
+        y = inst.toolbar->y() - panel->height() - Style::spaceSm;
+      panel->setPosition(
+          std::clamp(inst.toolbar->x() + (inst.toolbar->width() - panel->width()) / 2, 4.0F, maxX),
+          std::clamp(y, 4.0F, maxY)
+      );
+    }
+    if (inst.capsule && renderer) {
+      Flex* panel = inst.openMenu == 1 ? inst.toolsPanel : inst.stylePanel;
+      const float width = std::max(inst.toolbar->width(), inst.openMenu ? panel->width() : 0.0F);
+      const float height = inst.toolbar->height() + (inst.openMenu ? panel->height() + Style::spaceSm : 0.0F);
+      if (std::abs(width - inst.targetWidth) > 0.5F || std::abs(height - inst.targetHeight) > 0.5F) {
+        inst.animations.cancel(inst.capsuleAnimation);
+        const float fromW = inst.capsuleWidth, fromH = inst.capsuleHeight;
+        inst.targetWidth = width;
+        inst.targetHeight = height;
+        auto* target = &inst;
+        inst.capsuleAnimation = inst.animations.animate(
+            0, 1, 280, Easing::EaseOutCubic,
+            [target, fromW, fromH, width, height](float progress) {
+              target->capsuleWidth = fromW + (width - fromW) * progress;
+              target->capsuleHeight = fromH + (height - fromH) * progress;
+              target->capsule->setPosition(
+                  (static_cast<float>(target->surface->width()) - target->capsuleWidth) / 2, target->toolbar->y()
+              );
+              target->capsule->setSize(target->capsuleWidth, target->capsuleHeight);
+              target->capsule->setRadius(std::min(target->capsuleHeight / 2, 30.0F));
+              target->surface->requestRedraw();
+            },
+            {}, inst.capsule
+        );
+      }
+    }
   }
 
   std::size_t AnnotationOverlay::nearestSizePreset(AnnotationTool tool) const {
@@ -1364,7 +1596,7 @@ namespace capture {
     const bool text = tool == AnnotationTool::Text;
     m_tools.width[toolIndex(tool)] = std::clamp(
         annotationToolDefaultWidth(tool) * kSizePresets[index], text ? kMinTextWidth : kMinToolWidth,
-        text ? kMaxTextWidth : kMaxToolWidth
+        text ? kMaxTextWidth : (m_tools.tool == AnnotationTool::Magnify ? 8.0 : kMaxToolWidth)
     );
     restyleActiveText();
     requestRedrawAll();
@@ -1399,12 +1631,14 @@ namespace capture {
 
     float x = std::max(Style::spaceMd, (surfaceW - width) * 0.5F);
     float y = Style::spaceMd;
-    if (positionIt != m_toolbarPositions.end()) {
+    if (positionIt != m_toolbarPositions.end() && !inst.islandHost) {
       x = static_cast<float>(positionIt->second.x);
       y = static_cast<float>(positionIt->second.y);
     }
     x = std::clamp(x, kToolbarEdgeMargin, maxX);
     y = std::clamp(y, kToolbarEdgeMargin, maxY);
+    if (inst.islandHost)
+      y = 8.0F * inst.islandHost->scale;
     inst.toolbar->setPosition(x, y);
 
     if (positionIt != m_toolbarPositions.end()) {
@@ -2147,6 +2381,12 @@ namespace capture {
     case XKB_KEY_u:
     case XKB_KEY_U:
       return pick(AnnotationTool::Blur);
+    case XKB_KEY_i:
+    case XKB_KEY_I:
+      return pick(AnnotationTool::Pixelate);
+    case XKB_KEY_z:
+    case XKB_KEY_Z:
+      return pick(AnnotationTool::Magnify);
     case XKB_KEY_e:
     case XKB_KEY_E:
       return pick(AnnotationTool::Eraser);
@@ -2180,6 +2420,17 @@ namespace capture {
       return false;
     }
 
+    if (auto* inst = instanceForSurface(m_wayland->lastKeyboardSurface()); inst && inst->openMenu != 0) {
+      if (event.pressed && KeySymbol::isEscape(event.sym))
+        toggleToolbarMenu(*inst, 0);
+      else if (event.pressed && event.sym == XKB_KEY_Tab)
+        (void)inst->inputDispatcher.cycleTabFocusInSubtree(
+            inst->openMenu == 1 ? inst->toolsPanel : inst->stylePanel, (event.modifiers & KeyMod::Shift) != 0
+        );
+      else
+        inst->inputDispatcher.keyEvent(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
+      return true;
+    }
     if (!event.pressed) {
       return false;
     }
@@ -2293,7 +2544,7 @@ namespace capture {
     if (m_gestureActive) {
       return;
     }
-    if (m_mode == AnnotationMode::Live && (tool == AnnotationTool::Blur || tool == AnnotationTool::Crop)) {
+    if (m_mode == AnnotationMode::Live && annotationToolNeedsBackground(tool)) {
       return;
     }
     m_tools.tool = tool;
@@ -2310,7 +2561,8 @@ namespace capture {
     const std::size_t index = toolIndex(m_tools.tool);
     const bool text = m_tools.tool == AnnotationTool::Text;
     m_tools.width[index] = std::clamp(
-        m_tools.width[index] + delta, text ? kMinTextWidth : kMinToolWidth, text ? kMaxTextWidth : kMaxToolWidth
+        m_tools.width[index] + delta, text ? kMinTextWidth : kMinToolWidth,
+        text ? kMaxTextWidth : (m_tools.tool == AnnotationTool::Magnify ? 8.0 : kMaxToolWidth)
     );
     restyleActiveText();
     requestRedrawAll();
@@ -2364,6 +2616,13 @@ namespace capture {
     }
     FreezeCallback onFreeze = m_onFreeze;
     DeferredCall::callLater([onFreeze]() { onFreeze(); });
+  }
+
+  void AnnotationOverlay::requestRecording(bool monitor) {
+    if (!m_active || !m_onRecord)
+      return;
+    auto callback = m_onRecord;
+    DeferredCall::callLater([callback, monitor]() { callback(monitor); });
   }
 
   void AnnotationOverlay::requestCaptureRegion() {

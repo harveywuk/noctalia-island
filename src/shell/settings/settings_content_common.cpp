@@ -322,6 +322,7 @@ namespace settings {
     case SettingsSection::Wallpaper:
     case SettingsSection::Desktop:
     case SettingsSection::Dock:
+    case SettingsSection::Island:
     case SettingsSection::Panels:
     case SettingsSection::ControlCenter:
     case SettingsSection::Notifications:
@@ -359,6 +360,7 @@ namespace settings {
     case SettingsSection::Wallpaper:
     case SettingsSection::Desktop:
     case SettingsSection::Dock:
+    case SettingsSection::Island:
     case SettingsSection::Panels:
     case SettingsSection::ControlCenter:
     case SettingsSection::Notifications:

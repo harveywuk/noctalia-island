@@ -1,0 +1,31 @@
+# Standalone Orbit-inspired island profile for this fork.
+[island]
+enabled = true
+height = 64
+clock_size = 24
+scale = 1.0
+reserve_space = true
+clock_seconds = false
+# Set monitors = ["DP-1"] to match the original Orbit profile.
+monitors = []
+
+[accessibility]
+ui_scale = 1.1
+
+[shell]
+font_family = "SF Pro Display"
+setup_wizard_enabled = false
+polkit_agent = false
+
+[bar.default]
+enabled = false
+
+[dock]
+enabled = false
+
+[wallpaper]
+enabled = false
+
+[plugins]
+auto_update = "none"
+enabled = []
