@@ -29,6 +29,7 @@ namespace settings {
     Templates,
     Desktop,
     Dock,
+    Island,
     Panels,
     Launcher,
     ControlCenter,

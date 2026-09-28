@@ -752,6 +752,10 @@ void Application::initIpc() {
       IpcService::HandlerOptions{.actionEditorVisibility = IpcService::ActionEditorVisibility::Hidden}
   );
   m_bar.registerIpc(m_ipcService);
+  m_ipcService.bind(noctalia::cli::msg::islandFocus, [this](const std::string&) -> std::string {
+    if (m_lockScreen.isActive()) return "error: session is locked\n";
+    return m_island.focusKeyboard() ? "ok\n" : "error: island is unavailable\n";
+  });
   m_desktopWidgetsController.registerIpc(m_ipcService);
   m_lockscreenWidgetsController.registerIpc(m_ipcService);
   m_panelManager.registerIpc(m_ipcService);

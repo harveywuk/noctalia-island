@@ -191,6 +191,9 @@ bool NotificationService::isHealthy() const {
 }
 
 static constexpr size_t kMaxStringLen = 1024;
+// Bodies can contain complete messages, beyond the compact toast preview.
+// Keep metadata limits small while retaining enough text for the reading view.
+static constexpr size_t kMaxBodyLen = 64 * 1024;
 
 namespace notification_dbus {
 
@@ -409,7 +412,7 @@ namespace notification_dbus {
             .replacesId = replaces_id,
             .appName = StringUtils::truncateUtf8(app_name, kMaxStringLen),
             .summary = StringUtils::truncateUtf8(summary, kMaxStringLen),
-            .body = StringUtils::sanitizeMarkup(StringUtils::truncateUtf8(body, kMaxStringLen)),
+            .body = StringUtils::sanitizeMarkup(StringUtils::truncateUtf8(body, kMaxBodyLen)),
             .urgency = notifyUrgencyFromHints(hints),
             .timeout = timeout,
             .origin = NotificationOrigin::External,

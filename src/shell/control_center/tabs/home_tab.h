@@ -29,6 +29,7 @@ class Image;
 class InputArea;
 class Label;
 class Shortcut;
+class ScrollView;
 class Wallpaper;
 class ClipboardService;
 namespace scripting {
@@ -96,6 +97,8 @@ private:
   ShortcutServices m_services;
   bool m_active = false;
 
+  bool m_stacked = false;
+  ScrollView* m_homeScroll = nullptr;
   Flex* m_rootLayout = nullptr;
   Flex* m_bottomRow = nullptr;
   Flex* m_dateTimeCard = nullptr;

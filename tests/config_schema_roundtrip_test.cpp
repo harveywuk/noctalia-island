@@ -332,6 +332,19 @@ location = "https://example.invalid/bad"
   // checks exercise real serialization rather than all-defaults.
   Config makeProbe() {
     Config c;
+    c.island.enabled = true;
+    c.island.monitors = {"DP-1"};
+    c.island.height = 58;
+    c.island.clockSize = 22;
+    c.island.scale = 1.1F;
+    c.island.clockSeconds = true;
+    c.island.reserveSpace = false;
+    c.island.clockOffset = -3;
+    c.island.expandedClockOffset = 5;
+    c.island.calendarLabels = IslandCalendarLabels::TodayAbbreviated;
+    c.island.mediaArtworkSize = 72;
+    c.island.volumeBarHeight = 12;
+    c.island.volumeShowPercentage = true;
     c.audio = AudioConfig{true, true, 0.73F, "freedesktop"};
     c.weather = WeatherConfig{false, false, 17, "imperial"};
     c.osd.position = "bottom_left";
@@ -419,6 +432,8 @@ location = "https://example.invalid/bad"
     c.battery.deviceThresholds = {{"BAT0", 10}, {"hidpp:1", 25}};
     c.controlCenter.sidebarMode = ControlCenterSidebarMode::Full;
     c.controlCenter.sidebarSectionMode = ControlCenterSidebarMode::None;
+    c.controlCenter.homeTab.cards = {"clock", "media"};
+    c.controlCenter.homeTab.stacked = true;
     c.controlCenter.calendarTab.showEventsCard = false;
     c.controlCenter.calendarTab.showWeekNumbers = true;
     c.controlCenter.shortcuts = {{"wifi"}, {"bluetooth"}};

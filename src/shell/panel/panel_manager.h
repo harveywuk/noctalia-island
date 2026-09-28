@@ -3,6 +3,7 @@
 #include "core/timer_manager.h"
 #include "render/animation/animation_manager.h"
 #include "render/scene/input_dispatcher.h"
+#include "shell/island/island_panel_surface.h"
 #include "shell/panel/attached_panel_context.h"
 #include "shell/panel/panel_click_shield.h"
 #include "shell/panel/persistent_panel_host.h"
@@ -18,6 +19,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+class Island;
 class ConfigService;
 class CompositorPlatform;
 class ContextMenuPopup;
@@ -60,6 +62,8 @@ public:
   static PanelManager* current() noexcept;
 
   void initialize(CompositorPlatform& platform, ConfigService* config, RenderContext* renderContext);
+  void setIslandHost(Island* island) { m_islandHost = island; }
+  bool isIslandOpen() const noexcept { return m_islandSurface.has_value(); }
 
   // Optional: invoked from shell UI (e.g. control center) to spawn the standalone settings toplevel.
   void setOpenSettingsWindowCallback(std::function<void(std::string)> callback);
@@ -179,6 +183,10 @@ public:
 private:
   static PanelManager* s_instance;
 
+  bool openIslandPanel(wl_output* output);
+  void buildIslandScene(std::uint32_t width, std::uint32_t height);
+  void applyIslandReveal(float progress);
+  void resizeIslandPanel(float width, float height, bool first);
   void buildScene(std::uint32_t width, std::uint32_t height);
   void prepareFrame(bool needsUpdate, bool needsLayout);
   void applyPendingPanelFocus();
@@ -228,7 +236,17 @@ private:
   std::unique_ptr<FocusGrab> m_focusGrab;
   std::unordered_set<wl_surface*> m_focusGrabPopupSurfaces;
 
-  std::unique_ptr<Surface> m_surface;
+  std::unique_ptr<Surface> m_ownedSurface;
+  Surface* m_surface = nullptr;
+  Island* m_islandHost = nullptr;
+  std::optional<IslandPanelSurface> m_islandSurface;
+  AnimationManager::Id m_islandMorph = 0;
+  bool m_islandResizing = false;
+  float m_islandProgress = 0;
+  float m_islandWidth = 0;
+  float m_islandHeight = 0;
+  float m_islandCollapsedWidth = 0;
+  float m_islandCollapsedHeight = 0;
   LayerSurface* m_layerSurface = nullptr;
   LayerShellLayer m_panelLayer = LayerShellLayer::Top;
   // m_sceneRoot must be destroyed before m_animations — ~Node() calls cancelForOwner().

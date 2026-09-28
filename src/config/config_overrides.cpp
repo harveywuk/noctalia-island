@@ -391,6 +391,7 @@ namespace {
         && a.dock == b.dock
         && a.shell == b.shell
         && a.osd == b.osd
+        && a.island == b.island
         && a.notification == b.notification
         && a.weather == b.weather
         && a.calendar == b.calendar
@@ -870,6 +871,7 @@ ConfigChangeSet computeConfigChangeSet(const Config& prev, const Config& next) {
       .dock = !(prev.dock == next.dock),
       .shell = !(prev.shell == next.shell),
       .osd = !(prev.osd == next.osd),
+      .island = !(prev.island == next.island),
       .notification = !(prev.notification == next.notification),
       .weather = !(prev.weather == next.weather),
       .calendar = !(prev.calendar == next.calendar),

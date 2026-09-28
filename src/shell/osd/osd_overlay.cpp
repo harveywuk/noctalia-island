@@ -269,6 +269,10 @@ void OsdOverlay::show(const OsdContent& content) {
   }
 
   m_content = content;
+  if (presentationHandler && presentationHandler(content)) {
+    destroySurfaces();
+    return;
+  }
   ensureSurfaces();
   for (auto& inst : m_instances) {
     if (inst->surface == nullptr) {
@@ -280,6 +284,8 @@ void OsdOverlay::show(const OsdContent& content) {
 }
 
 bool OsdOverlay::isVisible() const {
+  if (presentationVisible && presentationVisible())
+    return true;
   return std::ranges::any_of(m_instances, [](const auto& inst) {
     return inst->visible || inst->showPending || inst->showAnimId != 0;
   });

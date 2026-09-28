@@ -624,6 +624,8 @@ void NotificationToast::requestRedraw() {
 // --- Notification events ---
 
 void NotificationToast::onNotificationEvent(const Notification& n, NotificationEvent event) {
+  if (presentationHandler && presentationHandler(n, event))
+    return;
   switch (event) {
   case NotificationEvent::Added:
     if (m_notifications != nullptr

@@ -1,4 +1,5 @@
 #include "dbus/mpris/mpris_art.h"
+#include "dbus/mpris/mpris_service.h"
 #include "dbus/notification/notification_service.h"
 #include "net/uri.h"
 #include "notification/notification_history_store.h"
@@ -61,6 +62,20 @@ namespace {
 } // namespace
 
 int main() {
+  MprisPlayerInfo player;
+  player.artUrl = "file:///tmp/browser-thumbnail.png";
+  player.sourceUrl = "https://www.youtube.com/watch?v=example1234";
+  const std::string highRes = "https://i.ytimg.com/vi/example1234/maxresdefault.jpg";
+  TEST_CHECK(mpris::effectiveArtUrl(player) == highRes);
+  const auto candidates = mpris::artFetchCandidates(highRes);
+  TEST_CHECK(candidates.size() == 2);
+  TEST_CHECK(candidates[0] == highRes);
+  TEST_CHECK(candidates[1] == "https://i.ytimg.com/vi/example1234/hqdefault.jpg");
+  player.sourceUrl = "https://music.youtube.com/watch?v=example1234";
+  TEST_CHECK(mpris::effectiveArtUrl(player) == highRes);
+  player.sourceUrl = "https://example.com/watch?v=example1234";
+  TEST_CHECK(mpris::effectiveArtUrl(player) == player.artUrl);
+
   TempDirectory temp;
   const auto literal = temp.path / "icon%20name.png";
   const auto space = temp.path / "icon name.png";

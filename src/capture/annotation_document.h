@@ -23,9 +23,11 @@ namespace capture {
     Blur,
     Eraser,
     Crop,
+    Pixelate,
+    Magnify,
   };
 
-  inline constexpr std::size_t kAnnotationToolCount = 12;
+  inline constexpr std::size_t kAnnotationToolCount = 14;
 
   [[nodiscard]] std::string_view annotationToolName(AnnotationTool tool) noexcept;
   [[nodiscard]] std::optional<AnnotationTool> annotationToolFromName(std::string_view name) noexcept;
@@ -33,6 +35,7 @@ namespace capture {
   [[nodiscard]] bool annotationToolIsShape(AnnotationTool tool) noexcept;
   // Tools that never produce an annotation of their own.
   [[nodiscard]] bool annotationToolIsNonDrawing(AnnotationTool tool) noexcept;
+  [[nodiscard]] bool annotationToolNeedsBackground(AnnotationTool tool) noexcept;
   [[nodiscard]] double annotationToolDefaultWidth(AnnotationTool tool) noexcept;
 
   struct AnnotationPoint {

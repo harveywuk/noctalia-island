@@ -10,6 +10,7 @@
 #include "render/scene/input_area.h"
 #include "shell/control_center/tab.h"
 #include "shell/panel/panel_button_style.h"
+#include "shell/panel/panel_content_height.h"
 #include "shell/panel/panel_manager.h"
 #include "system/desktop_entry_launch.h"
 #include "time/time_format.h"
@@ -234,6 +235,21 @@ std::unique_ptr<Flex> CalendarTab::createHeaderActions() {
           .configure = [scale](Button& button) { panel_button_style::configureHeaderIconButton(button, scale); },
       })
   );
+}
+
+float CalendarTab::fittedHeight() const {
+  if (!m_card)
+    return 0.0F;
+  const float scale = contentScale();
+  // The calendar's input wrapper stretches to the previous tab's height. Measure
+  // six usable week rows directly instead of treating that allocation as content.
+  const float calendar = (m_todayLabel ? m_todayLabel->height() : 0.0F)
+      + kCalendarHeaderHeight * scale
+      + 2.0F * m_card->gap()
+      + (kCalendarWeekdayRowHeight + 6.0F * (kCalendarCellSizeMin + kCalendarGridGap)) * scale
+      + m_card->paddingTop()
+      + m_card->paddingBottom();
+  return std::max(calendar, panel_content::height(m_eventsCard));
 }
 
 void CalendarTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight) {
@@ -488,8 +504,13 @@ void CalendarTab::rebuild() {
   const float innerHeight = std::max(0.0F, m_card->height() - (m_card->paddingTop() + m_card->paddingBottom()));
   const float navWidth = kCalendarNavButtonSize * scale * 2.0F + Style::spaceSm * scale * 2.0F;
   const float monthWidth = std::max(0.0F, innerWidth - navWidth);
-  const float gridHeightAvailable =
-      std::max(0.0F, innerHeight - kCalendarHeaderHeight * scale - kCalendarGridGap * scale);
+  const float gridHeightAvailable = std::max(
+      0.0F,
+      innerHeight
+          - (m_todayLabel ? m_todayLabel->height() : 0.0F)
+          - kCalendarHeaderHeight * scale
+          - 2.0F * m_card->gap()
+  );
   const float weekdayHeight = kCalendarWeekdayRowHeight * scale;
   const float dayCellHeight = std::clamp(
       (gridHeightAvailable - weekdayHeight - kCalendarGridGap * scale * 6.0F) / 6.0F, kCalendarCellSizeMin * scale,

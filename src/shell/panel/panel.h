@@ -50,6 +50,9 @@ public:
 
   [[nodiscard]] virtual float preferredWidth() const = 0;
   [[nodiscard]] virtual float preferredHeight() const = 0;
+  // Called after content layout by the island host; standalone hosts keep their
+  // normal preferred size. Implementations include their outer panel padding.
+  [[nodiscard]] virtual float fittedHeight() const { return preferredHeight(); }
   // Span the output's available extent on this axis (floating panels only). The
   // surface is dual-anchored with a requested size of 0 so the compositor
   // assigns the size, subtracting every exclusive zone on the output; the

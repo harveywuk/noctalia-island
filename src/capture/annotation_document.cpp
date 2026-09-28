@@ -29,6 +29,8 @@ namespace capture {
         {AnnotationTool::Blur, "blur"},
         {AnnotationTool::Eraser, "eraser"},
         {AnnotationTool::Crop, "crop"},
+        {AnnotationTool::Pixelate, "pixelate"},
+        {AnnotationTool::Magnify, "magnify"},
     }};
 
     [[nodiscard]] double distanceToSegment(double px, double py, double x0, double y0, double x1, double y1) {
@@ -129,11 +131,20 @@ namespace capture {
         || tool == AnnotationTool::Arrow
         || tool == AnnotationTool::Rectangle
         || tool == AnnotationTool::Circle
-        || tool == AnnotationTool::Blur;
+        || tool == AnnotationTool::Blur
+        || tool == AnnotationTool::Pixelate
+        || tool == AnnotationTool::Magnify;
   }
 
   bool annotationToolIsNonDrawing(AnnotationTool tool) noexcept {
     return tool == AnnotationTool::Move || tool == AnnotationTool::Eraser || tool == AnnotationTool::Crop;
+  }
+
+  bool annotationToolNeedsBackground(AnnotationTool tool) noexcept {
+    return tool == AnnotationTool::Blur
+        || tool == AnnotationTool::Crop
+        || tool == AnnotationTool::Pixelate
+        || tool == AnnotationTool::Magnify;
   }
 
   double annotationToolDefaultWidth(AnnotationTool tool) noexcept {
@@ -144,6 +155,10 @@ namespace capture {
       return 28.0;
     case AnnotationTool::Blur:
       return 32.0;
+    case AnnotationTool::Pixelate:
+      return 16.0;
+    case AnnotationTool::Magnify:
+      return 2.0;
     case AnnotationTool::Text:
       return 24.0;
     case AnnotationTool::Numbering:
@@ -310,7 +325,7 @@ namespace capture {
       return measureText(annotation);
     }
 
-    if (annotation.tool == AnnotationTool::Blur && annotation.points.size() >= 2) {
+    if (annotationToolNeedsBackground(annotation.tool) && annotation.points.size() >= 2) {
       return shapeRect(annotation);
     }
 
@@ -380,6 +395,8 @@ namespace capture {
             || distanceToSegment(a.x, a.y, start.x, start.y, end.x, end.y) <= reach
             || distanceToSegment(b.x, b.y, start.x, start.y, end.x, end.y) <= reach;
       case AnnotationTool::Blur:
+      case AnnotationTool::Pixelate:
+      case AnnotationTool::Magnify:
         return segmentIntersectsRect(a.x, a.y, b.x, b.y, left, top, right, bottom);
       case AnnotationTool::Rectangle: {
         const std::array<AnnotationPoint, 2> probes{a, b};

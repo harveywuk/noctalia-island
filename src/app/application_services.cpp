@@ -151,6 +151,7 @@ void Application::scheduleNotificationShellRefresh() {
   DeferredCall::callLater([this]() {
     m_notificationShellRefreshScheduled = false;
     m_bar.refresh();
+    m_island.refresh();
     if (m_panelManager.isOpenPanel("control-center")) {
       m_panelManager.refresh();
     }
@@ -841,6 +842,7 @@ void Application::reconcileOutputSurfaces() {
   m_screenshotService.onOutputChange();
   m_notificationToast.onOutputChange();
   m_osdOverlay.onOutputChange();
+  m_island.onOutputChange();
   m_windowSwitcher.onOutputChange();
 }
 
@@ -1231,6 +1233,7 @@ void Application::initSystemBusServices() {
       m_prevBatteryPluggedForEvents = initialPower.isPresent ? batteryStatePlugged(initialPower.state) : std::nullopt;
       m_batteryWarningMonitor.evaluate(m_configService.config().battery, *m_upowerService, m_notificationManager);
       m_upowerService->setChangeCallback([this, shouldRefreshControlCenter](const UPowerChange& change) {
+        m_island.refresh();
         if (change.origin != UPowerService::ChangeOrigin::DeviceState) {
           if (shouldRefreshControlCenter()) {
             m_panelManager.refresh();
@@ -1371,6 +1374,7 @@ void Application::initSystemBusServices() {
       m_bluetoothService = std::make_unique<BluetoothService>(*m_systemBus, m_upowerService.get());
       auto refreshBluetoothUi = [this, shouldRefreshControlCenter]() {
         m_bar.refresh();
+        m_island.refresh();
         if (shouldRefreshControlCenter()) {
           m_panelManager.refresh();
         }
@@ -1574,6 +1578,7 @@ void Application::initSessionBusServices() {
         m_bar.refresh();
         m_desktopWidgetsController.requestUpdate();
         m_mediaOsd.onMprisChanged(*m_mprisService);
+        m_island.refresh();
         if (m_lockScreen.isActive()) {
           m_lockScreen.requestUpdate();
         }

@@ -14,6 +14,7 @@
 #include "scripting/plugin_id.h"
 #include "shell/bar/bar_corner_shape.h"
 #include "shell/bar/bar_reserved_zone.h"
+#include "shell/island/island.h"
 #include "shell/panel/panel.h"
 #include "shell/panel/panel_surface_style.h"
 #include "shell/screen_position.h"
@@ -595,9 +596,19 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
     return;
   }
 
+  m_activePanel = it->second.get();
+  m_activePanelId = panelId;
+  m_activePanel->setContentScale(shell::panel_surface::contentScale(m_config));
+  m_pendingOpenContext = std::string(request.context);
+  m_activePanel->setPendingOpenContext(request.context);
+  if (openIslandPanel(request.output))
+    return;
+
   auto barConfigOpt =
       resolvePanelBarConfig(m_config, m_platform, request.output, m_barConfigProvider, request.sourceBarName);
   if (!barConfigOpt.has_value()) {
+    m_activePanel = nullptr;
+    m_activePanelId.clear();
     return;
   }
   auto barConfig = std::move(*barConfigOpt);
@@ -924,7 +935,8 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
 
   const auto resetPanelOpenState = [this]() {
     deactivateOutsideClickHandlers();
-    m_surface.reset();
+    m_surface = nullptr;
+    m_ownedSurface.reset();
     m_layerSurface = nullptr;
     m_output = nullptr;
     m_wlSurface = nullptr;
@@ -1148,7 +1160,8 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
 
     auto layerSurfaceUnique = std::make_unique<LayerSurface>(m_platform->wayland(), std::move(attachedConfig));
     m_layerSurface = layerSurfaceUnique.get();
-    m_surface = std::move(layerSurfaceUnique);
+    m_ownedSurface = std::move(layerSurfaceUnique);
+    m_surface = m_ownedSurface.get();
     configureSurfaceCallbacks(*m_surface);
     if (wantsOutsideDismiss) {
       m_panelOutputInputRect = InputRect{visualX, visualY, static_cast<int>(panelWidth), static_cast<int>(panelHeight)};
@@ -1191,7 +1204,8 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
     if (m_attachedPanelGeometryCallback) {
       m_attachedPanelGeometryCallback(request.output, m_sourceBarName, std::nullopt);
     }
-    m_surface.reset();
+    m_surface = nullptr;
+    m_ownedSurface.reset();
     m_layerSurface = nullptr;
     m_attachedToBar = false;
     m_panelInsetX = 0;
@@ -1217,7 +1231,8 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
 
   auto layerSurface = std::make_unique<LayerSurface>(m_platform->wayland(), std::move(surfaceConfig));
   m_layerSurface = layerSurface.get();
-  m_surface = std::move(layerSurface);
+  m_ownedSurface = std::move(layerSurface);
+  m_surface = m_ownedSurface.get();
   m_panelInsetX = detachedShadowBleed.left;
   m_panelInsetY = detachedShadowBleed.up;
   m_panelVisualWidth = panelWidth;
@@ -1420,7 +1435,14 @@ void PanelManager::deactivateOutsideClickHandlers() {
 }
 
 void PanelManager::closePanel(bool animateClose) {
-  if (!isOpen() || m_inTransition || m_closing) {
+  if (!isOpen() || m_inTransition) {
+    return;
+  }
+  if (m_closing) {
+    if (!animateClose) {
+      ++m_destroyGeneration;
+      destroyPanel();
+    }
     return;
   }
 
@@ -1437,7 +1459,33 @@ void PanelManager::closePanel(bool animateClose) {
 
   if (animateClose && m_sceneRoot != nullptr && m_activePanel != nullptr && m_activePanel->wantsCloseAnimation()) {
     const std::uint64_t gen = ++m_destroyGeneration;
-    if (m_attachedToBar && m_attachedRevealClipNode != nullptr) {
+    if (m_islandSurface) {
+      m_animations.cancelForOwner(m_sceneRoot.get());
+      // Keep the content layout fixed while the capsule closes from its exact
+      // current size, even when opening is interrupted.
+      m_islandSurface->width = m_islandWidth;
+      m_islandSurface->height = m_islandHeight;
+      const float contentOpacity = m_contentNode ? m_contentNode->opacity() : 0;
+      m_animations.animate(
+          1.0F, 0.0F, 420, Easing::EaseOutCubic,
+          [this, contentOpacity](float v) {
+            const auto target = m_islandHost->panelReturnSize();
+            m_islandCollapsedWidth = target.width * m_islandSurface->scale;
+            m_islandCollapsedHeight = target.height * m_islandSurface->scale;
+            applyIslandReveal(v);
+            // Fade before the shrinking capsule clips the panel's controls.
+            if (m_contentNode)
+              m_contentNode->setOpacity(contentOpacity * std::clamp((v - 0.8F) / 0.2F, 0.0F, 1.0F));
+          },
+          [this, gen]() {
+            DeferredCall::callLater([this, gen]() {
+              if (m_destroyGeneration == gen)
+                destroyPanel();
+            });
+          },
+          m_sceneRoot.get()
+      );
+    } else if (m_attachedToBar && m_attachedRevealClipNode != nullptr) {
       m_animations.cancelForOwner(m_attachedRevealClipNode);
       m_animations.animate(
           m_attachedRevealProgress, 0.0F, Style::animNormal, Easing::EaseInOutQuad,
@@ -1504,8 +1552,15 @@ void PanelManager::destroyPanel() {
   m_panelShadowNode = nullptr;
   m_panelContactShadowNode = nullptr;
   m_selectPopup.reset();
+  if (m_surface)
+    m_surface->setSceneRoot(nullptr);
   m_sceneRoot.reset();
-  m_surface.reset();
+  if (m_islandSurface) {
+    m_islandHost->releasePanelSurface(m_islandSurface->output, m_islandWidth, m_islandHeight);
+    m_islandSurface.reset();
+  }
+  m_surface = nullptr;
+  m_ownedSurface.reset();
   m_layerSurface = nullptr;
   m_output = nullptr;
   m_wlSurface = nullptr;
@@ -1632,6 +1687,10 @@ bool PanelManager::onPointerEvent(const PointerEvent& event) {
     return false;
   }
 
+  if (m_islandSurface && event.surface == m_wlSurface && event.type != PointerEvent::Type::Leave && !m_pointerInside) {
+    m_pointerInside = true;
+    m_inputDispatcher.pointerEnter(static_cast<float>(event.sx), static_cast<float>(event.sy), event.serial);
+  }
   switch (event.type) {
   case PointerEvent::Type::Enter: {
     if (event.surface == m_wlSurface) {
@@ -1752,6 +1811,10 @@ void PanelManager::refresh() {
 }
 
 void PanelManager::relayoutActivePanelPreferredSize() {
+  if (m_islandSurface) {
+    m_surface->requestLayout();
+    return;
+  }
   if (!isOpen() || m_activePanel == nullptr || m_surface == nullptr || m_layerSurface == nullptr || m_attachedToBar) {
     return;
   }
@@ -2444,6 +2507,10 @@ void PanelManager::applyAttachedDecorationStyle() {
 
 void PanelManager::onConfigReloaded() {
   m_persistentHost.onConfigReloaded();
+  if (m_islandSurface) {
+    refresh();
+    return;
+  }
   if (!isOpen() || m_config == nullptr || m_activePanel == nullptr) {
     return;
   }
@@ -2521,6 +2588,10 @@ void PanelManager::onConfigReloaded() {
 }
 
 void PanelManager::buildScene(std::uint32_t width, std::uint32_t height) {
+  if (m_islandSurface) {
+    buildIslandScene(width, height);
+    return;
+  }
   uiAssertNotRendering("PanelManager::buildScene");
   if (m_renderContext == nullptr || m_activePanel == nullptr) {
     return;
@@ -2799,6 +2870,7 @@ void PanelManager::prepareFrame(bool needsUpdate, bool needsLayout) {
   const auto height = m_surface->height();
 
   const bool needsSceneBuild = m_sceneRoot == nullptr
+      || (m_islandSurface && (needsUpdate || needsLayout))
       || static_cast<std::uint32_t>(std::round(m_sceneRoot->width())) != width
       || static_cast<std::uint32_t>(std::round(m_sceneRoot->height())) != height;
   if (needsSceneBuild) {

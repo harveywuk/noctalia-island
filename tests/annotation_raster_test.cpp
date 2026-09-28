@@ -190,5 +190,44 @@ int main() {
     cairo_surface_destroy(surface);
   }
 
+  {
+    auto image = twoToneImage(64, 64);
+    auto* source = capture::frozenToCairo(image);
+    auto* target = capture::frozenToCairo(image);
+    auto* cr = cairo_create(target);
+    capture::Annotation effect{.tool = capture::AnnotationTool::Pixelate, .width = 8, .points = {{8, 8}, {40, 40}}};
+    capture::renderAnnotation(cr, effect, source, 1);
+    const auto value = pixelAt(target, 10, 10) & 255;
+    ok = expect(value >= 127 && value <= 128, "pixelation averages dark and light bands") && ok;
+    ok = expect(pixelAt(target, 10, 10) == pixelAt(target, 15, 15), "one pixel block has one colour") && ok;
+    ok = expect(pixelAt(target, 42, 10) == pixelAt(source, 42, 10), "pixelation stays within selection") && ok;
+    cairo_destroy(cr);
+    cairo_surface_destroy(target);
+    target = capture::frozenToCairo(image);
+    cr = cairo_create(target);
+    effect.tool = capture::AnnotationTool::Magnify;
+    effect.width = 2;
+    capture::renderAnnotation(cr, effect, source, 1);
+    ok = expect(pixelAt(target, 10, 20) == pixelAt(source, 17, 22), "magnifier samples around selection centre") && ok;
+    ok = expect(pixelAt(target, 42, 10) == pixelAt(source, 42, 10), "magnifier leaves outside unchanged") && ok;
+    cairo_destroy(cr);
+    cairo_surface_destroy(target);
+    target = capture::frozenToCairo(image);
+    cr = cairo_create(target);
+    cairo_translate(cr, 8, 4);
+    cairo_scale(cr, 2, 2);
+    effect.tool = capture::AnnotationTool::Pixelate;
+    effect.width = 4;
+    effect.points = {{4, 4}, {12, 12}};
+    capture::renderAnnotation(cr, effect, source, 2);
+    const auto scaled = pixelAt(target, 18, 14) & 255;
+    ok = expect(scaled >= 127 && scaled <= 128, "pixelation honours translated scaled coordinates") && ok;
+    ok =
+        expect(pixelAt(target, 10, 10) == pixelAt(source, 10, 10), "scaled effect does not touch outside pixels") && ok;
+    cairo_destroy(cr);
+    cairo_surface_destroy(target);
+    cairo_surface_destroy(source);
+  }
+
   return ok ? 0 : 1;
 }

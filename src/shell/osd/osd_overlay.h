@@ -64,6 +64,8 @@ public:
   void requestRedraw();
 
   void show(const OsdContent& content);
+  std::function<bool(const OsdContent&)> presentationHandler;
+  std::function<bool()> presentationVisible;
   [[nodiscard]] bool isEnabled() const noexcept;
 
   // True while any instance is on screen or animating into view. Callers use this to correct

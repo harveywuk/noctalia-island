@@ -1639,6 +1639,12 @@ struct ThemeConfig {
 struct ControlCenterConfig {
   static constexpr std::int32_t kDefaultWidth = 700;
 
+  struct HomeTabConfig {
+    std::vector<std::string> cards = {"profile", "media", "clock", "shortcuts"};
+    bool stacked = false;
+    bool operator==(const HomeTabConfig&) const = default;
+  };
+
   struct CalendarTabConfig {
     bool showEventsCard = true;
     bool showWeekNumbers = false;
@@ -1652,6 +1658,7 @@ struct ControlCenterConfig {
   std::int32_t width = kDefaultWidth; // full-sidebar logical width; compact/none modes scale down from this
   bool showShortcutLabels = true;
   bool showSessionButton = true;
+  HomeTabConfig homeTab;
   CalendarTabConfig calendarTab;
   bool operator==(const ControlCenterConfig&) const = default;
 };
@@ -1743,7 +1750,32 @@ struct HotCornersConfig {
   bool operator==(const HotCornersConfig&) const = default;
 };
 
+enum class IslandCalendarLabels : std::uint8_t { Initials, TodayAbbreviated, Abbreviated };
+constexpr EnumOption<IslandCalendarLabels> kIslandCalendarLabels[] = {
+    {IslandCalendarLabels::Initials, "initials", "settings.options.island.calendar-initials"},
+    {IslandCalendarLabels::TodayAbbreviated, "today", "settings.options.island.calendar-today"},
+    {IslandCalendarLabels::Abbreviated, "abbreviated", "settings.options.island.calendar-abbreviated"},
+};
+
+struct IslandConfig {
+  bool enabled = false;
+  std::vector<std::string> monitors;
+  float height = 64.0F;
+  float clockSize = 24.0F;
+  float scale = 1.0F;
+  bool reserveSpace = true;
+  bool clockSeconds = false;
+  float clockOffset = 0.0F;
+  float expandedClockOffset = 0.0F;
+  IslandCalendarLabels calendarLabels = IslandCalendarLabels::Abbreviated;
+  float mediaArtworkSize = 56.0F;
+  float volumeBarHeight = 18.0F;
+  bool volumeShowPercentage = false;
+  bool operator==(const IslandConfig&) const = default;
+};
+
 struct Config {
+  IslandConfig island;
   std::vector<BarConfig> bars;
   std::unordered_map<std::string, WidgetConfig> widgets;
   WallpaperConfig wallpaper;
@@ -1787,6 +1819,7 @@ struct ConfigChangeSet {
   bool dock = true;
   bool shell = true;
   bool osd = true;
+  bool island = true;
   bool notification = true;
   bool weather = true;
   bool calendar = true;
@@ -1817,6 +1850,7 @@ struct ConfigChangeSet {
         || dock
         || shell
         || osd
+        || island
         || notification
         || weather
         || calendar

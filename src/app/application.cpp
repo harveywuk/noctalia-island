@@ -175,12 +175,17 @@ Application::Application()
   m_notificationManager.setStateCallback([this]() {
     if (m_notificationManager.doNotDisturb()) {
       m_notificationToast.hideDndSuppressed();
+      m_island.hideDndSuppressed();
     }
     scheduleNotificationShellRefresh();
   });
 }
 
 Application::~Application() {
+  // Release any borrowed island surface while panel services are still alive.
+  m_panelManager.closePanel(false);
+  m_island.closeHostedPanel = {};
+  m_panelManager.setIslandHost(nullptr);
   ColorPickerDialog::setPresenter(nullptr);
   GlyphPickerDialog::setPresenter(nullptr);
   FileDialog::setPresenter(nullptr);

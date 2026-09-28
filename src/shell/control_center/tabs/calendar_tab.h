@@ -20,6 +20,7 @@ public:
 
   std::unique_ptr<Flex> create() override;
   std::unique_ptr<Flex> createHeaderActions() override;
+  float fittedHeight() const;
   void setActive(bool active) override;
   void onClose() override;
 

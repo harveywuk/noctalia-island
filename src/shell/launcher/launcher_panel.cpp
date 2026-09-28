@@ -13,6 +13,7 @@
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
 #include "shell/dock/pinned_apps.h"
+#include "shell/panel/panel_content_height.h"
 #include "shell/panel/panel_manager.h"
 #include "system/desktop_entry.h"
 #include "ui/app_icon_colorization.h"
@@ -1357,6 +1358,12 @@ void LauncherPanel::onPanelCardOpacityChanged(float opacity) {
   if (m_detailScroll != nullptr) {
     m_detailScroll->setCardStyle(contentScale(), opacity);
   }
+}
+
+float LauncherPanel::fittedHeight() const {
+  return m_container
+      ? std::max(scaled(150), panel_content::height(m_container) + 2 * Style::panelPadding * contentScale())
+      : preferredHeight();
 }
 
 void LauncherPanel::doLayout(Renderer& renderer, float width, float height) {

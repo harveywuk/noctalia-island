@@ -1,0 +1,5 @@
+{
+  "accent": "{{colors.primary.default.hex}}",
+  "interior": "{{colors.on_primary.default.hex}}",
+  "shadow": "{{colors.shadow.default.hex}}"
+}

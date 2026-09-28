@@ -1,4 +1,31 @@
 {
+  "island": {
+    "timer": {
+      "title": "Timer", "pomodoro": "Pomodoro", "focus": "Focus session", "break": "Break",
+      "running": "Running", "paused": "Paused", "finished": "Finished",
+      "pause": "Pause", "resume": "Resume", "cancel": "Cancel", "open": "Open"
+    },
+    "privacy": {
+      "audio-controls": "Open audio controls"
+    },
+    "battery": {
+      "until-full": "until full",
+      "remaining": "remaining",
+      "more": "{count} more battery",
+      "more-plural": "{count} more batteries"
+    },
+    "downloads": {
+      "title": "Downloads",
+      "downloading": "Downloading",
+      "installing": "Installing",
+      "preparing": "Preparing download",
+      "verifying": "Verifying files",
+      "media": "Media controls",
+      "close": "Close",
+      "more": "{count} more",
+      "more-plural": "{count} more"
+    }
+  },
   "auth": {
     "fingerprint": {
       "disconnected": "Fingerprint reader disconnected",
@@ -28,6 +55,11 @@
   },
   "bar": {
     "annotate": {
+      "tools-menu": "Drawing tools",
+      "style-menu": "Colour and size",
+      "style-done": "Done",
+      "record-region": "Record a region with desktop audio (discards the current edit); stop if recording",
+      "record-monitor": "Record a monitor with desktop audio (discards the current edit); stop if recording",
       "capture-new-region": "Capture new region (discards the current edit)",
       "close": "Close without delivering (Esc)",
       "color-black": "Black",
@@ -58,6 +90,8 @@
       "size-small": "Small",
       "tool-arrow": "Arrow (a) · hold Shift to snap the angle",
       "tool-blur": "Blur a region (u)",
+      "tool-pixelate": "Pixelate a region (i); size sets block width",
+      "tool-magnify": "Magnify a region (z); size sets zoom factor",
       "tool-brush": "Brush (b)",
       "tool-circle": "Ellipse (o) · hold Shift for a circle",
       "tool-crop": "Crop the export (c)",
@@ -310,10 +344,16 @@
         "data-unavailable": "Weather data unavailable.",
         "disabled": "Weather is disabled in config.",
         "fetching": "Fetching forecast…"
-      }
+      },
+      "customise": "Customise Home",
+      "empty": "No Home cards. Add cards using the settings button above."
     },
     "media": {
       "active-player": "Active player",
+      "previous": "Previous track",
+      "next": "Next track",
+      "play": "Play",
+      "pause": "Pause",
       "nothing-playing": "Nothing Playing",
       "now-playing": "Now Playing",
       "start-playback": "Start playback in an MPRIS app"
@@ -826,6 +866,12 @@
     "waiting": "Waiting for lock confirmation…"
   },
   "notifications": {
+    "unread-history": "Unread notifications — open history",
+    "unread-count": "{count} unread notification",
+    "unread-count-plural": "{count} unread notifications",
+    "dismiss": "Dismiss notification",
+    "expand": "Read full notification",
+    "collapse": "Collapse notification",
     "actions": {
       "fallback": "Action",
       "open": "Open"
@@ -1370,7 +1416,9 @@
         "weather": "Weather",
         "widget-list": "Widget List",
         "widgets": "Widgets",
-        "window-switcher": "Window Switcher"
+        "window-switcher": "Window Switcher",
+        "clock": "Clock",
+        "calendar": "Calendar"
       },
       "sections": {
         "accessibility": "Accessibility",
@@ -1399,7 +1447,8 @@
         "system": "System",
         "templates": "Templates",
         "umbriel": "Umbriel",
-        "wallpaper": "Wallpaper"
+        "wallpaper": "Wallpaper",
+        "island": "Dynamic Island"
       }
     },
     "notifications": {
@@ -1614,6 +1663,17 @@
           "imperial": "Imperial",
           "metric": "Metric"
         }
+      },
+      "home-cards": {
+        "profile": "Profile",
+        "media": "Media",
+        "clock": "Clock and weather",
+        "shortcuts": "Shortcuts"
+      },
+      "island": {
+        "calendar-initials": "Single letters",
+        "calendar-today": "Abbreviate today only",
+        "calendar-abbreviated": "Abbreviate every day"
       }
     },
     "plugins": {
@@ -2684,6 +2744,14 @@
         "transparency-mode": {
           "description": "Panel glass style, including floating panel opacity and card translucency",
           "label": "Transparency"
+        },
+        "home-cards": {
+          "label": "Home cards",
+          "description": "Add or remove cards. Use the arrows to arrange them in the stacked layout."
+        },
+        "home-stacked": {
+          "label": "Stack Home cards",
+          "description": "Show cards at full width in the order above. Turn off for the dashboard layout."
         }
       },
       "power": {
@@ -3424,6 +3492,56 @@
         "transitions": {
           "description": "Effects available when changing wallpaper (one is picked at random per change)",
           "label": "Transition Effects"
+        }
+      },
+      "island": {
+        "enabled": {
+          "label": "Enable dynamic island",
+          "description": "Show the clock, media controls, notifications, and volume in the island."
+        },
+        "reserve_space": {
+          "label": "Reserve desktop space",
+          "description": "Keep windows below the compact island."
+        },
+        "height": {
+          "label": "Compact height",
+          "description": "Height of the compact island in pixels."
+        },
+        "scale": {
+          "label": "Island scale",
+          "description": "Scale the island in addition to the interface scale."
+        },
+        "clock_size": {
+          "label": "Clock size",
+          "description": "Text size in the compact island. The expanded clock scales with it."
+        },
+        "clock_seconds": {
+          "label": "Show seconds",
+          "description": "Include seconds in the island clock."
+        },
+        "clock_offset": {
+          "label": "Compact clock position",
+          "description": "Move the clock up with a negative value or down with a positive value."
+        },
+        "expanded_clock_offset": {
+          "label": "Expanded clock position",
+          "description": "Move the calendar clock up or down. Negative values move it up."
+        },
+        "calendar_labels": {
+          "label": "Weekday labels",
+          "description": "Choose single letters or abbreviated day names. Columns stay aligned."
+        },
+        "media_artwork_size": {
+          "label": "Artwork size",
+          "description": "Cover size in the expanded media controls. Larger covers make the card taller."
+        },
+        "volume_bar_height": {
+          "label": "Volume bar thickness",
+          "description": "Height of the volume indicator in pixels."
+        },
+        "volume_show_percentage": {
+          "label": "Show volume percentage",
+          "description": "Display the volume value above the bar."
         }
       }
     },

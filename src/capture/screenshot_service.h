@@ -17,6 +17,7 @@ class ClipboardService;
 class CompositorPlatform;
 class ConfigService;
 class IpcService;
+class Island;
 class NotificationManager;
 struct Config;
 class RenderContext;
@@ -72,6 +73,8 @@ public:
 
   void registerIpc(IpcService& ipc, const ConfigService& configService);
 
+  void setIslandHost(Island* island) { m_islandHost = island; }
+  void releaseIslandCapture();
   void setSoundPlayer(SoundPlayer* soundPlayer);
 
 private:
@@ -128,6 +131,7 @@ private:
       wl_output* output, std::optional<LogicalRect> region, const std::string& labelBase, const OutputOptions& options,
       int pathSuffix = 0
   );
+  std::string beginRecording(bool monitor);
   void ensureRegionOverlay();
   void startRegionOverlay(RenderContext& renderContext);
   void startFullscreenOverlay(RenderContext& renderContext);
@@ -196,6 +200,7 @@ private:
   OutputOptions m_regionOutputOptions{};
   RenderContext* m_regionRenderContext = nullptr;
   bool m_regionFullscreenPick = false;
+  bool m_recordSelection = false;
   std::vector<capture::FrozenScreenshot> m_frozenScreenshots;
   std::unique_ptr<capture::AnnotationOverlay> m_annotationOverlay;
   std::vector<FreezeRequest> m_pendingFreezeCaptures;
@@ -203,4 +208,5 @@ private:
   FreezeTarget m_freezeTarget = FreezeTarget::Region;
   bool m_freezeCaptureActive = false;
   SoundPlayer* m_soundPlayer = nullptr;
+  Island* m_islandHost = nullptr;
 };

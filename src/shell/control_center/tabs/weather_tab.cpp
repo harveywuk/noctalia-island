@@ -568,10 +568,13 @@ void WeatherTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeig
         m_forecastViewPicker != nullptr && m_forecastViewPicker->visible() ? m_forecastViewPicker->height() : 0.0F;
     const float separatorsTotal = separatorThickness * static_cast<float>(visibleSeparators);
     const float gapsTotal = m_forecastColumn->gap() * static_cast<float>(visibleForecastDays + visibleSeparators);
-    const float rowHeight = std::max(
-        Style::controlHeightLg * scale,
-        (forecastInnerHeight - pickerHeight - separatorsTotal - gapsTotal) / static_cast<float>(visibleForecastDays)
-    );
+    const float rowHeight = PanelManager::instance().isIslandOpen()
+        ? Style::controlHeightLg * scale
+        : std::max(
+              Style::controlHeightLg * scale,
+              (forecastInnerHeight - pickerHeight - separatorsTotal - gapsTotal)
+                  / static_cast<float>(visibleForecastDays)
+          );
 
     for (std::size_t i = 0; i < kForecastRowCount; ++i) {
       if (m_forecastRows[i] == nullptr) {

@@ -68,6 +68,25 @@ namespace noctalia::config::schema {
     return s;
   }
 
+  const Schema<IslandConfig>& islandSchema() {
+    static const Schema<IslandConfig> s = {
+        field(&IslandConfig::enabled, "enabled"),
+        field(&IslandConfig::monitors, "monitors"),
+        field(&IslandConfig::height, "height", Range<float>{44.0F, 72.0F}),
+        field(&IslandConfig::clockSize, "clock_size", Range<float>{16.0F, 36.0F}),
+        field(&IslandConfig::scale, "scale", kScaleRange),
+        field(&IslandConfig::reserveSpace, "reserve_space"),
+        field(&IslandConfig::clockSeconds, "clock_seconds"),
+        field(&IslandConfig::clockOffset, "clock_offset", Range<float>{-12.0F, 12.0F}),
+        field(&IslandConfig::expandedClockOffset, "expanded_clock_offset", Range<float>{-12.0F, 12.0F}),
+        enumField(&IslandConfig::calendarLabels, "calendar_labels", kIslandCalendarLabels),
+        field(&IslandConfig::mediaArtworkSize, "media_artwork_size", Range<float>{40.0F, 80.0F}),
+        field(&IslandConfig::volumeBarHeight, "volume_bar_height", Range<float>{5.0F, 24.0F}),
+        field(&IslandConfig::volumeShowPercentage, "volume_show_percentage"),
+    };
+    return s;
+  }
+
   const Schema<OsdConfig>& osdSchema() {
     static const Schema<OsdConfig> s = {
         field(&OsdConfig::enabled, "enabled"),
@@ -483,6 +502,14 @@ namespace noctalia::config::schema {
       return s;
     }
 
+    const Schema<ControlCenterConfig::HomeTabConfig>& homeTabSchema() {
+      static const Schema<ControlCenterConfig::HomeTabConfig> s = {
+          field(&ControlCenterConfig::HomeTabConfig::cards, "cards"),
+          field(&ControlCenterConfig::HomeTabConfig::stacked, "stacked"),
+      };
+      return s;
+    }
+
     const Schema<ControlCenterConfig::CalendarTabConfig>& calendarTabSchema() {
       static const Schema<ControlCenterConfig::CalendarTabConfig> s = {
           field(&ControlCenterConfig::CalendarTabConfig::showEventsCard, "show_events_card"),
@@ -500,6 +527,7 @@ namespace noctalia::config::schema {
         field(&ControlCenterConfig::showShortcutLabels, "show_shortcut_labels"),
         field(&ControlCenterConfig::showSessionButton, "show_session_button"),
         field(&ControlCenterConfig::hiddenTabs, "hidden_tabs"),
+        subTable(&ControlCenterConfig::homeTab, "home", homeTabSchema()),
         subTable(&ControlCenterConfig::calendarTab, "calendar", calendarTabSchema()),
         arrayOf<ControlCenterConfig, ShortcutConfig>(
             &ControlCenterConfig::shortcuts, "shortcuts", shortcutSchema(),

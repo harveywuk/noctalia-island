@@ -55,6 +55,7 @@ public:
 
   [[nodiscard]] float preferredWidth() const override { return scaled(560.0F); }
   [[nodiscard]] float preferredHeight() const override { return scaled(500.0F); }
+  [[nodiscard]] float fittedHeight() const override;
   [[nodiscard]] LayerShellKeyboard keyboardMode() const override { return LayerShellKeyboard::Exclusive; }
   [[nodiscard]] InputArea* initialFocusArea() const override;
   [[nodiscard]] bool handleGlobalKey(std::uint32_t sym, std::uint32_t modifiers, bool pressed, bool preedit) override;
