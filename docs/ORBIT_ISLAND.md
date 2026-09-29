@@ -1,10 +1,11 @@
-# Orbit island for Noctalia v5
+# Dynamic Noctalia: Island guide
 
-This branch adds an opt-in native C++/Wayland island based on the local Orbit
+Dynamic Noctalia is an independent Noctalia fork with an opt-in native C++/Wayland
+island based on the local Orbit
 Quickshell implementation (`Island.qml` and `IslandGlance.qml`). It uses Noctalia's
 notification manager, MPRIS service, OSD routing, renderer, and animation settings.
 
-The first port provides:
+The Island provides:
 
 - A centered theme-coloured clock capsule, with the current Orbit profile's 64 px height,
   24 px clock and 1.1 UI scale in the example profile.

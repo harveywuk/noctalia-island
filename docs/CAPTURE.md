@@ -1,4 +1,4 @@
-# Native capture additions
+# Dynamic Noctalia: capture tools
 
 The capture controls open inside the existing dynamic island surface when the
 island is enabled. Drawing tools live in a compact menu, and the colour button
@@ -6,7 +6,7 @@ opens an expanding colour-and-size panel with swatches, HSV, hex/RGB entry, and
 size presets. Escape dismisses a menu first, then closes capture. With the island
 disabled, the same compact controls appear on the annotation overlay.
 
-Built on the existing screenshot editor in the Orbit Island fork. UI, selection,
+Built on Noctalia’s existing screenshot editor, extended in Dynamic Noctalia. UI, selection,
 recording lifecycle, and island status are C++; video encoding uses wf-recorder.
 
 - `noctalia msg screenshot-annotate`: freeze, draw, crop, copy, or save.

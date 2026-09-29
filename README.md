@@ -1,149 +1,66 @@
-# Noctalia
+# Dynamic Noctalia
 
-Noctalia is a native Wayland desktop shell for people who want a polished, configurable Linux desktop without stitching
-together a separate bar, launcher, notification daemon, lock screen, wallpaper tool, and settings UI.
+An independent Noctalia fork with a dynamic island interface.
 
-It provides the shell layer around your compositor: bars, widgets, dock, launcher, control center, notifications,
-wallpaper, lock screen, session actions, clipboard history, OSDs, tray integration, and desktop widgets. The project is
-built directly on Wayland and OpenGL ES with no Qt or GTK dependency, so the UI, rendering, configuration, and IPC model
-are designed as one cohesive shell instead of a collection of unrelated panels and scripts.
+Dynamic Noctalia brings media, notifications, downloads, timers and desktop controls
+into an adaptive capsule at the top of your screen. It is built on
+[Noctalia](https://github.com/noctalia-dev/noctalia), the native C++/Wayland desktop
+shell, and currently follows the Noctalia **5.2.0** base.
 
-<p><br/></p>
+This is an independently maintained fork, not an official Noctalia release.
 
-<p align="center">
-  <img src="https://assets.noctalia.dev/noctalia-logo.svg?v=2" alt="Noctalia Logo" style="width: 192px" />
-</p>
+## The dynamic island
 
-<p align="center">
-  <a href="https://docs.noctalia.dev/noctalia/getting-started/installation/">
-    <img
-      src="https://img.shields.io/badge/Install_Noctalia-FFF59B?style=for-the-badge&labelColor=FFF59B"
-      alt="Install Noctalia"
-      style="height: 50px"
-    />
-  </a>
-</p>
+- Compact media activity with artwork and a five-band audio visualiser that reacts
+  to desktop audio. Hover to reveal track information, seeking and playback controls.
+- Expandable notifications, an unread indicator and access to notification history.
+- Download progress, timer controls, battery information and privacy indicators.
+- Calendar, launcher and control-centre panels that open through the Island.
+- Screenshot annotation and screen recording, with a recording timer you can click
+  to stop and save.
 
-<p><br/></p>
+The underlying Noctalia shell still provides its bar, dock, settings, wallpaper,
+lock screen, tray, clipboard and plugin support. The Island is optional.
 
-<p align="center">
-  <a href="https://github.com/noctalia-dev/noctalia/commits">
-    <img src="https://img.shields.io/github/last-commit/noctalia-dev/noctalia?style=for-the-badge&labelColor=FFF59B&color=FFF59B&logo=git&logoColor=070722&label=commit" alt="Last commit" />
-  </a>
-  <a href="https://github.com/noctalia-dev/noctalia/stargazers">
-    <img src="https://img.shields.io/github/stars/noctalia-dev/noctalia?style=for-the-badge&labelColor=FFF59B&color=FFF59B&logo=github&logoColor=070722" alt="GitHub stars" />
-  </a>
-  <a href="https://docs.noctalia.dev">
-    <img src="https://img.shields.io/badge/docs-FFF59B?style=for-the-badge&logo=gitbook&logoColor=070722&labelColor=FFF59B" alt="Documentation" />
-  </a>
-  <a href="https://discord.noctalia.dev">
-    <img src="https://img.shields.io/badge/discord-FFF59B?style=for-the-badge&labelColor=FFF59B&logo=discord&logoColor=070722" alt="Discord" />
-  </a>
-</p>
+See the [Island guide](docs/ORBIT_ISLAND.md) for configuration and behaviour, and
+[the capture guide](docs/CAPTURE.md) for recording and annotation tools.
 
-## Why Noctalia?
+## Build and run
 
-Most Wayland setups leave the desktop shell to a stack of small tools: one bar, another launcher, another notification
-daemon, a lock screen, a wallpaper daemon, scripts for session actions, and separate config formats for each piece. That
-can be flexible, but it also makes a complete desktop feel fragile and hard to keep visually consistent.
+Follow [BUILDING.md](BUILDING.md) to install dependencies and build this checkout.
+Upstream packages install upstream Noctalia; they do not include this fork's Island.
 
-Noctalia solves that by providing one configurable shell layer that owns the common desktop surfaces and services while
-still fitting into compositor-driven Wayland workflows. It is meant for users who want the control of a custom desktop
-environment with fewer moving parts and a consistent UI.
+The executable and configuration paths retain the `noctalia` name for compatibility.
+Enable the Island in your Noctalia configuration:
 
-To understand the values and philosophy guiding the project, read our [ethos](https://noctalia.dev/ethos).
+```toml
+[island]
+enabled = true
+```
 
-## What It Includes
+The [example Island profile](examples/orbit-island.toml) also disables the regular
+bar and dock. Review it before applying it, as it contains other desktop preferences.
 
-- Multi-monitor bars with configurable widgets, taskbar, workspaces, system tray, media, network, battery, brightness,
-  weather, clipboard, and custom script-backed widgets.
-- Dock, launcher, control center, notification toasts/history, wallpaper picker, OSD overlays, lock screen, session
-  panel, and desktop widgets.
-- TOML configuration with hot reload, GUI-managed overrides, theme/palette support, template application, and IPC for
-  runtime control.
-- Direct Wayland integration for layer-shell, session lock, idle behavior, clipboard, foreign toplevels, workspaces,
-  fractional scaling, and compositor-specific workspace backends where needed.
+General shell configuration is described in [example.toml](example.toml),
+[the bundled user documentation](docs/user/) and the
+[upstream documentation](https://docs.noctalia.dev/noctalia/).
+Fork-specific options are documented in the Island guide.
 
-## Wayland Compositor Support
+## Development
 
-Noctalia supports Wayland compositors that provide the layer-shell protocols it needs for shell surfaces. Workspace
-integration works through compositor-native backends where needed, or through `ext-workspace-v1` on compositors that
-implement it.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the inherited architecture, code style
+and build checks. Keep contributions focused and include relevant validation.
 
-Current compositor integrations include Niri, Hyprland, Sway, Scroll, Mango, Labwc, Triad, dwl, and other compatible
-Wayland compositors. Other compositors may run Noctalia but can have reduced workspace, window, output, or
-session-action integration depending on the protocols and IPC they expose.
+Report fork-specific problems in
+[this fork's issue tracker](https://github.com/harveywuk/noctalia-island/issues).
+Include the build version, compositor, reproduction steps and relevant logs.
 
-## Scope
+## Credits and licence
 
-Noctalia is a desktop shell, not a full desktop environment. It provides the visual and service layer around your
-Wayland compositor: bars, panels, launcher, notifications, dock, lock screen, idle behavior, OSDs, theming, wallpapers,
-desktop widgets, and multi-monitor shell surfaces.
+Dynamic Noctalia builds on the work of the
+[Noctalia developers and contributors](https://github.com/noctalia-dev/noctalia/graphs/contributors).
+The original shell, artwork and dependencies retain their credits in
+[CREDITS.md](CREDITS.md). The Island's original design draws on the local Orbit
+Quickshell implementation described in its guide.
 
-Window management, tiling, compositor configuration such as monitor arrangement and positions, file management,
-removable-drive mounting, printers management, and screen mirroring/casting belong to the compositor, dedicated desktop
-applications, or system services.
-
-Display/login greeter support lives in the separate [Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter)
-project. Noctalia may integrate with those pieces when useful, but it does not replace them.
-
-Core Noctalia is non-invasive: it does not manage your compositor settings or take over your dotfiles. Compositor-specific
-controls can be provided as opt-in plugins rather than becoming core shell behavior.
-
-The plugin system is available for user-installed extensions. Features that are useful to some users but not essential
-to the core shell can live there: extra bar widgets, launcher providers, desktop widgets, panels, shortcuts, background
-services, compositor-specific extras and controls, hardware-specific controls, and third-party service integrations.
-
-## Build from source
-
-Source dependencies, distro-specific package commands, build modes, and install layouts live in
-[BUILDING.md](BUILDING.md).
-
-## Configuration
-
-A ready-to-use starting config with all defaults is at [example.toml](example.toml). The full configuration reference
-lives in the [documentation site](https://docs.noctalia.dev/noctalia/). The source MDX files are in
-[`docs/user/`](docs/user/); sync them to a local docs checkout with `tools/sync-docs.sh`.
-
-## Contributing
-
-Developer notes, architecture overview, code style, project layout, and debugging commands live in
-[CONTRIBUTING.md](CONTRIBUTING.md).
-
-Bug reports, fixes, documentation updates, themes, and configuration examples are welcome. For general help and design
-discussion, join the community on [Discord](https://discord.noctalia.dev).
-
-## Credits
-
-Thank you to the [contributors](https://github.com/noctalia-dev/noctalia/graphs/contributors) and community
-members who test Noctalia, report issues, share configurations, and help shape the project.
-
-## Donations
-
-Donations are appreciated but completely optional.
-
-<p>
-  <a href="https://www.buymeacoffee.com/noctalia">
-    <img src="https://img.shields.io/badge/Buy_Me_a_Coffee-FFF59B?style=for-the-badge&logo=buymeacoffee&logoColor=070722&labelColor=FFF59B" alt="Buy Me a Coffee">
-  </a>
-  <a href="https://ko-fi.com/noctaliadev">
-    <img src="https://img.shields.io/badge/Ko--fi-FFF59B?style=for-the-badge&logo=kofi&logoColor=070722&labelColor=FFF59B" alt="Ko-fi">
-  </a>
-</p>
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
-
-## Packaging
-
-Distro packaging notes (description, deps, install layout, Meson options) live in
-[PACKAGING.md](PACKAGING.md).
-
-## Star History
-
-<p align="center">
-  <a href="https://github.com/noctalia-dev/noctalia/stargazers">
-    <img src="https://api.noctalia.dev/stars" alt="Star History" />
-  </a>
-</p>
+MIT licensed; see [LICENSE](LICENSE). Upstream copyright notices are preserved.

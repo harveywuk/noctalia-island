@@ -1,5 +1,9 @@
 # Credits
 
+Dynamic Noctalia is an independent fork of [Noctalia](https://github.com/noctalia-dev/noctalia).
+Credit for the original shell belongs to noctalia-dev and its contributors.
+The upstream artwork and dependency credits below are retained.
+
 Noctalia is made possible by the incredible work of many open-source projects and contributors.
 
 ## Design & Branding
