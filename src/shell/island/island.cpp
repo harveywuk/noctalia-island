@@ -88,6 +88,7 @@ struct Island::Instance {
   std::vector<Action> actions;
   ProgressBar* seekProgress = nullptr;
   Label* mediaPosition = nullptr;
+  Label* recordingLabel = nullptr;
   struct TimerUi {
     std::string plugin;
     Label* label;
@@ -589,7 +590,7 @@ void Island::prepare(Instance& inst) {
     signature += time + date;
     break;
   case island::View::Rest:
-    signature += time;
+    signature += recording ? "recording" : time;
     break;
   case island::View::TimerActivity:
     break;
@@ -616,6 +617,15 @@ void Island::prepare(Instance& inst) {
       signature += std::format("|battery:{}|{}|{}|{}|{}|{}|{}", battery.id, battery.name, battery.icon,
           std::lround(battery.percentage), static_cast<int>(battery.state), battery.seconds / 60, battery.low);
   if (signature == inst.signature && inst.root) {
+    // Timer ticks must not rebuild the stop action between pointer press and release.
+    if (recording && inst.recordingLabel) {
+      inst.recordingLabel->setText(time);
+      inst.recordingLabel->measure(renderer);
+      const float clockY = (cfg.height * inst.scale - inst.recordingLabel->height()) / 2.0F
+          + cfg.clockOffset * inst.scale;
+      inst.recordingLabel->setPosition(inst.recordingLabel->x(), std::clamp(clockY, 0.0F,
+          std::max(0.0F, cfg.height * inst.scale - inst.recordingLabel->height())));
+    }
     for (const auto& ui : inst.timerUi) {
       const auto timer = std::ranges::find(timers, ui.plugin, &island::Countdown::plugin);
       if (timer == timers.end()) continue;
@@ -682,6 +692,7 @@ void Island::prepare(Instance& inst) {
   inst.seek = {};
   inst.seekProgress = nullptr;
   inst.mediaPosition = nullptr;
+  inst.recordingLabel = nullptr;
   inst.timerUi.clear();
   inst.downloadUi.clear();
   Node* canvas = inst.content;
@@ -861,6 +872,8 @@ void Island::prepare(Instance& inst) {
         announce ? m_announcement : time, inset, 0, w - inset * 2, announce ? 17 : size,
         recording ? colorSpecFromRole(ColorRole::Error) : foreground, true
     );
+    if (recording)
+      inst.recordingLabel = clockLabel;
     const float clockY = (cfg.height * s - clockLabel->height()) / 2.0F + cfg.clockOffset * s;
     clockLabel->setPosition(inset * s, std::clamp(clockY, 0.0F, std::max(0.0F, cfg.height * s - clockLabel->height())));
     action(0, 0, w, cfg.height, "controls", [panel, recording] {

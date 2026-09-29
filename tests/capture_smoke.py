@@ -83,7 +83,12 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
         time.sleep(2)
         run(['grim',str(out/'recording-indicator.png')])
         # Click the red island timer to stop, then verify idle and video/audio streams.
-        move(640,38);click()
+        move(640,38);command(pointer,'press')
+        before_tick=msg('record-status').strip()
+        wait(lambda:msg('record-status').strip()!=before_tick,'recording timer tick while pressed')
+        time.sleep(1.1) # Include the Island's one-second refresh before release.
+        assert msg('record-status').startswith('REC'), 'press alone must not stop recording'
+        command(pointer,'release')
         wait(lambda:msg('record-status').strip()=='idle','click-to-stop')
         assert msg('screenshot-annotate').strip()=='ok';time.sleep(1)
         move(487,40);click();time.sleep(1);run(['grim',str(out/'monitor-picker.png')]);move(690,45);click();time.sleep(.5);run(['grim',str(out/'monitor-picked.png')])
