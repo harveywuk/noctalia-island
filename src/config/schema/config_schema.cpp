@@ -71,6 +71,15 @@ namespace noctalia::config::schema {
   const Schema<IslandConfig>& islandSchema() {
     static const Schema<IslandConfig> s = {
         field(&IslandConfig::hoverWidgets, "hover_widgets"),
+        field(&IslandConfig::hoverWidgetsCenter, "hover_widgets_center"),
+        field(&IslandConfig::hoverWidgetsRight, "hover_widgets_right"),
+        field(&IslandConfig::hoverShowClock, "hover_show_clock"),
+        field(&IslandConfig::hoverShowCalendar, "hover_show_calendar"),
+        field(&IslandConfig::hoverShowMedia, "hover_show_media"),
+        field(&IslandConfig::hoverShowDownloads, "hover_show_downloads"),
+        field(&IslandConfig::hoverShowTimers, "hover_show_timers"),
+        field(&IslandConfig::hoverShowBatteries, "hover_show_batteries"),
+        field(&IslandConfig::hoverShowUnread, "hover_show_unread"),
         field(&IslandConfig::enabled, "enabled"),
         field(&IslandConfig::monitors, "monitors"),
         field(&IslandConfig::height, "height", Range<float>{44.0F, 72.0F}),

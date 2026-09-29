@@ -334,6 +334,15 @@ location = "https://example.invalid/bad"
     Config c;
     c.island.enabled = true;
     c.island.hoverWidgets = {"volume", "test/hover:widget", "my_button"};
+    c.island.hoverWidgetsCenter = {"clock"};
+    c.island.hoverWidgetsRight = {"network"};
+    c.island.hoverShowClock = false;
+    c.island.hoverShowCalendar = false;
+    c.island.hoverShowMedia = false;
+    c.island.hoverShowDownloads = false;
+    c.island.hoverShowTimers = false;
+    c.island.hoverShowBatteries = false;
+    c.island.hoverShowUnread = false;
     c.island.monitors = {"DP-1"};
     c.island.height = 58;
     c.island.clockSize = 22;

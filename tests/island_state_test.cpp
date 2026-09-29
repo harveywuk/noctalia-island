@@ -30,6 +30,14 @@ int main() {
   assert(view(false, false, true, true, false, false, true) == View::Media);
   assert(view(true, false, false, false, false, false, true) == View::Notification);
   assert(view(false, true, false, false, false, false, true) == View::Osd);
+  // Disabling hover sections preserves compact activity and alert priority.
+  assert(view(false, false, true, true, true, true, false, false, false) == View::Calendar);
+  assert(view(false, false, true, true, true, true, false, true, false) == View::Media);
+  assert(view(false, false, true, true, true, true, false, false, true) == View::Downloads);
+  assert(view(false, false, false, true, false, false, false, false, false) == View::Activity);
+  assert(view(false, false, false, true, false, true, false, false, false) == View::DownloadActivity);
+  assert(view(true, true, true, true, true, true, false, false, false) == View::Notification);
+  assert(view(false, true, true, true, true, true, false, false, false) == View::Osd);
   // Closing a panel returns directly to the live non-hover state, not always idle.
   const auto playingSize = island::size(view(false, false, false, true, false), 64, 24, false);
   const auto idleSize = island::size(view(false, false, false, false, false), 64, 24, false);

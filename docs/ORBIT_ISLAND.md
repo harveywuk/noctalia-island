@@ -211,16 +211,21 @@ light/dark changes.
 
 ## Add widgets to the hover view
 
-Open **Settings → Island → Widgets → Hover widgets** to add, remove or reorder
-modules. This uses the bar widget catalogue, including installed and enabled plugin
+Open **Settings → Island → Widgets** to add, remove or reorder modules in the
+**Left widgets**, **Centre widgets** and **Right widgets** lists. This uses the bar
+widget catalogue, including installed and enabled plugin
 `[[widget]]` entries and configured custom widget instances. Widgets appear beneath
 the calendar, media or downloads content when you hover over the Island. They wrap
 onto additional rows, and the footer scrolls if it exceeds the screen height.
+Groups share a row when they fit; crowded groups stack while keeping their alignment.
+The centre group stays centred where space permits, shifting only to avoid its neighbours.
 
 ```toml
 [island]
 enabled = true
 hover_widgets = ["volume", "network", "weather", "my_button", "author/plugin:widget"]
+hover_widgets_center = ["clock"]
+hover_widgets_right = ["battery"]
 ```
 
 Use only plugin IDs that are installed and enabled. Create custom widget instances
@@ -232,8 +237,31 @@ Plugin widgets receive the bar
 context `island` and the Island's output. Other plugin entry types, such as desktop
 widgets or background services, are not bar widgets and do not appear in this list.
 
-The default list is empty. Removing an item from this list does not uninstall its
+All three lists are empty by default. Existing `hover_widgets` entries become the
+left group automatically. Removing an item from a list does not uninstall its
 plugin or remove it from another bar. Widget runtimes stop when the hover view closes.
+
+### Optional hover sections
+
+Under **Settings → Island → Hover Sections**, toggle the built-in clock, calendar,
+media controls, downloads, timers, battery details and unread notification count.
+All are enabled by default. Turning off the clock and calendar gives idle widgets
+their own compact hover row. Turning off media or downloads leaves the other enabled
+hover content available while that activity runs.
+
+These options only affect the hover view. Compact activity indicators, incoming
+notifications, volume OSD and capture indicators keep working.
+
+```toml
+[island]
+hover_show_clock = false
+hover_show_calendar = false
+hover_show_media = true
+hover_show_downloads = true
+hover_show_timers = true
+hover_show_batteries = true
+hover_show_unread = true
+```
 
 ## Build
 

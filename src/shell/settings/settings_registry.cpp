@@ -915,14 +915,26 @@ namespace settings {
     islandSetting("media", "media_artwork_size", SliderSetting{cfg.island.mediaArtworkSize, 40, 80, 1, true});
     islandSetting("osd", "volume_bar_height", SliderSetting{cfg.island.volumeBarHeight, 5, 24, 1, true});
     islandSetting("osd", "volume_show_percentage", ToggleSetting{cfg.island.volumeShowPercentage});
-    ListSetting hoverWidgets{.items = cfg.island.hoverWidgets};
-    for (const auto& widget : widgetPickerEntries(cfg)) {
-      if (widget.kind == WidgetReferenceKind::BuiltIn && widgetTypeRequiresNamedConfig(widget.value)
-          && !cfg.widgets.contains(widget.value))
-        continue;
-      hoverWidgets.suggestedOptions.push_back({widget.value, widget.label});
-    }
-    islandSetting("widgets", "hover_widgets", std::move(hoverWidgets));
+    const auto hoverWidgets = [&](std::string key, const std::vector<std::string>& items) {
+      ListSetting list{.items = items};
+      for (const auto& widget : widgetPickerEntries(cfg)) {
+        if (widget.kind == WidgetReferenceKind::BuiltIn && widgetTypeRequiresNamedConfig(widget.value)
+            && !cfg.widgets.contains(widget.value))
+          continue;
+        list.suggestedOptions.push_back({widget.value, widget.label});
+      }
+      islandSetting("widgets", std::move(key), std::move(list));
+    };
+    hoverWidgets("hover_widgets", cfg.island.hoverWidgets);
+    hoverWidgets("hover_widgets_center", cfg.island.hoverWidgetsCenter);
+    hoverWidgets("hover_widgets_right", cfg.island.hoverWidgetsRight);
+    islandSetting("hover-sections", "hover_show_clock", ToggleSetting{cfg.island.hoverShowClock});
+    islandSetting("hover-sections", "hover_show_calendar", ToggleSetting{cfg.island.hoverShowCalendar});
+    islandSetting("hover-sections", "hover_show_media", ToggleSetting{cfg.island.hoverShowMedia});
+    islandSetting("hover-sections", "hover_show_downloads", ToggleSetting{cfg.island.hoverShowDownloads});
+    islandSetting("hover-sections", "hover_show_timers", ToggleSetting{cfg.island.hoverShowTimers});
+    islandSetting("hover-sections", "hover_show_batteries", ToggleSetting{cfg.island.hoverShowBatteries});
+    islandSetting("hover-sections", "hover_show_unread", ToggleSetting{cfg.island.hoverShowUnread});
 
     // Dock
     entries.push_back(makeEntry(

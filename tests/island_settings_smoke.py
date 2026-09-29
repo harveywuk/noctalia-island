@@ -16,13 +16,19 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     base = pathlib.Path(tmp); runtime = base/'runtime'; runtime.mkdir(mode=0o700)
     cfg = base/'config/noctalia'; cfg.mkdir(parents=True)
     (cfg/'config.toml').write_text('[island]\nenabled=true\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n')
-    if '--hover-widgets-only' in sys.argv:
+    if '--hover-widgets-only' in sys.argv or '--hover-layout-only' in sys.argv:
         plugin_root=base/'hover-plugins'; plugin=plugin_root/'hover';plugin.mkdir(parents=True)
         (plugin/'plugin.toml').write_text('id="test/hover"\nname="Hover Widget Test"\nversion="1.0.0"\nplugin_api=3\n[[widget]]\nid="widget"\nentry="widget.luau"\n')
         (plugin/'widget.luau').write_text('local n=0\nfunction update() noctalia.setUpdateInterval(200); barWidget.setText("Plugin "..n); barWidget.setGlyph("puzzle"); noctalia.state.set("ticks",(noctalia.state.get("ticks") or 0)+1); noctalia.writeFile(noctalia.pluginDir().."/state.json",noctalia.json.encode({ticks=noctalia.state.get("ticks"),clicks=n})) end\nfunction onClick() n=n+1; noctalia.state.set("clicks",n); update() end\n')
         hover_config=(cfg/'config.toml').read_text().replace('[island]','[island]\nhover_widgets=["test/hover:widget","test_button","volume","clock"]')
         hover_config+='\n[plugins]\nauto_update="none"\nenabled=["test/hover"]\n[[plugins.source]]\nname="hover-test"\nkind="path"\nlocation='+json.dumps(str(plugin_root))+'\nenabled=true\n'
         hover_config+='\n[widget.test_button]\ntype="custom_button"\nlabel="Action"\nglyph="star"\n[widget.test_button.actions]\nleft="exec touch '+str(base/'widget-clicked')+'"\n'
+        # Lock-key LEDs are global even on a private display; keep real typing from interrupting these checks.
+        hover_config+='\n[osd.kinds]\nlock_keys=false\n'
+        if '--hover-layout-only' in sys.argv:
+            hover_config=hover_config.replace('hover_widgets=["test/hover:widget","test_button","volume","clock"]',
+                'hover_widgets=["test_button"]\nhover_widgets_center=["test/hover:widget"]\nhover_widgets_right=["right_button"]')
+            hover_config+='\n[widget.right_button]\ntype="custom_button"\nlabel="R"\n[widget.right_button.actions]\nleft="exec touch '+str(base/'right-clicked')+'"\n'
         (cfg/'config.toml').write_text(hover_config)
     if '--polish-only' in sys.argv:
         config_path=cfg/'config.toml'
@@ -40,6 +46,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             (target/'island-test.luau').write_text((REPO/'tests/fixtures/island_timer_probe.luau').read_text().replace('__POMODORO__','true' if name=='pomodoro' else 'false'))
         with (cfg/'config.toml').open('a') as f:
             f.write('\n[plugins]\nauto_update="none"\nenabled=["noctalia/timer","thepunkoff/pomodoro"]\n[[plugins.source]]\nname="timer-test"\nkind="path"\nlocation='+json.dumps(str(plugin_root))+'\nenabled=true\n')
+            f.write('\n[osd.kinds]\nlock_keys=false\n')
     (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
     config = base/'umbriel.toml'; config.write_text('[output."HEADLESS-1"]\nmode="1280x720"\n')
     env=dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(base/'config'), XDG_STATE_HOME=str(base/'state'), XDG_DATA_HOME=str(base/'data'), XDG_CACHE_HOME=str(base/'cache'), NOCTALIA_CONFIG_HOME=str(base/'config'), NOCTALIA_STATE_HOME=str(base/'state'), NOCTALIA_DATA_HOME=str(base/'data'), WLR_BACKENDS='headless', WLR_HEADLESS_OUTPUTS='1', WLR_LIBINPUT_NO_DEVICES='1', LIBGL_ALWAYS_SOFTWARE='1', XDG_VIDEOS_DIR=str(out))
@@ -86,7 +93,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         def move(x,y): command(pointer,f'move {x} {y}')
         def click(): command(pointer,'press');command(pointer,'release')
         def key(code): command(keyboard,str(code))
-        if any(mode in sys.argv for mode in ('--battery-only','--privacy-only','--polish-only')):
+        if any(mode in sys.argv for mode in ('--battery-only','--privacy-only','--polish-only','--hover-layout-only')):
             env['DBUS_SYSTEM_BUS_ADDRESS'] = env['DBUS_SESSION_BUS_ADDRESS']
             battery = subprocess.Popen([sys.executable, str(REPO/'tests/fixtures/island_battery.py')], env=env,
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -102,6 +109,74 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         wait(ready, 'shell IPC startup')
         key(1)  # Dismiss Umbriel's first-run keybinding hint.
         time.sleep(3)
+        if '--hover-layout-only' in sys.argv:
+            def shot(name): run(['grim',str(out/('hover-layout-'+name+'.png'))])
+            def plugin_state():
+                try: return json.loads((plugin/'state.json').read_text())
+                except (FileNotFoundError,json.JSONDecodeError): return {}
+            def configure(options, name, source=hover_config):
+                move(1100,600)
+                (cfg/'config.toml').write_text(source.replace('[island]','[island]\n'+options))
+                time.sleep(1.2);move(640,40);time.sleep(.8);shot(name)
+            def plugin_click(y):
+                before=plugin_state().get('clicks',0)
+                move(640,y);click()
+                wait(lambda:plugin_state().get('clicks',0)==before+1,'Centre plugin click')
+            hidden='hover_show_clock=false\nhover_show_calendar=false\n'
+            if '--settings-only' not in sys.argv:
+                configure('', 'groups')
+                plugin_click(165)
+                move(520,165);click();wait(lambda:(base/'widget-clicked').exists(),'Left group click')
+                move(778,165);click();wait(lambda:(base/'right-clicked').exists(),'Right group click')
+                configure('hover_show_calendar=false', 'clock-only');plugin_click(101)
+                configure('hover_show_clock=false', 'calendar-only');plugin_click(101)
+                configure(hidden, 'widgets-only');plugin_click(37)
+                configure(hidden, 'centre-only', hover_config.replace('hover_widgets=["test_button"]','hover_widgets=[]').replace('hover_widgets_right=["right_button"]','hover_widgets_right=[]'))
+                plugin_click(37)
+                (base/'right-clicked').unlink()
+                configure(hidden, 'right-only', hover_config.replace('hover_widgets=["test_button"]','hover_widgets=[]').replace('hover_widgets_center=["test/hover:widget"]','hover_widgets_center=[]'))
+                move(778,37);click();wait(lambda:(base/'right-clicked').exists(),'Right-only group click')
+                # Disabled built-in sections must leave the widget row accessible.
+                run(['notify-send','-a','Hover test','-t','0','Unread item','Hover sections'])
+                msg('notification-clear-active')
+                configure(hidden+'hover_show_unread=false', 'unread-hidden');plugin_click(37)
+                configure(hidden, 'unread-visible');plugin_click(69)
+                msg('notification-clear-history')
+                command(battery,json.dumps({'IsPresent':True,'Type':5,'PowerSupply':False,'Percentage':42.}))
+                configure(hidden+'hover_show_batteries=false', 'battery-hidden');plugin_click(37)
+                configure(hidden, 'battery-visible');plugin_click(97)
+                command(battery,json.dumps({'IsPresent':False}))
+                env['ISLAND_TEST_ART']=(REPO/'assets/noctalia-wallpaper.png').as_uri()
+                player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'hover-layout-player.log')
+                time.sleep(1.5)
+                configure(hidden+'hover_show_media=false', 'media-hidden');plugin_click(37)
+                configure(hidden, 'media-visible');plugin_click(219)
+                player.terminate();player.wait(timeout=6)
+                publisher=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_downloads.py')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+                processes.append(publisher)
+                command(publisher,json.dumps({'uri':'application://test.desktop','properties':{'progress-visible':True,'progress':.42}}))
+                configure(hidden+'hover_show_downloads=false', 'downloads-hidden');plugin_click(37)
+                configure(hidden, 'downloads-visible');plugin_click(186)
+                publisher.terminate();publisher.wait(timeout=6)
+            configure(hidden, 'restored')
+            msg('settings-open','island');time.sleep(1);shot('settings')
+            move(925,273);click();time.sleep(.7);shot('section-settings')
+            move(1070,384);click();time.sleep(.7);shot('section-settings-edited')
+            settings_path=base/'state/noctalia/settings.toml'
+            saved=tomllib.loads(settings_path.read_text()).get('island',{}) if settings_path.exists() else {}
+            assert saved.get('hover_show_clock') is True, ('Section toggle must save the clock setting',saved)
+            move(827,273);click();time.sleep(.7);shot('widget-settings')
+            move(950,630);command(pointer,'scroll 1');time.sleep(.7);shot('widget-settings-scrolled')
+            move(624,634);click();time.sleep(.7);shot('right-added')
+            saved=tomllib.loads(settings_path.read_text()).get('island',{})
+            assert 'active_window' in saved.get('hover_widgets_right',[]), ('Right group add must save',saved)
+            move(624,511);click();time.sleep(.7)
+            saved=tomllib.loads(settings_path.read_text()).get('island',{})
+            assert 'active_window' in saved.get('hover_widgets_center',[]), ('Centre group add must save',saved)
+            shot('widget-settings-edited')
+            assert shell.poll() is None
+            print('PASS: hover section and placement Settings controls' if '--settings-only' in sys.argv else 'PASS: hover group placement and clicks, optional sections, widgets-only view and Settings controls')
+            raise SystemExit(0)
         if '--hover-widgets-only' in sys.argv:
             def shot(name): run(['grim',str(out/('hover-widgets-'+name+'.png'))])
             def plugin_state():
@@ -148,12 +223,12 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             def saved_hover():
                 path=base/'state/noctalia/settings.toml'
                 return tomllib.loads(path.read_text()).get('island',{}).get('hover_widgets',[]) if path.exists() else []
-            move(648,583);click();time.sleep(.6)
+            move(648,502);click();time.sleep(.6)
             assert saved_hover()[:2]==['test_button','test/hover:widget'], 'Settings must reorder hover widgets'
-            move(618,611);click();time.sleep(.6)
+            move(618,530);click();time.sleep(.6)
             assert 'volume' not in saved_hover(), 'Settings must remove hover widgets'
             shot('settings-removed')
-            move(624,553);click();time.sleep(.6)
+            move(624,444);click();time.sleep(.6)
             shot('settings-add-attempt')
             assert 'active_window' in saved_hover(), ('Settings must add the selected module',saved_hover())
             shot('settings-edited');msg('settings-close')
@@ -246,10 +321,23 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             def dispatch(plugin,event,*payload): msg('plugin',plugin+':island-test','all',event,*payload)
             wait(lambda: state('timer').get('state')=='IDLE' and 'isRunning' in state('pomodoro'),'Both plugin services ready')
             move(1100,600);shot('idle');move(640,40);time.sleep(.8);shot('entry-points')
+            timer_config=(cfg/'config.toml').read_text()
+            (cfg/'config.toml').write_text(timer_config.replace('[island]','[island]\nhover_show_timers=false'))
+            time.sleep(1.2);move(1100,600);move(640,40);time.sleep(.8);shot('shortcuts-hidden')
+            idle_footer=Image.open(out/'timer-idle.png').convert('RGB').crop((490,160,790,220))
+            hidden_footer=Image.open(out/'timer-shortcuts-hidden.png').convert('RGB').crop((490,160,790,220))
+            assert ImageChops.difference(idle_footer,hidden_footer).getbbox() is None, 'Hidden timer shortcuts must leave no footer'
+            (cfg/'config.toml').write_text(timer_config);time.sleep(1.2);move(1100,600);move(640,40);time.sleep(.8)
             move(550,160);click();time.sleep(.8);shot('panel')
             key(3);key(11);key(11);key(28)  # Enter 200 (2:00) in the actual plugin panel.
             wait(lambda:state('timer').get('state')=='RUNNING','Timer starts from its panel');key(1);move(1100,600);time.sleep(1.1)
             shot('running');move(640,40);time.sleep(.8);shot('hover')
+            (cfg/'config.toml').write_text(timer_config.replace('[island]','[island]\nhover_show_timers=false'))
+            time.sleep(1.2);move(1100,600);move(640,40);time.sleep(.8);shot('running-hidden')
+            hidden_footer=Image.open(out/'timer-running-hidden.png').convert('RGB').crop((490,160,790,220))
+            assert ImageChops.difference(idle_footer,hidden_footer).getbbox() is None, 'Hidden running timer must leave no footer'
+            assert state('timer').get('state')=='RUNNING', 'Hiding timer controls must not stop the timer'
+            (cfg/'config.toml').write_text(timer_config);time.sleep(1.2);move(1100,600);move(640,40);time.sleep(.8)
             move(536,207);click();wait(lambda:state('timer').get('state')=='PAUSED','Island pause reaches plugin')
             before=state('timer')['remaining'];time.sleep(1.3);assert state('timer')['remaining']==before
             shot('paused');click();wait(lambda:state('timer').get('state')=='RUNNING','Island resume reaches plugin')

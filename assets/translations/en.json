@@ -1418,7 +1418,8 @@
         "widgets": "Widgets",
         "window-switcher": "Window Switcher",
         "clock": "Clock",
-        "calendar": "Calendar"
+        "calendar": "Calendar",
+        "hover-sections": "Hover Sections"
       },
       "sections": {
         "accessibility": "Accessibility",
@@ -3496,8 +3497,44 @@
       },
       "island": {
         "hover_widgets": {
-          "label": "Hover widgets",
-          "description": "Add, remove and reorder bar modules and enabled plugin widgets beneath the Island hover view. Widget options are shared with the bar."
+          "label": "Left widgets",
+          "description": "Add, remove and reorder modules and enabled plugin widgets on the left of the hover view. Widget options are shared with the bar."
+        },
+        "hover_widgets_center": {
+          "label": "Centre widgets",
+          "description": "Add, remove and reorder widgets in the centre of the hover view."
+        },
+        "hover_widgets_right": {
+          "label": "Right widgets",
+          "description": "Add, remove and reorder widgets on the right of the hover view. Crowded groups stack into aligned rows."
+        },
+        "hover_show_clock": {
+          "label": "Clock",
+          "description": "Show the clock above the idle hover view."
+        },
+        "hover_show_calendar": {
+          "label": "Calendar",
+          "description": "Show the week strip in the idle hover view."
+        },
+        "hover_show_media": {
+          "label": "Media controls",
+          "description": "Show the current player when hovering during playback."
+        },
+        "hover_show_downloads": {
+          "label": "Downloads",
+          "description": "Show download progress in the hover view."
+        },
+        "hover_show_timers": {
+          "label": "Timers",
+          "description": "Show timer controls and shortcuts in the hover view."
+        },
+        "hover_show_batteries": {
+          "label": "Battery details",
+          "description": "Show battery levels and remaining time in the hover view."
+        },
+        "hover_show_unread": {
+          "label": "Unread notifications",
+          "description": "Show the unread count and history shortcut in the hover view."
         },
         "enabled": {
           "label": "Enable dynamic island",

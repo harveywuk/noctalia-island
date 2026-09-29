@@ -1758,7 +1758,17 @@ constexpr EnumOption<IslandCalendarLabels> kIslandCalendarLabels[] = {
 };
 
 struct IslandConfig {
+  // Keep the original key as the left group for existing configurations.
   std::vector<std::string> hoverWidgets;
+  std::vector<std::string> hoverWidgetsCenter;
+  std::vector<std::string> hoverWidgetsRight;
+  bool hoverShowClock = true;
+  bool hoverShowCalendar = true;
+  bool hoverShowMedia = true;
+  bool hoverShowDownloads = true;
+  bool hoverShowTimers = true;
+  bool hoverShowBatteries = true;
+  bool hoverShowUnread = true;
   bool enabled = false;
   std::vector<std::string> monitors;
   float height = 64.0F;

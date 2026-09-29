@@ -580,7 +580,7 @@ void Island::prepare(Instance& inst) {
     inst.heldMedia = true;
   if (!player || !expansionRequested)
     inst.heldMedia = false;
-  const auto view = recording ? island::View::Rest : island::view(m_notification.has_value(), m_osd.has_value() && !inst.keyboardMode, expansionRequested, playing, inst.heldMedia, !downloads.empty(), timerActive);
+  const auto view = recording ? island::View::Rest : island::view(m_notification.has_value(), m_osd.has_value() && !inst.keyboardMode, expansionRequested, playing, inst.heldMedia, !downloads.empty(), timerActive, cfg.hoverShowMedia, cfg.hoverShowDownloads);
   const bool compactView = view == island::View::Rest || view == island::View::Activity || view == island::View::DownloadActivity || view == island::View::TimerActivity;
   const bool expandedView = view == island::View::Calendar || view == island::View::Media || view == island::View::Downloads;
   const auto batteryList = !recording && (compactView || expandedView) ? batteries() : std::vector<island::Battery>{};
@@ -917,7 +917,7 @@ void Island::prepare(Instance& inst) {
       label(i18n::trp("island.downloads.more", downloads.size() - rows), 22, h, w - 44, 12, muted);
       h += 28;
     }
-    if (player) {
+    if (player && cfg.hoverShowMedia) {
       control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true,
               [panel] { panel("media"); });
       h += 38;
@@ -937,17 +937,20 @@ void Island::prepare(Instance& inst) {
       if (metrics.width > available)
         size *= available / metrics.width;
     }
-    auto* clockLabel = label(
-        announce ? m_announcement : time, inset, 0, w - inset * 2, announce ? 17 : size,
-        recording ? colorSpecFromRole(ColorRole::Error) : foreground, true
-    );
-    if (recording)
-      inst.recordingLabel = clockLabel;
-    const float clockY = (cfg.height * s - clockLabel->height()) / 2.0F + cfg.clockOffset * s;
-    clockLabel->setPosition(inset * s, std::clamp(clockY, 0.0F, std::max(0.0F, cfg.height * s - clockLabel->height())));
-    action(0, 0, w, cfg.height, "controls", [panel, recording] {
-      if (recording) ScreenRecorder::instance().stop(); else panel("control-center");
-    });
+    Label* clockLabel = nullptr;
+    if (view != island::View::Calendar || cfg.hoverShowClock) {
+      clockLabel = label(
+          announce ? m_announcement : time, inset, 0, w - inset * 2, announce ? 17 : size,
+          recording ? colorSpecFromRole(ColorRole::Error) : foreground, true
+      );
+      if (recording)
+        inst.recordingLabel = clockLabel;
+      const float clockY = (cfg.height * s - clockLabel->height()) / 2.0F + cfg.clockOffset * s;
+      clockLabel->setPosition(inset * s, std::clamp(clockY, 0.0F, std::max(0.0F, cfg.height * s - clockLabel->height())));
+      action(0, 0, w, cfg.height, "controls", [panel, recording] {
+        if (recording) ScreenRecorder::instance().stop(); else panel("control-center");
+      });
+    }
     if (view == island::View::Activity) {
       artwork(12, (cfg.height - 38) / 2, 38);
       if (showVisualizer) {
@@ -960,51 +963,57 @@ void Island::prepare(Instance& inst) {
       }
     }
     if (view == island::View::Calendar) {
+      h = (cfg.hoverShowClock ? cfg.height : 0) + (cfg.hoverShowCalendar ? 72 : 8);
       // Orbit's clock sits in a taller head band above a strip centred on today.
-      const float expandedY = ((cfg.height + 19.0F) * s - clockLabel->height()) / 2.0F + cfg.expandedClockOffset * s;
-      clockLabel->setPosition(inset * s, std::clamp(expandedY, 0.0F, std::max(0.0F, (cfg.height + 6.0F) * s - clockLabel->height())));
-      constexpr float dateSize = 17.0F;
-      constexpr float daySize = 13.0F;
-      const float preferredCellWidth = cfg.calendarLabels == IslandCalendarLabels::Initials ? 32.0F : 44.0F;
-      const float cellWidth = std::min(preferredCellWidth, (w - 40.0F) / 7.0F);
-      constexpr float dayHeight = daySize * 1.4F;
-      const float stripX = (w - 7.0F * cellWidth) / 2.0F;
-      const float stripY = cfg.height + 10.0F;
-      const auto now = std::time(nullptr);
-      std::tm tm{};
-      localtime_r(&now, &tm);
-      tm.tm_mday -= 3;
-      tm.tm_hour = 12;
-      tm.tm_isdst = -1;
-      std::mktime(&tm);
-      for (int day = 0; day < 7; ++day) {
-        const bool today = day == 3;
-        const int distance = std::abs(day - 3);
-        const float grade = today ? 1.0F : 1.0F - static_cast<float>(distance - 1) * 0.07F;
-        auto color = colorSpecFromRole(today ? ColorRole::Primary : ColorRole::OnSurfaceVariant);
-        color.alpha *= std::max(0.2F, 1.0F - static_cast<float>(distance) * 0.27F);
-        char dayName[64]{};
-        std::strftime(dayName, sizeof(dayName), "%a", &tm);
-        const bool abbreviated = cfg.calendarLabels == IslandCalendarLabels::Abbreviated
-            || (today && cfg.calendarLabels == IslandCalendarLabels::TodayAbbreviated);
-        char* shortName = g_utf8_substring(dayName, 0, abbreviated ? 3 : 1);
-        const float x = stripX + static_cast<float>(day) * cellWidth;
-        auto* weekday = label(
-            shortName, x, stripY, cellWidth, daySize,
-            color, true, 1, today ? FontWeight::Bold : FontWeight::SemiBold
-        );
-        weekday->setPosition(x * s, stripY * s + (dayHeight * s - weekday->height()) / 2.0F);
-        g_free(shortName);
-        label(
-            std::to_string(tm.tm_mday), x, stripY + dayHeight + 2.0F, cellWidth,
-            std::round(dateSize * grade * (today ? 1.25F : 1.0F)), color, true, 1,
-            today ? FontWeight::Bold : FontWeight::Medium
-        );
-        ++tm.tm_mday;
+      if (clockLabel && cfg.hoverShowCalendar) {
+        const float expandedY = ((cfg.height + 19.0F) * s - clockLabel->height()) / 2.0F + cfg.expandedClockOffset * s;
+        clockLabel->setPosition(inset * s, std::clamp(expandedY, 0.0F, std::max(0.0F, (cfg.height + 6.0F) * s - clockLabel->height())));
+      }
+      if (cfg.hoverShowCalendar) {
+        constexpr float dateSize = 17.0F;
+        constexpr float daySize = 13.0F;
+        const float preferredCellWidth = cfg.calendarLabels == IslandCalendarLabels::Initials ? 32.0F : 44.0F;
+        const float cellWidth = std::min(preferredCellWidth, (w - 40.0F) / 7.0F);
+        constexpr float dayHeight = daySize * 1.4F;
+        const float stripX = (w - 7.0F * cellWidth) / 2.0F;
+        const float calendarTop = cfg.hoverShowClock ? cfg.height : 0;
+        const float stripY = calendarTop + 10.0F;
+        const auto now = std::time(nullptr);
+        std::tm tm{};
+        localtime_r(&now, &tm);
+        tm.tm_mday -= 3;
+        tm.tm_hour = 12;
         tm.tm_isdst = -1;
         std::mktime(&tm);
+        for (int day = 0; day < 7; ++day) {
+          const bool today = day == 3;
+          const int distance = std::abs(day - 3);
+          const float grade = today ? 1.0F : 1.0F - static_cast<float>(distance - 1) * 0.07F;
+          auto color = colorSpecFromRole(today ? ColorRole::Primary : ColorRole::OnSurfaceVariant);
+          color.alpha *= std::max(0.2F, 1.0F - static_cast<float>(distance) * 0.27F);
+          char dayName[64]{};
+          std::strftime(dayName, sizeof(dayName), "%a", &tm);
+          const bool abbreviated = cfg.calendarLabels == IslandCalendarLabels::Abbreviated
+              || (today && cfg.calendarLabels == IslandCalendarLabels::TodayAbbreviated);
+          char* shortName = g_utf8_substring(dayName, 0, abbreviated ? 3 : 1);
+          const float x = stripX + static_cast<float>(day) * cellWidth;
+          auto* weekday = label(
+              shortName, x, stripY, cellWidth, daySize,
+              color, true, 1, today ? FontWeight::Bold : FontWeight::SemiBold
+          );
+          weekday->setPosition(x * s, stripY * s + (dayHeight * s - weekday->height()) / 2.0F);
+          g_free(shortName);
+          label(
+              std::to_string(tm.tm_mday), x, stripY + dayHeight + 2.0F, cellWidth,
+              std::round(dateSize * grade * (today ? 1.25F : 1.0F)), color, true, 1,
+              today ? FontWeight::Bold : FontWeight::Medium
+          );
+          ++tm.tm_mday;
+          tm.tm_isdst = -1;
+          std::mktime(&tm);
+        }
+        action(0, calendarTop, w, h - calendarTop, "calendar", [panel] { panel("calendar"); });
       }
-      action(0, cfg.height, w, h - cfg.height, "calendar", [panel] { panel("calendar"); });
     }
   } else if (view == island::View::Media && player) {
     const float mediaOffset = std::max(0.0F, cfg.mediaArtworkSize - 56.0F);
@@ -1195,7 +1204,7 @@ void Island::prepare(Instance& inst) {
   const float footerTop = h;
   auto footer = std::make_unique<Node>();
   if (expandedView) canvas = footer.get();
-  if (expandedView && !timers.empty()) {
+  if (expandedView && cfg.hoverShowTimers && !timers.empty()) {
     auto displayTimers = timers;
     // Compact priority can change on pause; keep hover buttons under the same pointer.
     std::ranges::sort(displayTimers, {}, &island::Countdown::plugin);
@@ -1301,7 +1310,7 @@ void Island::prepare(Instance& inst) {
   };
   if (showBattery)
     batteryRing(batteryList.front(), w - 50 - (showUnread ? 36 : 0), (cfg.height - 36) / 2, 36);
-  if (expandedView && !batteryList.empty()) {
+  if (expandedView && cfg.hoverShowBatteries && !batteryList.empty()) {
     const auto rows = std::min(batteryList.size(), std::size_t{4});
     for (std::size_t i = 0; i < rows; ++i) {
       const auto& battery = batteryList[i];
@@ -1322,7 +1331,7 @@ void Island::prepare(Instance& inst) {
     }
     h += 6;
   }
-  if (showUnread && (view == island::View::Calendar || view == island::View::Media || view == island::View::Downloads)) {
+  if (showUnread && expandedView && cfg.hoverShowUnread) {
     control(22, h, w - 44, 24, i18n::trp("notifications.unread-count", unreadCount), "",
             i18n::tr("notifications.unread-history"), 0, true, [panel] { panel("notifications"); });
     h += 32;
@@ -1353,7 +1362,8 @@ void Island::prepare(Instance& inst) {
     });
     h += 42;
   }
-  if (expandedView && m_widgetFactory && !cfg.hoverWidgets.empty()) {
+  if (expandedView && m_widgetFactory
+      && (!cfg.hoverWidgets.empty() || !cfg.hoverWidgetsCenter.empty() || !cfg.hoverWidgetsRight.empty())) {
     if (!retainedWidgets) {
       retainedWidgets = std::make_unique<IslandWidgetHost>(
           *m_widgetFactory, m_config->config(), inst.output, s, &inst.animations, &m_widgetActions,
@@ -1390,6 +1400,7 @@ void Island::prepare(Instance& inst) {
       inst.content->addChild(std::move(footer));
     }
   }
+  if (expandedView) h = std::max(h, cfg.height);
   inst.content->setSize(w * s, h * s);
   inst.content->layout(renderer);
   if (inst.activityScroll) inst.activityScroll->setScrollOffset(activityOffset);

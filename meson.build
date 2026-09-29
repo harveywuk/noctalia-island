@@ -1164,6 +1164,7 @@ if build_tests
     'screen_recorder',
     'animation_manager',
     'island_state',
+    'island_widget_layout',
     'island_battery',
     'island_privacy',
     'island_timer',

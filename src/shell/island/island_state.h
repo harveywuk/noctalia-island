@@ -37,16 +37,17 @@ namespace island {
 
   // Orbit priority: a notification wins over OSD; hover reveals the current activity.
   // Keeping paused media open until hover leaves prevents controls moving under the pointer.
-  constexpr View view(bool notification, bool osd, bool hovered, bool playing, bool heldMedia, bool downloads = false, bool timer = false) {
+  constexpr View view(bool notification, bool osd, bool hovered, bool playing, bool heldMedia, bool downloads = false,
+                      bool timer = false, bool hoverMedia = true, bool hoverDownloads = true) {
     if (notification)
       return View::Notification;
     if (osd)
       return View::Osd;
     if (timer && !hovered)
       return View::TimerActivity;
-    if (downloads)
+    if (downloads && (!hovered || hoverDownloads))
       return hovered ? View::Downloads : View::DownloadActivity;
-    if (hovered && (playing || heldMedia))
+    if (hovered && hoverMedia && (playing || heldMedia))
       return View::Media;
     if (hovered)
       return View::Calendar;

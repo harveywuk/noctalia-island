@@ -32,4 +32,5 @@ private:
   bool m_dirty = true;
   std::function<void()> m_frame;
   std::vector<std::unique_ptr<Widget>> m_widgets;
+  std::vector<std::size_t> m_groups;
 };
