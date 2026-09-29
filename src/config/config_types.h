@@ -1758,6 +1758,7 @@ constexpr EnumOption<IslandCalendarLabels> kIslandCalendarLabels[] = {
 };
 
 struct IslandConfig {
+  std::vector<std::string> hoverWidgets;
   bool enabled = false;
   std::vector<std::string> monitors;
   float height = 64.0F;

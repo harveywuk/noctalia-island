@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/timer_manager.h"
+#include "shell/bar/widget_action_dispatcher.h"
 #include "notification/notification.h"
 #include "shell/island/island_panel_surface.h"
 #include "shell/island/island_state.h"
@@ -14,6 +15,9 @@
 #include <vector>
 
 class MprisService;
+class WidgetFactory;
+class IpcService;
+struct BarServices;
 class PipeWireSpectrum;
 class SessionBus;
 class DownloadProgressService;
@@ -33,6 +37,7 @@ public:
   Island();
   ~Island();
   void initialize(WaylandConnection&, ConfigService*, RenderContext*, MprisService*, NotificationManager*, HttpClient*, SessionBus*, UPowerService*, BluetoothService*, PipeWireService*, PipeWireSpectrum*);
+  void initializeWidgets(const BarServices&, IpcService*);
   void onOutputChange();
   void onConfigReload();
   void refresh();
@@ -73,6 +78,8 @@ private:
   PipeWireSpectrum* m_spectrum = nullptr;
   mutable island::PrivacySummary m_privacySummary;
   std::unique_ptr<DownloadProgressService> m_downloads;
+  std::unique_ptr<WidgetFactory> m_widgetFactory;
+  noctalia::bar::WidgetActionDispatcher m_widgetActions;
   std::vector<std::unique_ptr<Instance>> m_instances;
   std::optional<Notification> m_notification;
   std::optional<OsdContent> m_osd;

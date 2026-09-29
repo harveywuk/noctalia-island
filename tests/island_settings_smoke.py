@@ -16,6 +16,14 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     base = pathlib.Path(tmp); runtime = base/'runtime'; runtime.mkdir(mode=0o700)
     cfg = base/'config/noctalia'; cfg.mkdir(parents=True)
     (cfg/'config.toml').write_text('[island]\nenabled=true\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n')
+    if '--hover-widgets-only' in sys.argv:
+        plugin_root=base/'hover-plugins'; plugin=plugin_root/'hover';plugin.mkdir(parents=True)
+        (plugin/'plugin.toml').write_text('id="test/hover"\nname="Hover Widget Test"\nversion="1.0.0"\nplugin_api=3\n[[widget]]\nid="widget"\nentry="widget.luau"\n')
+        (plugin/'widget.luau').write_text('local n=0\nfunction update() noctalia.setUpdateInterval(200); barWidget.setText("Plugin "..n); barWidget.setGlyph("puzzle"); noctalia.state.set("ticks",(noctalia.state.get("ticks") or 0)+1); noctalia.writeFile(noctalia.pluginDir().."/state.json",noctalia.json.encode({ticks=noctalia.state.get("ticks"),clicks=n})) end\nfunction onClick() n=n+1; noctalia.state.set("clicks",n); update() end\n')
+        hover_config=(cfg/'config.toml').read_text().replace('[island]','[island]\nhover_widgets=["test/hover:widget","test_button","volume","clock"]')
+        hover_config+='\n[plugins]\nauto_update="none"\nenabled=["test/hover"]\n[[plugins.source]]\nname="hover-test"\nkind="path"\nlocation='+json.dumps(str(plugin_root))+'\nenabled=true\n'
+        hover_config+='\n[widget.test_button]\ntype="custom_button"\nlabel="Action"\nglyph="star"\n[widget.test_button.actions]\nleft="exec touch '+str(base/'widget-clicked')+'"\n'
+        (cfg/'config.toml').write_text(hover_config)
     if '--polish-only' in sys.argv:
         config_path=cfg/'config.toml'
         config_path.write_text(config_path.read_text().replace('[island]','[island]\nscale=1.4'))
@@ -94,6 +102,65 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         wait(ready, 'shell IPC startup')
         key(1)  # Dismiss Umbriel's first-run keybinding hint.
         time.sleep(3)
+        if '--hover-widgets-only' in sys.argv:
+            def shot(name): run(['grim',str(out/('hover-widgets-'+name+'.png'))])
+            def plugin_state():
+                try: return json.loads((plugin/'state.json').read_text())
+                except (FileNotFoundError,json.JSONDecodeError): return {}
+            move(1100,600);shot('compact')
+            move(640,40);time.sleep(2);shot('expanded')
+            # The first row starts below the idle calendar (64 + 72 pixels).
+            move(545,165);click();time.sleep(.4);shot('clicked')
+            assert plugin_state().get('clicks') == 1, 'Plugin click handler must run'
+            time.sleep(1.3)
+            assert plugin_state().get('clicks') == 1, 'Clock refreshes must retain the plugin runtime'
+            move(615,165);click();wait(lambda:(base/'widget-clicked').exists(),'custom command widget click')
+            move(660,165);click();time.sleep(1);shot('audio-panel')
+            key(1);move(1100,600);time.sleep(1)
+            before=plugin_state().get('ticks',0);time.sleep(.7)
+            assert plugin_state().get('ticks',0)==before, 'Hidden widgets must stop their runtime'
+            move(640,40);time.sleep(1);shot('reopened')
+            assert plugin_state().get('ticks',0)>before, 'Hover must restart plugin widgets'
+            # Reorder and remove through the same persisted config used by settings.
+            changed=hover_config.replace('["test/hover:widget","test_button","volume","clock"]','["clock","test_button","test/hover:widget"]')
+            (cfg/'config.toml').write_text(changed);time.sleep(1.5)
+            move(1100,600);move(640,40);time.sleep(1);shot('reordered')
+            (cfg/'config.toml').write_text(changed.replace('["clock","test_button","test/hover:widget"]','[]'));time.sleep(1.5)
+            move(1100,600);move(640,40);time.sleep(1);shot('empty')
+            # Disabling a configured plugin must remove its runtime without deleting the list item.
+            (cfg/'config.toml').write_text(hover_config.replace('enabled=["test/hover"]','enabled=[]'));time.sleep(1.5)
+            move(1100,600);move(640,40);time.sleep(1)
+            before=plugin_state().get('ticks',0);time.sleep(.7)
+            assert plugin_state().get('ticks',0)==before, 'Disabled plugin must not run'
+            shot('plugin-disabled')
+            names=['item'+str(i) for i in range(60)]
+            overflow=hover_config.replace('["test/hover:widget","test_button","volume","clock"]',json.dumps(names))
+            overflow+=''.join('\n[widget.'+name+']\ntype="custom_button"\nlabel="Item '+str(i)+'"\n' for i,name in enumerate(names))
+            (cfg/'config.toml').write_text(overflow);time.sleep(1.5)
+            move(1100,600);move(640,40);time.sleep(1);shot('overflow-top')
+            move(640,560);command(pointer,'scroll 8');time.sleep(.7);shot('overflow-scrolled')
+            a=Image.open(out/'hover-widgets-overflow-top.png').convert('RGB')
+            b=Image.open(out/'hover-widgets-overflow-scrolled.png').convert('RGB')
+            assert ImageChops.difference(a.crop((465,145,815,690)),b.crop((465,145,815,690))).getbbox(), 'Overflow widgets must scroll'
+            (cfg/'config.toml').write_text(hover_config);time.sleep(1.5)
+            msg('settings-open','island');time.sleep(1);shot('settings')
+            move(827,273);click();time.sleep(.6);shot('widget-settings')
+            def saved_hover():
+                path=base/'state/noctalia/settings.toml'
+                return tomllib.loads(path.read_text()).get('island',{}).get('hover_widgets',[]) if path.exists() else []
+            move(648,583);click();time.sleep(.6)
+            assert saved_hover()[:2]==['test_button','test/hover:widget'], 'Settings must reorder hover widgets'
+            move(618,611);click();time.sleep(.6)
+            assert 'volume' not in saved_hover(), 'Settings must remove hover widgets'
+            shot('settings-removed')
+            move(624,553);click();time.sleep(.6)
+            shot('settings-add-attempt')
+            assert 'active_window' in saved_hover(), ('Settings must add the selected module',saved_hover())
+            shot('settings-edited');msg('settings-close')
+            msg('settings-open-widget','island','test_button');time.sleep(1);shot('widget-inspector');msg('settings-close')
+            assert shell.poll() is None
+            print('PASS: hover modules, plugin/custom clicks, retained state, cleanup, reload, disable and overflow')
+            raise SystemExit(0)
         if '--visualizer-only' in sys.argv:
             import math, struct, wave
             tone=base/'tone.wav'

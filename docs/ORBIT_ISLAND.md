@@ -209,6 +209,32 @@ The island and its expanded panels use the theme's Surface background. Text,
 icons, calendar accents, and progress bars follow the palette live, including
 light/dark changes.
 
+## Add widgets to the hover view
+
+Open **Settings → Island → Widgets → Hover widgets** to add, remove or reorder
+modules. This uses the bar widget catalogue, including installed and enabled plugin
+`[[widget]]` entries and configured custom widget instances. Widgets appear beneath
+the calendar, media or downloads content when you hover over the Island. They wrap
+onto additional rows, and the footer scrolls if it exceeds the screen height.
+
+```toml
+[island]
+enabled = true
+hover_widgets = ["volume", "network", "weather", "my_button", "author/plugin:widget"]
+```
+
+Use only plugin IDs that are installed and enabled. Create custom widget instances
+in the regular widget editor or a `[widget.my_button]` configuration table before
+selecting them. Their options and gesture bindings are shared with the normal bar;
+use a separate named instance for different settings. Middle-click a widget to open
+its settings (unless you have assigned a different middle-click action).
+Plugin widgets receive the bar
+context `island` and the Island's output. Other plugin entry types, such as desktop
+widgets or background services, are not bar widgets and do not appear in this list.
+
+The default list is empty. Removing an item from this list does not uninstall its
+plugin or remove it from another bar. Widget runtimes stop when the hover view closes.
+
 ## Build
 
 Follow `BUILDING.md`. The branch is based on Noctalia v5.2.0, commit ec704377180f.

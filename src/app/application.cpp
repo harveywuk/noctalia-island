@@ -247,6 +247,7 @@ void Application::run(std::function<void()> startupReadyCallback) {
     m_pluginManager.setOnChanged([this]() {
       m_pluginServiceHost.refresh(m_configService.config().plugins.pluginSettings);
       m_bar.reload();
+      m_island.onConfigReload();
       reloadPluginLauncherProviders();
       reloadPluginPanels();
       m_settingsWindow.onPluginsChanged();

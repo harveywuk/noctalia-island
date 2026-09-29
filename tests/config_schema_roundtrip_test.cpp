@@ -333,6 +333,7 @@ location = "https://example.invalid/bad"
   Config makeProbe() {
     Config c;
     c.island.enabled = true;
+    c.island.hoverWidgets = {"volume", "test/hover:widget", "my_button"};
     c.island.monitors = {"DP-1"};
     c.island.height = 58;
     c.island.clockSize = 22;

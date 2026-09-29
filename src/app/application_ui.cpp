@@ -760,7 +760,7 @@ void Application::initNotificationAndOsd() {
   };
   m_configService.addReloadCallback([this]() {
     const auto& change = m_configService.lastChange();
-    if (change.island || change.accessibility || change.shell)
+    if (change.island || change.accessibility || change.shell || change.widgets || change.plugins)
       m_island.onConfigReload();
   });
   m_osdOverlay.presentationHandler = [this](const OsdContent& content) { return m_island.showOsd(content); };
@@ -895,7 +895,7 @@ void Application::initBarDockAndLayout() {
   m_trayMenu.initialize(m_wayland, &m_configService, m_trayService.get(), &m_renderContext);
   m_trayMenu.setClosedCallback([this]() { m_bar.reevaluateAutoHideAfterPopup(); });
 
-  m_bar.initialize({
+  const BarServices barServices{
       .platform = m_compositorPlatform,
       .config = m_configService,
       .notifications = &m_notificationManager,
@@ -923,7 +923,9 @@ void Application::initBarDockAndLayout() {
       .fileWatcher = &m_fileWatcher,
       .screenshots = &m_screenshotService,
       .scriptApi = &m_scriptApi,
-  });
+  };
+  m_bar.initialize(barServices);
+  m_island.initializeWidgets(barServices, &m_ipcService);
   m_idleInhibitor.setAnchorSurfacesProvider([this]() { return m_bar.caffeineAnchorSurfaces(); });
   m_panelManager.setOpenWidgetSettingsCallback([this](std::string barName, std::string widgetName) {
     m_settingsWindow.openToBarWidget(std::move(barName), std::move(widgetName));

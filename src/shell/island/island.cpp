@@ -1,4 +1,6 @@
 #include "shell/island/island.h"
+#include "shell/island/island_widget_host.h"
+#include "shell/bar/widget_factory.h"
 #include "capture/screen_recorder.h"
 #include "pipewire/pipewire_spectrum.h"
 #include "ui/visuals/audio_visualizer.h"
@@ -129,6 +131,7 @@ struct Island::Instance {
   Label* mediaPosition = nullptr;
   Label* recordingLabel = nullptr;
   IslandAudioVisualizer* visualizer = nullptr;
+  IslandWidgetHost* hoverWidgets = nullptr;
   struct TimerUi {
     std::string plugin;
     Label* label;
@@ -227,6 +230,11 @@ namespace {
 
 Island::Island() = default;
 Island::~Island() { destroySurfaces(); }
+
+void Island::initializeWidgets(const BarServices& services, IpcService* ipc) {
+  m_widgetFactory = std::make_unique<WidgetFactory>(services);
+  m_widgetActions.setIpcService(ipc);
+}
 
 void Island::initialize(
     WaylandConnection& wayland, ConfigService* config, RenderContext* renderer, MprisService* mpris,
@@ -414,6 +422,8 @@ void Island::onOutputChange() {
     inst->surface->setFrameTickCallback([ptr](float dt) {
       if (!ptr->panelHosted && ptr->visualizer)
         ptr->visualizer->onFrameTick(dt);
+      if (!ptr->panelHosted && ptr->hoverWidgets)
+        ptr->hoverWidgets->tickWidgets(dt);
     });
     if (!inst->surface->initialize(output.output))
       continue;
@@ -661,6 +671,11 @@ void Island::prepare(Instance& inst) {
     for (const auto& battery : batteryList)
       signature += std::format("|battery:{}|{}|{}|{}|{}|{}|{}", battery.id, battery.name, battery.icon,
           std::lround(battery.percentage), static_cast<int>(battery.state), battery.seconds / 60, battery.low);
+  if (expandedView && inst.hoverWidgets) {
+    const float oldHeight = inst.hoverWidgets->height();
+    inst.hoverWidgets->updateWidgets(renderer, inst.hoverWidgets->width());
+    if (oldHeight != inst.hoverWidgets->height()) inst.signature.clear();
+  }
   if (signature == inst.signature && inst.root) {
     // Timer ticks must not rebuild the stop action between pointer press and release.
     if (recording && inst.recordingLabel) {
@@ -728,6 +743,10 @@ void Island::prepare(Instance& inst) {
   inst.badgeHovered = false;
   inst.pressedAction.clear();
   const bool showVisualizer = view == island::View::Activity && !showUnread && !showBattery && privacyList.empty();
+  std::unique_ptr<Node> retainedWidgets;
+  if (expandedView && inst.hoverWidgets)
+    retainedWidgets = inst.hoverWidgets->parent()->removeChild(inst.hoverWidgets);
+  inst.hoverWidgets = nullptr;
   std::unique_ptr<Node> retainedVisualizer;
   if (inst.visualizer && showVisualizer)
     retainedVisualizer = inst.content->removeChild(inst.visualizer);
@@ -1334,6 +1353,21 @@ void Island::prepare(Instance& inst) {
     });
     h += 42;
   }
+  if (expandedView && m_widgetFactory && !cfg.hoverWidgets.empty()) {
+    if (!retainedWidgets) {
+      retainedWidgets = std::make_unique<IslandWidgetHost>(
+          *m_widgetFactory, m_config->config(), inst.output, s, &inst.animations, &m_widgetActions,
+          [&inst] { if (!inst.panelHosted) inst.surface->requestUpdate(); },
+          [&inst] { if (!inst.panelHosted) inst.surface->requestRedraw(); },
+          [&inst] { if (!inst.panelHosted) inst.surface->requestFrameTick(); });
+    }
+    inst.hoverWidgets = static_cast<IslandWidgetHost*>(retainedWidgets.get());
+    inst.hoverWidgets->updateWidgets(renderer, std::max(1.0F, (w - 44) * s));
+    inst.hoverWidgets->setPosition(22 * s, (h + 8) * s);
+    const float widgetHeight = inst.hoverWidgets->height() / s;
+    footer->addChild(std::move(retainedWidgets));
+    if (widgetHeight > 0) h += widgetHeight + 16;
+  }
   if (expandedView) {
     const float footerHeight = h - footerTop;
     for (const auto& child : footer->children()) child->setPosition(child->x(), child->y() - footerTop * s);
@@ -1450,6 +1484,8 @@ bool Island::onKeyboardEvent(const KeyboardEvent& event) {
 bool Island::onPointerEvent(const PointerEvent& event) {
   for (auto& ptr : m_instances) {
     auto& inst = *ptr;
+    if (!inst.panelHosted && inst.hoverWidgets && inst.hoverWidgets->onPointerEvent(event))
+      return true;
     if (inst.panelHosted || event.surface != inst.surface->wlSurface())
       continue;
     if (event.type == PointerEvent::Type::Enter) {
@@ -1631,6 +1667,8 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     inst.surface->setFrameTickCallback([p = ptr.get()](float dt) {
       if (!p->panelHosted && p->visualizer)
         p->visualizer->onFrameTick(dt);
+      if (!p->panelHosted && p->hoverWidgets)
+        p->hoverWidgets->tickWidgets(dt);
     });
     inst.surface->setConfigureCallback([p = ptr.get()](std::uint32_t, std::uint32_t) {
       p->signature.clear();

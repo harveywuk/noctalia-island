@@ -1,4 +1,5 @@
 #include "shell/settings/settings_registry.h"
+#include "shell/settings/widget_settings_registry.h"
 
 #include "config/config_types.h"
 #include "config/schema/config_schema.h"
@@ -914,6 +915,14 @@ namespace settings {
     islandSetting("media", "media_artwork_size", SliderSetting{cfg.island.mediaArtworkSize, 40, 80, 1, true});
     islandSetting("osd", "volume_bar_height", SliderSetting{cfg.island.volumeBarHeight, 5, 24, 1, true});
     islandSetting("osd", "volume_show_percentage", ToggleSetting{cfg.island.volumeShowPercentage});
+    ListSetting hoverWidgets{.items = cfg.island.hoverWidgets};
+    for (const auto& widget : widgetPickerEntries(cfg)) {
+      if (widget.kind == WidgetReferenceKind::BuiltIn && widgetTypeRequiresNamedConfig(widget.value)
+          && !cfg.widgets.contains(widget.value))
+        continue;
+      hoverWidgets.suggestedOptions.push_back({widget.value, widget.label});
+    }
+    islandSetting("widgets", "hover_widgets", std::move(hoverWidgets));
 
     // Dock
     entries.push_back(makeEntry(

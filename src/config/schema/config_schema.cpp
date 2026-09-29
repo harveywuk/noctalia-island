@@ -70,6 +70,7 @@ namespace noctalia::config::schema {
 
   const Schema<IslandConfig>& islandSchema() {
     static const Schema<IslandConfig> s = {
+        field(&IslandConfig::hoverWidgets, "hover_widgets"),
         field(&IslandConfig::enabled, "enabled"),
         field(&IslandConfig::monitors, "monitors"),
         field(&IslandConfig::height, "height", Range<float>{44.0F, 72.0F}),

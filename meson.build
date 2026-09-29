@@ -694,6 +694,7 @@ _noctalia_sources = files(
   'src/shell/osd/privacy_osd.cpp',
   'src/shell/osd/osd_overlay.cpp',
   'src/shell/island/island.cpp',
+  'src/shell/island/island_widget_host.cpp',
   'src/dbus/downloads/download_progress_service.cpp',
   'src/system/steam_activity.cpp',
   'src/shell/tooltip/tooltip_manager.cpp',

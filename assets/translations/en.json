@@ -3495,6 +3495,10 @@
         }
       },
       "island": {
+        "hover_widgets": {
+          "label": "Hover widgets",
+          "description": "Add, remove and reorder bar modules and enabled plugin widgets beneath the Island hover view. Widget options are shared with the bar."
+        },
         "enabled": {
           "label": "Enable dynamic island",
           "description": "Show the clock, media controls, notifications, and volume in the island."
