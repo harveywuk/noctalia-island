@@ -19,6 +19,7 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
     config = base/'umbriel.toml'; config.write_text('[output."HEADLESS-1"]\nmode="1280x720"\n')
     env=dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(base/'config'), XDG_STATE_HOME=str(base/'state'), XDG_DATA_HOME=str(base/'data'), XDG_CACHE_HOME=str(base/'cache'), NOCTALIA_CONFIG_HOME=str(base/'config'), NOCTALIA_STATE_HOME=str(base/'state'), NOCTALIA_DATA_HOME=str(base/'data'), WLR_BACKENDS='headless', WLR_HEADLESS_OUTPUTS='1', WLR_LIBINPUT_NO_DEVICES='1', LIBGL_ALWAYS_SOFTWARE='1', XDG_VIDEOS_DIR=str(out), PULSE_SERVER='unix:/run/user/1000/pulse/native')
     env.pop('WAYLAND_DISPLAY',None); env.pop('DISPLAY',None)
+    env.pop('UMBRIEL_SOCKET',None)
     processes=[]
     def run(args): return subprocess.check_output(args,env=env,text=True,stderr=subprocess.STDOUT,timeout=15)
     def start(args,name):

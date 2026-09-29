@@ -39,6 +39,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     env['HOME']=str(base)
     env['DBUS_SYSTEM_BUS_ADDRESS']=env['DBUS_SESSION_BUS_ADDRESS']
     env.pop('WAYLAND_DISPLAY',None); env.pop('DISPLAY',None)
+    env.pop('UMBRIEL_SOCKET',None)
     processes=[]
     def run(args): return subprocess.check_output(args,env=env,text=True,stderr=subprocess.STDOUT,timeout=15)
     def start(args,name):

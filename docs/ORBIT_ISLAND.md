@@ -207,7 +207,7 @@ light/dark changes.
 
 ## Build
 
-Follow `BUILDING.md`. The branch is based on Noctalia v5.1.0, commit c0d9a3a4fdfb.
+Follow `BUILDING.md`. The branch is based on Noctalia v5.2.0, commit ec704377180f.
 
 ```sh
 meson setup build-island -Dbuildtype=debugoptimized -Dtests=enabled
