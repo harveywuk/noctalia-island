@@ -14,6 +14,7 @@
 #include <vector>
 
 class MprisService;
+class PipeWireSpectrum;
 class SessionBus;
 class DownloadProgressService;
 class UPowerService;
@@ -31,7 +32,7 @@ class Island {
 public:
   Island();
   ~Island();
-  void initialize(WaylandConnection&, ConfigService*, RenderContext*, MprisService*, NotificationManager*, HttpClient*, SessionBus*, UPowerService*, BluetoothService*, PipeWireService*);
+  void initialize(WaylandConnection&, ConfigService*, RenderContext*, MprisService*, NotificationManager*, HttpClient*, SessionBus*, UPowerService*, BluetoothService*, PipeWireService*, PipeWireSpectrum*);
   void onOutputChange();
   void onConfigReload();
   void refresh();
@@ -69,6 +70,7 @@ private:
   UPowerService* m_upower = nullptr;
   BluetoothService* m_bluetooth = nullptr;
   PipeWireService* m_pipewire = nullptr;
+  PipeWireSpectrum* m_spectrum = nullptr;
   mutable island::PrivacySummary m_privacySummary;
   std::unique_ptr<DownloadProgressService> m_downloads;
   std::vector<std::unique_ptr<Instance>> m_instances;

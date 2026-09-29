@@ -51,10 +51,19 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             time.sleep(.1)
         raise AssertionError(reason)
     try:
-        if '--privacy-only' in sys.argv:
+        if '--privacy-only' in sys.argv or '--visualizer-only' in sys.argv:
             env['PIPEWIRE_RUNTIME_DIR']=str(runtime)
             audio=start(['pipewire'],'privacy-pipewire.log')
             wait(lambda:(runtime/'pipewire-0').exists(),'private PipeWire startup')
+        if '--visualizer-only' in sys.argv:
+            wp=base/'config/wireplumber/wireplumber.conf.d';wp.mkdir(parents=True)
+            (wp/'test.conf').write_text('wireplumber.profiles = { main = { hardware.audio = disabled hardware.bluetooth = disabled hardware.video-capture = disabled } }')
+            start(['wireplumber'],'visualizer-wireplumber.log')
+            env['PULSE_SERVER']='unix:'+str(runtime/'pulse/native')
+            start(['pipewire-pulse'],'visualizer-pulse.log')
+            wait(lambda:(runtime/'pulse/native').exists(),'private PulseAudio startup')
+            run(['pactl','load-module','module-null-sink','sink_name=island-test'])
+            run(['pactl','set-default-sink','island-test'])
         compositor=start(['/usr/local/bin/umbriel','-c',str(config)],'umbriel.log')
         wait(lambda:list(runtime.glob('wayland-*.lock')),'headless compositor start')
         env['WAYLAND_DISPLAY']=next(runtime.glob('wayland-*.lock')).name.removesuffix('.lock')
@@ -85,6 +94,46 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         wait(ready, 'shell IPC startup')
         key(1)  # Dismiss Umbriel's first-run keybinding hint.
         time.sleep(3)
+        if '--visualizer-only' in sys.argv:
+            import math, struct, wave
+            tone=base/'tone.wav'
+            with wave.open(str(tone),'wb') as wav:
+                wav.setparams((1,2,48000,0,'NONE','not compressed'))
+                wav.writeframes(b''.join(struct.pack('<h',int(12000*math.sin(2*math.pi*440*i/48000))) for i in range(48000*30)))
+            env['ISLAND_TEST_ART']='file://'+str(REPO/'assets/noctalia-wallpaper.png')
+            env['ISLAND_TEST_EVENTS']=str(out/'player-actions.log')
+            player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'visualizer-player.log')
+            move(1100,600);time.sleep(5)
+            def shot(name):
+                path=out/('visualizer-'+name+'.png');run(['grim',str(path)])
+                return Image.open(path).convert('RGB').crop((700,16,790,65))
+            silent=shot('silent')
+            sound=start(['paplay','--device=island-test',str(tone)],'visualizer-audio.log')
+            time.sleep(2)
+            active=shot('active')
+            assert ImageChops.difference(silent,active).getbbox(), 'Visualizer must react to audio'
+            def spectrum_count():
+                return sum(node.get('info',{}).get('props',{}).get('application.name')=='Noctalia Spectrum'
+                           for node in json.loads(run(['pw-dump'])))
+            assert spectrum_count()==1, 'Compact media should own one spectrum stream'
+            # Rebuilding or lending the surface must release and restore the audio listener.
+            move(640,40);time.sleep(.8);shot('expanded')
+            assert spectrum_count()==0, 'Expanded media must release the compact visualizer'
+            move(1100,600);time.sleep(1);shot('returned')
+            assert spectrum_count()==1
+            msg('panel-open','control-center');time.sleep(1)
+            assert spectrum_count()==0, 'A hosted panel must release the visualizer'
+            key(1);time.sleep(1)
+            assert spectrum_count()==1, 'Returning from a panel must restore the visualizer'
+            sound.terminate();sound.wait(timeout=5);time.sleep(3)
+            quiet=shot('quiet')
+            assert ImageChops.difference(active,quiet).getbbox(), 'Visualizer must settle when audio stops'
+            player.terminate();player.wait(timeout=5);time.sleep(1)
+            shot('stopped')
+            assert spectrum_count()==0, 'Removing the player must release the audio stream'
+            assert shell.poll() is None
+            print('PASS: live audio visualizer, silence, media expansion and player removal')
+            raise SystemExit(0)
         if '--polish-only' in sys.argv:
             def shot(name): run(['grim',str(out/('polish-'+name+'.png'))])
             def state(name):

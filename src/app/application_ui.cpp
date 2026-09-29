@@ -740,7 +740,7 @@ void Application::initPanelManagerAndPanels() {
 void Application::initNotificationAndOsd() {
   m_island.initialize(
       m_wayland, &m_configService, &m_renderContext, m_mprisService.get(), &m_notificationManager, &m_httpClient, m_bus.get(),
-      m_upowerService.get(), m_bluetoothService.get(), m_pipewireService.get()
+      m_upowerService.get(), m_bluetoothService.get(), m_pipewireService.get(), m_pipewireSpectrum.get()
   );
   m_panelManager.setIslandHost(&m_island);
   m_screenshotService.setIslandHost(&m_island);

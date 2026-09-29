@@ -19,6 +19,9 @@ The first port provides:
   Playback controls use Noctalia's themed buttons, with hover/press feedback and
   delayed tooltips. Unavailable controls stay disabled.
 - Compact playing activity and brief track announcements in the clock slot.
+  A five-band accent-coloured visualiser replaces the right-hand music glyph.
+  It follows the default desktop audio output through the existing PipeWire spectrum
+  service and settles when the output is silent.
 - A small accent-coloured unread-notification bell on the clock and media island. The badge
   opens the existing notification history, which marks entries as seen. Hovering
   over the compact badge keeps it in place; it adds no width to the island.

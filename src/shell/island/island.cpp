@@ -1,5 +1,7 @@
 #include "shell/island/island.h"
 #include "capture/screen_recorder.h"
+#include "pipewire/pipewire_spectrum.h"
+#include "ui/visuals/audio_visualizer.h"
 
 #include "config/config_service.h"
 #include "core/ui_phase.h"
@@ -43,6 +45,43 @@
 #include <linux/input-event-codes.h>
 
 using namespace std::chrono_literals;
+
+namespace {
+  class IslandAudioVisualizer : public AudioVisualizer {
+  public:
+    IslandAudioVisualizer(PipeWireSpectrum* spectrum, LayerSurface& surface)
+        : m_spectrum(spectrum), m_surface(surface) {
+      setCentered(true);
+      setMirrored(false);
+      setValues(std::vector<float>(5, 0.0F));
+      if (m_spectrum) {
+        m_listener = m_spectrum->addChangeListener(5, [this] { m_surface.requestFrameTick(); });
+      }
+      m_surface.requestFrameTick();
+    }
+
+    ~IslandAudioVisualizer() override {
+      if (m_spectrum && m_listener)
+        m_spectrum->removeChangeListener(m_listener);
+    }
+
+    void onFrameTick(float deltaMs) {
+      if (m_spectrum && m_listener)
+        setValues(m_spectrum->values(m_listener));
+      const bool changing = !converged();
+      tick(deltaMs);
+      if (changing)
+        m_surface.requestRedraw();
+      if (!converged() || (m_spectrum && !m_spectrum->idle()))
+        m_surface.requestFrameTick();
+    }
+
+  private:
+    PipeWireSpectrum* m_spectrum;
+    LayerSurface& m_surface;
+    PipeWireSpectrum::ListenerId m_listener = 0;
+  };
+} // namespace
 
 struct Island::Instance {
   wl_output* output = nullptr;
@@ -89,6 +128,7 @@ struct Island::Instance {
   ProgressBar* seekProgress = nullptr;
   Label* mediaPosition = nullptr;
   Label* recordingLabel = nullptr;
+  IslandAudioVisualizer* visualizer = nullptr;
   struct TimerUi {
     std::string plugin;
     Label* label;
@@ -191,7 +231,7 @@ Island::~Island() { destroySurfaces(); }
 void Island::initialize(
     WaylandConnection& wayland, ConfigService* config, RenderContext* renderer, MprisService* mpris,
     NotificationManager* notifications, HttpClient* http, SessionBus* bus, UPowerService* upower, BluetoothService* bluetooth,
-    PipeWireService* pipewire
+    PipeWireService* pipewire, PipeWireSpectrum* spectrum
 ) {
   m_wayland = &wayland;
   m_config = config;
@@ -202,6 +242,7 @@ void Island::initialize(
   m_upower = upower;
   m_bluetooth = bluetooth;
   m_pipewire = pipewire;
+  m_spectrum = spectrum;
   if (bus) {
     try {
       m_downloads = std::make_unique<DownloadProgressService>(*bus);
@@ -370,6 +411,10 @@ void Island::onOutputChange() {
     });
     inst->surface->setPrepareFrameCallback([this, ptr](bool, bool) { prepare(*ptr); });
     inst->surface->setAnimationManager(&inst->animations);
+    inst->surface->setFrameTickCallback([ptr](float dt) {
+      if (!ptr->panelHosted && ptr->visualizer)
+        ptr->visualizer->onFrameTick(dt);
+    });
     if (!inst->surface->initialize(output.output))
       continue;
     inst->surface->setInputRegion({});
@@ -682,6 +727,11 @@ void Island::prepare(Instance& inst) {
   inst.activityScroll = nullptr;
   inst.badgeHovered = false;
   inst.pressedAction.clear();
+  const bool showVisualizer = view == island::View::Activity && !showUnread && !showBattery && privacyList.empty();
+  std::unique_ptr<Node> retainedVisualizer;
+  if (inst.visualizer && showVisualizer)
+    retainedVisualizer = inst.content->removeChild(inst.visualizer);
+  inst.visualizer = nullptr;
   if (inst.content)
     inst.background->removeChild(inst.content);
   auto content = std::make_unique<Node>();
@@ -881,7 +931,14 @@ void Island::prepare(Instance& inst) {
     });
     if (view == island::View::Activity) {
       artwork(12, (cfg.height - 38) / 2, 38);
-      if (!showUnread && !showBattery && privacyList.empty()) glyph("music", w - 44, (cfg.height - 24) / 2, 24);
+      if (showVisualizer) {
+        if (!retainedVisualizer)
+          retainedVisualizer = std::make_unique<IslandAudioVisualizer>(m_spectrum, *inst.surface);
+        inst.visualizer = static_cast<IslandAudioVisualizer*>(retainedVisualizer.get());
+        inst.visualizer->setPosition((w - 44) * s, (cfg.height - 24) * s / 2);
+        inst.visualizer->setSize(24 * s, 24 * s);
+        canvas->addChild(std::move(retainedVisualizer));
+      }
     }
     if (view == island::View::Calendar) {
       // Orbit's clock sits in a taller head band above a strip centred on today.
@@ -1513,6 +1570,10 @@ std::optional<IslandPanelSurface> Island::acquirePanelSurface(wl_output* output,
     return std::nullopt;
   if (inst.keyboardMode) releaseKeyboard(inst);
   inst.panelHosted = true;
+  if (inst.visualizer) {
+    inst.content->removeChild(inst.visualizer);
+    inst.visualizer = nullptr;
+  }
   inst.input.pointerLeave();
   TooltipManager::instance().forceDestroy();
   inst.enter.stop();
@@ -1567,7 +1628,10 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     inst.signature.clear();
     inst.surface->setSceneRoot(inst.root.get());
     inst.surface->setAnimationManager(&inst.animations);
-    inst.surface->setFrameTickCallback({});
+    inst.surface->setFrameTickCallback([p = ptr.get()](float dt) {
+      if (!p->panelHosted && p->visualizer)
+        p->visualizer->onFrameTick(dt);
+    });
     inst.surface->setConfigureCallback([p = ptr.get()](std::uint32_t, std::uint32_t) {
       p->signature.clear();
       p->surface->requestUpdate();
