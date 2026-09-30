@@ -19,6 +19,7 @@ class Node;
 class ConfigService;
 
 namespace settings {
+  struct HoverLayout;
 
   // Pango line budget for setting descriptions: wrap up to this many lines, then ellipsize.
   inline constexpr int kSettingDescriptionMaxLines = 5;
@@ -103,6 +104,7 @@ namespace settings {
     std::function<void()> afterNotificationFilterApply;
     std::function<void()> closeHostedEditor;
     bool supportsTaskbarWorkspaceGrouping = true;
+    std::shared_ptr<HoverLayout>* hoverLayoutUndo = nullptr;
   };
 
   std::size_t

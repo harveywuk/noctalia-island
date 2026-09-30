@@ -75,6 +75,15 @@ int main() {
   registry.setSources({root});
   registry.ensureScanned();
 
+  auto& sharedRegistry = scripting::PluginRegistry::instance();
+  sharedRegistry.setSources({root});
+  sharedRegistry.ensureScanned();
+  const Config cfg;
+  ok = expect(settings::widgetTypeForReference(cfg, "me/monitor:summary") == "me/monitor:summary",
+              "direct plugin widgets must open their settings inspector") && ok;
+  ok = expect(settings::widgetReferenceInfo(cfg, "me/monitor:summary").kind == settings::WidgetReferenceKind::Plugin,
+              "direct plugin widgets must have plugin labels and controls") && ok;
+
   const auto schema = settings::widgetSettingSchema("me/monitor:summary", nullptr, &registry);
   ok = expect(hasKey(schema, "metric"), "manifest setting should stay in the schema") && ok;
   ok = expect(hasKey(schema, "enable_scroll"), "host scroll gate should stay in the schema") && ok;

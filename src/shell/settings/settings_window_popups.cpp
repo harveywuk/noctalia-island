@@ -18,6 +18,7 @@
 #include "shell/settings/settings_content.h"
 #include "shell/settings/settings_content_common.h"
 #include "shell/settings/settings_content_plugins.h"
+#include "shell/settings/island_widget_editor.h"
 #include "shell/settings/settings_control_factory.h"
 #include "shell/settings/settings_registry.h"
 #include "shell/settings/settings_window.h"
@@ -263,6 +264,8 @@ namespace {
   }
 
   std::vector<std::string> barWidgetItemsForPath(const Config& cfg, const std::vector<std::string>& path) {
+    if (const auto group = settings::hoverWidgetGroup(path))
+      return settings::hoverLayout(cfg.island).groups[*group];
     if (!isBarWidgetListPath(path) || path.size() < 3) {
       return {};
     }

@@ -977,6 +977,7 @@ settings::SettingsContentContext SettingsWindow::makeContentContext(
       .afterNotificationFilterApply = {},
       .closeHostedEditor = {},
       .supportsTaskbarWorkspaceGrouping = m_platform != nullptr && m_platform->supportsTaskbarWorkspaceGrouping(),
+      .hoverLayoutUndo = &m_hoverLayoutUndo,
   };
 }
 

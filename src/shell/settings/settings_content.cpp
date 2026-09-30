@@ -5,6 +5,7 @@
 #include "i18n/i18n.h"
 #include "notification/notification_filter.h"
 #include "shell/settings/bar_widget_editor.h"
+#include "shell/settings/island_widget_editor.h"
 #include "shell/settings/settings_content_common.h"
 #include "shell/settings/settings_control_factory.h"
 #include "ui/builders.h"
@@ -1330,6 +1331,7 @@ namespace settings {
       }
     }
 
+    bool islandWidgetEditorAdded = false;
     for (const std::size_t entryIndex : entryOrder) {
       const auto& entry = registry[entryIndex];
       if (!entryPassesFilters(entry)) {
@@ -1409,7 +1411,12 @@ namespace settings {
           activeKeybindRowCount = 0;
         }
         if (const auto* list = std::get_if<ListSetting>(&entry.control)) {
-          if (isFirstBarWidgetListPath(entry.path)) {
+          if (hoverWidgetGroup(entry.path)) {
+            if (!islandWidgetEditorAdded) {
+              addIslandWidgetEditor(*activeGroupBody, factory);
+              islandWidgetEditorAdded = true;
+            }
+          } else if (isFirstBarWidgetListPath(entry.path)) {
             addBarWidgetLaneEditor(*activeGroupBody, entry, barWidgetEditorCtx);
           } else if (!isBarWidgetListPath(entry.path)) {
             makeListBlock(*activeGroupBody, entry, *list);

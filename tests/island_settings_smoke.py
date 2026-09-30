@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     base = pathlib.Path(tmp); runtime = base/'runtime'; runtime.mkdir(mode=0o700)
     cfg = base/'config/noctalia'; cfg.mkdir(parents=True)
     (cfg/'config.toml').write_text('[island]\nenabled=true\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n')
-    if '--hover-widgets-only' in sys.argv or '--hover-layout-only' in sys.argv:
+    if any(mode in sys.argv for mode in ('--hover-widgets-only','--hover-layout-only','--hover-editor-only')):
         plugin_root=base/'hover-plugins'; plugin=plugin_root/'hover';plugin.mkdir(parents=True)
         (plugin/'plugin.toml').write_text('id="test/hover"\nname="Hover Widget Test"\nversion="1.0.0"\nplugin_api=3\n[[widget]]\nid="widget"\nentry="widget.luau"\n')
         (plugin/'widget.luau').write_text('local n=0\nfunction update() noctalia.setUpdateInterval(200); barWidget.setText("Plugin "..n); barWidget.setGlyph("puzzle"); noctalia.state.set("ticks",(noctalia.state.get("ticks") or 0)+1); noctalia.writeFile(noctalia.pluginDir().."/state.json",noctalia.json.encode({ticks=noctalia.state.get("ticks"),clicks=n})) end\nfunction onClick() n=n+1; noctalia.state.set("clicks",n); update() end\n')
@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         hover_config+='\n[widget.test_button]\ntype="custom_button"\nlabel="Action"\nglyph="star"\n[widget.test_button.actions]\nleft="exec touch '+str(base/'widget-clicked')+'"\n'
         # Lock-key LEDs are global even on a private display; keep real typing from interrupting these checks.
         hover_config+='\n[osd.kinds]\nlock_keys=false\n'
-        if '--hover-layout-only' in sys.argv:
+        if '--hover-layout-only' in sys.argv or '--hover-editor-only' in sys.argv:
             hover_config=hover_config.replace('hover_widgets=["test/hover:widget","test_button","volume","clock"]',
                 'hover_widgets=["test_button"]\nhover_widgets_center=["test/hover:widget"]\nhover_widgets_right=["right_button"]')
             hover_config+='\n[widget.right_button]\ntype="custom_button"\nlabel="R"\n[widget.right_button.actions]\nleft="exec touch '+str(base/'right-clicked')+'"\n'
@@ -109,6 +109,88 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         wait(ready, 'shell IPC startup')
         key(1)  # Dismiss Umbriel's first-run keybinding hint.
         time.sleep(3)
+        if '--hover-editor-only' in sys.argv:
+            def shot(name): run(['grim',str(out/('hover-editor-'+name+'.png'))])
+            def saved():
+                p=base/'state/noctalia/settings.toml'
+                values=tomllib.loads(hover_config)['island'].copy()
+                if p.exists(): values.update(tomllib.loads(p.read_text()).get('island',{}))
+                return values
+            def drag(x1,y1,x2,y2):
+                move(x1,y1);command(pointer,'press');move(x1+12,y1+8);move(x2,y2)
+                time.sleep(.2);shot('dragging');command(pointer,'release');time.sleep(.8)
+            msg('settings-open','island');time.sleep(1)
+            move(827,273);click();time.sleep(.7);shot('settings')
+            title=Image.open(out/'hover-editor-settings.png').convert('RGB').crop((400,347,465,367))
+            def editor_click(x,y):
+                # Rebuilding settings can scroll the focused control into view.
+                # Locate the section title so clicks follow the visible editor.
+                shot('position')
+                frame=Image.open(out/'hover-editor-position.png').convert('RGB')
+                for top in range(300,600):
+                    if ImageChops.difference(title,frame.crop((400,top,465,top+20))).getbbox() is None:
+                        move(x,y+top-347);click();return
+                raise AssertionError('Widgets editor title is not visible')
+            original=saved()
+            # Drop outside the editor cancels without changing settings.
+            drag(425,538,1115,380)
+            assert saved()==original, 'Outside drop must not change the layout'
+            # Move a custom widget into the centre lane after the plugin.
+            drag(425,538,740,573);shot('moved')
+            assert saved()['hover_widgets']==[], saved()
+            assert saved()['hover_widgets_center']==['test/hover:widget','test_button'], saved()
+            # Reorder within a group, then drop into the now-empty left group.
+            drag(657,640,750,565);shot('reordered')
+            assert saved()['hover_widgets_center']==['test_button','test/hover:widget'], saved()
+            drag(657,576,500,575);shot('empty-drop')
+            assert saved()['hover_widgets']==['test_button'], saved()
+            assert saved()['hover_widgets_center']==['test/hover:widget'], saved()
+            # Widget settings shortcuts must open an actual inspector for both kinds.
+            move(574,538);click();time.sleep(.8);shot('custom-settings');key(1);time.sleep(.5)
+            move(806,538);click();time.sleep(.8);shot('plugin-settings')
+            move(968,226);click();time.sleep(.6)
+            widget_data=tomllib.loads((base/'state/noctalia/settings.toml').read_text()).get('widget',{})
+            assert widget_data['test/hover:widget']['enable_scroll'] is False, widget_data
+            move(986,146);click();time.sleep(.7)
+            move(1090,600);command(pointer,'scroll 20');time.sleep(.5);shot('after-inspector')
+            def layout_state():
+                data=saved()
+                return {**{key:data.get(key,[]) for key in ('hover_widgets','hover_widgets_center','hover_widgets_right')},
+                        **{key:data.get(key,True) for key in ('hover_show_clock','hover_show_calendar','hover_show_media','hover_show_downloads','hover_show_timers','hover_show_batteries','hover_show_unread')}}
+            before=layout_state()
+            # Presets replace the hover choices together; undo restores custom and plugin references.
+            for x,name,groups in [(435,'minimal',[[],['clock'],[]]),(510,'media',[['volume'],['media'],['audio_visualizer']]),(600,'system',[['sysmon'],['network'],['battery']])]:
+                editor_click(x,428);time.sleep(.8);shot(name)
+                current=saved()
+                assert [current.get(key,[]) for key in ('hover_widgets','hover_widgets_center','hover_widgets_right')]==groups, (name,current)
+                assert current.get('enabled') is True and current.get('hover_show_calendar') is False
+                editor_click(730,428);time.sleep(.8);shot(name+'-undo')
+                assert layout_state()==before, (name,layout_state(),before)
+                assert tomllib.loads((base/'state/noctalia/settings.toml').read_text())['widget']['test/hover:widget']['enable_scroll'] is False
+            # The shared picker appends to the selected group, including its existing items.
+            editor_click(837,503);time.sleep(.7);shot('picker')
+            move(550,267);click()
+            for code in (46,38,24,46,37): key(code)  # clock
+            time.sleep(.5);shot('picker-filtered');key(28);time.sleep(.8);shot('added-clock')
+            assert saved()['hover_widgets_center']==['test/hover:widget','clock'], saved()
+            # Arrow buttons provide the same moves as dragging.
+            editor_click(734,603);time.sleep(.8);shot('arrow-moved')
+            assert saved()['hover_widgets_center']==['clock'], saved()
+            assert saved()['hover_widgets_right']==['right_button','test/hover:widget'], saved()
+            move(1090,600);command(pointer,'scroll 1');time.sleep(.5)
+            editor_click(1067,640);time.sleep(.8)
+            assert saved()['hover_widgets_right']==['right_button'], saved()
+            # Plugin adds use the normal named-instance workflow and keep existing entries.
+            editor_click(1070,503);time.sleep(.7)
+            move(550,267);click()
+            for code in (35,24,47,18,19): key(code)  # hover
+            time.sleep(.5);shot('plugin-picker-filtered');key(28);time.sleep(.8);shot('added-plugin')
+            data=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
+            added=saved()['hover_widgets_right']
+            assert added[0]=='right_button' and len(added)==2, data
+            assert data['widget'][added[1]]['type']=='test/hover:widget', data
+            print('PASS: hover editor drag/reorder/cancel, inspectors, presets/undo, arrows, removal and built-in/plugin picker')
+            raise SystemExit(0)
         if '--hover-layout-only' in sys.argv:
             def shot(name): run(['grim',str(out/('hover-layout-'+name+'.png'))])
             def plugin_state():
@@ -166,14 +248,6 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             saved=tomllib.loads(settings_path.read_text()).get('island',{}) if settings_path.exists() else {}
             assert saved.get('hover_show_clock') is True, ('Section toggle must save the clock setting',saved)
             move(827,273);click();time.sleep(.7);shot('widget-settings')
-            move(950,630);command(pointer,'scroll 1');time.sleep(.7);shot('widget-settings-scrolled')
-            move(624,634);click();time.sleep(.7);shot('right-added')
-            saved=tomllib.loads(settings_path.read_text()).get('island',{})
-            assert 'active_window' in saved.get('hover_widgets_right',[]), ('Right group add must save',saved)
-            move(624,511);click();time.sleep(.7)
-            saved=tomllib.loads(settings_path.read_text()).get('island',{})
-            assert 'active_window' in saved.get('hover_widgets_center',[]), ('Centre group add must save',saved)
-            shot('widget-settings-edited')
             assert shell.poll() is None
             print('PASS: hover section and placement Settings controls' if '--settings-only' in sys.argv else 'PASS: hover group placement and clicks, optional sections, widgets-only view and Settings controls')
             raise SystemExit(0)
@@ -220,18 +294,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             (cfg/'config.toml').write_text(hover_config);time.sleep(1.5)
             msg('settings-open','island');time.sleep(1);shot('settings')
             move(827,273);click();time.sleep(.6);shot('widget-settings')
-            def saved_hover():
-                path=base/'state/noctalia/settings.toml'
-                return tomllib.loads(path.read_text()).get('island',{}).get('hover_widgets',[]) if path.exists() else []
-            move(648,502);click();time.sleep(.6)
-            assert saved_hover()[:2]==['test_button','test/hover:widget'], 'Settings must reorder hover widgets'
-            move(618,530);click();time.sleep(.6)
-            assert 'volume' not in saved_hover(), 'Settings must remove hover widgets'
-            shot('settings-removed')
-            move(624,444);click();time.sleep(.6)
-            shot('settings-add-attempt')
-            assert 'active_window' in saved_hover(), ('Settings must add the selected module',saved_hover())
-            shot('settings-edited');msg('settings-close')
+            msg('settings-close')
             msg('settings-open-widget','island','test_button');time.sleep(1);shot('widget-inspector');msg('settings-close')
             assert shell.poll() is None
             print('PASS: hover modules, plugin/custom clicks, retained state, cleanup, reload, disable and overflow')

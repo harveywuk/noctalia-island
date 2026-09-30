@@ -1044,6 +1044,22 @@
     }
   },
   "settings": {
+    "island-editor": {
+      "description": "Drag widgets within or between groups. Use the arrows to move them, or the gear to open their settings.",
+      "preset-hint": "Presets replace hover widgets and section choices. Undo restores the layout you had before applying a preset.",
+      "undo": "Undo preset",
+      "add": "Add widget",
+      "empty": "Drop widgets here or use + to add one.",
+      "up": "Move up",
+      "down": "Move down",
+      "left": "Move to the group on the left",
+      "right": "Move to the group on the right",
+      "presets": {
+        "minimal": "Minimal",
+        "media": "Media",
+        "system": "System Monitor"
+      }
+    },
     "actions": {
       "confirm-reset": "Confirm Reset",
       "reset": "Reset"

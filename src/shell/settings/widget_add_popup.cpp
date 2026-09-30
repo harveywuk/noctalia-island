@@ -25,6 +25,8 @@ namespace settings {
   namespace {
 
     std::string laneLabel(std::string_view lane) {
+      if (lane == "hover_widgets" || lane == "hover_widgets_center" || lane == "hover_widgets_right")
+        return i18n::tr("settings.schema.island." + std::string(lane) + ".label");
       if (lane == "start") {
         return i18n::tr("settings.entities.widget.lanes.start");
       }

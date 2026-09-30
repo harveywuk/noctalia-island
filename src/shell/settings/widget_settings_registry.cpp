@@ -482,7 +482,7 @@ namespace settings {
     if (const auto it = cfg.widgets.find(std::string(name)); it != cfg.widgets.end() && !it->second.type.empty()) {
       return it->second.type;
     }
-    if (isBuiltInWidgetType(name)) {
+    if (isBuiltInWidgetType(name) || resolvePluginWidget(name).has_value()) {
       return std::string(name);
     }
     return {};
@@ -541,6 +541,13 @@ namespace settings {
       };
     }
 
+    if (auto plugin = resolvePluginWidget(name)) {
+      return WidgetReferenceInfo{
+          .title = pluginWidgetDisplayLabel(*plugin),
+          .detail = includeManifestVersion ? appendVersion(std::string(name), plugin->manifest->version) : std::string(name),
+          .kind = WidgetReferenceKind::Plugin,
+      };
+    }
     return WidgetReferenceInfo{
         .title = widgetInstanceDisplayLabel(name),
         .detail = std::string(name),

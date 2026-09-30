@@ -322,6 +322,7 @@ private:
   std::string m_editingWidgetName;
   std::string m_editingCapsuleGroupId;
   std::vector<std::string> m_selectedLaneWidgets;
+  std::shared_ptr<settings::HoverLayout> m_hoverLayoutUndo;
   std::string m_pendingDeleteWidgetName;
   std::string m_pendingDeleteWidgetSettingPath;
   std::string m_renamingWidgetName;

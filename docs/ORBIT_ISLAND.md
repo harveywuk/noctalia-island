@@ -212,8 +212,14 @@ light/dark changes.
 ## Add widgets to the hover view
 
 Open **Settings → Island → Widgets** to add, remove or reorder modules in the
-**Left widgets**, **Centre widgets** and **Right widgets** lists. This uses the bar
-widget catalogue, including installed and enabled plugin
+**Left widgets**, **Centre widgets** and **Right widgets** columns. Drag a card by
+its handle to reorder it or move it between columns; the insertion line shows where
+it will land. Dropping outside the columns cancels the move. The arrows provide the
+same moves with ordinary buttons, including keyboard navigation.
+
+Use **+** to open the searchable widget picker, the **gear** to open a widget's
+settings (including plugin widget options), and **×** to remove it from that column.
+This uses the bar widget catalogue, including installed and enabled plugin
 `[[widget]]` entries and configured custom widget instances. Widgets appear beneath
 the calendar, media or downloads content when you hover over the Island. They wrap
 onto additional rows, and the footer scrolls if it exceeds the screen height.
@@ -228,9 +234,9 @@ hover_widgets_center = ["clock"]
 hover_widgets_right = ["battery"]
 ```
 
-Use only plugin IDs that are installed and enabled. Create custom widget instances
-in the regular widget editor or a `[widget.my_button]` configuration table before
-selecting them. Their options and gesture bindings are shared with the normal bar;
+Use only plugin IDs that are installed and enabled. The picker can create named
+custom widget instances, or you can define a `[widget.my_button]` configuration table.
+Their options and gesture bindings are shared with the normal bar;
 use a separate named instance for different settings. Middle-click a widget to open
 its settings (unless you have assigned a different middle-click action).
 Plugin widgets receive the bar
@@ -240,6 +246,15 @@ widgets or background services, are not bar widgets and do not appear in this li
 All three lists are empty by default. Existing `hover_widgets` entries become the
 left group automatically. Removing an item from a list does not uninstall its
 plugin or remove it from another bar. Widget runtimes stop when the hover view closes.
+
+### Layout presets
+
+The Widgets editor offers **Minimal** (a clock), **Media** (volume, media and an
+audio visualizer) and **System Monitor** (system stats, network and battery).
+Applying a preset replaces all three hover widget lists and the hover section
+choices together. It does not change widget options, compact Island settings,
+normal bars or installed plugins. **Undo preset** restores the layout from just
+before the last preset was applied; it is available for the current shell session.
 
 ### Optional hover sections
 

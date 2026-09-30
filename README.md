@@ -14,6 +14,7 @@ This is an independently maintained fork, not an official Noctalia release.
 - Compact media activity with artwork and a five-band audio visualiser that reacts
   to desktop audio. Hover to reveal track information, seeking and playback controls.
 - Configurable hover widgets in left, centre and right groups, including enabled plugins, with optional built-in hover sections.
+- Drag-and-drop hover layout editor with widget settings shortcuts and reversible Minimal, Media and System Monitor presets.
 - Expandable notifications, an unread indicator and access to notification history.
 - Download progress, timer controls, battery information and privacy indicators.
 - Calendar, launcher and control-centre panels that open through the Island.
