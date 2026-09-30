@@ -144,6 +144,9 @@ struct CountdownRingStyle {
   Color color{};
   float thickness = 6.0F;
   float progress = 1.0F;
+  // Negative keeps the original circular renderer. Otherwise trace a rounded rectangle.
+  float cornerRadius = -1.0F;
+  float startOffset = 0.0F;
 };
 
 enum class ScreenCornerPosition : std::uint8_t {

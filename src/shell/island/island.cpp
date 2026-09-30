@@ -1,4 +1,5 @@
 #include "shell/island/island.h"
+#include "shell/island/island_progress_outline.h"
 #include "shell/island/island_widget_host.h"
 #include "shell/bar/widget_factory.h"
 #include "capture/screen_recorder.h"
@@ -92,6 +93,7 @@ struct Island::Instance {
   InputDispatcher input;
   std::unique_ptr<Node> root;
   Box* background = nullptr;
+  island::ProgressOutline* progressOutline = nullptr;
   Node* content = nullptr;
   ScrollView* activityScroll = nullptr;
   island::View previousView = island::View::Rest;
@@ -541,6 +543,11 @@ void Island::geometry(Instance& inst) {
   inst.background->setPosition(x, 8 * s);
   inst.background->setSize(inst.width * s, inst.height * s);
   inst.background->setRadius(std::min(inst.height / 2, 30.0F) * s);
+  if (inst.progressOutline) {
+    inst.progressOutline->setPosition(x, 8 * s);
+    inst.progressOutline->setGeometry(inst.width * s, inst.height * s,
+                                     std::min(inst.height / 2, 30.0F) * s, s);
+  }
   if (inst.content) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
     // Conceal content until the expanding capsule has room to contain it.
@@ -676,6 +683,33 @@ void Island::prepare(Instance& inst) {
     inst.hoverWidgets->updateWidgets(renderer, inst.hoverWidgets->width());
     if (oldHeight != inst.hoverWidgets->height()) inst.signature.clear();
   }
+  const bool outlineTimer = cfg.outerProgressRing && !recording && timerActive
+      && (view == island::View::TimerActivity || (expandedView && cfg.hoverShowTimers));
+  const bool outlineDownload = cfg.outerProgressRing && !recording && !outlineTimer
+      && (view == island::View::DownloadActivity || view == island::View::Downloads) && !downloads.empty();
+  const bool outlineBattery = cfg.outerProgressRing && !recording && !outlineTimer && !outlineDownload
+      && (showBattery || (expandedView && cfg.hoverShowBatteries && !batteryList.empty()));
+  const auto updateOutline = [&] {
+    if (!inst.progressOutline) return;
+    std::optional<float> fraction;
+    ColorRole role = ColorRole::Primary;
+    bool charging = false;
+    if (outlineTimer) fraction = timers.front().fraction();
+    else if (outlineDownload) {
+      // Each download gets equal weight; one unknown total makes the group indeterminate.
+      if (std::ranges::all_of(downloads, [](const auto& d) { return d.determinate; })) {
+        float total = 0;
+        for (const auto& d : downloads) total += static_cast<float>(d.progress);
+        fraction = total / static_cast<float>(downloads.size());
+      }
+    } else if (outlineBattery) {
+      fraction = static_cast<float>(batteryList.front().percentage / 100.0);
+      role = batteryList.front().low ? ColorRole::Error : ColorRole::Primary;
+      charging = batteryList.front().charging();
+    }
+    inst.progressOutline->update(outlineTimer || outlineDownload || outlineBattery, fraction, role, charging);
+  };
+  updateOutline();
   if (signature == inst.signature && inst.root) {
     // Timer ticks must not rebuild the stop action between pointer press and release.
     if (recording && inst.recordingLabel) {
@@ -730,6 +764,9 @@ void Island::prepare(Instance& inst) {
     box->setClipChildren(true);
     inst.background = box.get();
     inst.root->addChild(std::move(box));
+    auto outline = std::make_unique<island::ProgressOutline>();
+    inst.progressOutline = static_cast<island::ProgressOutline*>(inst.root->addChild(std::move(outline)));
+    updateOutline();
     inst.surface->setSceneRoot(inst.root.get());
     inst.input.setSceneRoot(inst.root.get());
     inst.width = w;
@@ -866,10 +903,13 @@ void Island::prepare(Instance& inst) {
     const bool timerView = view == island::View::TimerActivity;
     const auto fraction = timerView ? std::optional{timers.front().fraction()} : downloads.size() == 1 && downloads.front().determinate
         ? std::optional{static_cast<float>(downloads.front().progress)} : std::nullopt;
-    auto ring = std::make_unique<DownloadRing>(36 * s, 2.5F * s, fraction);
-    auto* ringPtr = ring.get();
-    ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
-    canvas->addChild(std::move(ring));
+    DownloadRing* ringPtr = nullptr;
+    if (!(outlineTimer || outlineDownload)) {
+      auto ring = std::make_unique<DownloadRing>(36 * s, 2.5F * s, fraction);
+      ringPtr = ring.get();
+      ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
+      canvas->addChild(std::move(ring));
+    }
     glyph(timerView ? timers.front().icon : "download", 23, (cfg.height - 18) / 2, 18, colorSpecFromRole(ColorRole::Primary));
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
@@ -878,7 +918,7 @@ void Island::prepare(Instance& inst) {
                                               m_config->config().shell.fontFamily);
     const float clockSize = cfg.clockSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
     auto* clockLabel = label(clockText, inset, 0, available, clockSize, foreground, true);
-    if (timerView) inst.timerUi.push_back({timers.front().plugin, clockLabel, [ringPtr](float value) { ringPtr->setProgress(value); }});
+    if (timerView) inst.timerUi.push_back({timers.front().plugin, clockLabel, [ringPtr](float value) { if (ringPtr) ringPtr->setProgress(value); }});
     clockLabel->setPosition(inset * s, std::clamp((cfg.height * s - clockLabel->height()) / 2 + cfg.clockOffset * s,
         0.0F, std::max(0.0F, cfg.height * s - clockLabel->height())));
     if (timerView && !showBattery && privacyList.empty()) {
@@ -1299,17 +1339,19 @@ void Island::prepare(Instance& inst) {
     }
     if (!compactView) h += 32;
   }
-  const auto batteryRing = [&](const island::Battery& battery, float x, float y, float diameter) {
+  const auto batteryRing = [&](const island::Battery& battery, float x, float y, float diameter, bool drawRing = true) {
     const auto role = battery.low ? ColorRole::Error : ColorRole::Primary;
-    auto ring = std::make_unique<DownloadRing>(diameter * s, 2.5F * s,
-        static_cast<float>(battery.percentage / 100.0), role, battery.charging());
-    ring->setPosition(x * s, y * s);
-    canvas->addChild(std::move(ring));
+    if (drawRing) {
+      auto ring = std::make_unique<DownloadRing>(diameter * s, 2.5F * s,
+          static_cast<float>(battery.percentage / 100.0), role, battery.charging());
+      ring->setPosition(x * s, y * s);
+      canvas->addChild(std::move(ring));
+    }
     glyph(battery.charging() ? "battery-charging" : battery.icon, x + (diameter - 18) / 2,
           y + (diameter - 18) / 2, 18, colorSpecFromRole(role));
   };
   if (showBattery)
-    batteryRing(batteryList.front(), w - 50 - (showUnread ? 36 : 0), (cfg.height - 36) / 2, 36);
+    batteryRing(batteryList.front(), w - 50 - (showUnread ? 36 : 0), (cfg.height - 36) / 2, 36, !outlineBattery);
   if (expandedView && cfg.hoverShowBatteries && !batteryList.empty()) {
     const auto rows = std::min(batteryList.size(), std::size_t{4});
     for (std::size_t i = 0; i < rows; ++i) {

@@ -33,6 +33,19 @@ public:
     markPaintDirty();
   }
 
+  void setCornerRadius(float radius) {
+    if (m_style.cornerRadius == radius)
+      return;
+    m_style.cornerRadius = radius;
+    markPaintDirty();
+  }
+  void setStartOffset(float offset) {
+    if (m_style.startOffset == offset)
+      return;
+    m_style.startOffset = offset;
+    markPaintDirty();
+  }
+
   [[nodiscard]] const CountdownRingStyle& style() const noexcept { return m_style; }
 
 private:

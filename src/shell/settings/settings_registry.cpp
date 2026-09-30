@@ -905,6 +905,7 @@ namespace settings {
     };
     islandSetting("general", "enabled", ToggleSetting{cfg.island.enabled});
     islandSetting("general", "reserve_space", ToggleSetting{cfg.island.reserveSpace});
+    islandSetting("layout", "outer_progress_ring", ToggleSetting{cfg.island.outerProgressRing});
     islandSetting("layout", "height", SliderSetting{cfg.island.height, 44, 72, 1, true});
     islandSetting("layout", "scale", sliderFor(cfg.island.scale, noctalia::config::schema::kScaleRange, false));
     islandSetting("clock", "clock_size", SliderSetting{cfg.island.clockSize, 16, 36, 1, true});

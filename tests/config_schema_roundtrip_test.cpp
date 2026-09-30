@@ -333,6 +333,7 @@ location = "https://example.invalid/bad"
   Config makeProbe() {
     Config c;
     c.island.enabled = true;
+    c.island.outerProgressRing = true;
     c.island.hoverWidgets = {"volume", "test/hover:widget", "my_button"};
     c.island.hoverWidgetsCenter = {"clock"};
     c.island.hoverWidgetsRight = {"network"};

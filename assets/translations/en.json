@@ -3512,6 +3512,10 @@
         }
       },
       "island": {
+        "outer_progress_ring": {
+          "label": "Outer progress ring",
+          "description": "Show timer, download or battery progress around the Island’s edge. Timers take priority, followed by downloads, then battery status."
+        },
         "hover_widgets": {
           "label": "Left widgets",
           "description": "Add, remove and reorder modules and enabled plugin widgets on the left of the hover view. Widget options are shared with the bar."

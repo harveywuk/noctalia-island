@@ -1167,6 +1167,7 @@ if build_tests
     'island_state',
     'island_widget_layout',
     'island_widget_editor',
+    'island_progress_outline',
     'island_battery',
     'island_privacy',
     'island_timer',

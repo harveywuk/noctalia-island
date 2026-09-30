@@ -1779,6 +1779,7 @@ struct IslandConfig {
   float clockOffset = 0.0F;
   float expandedClockOffset = 0.0F;
   IslandCalendarLabels calendarLabels = IslandCalendarLabels::Abbreviated;
+  bool outerProgressRing = false;
   float mediaArtworkSize = 56.0F;
   float volumeBarHeight = 18.0F;
   bool volumeShowPercentage = false;

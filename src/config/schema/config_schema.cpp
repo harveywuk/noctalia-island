@@ -90,6 +90,7 @@ namespace noctalia::config::schema {
         field(&IslandConfig::clockOffset, "clock_offset", Range<float>{-12.0F, 12.0F}),
         field(&IslandConfig::expandedClockOffset, "expanded_clock_offset", Range<float>{-12.0F, 12.0F}),
         enumField(&IslandConfig::calendarLabels, "calendar_labels", kIslandCalendarLabels),
+        field(&IslandConfig::outerProgressRing, "outer_progress_ring"),
         field(&IslandConfig::mediaArtworkSize, "media_artwork_size", Range<float>{40.0F, 80.0F}),
         field(&IslandConfig::volumeBarHeight, "volume_bar_height", Range<float>{5.0F, 24.0F}),
         field(&IslandConfig::volumeShowPercentage, "volume_show_percentage"),

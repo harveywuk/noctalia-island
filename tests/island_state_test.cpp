@@ -59,10 +59,11 @@ int main() {
   assert(isKnownConfigPath({"island", "enabled"}));
   assert(isKnownConfigPath({"island", "clock_size"}));
   IslandConfig cfg;
+  assert(!cfg.outerProgressRing);
   Diagnostics diagnostics;
-  auto table = toml::parse("height = 900\nclock_size = -1\nscale = 1.1\nenabled = true\n");
+  auto table = toml::parse("height = 900\nclock_size = -1\nscale = 1.1\nenabled = true\nouter_progress_ring = true\n");
   readInto(table, cfg, islandSchema(), "island", diagnostics);
-  assert(cfg.enabled && cfg.height == 72 && cfg.clockSize == 16);
+  assert(cfg.enabled && cfg.height == 72 && cfg.clockSize == 16 && cfg.outerProgressRing);
   table = toml::parse("clock_offset = -100\nexpanded_clock_offset = 100\ncalendar_labels = 'today'\nmedia_artwork_size = 900\nvolume_bar_height = 0\nvolume_show_percentage = true\n");
   readInto(table, cfg, islandSchema(), "island", diagnostics);
   assert(cfg.clockOffset == -12 && cfg.expandedClockOffset == 12);

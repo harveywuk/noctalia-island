@@ -30,6 +30,12 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
                 'hover_widgets=["test_button"]\nhover_widgets_center=["test/hover:widget"]\nhover_widgets_right=["right_button"]')
             hover_config+='\n[widget.right_button]\ntype="custom_button"\nlabel="R"\n[widget.right_button.actions]\nleft="exec touch '+str(base/'right-clicked')+'"\n'
         (cfg/'config.toml').write_text(hover_config)
+    if '--progress-outline-only' in sys.argv:
+        plugin_root=base/'progress-plugins';plugin=plugin_root/'timer';plugin.mkdir(parents=True)
+        (plugin/'plugin.toml').write_text('id="noctalia/timer"\nname="Outline test timer"\nversion="1.0.0"\nplugin_api=3\n[[service]]\nid="timer"\nentry="timer.luau"\n')
+        (plugin/'timer.luau').write_text((REPO/'tests/fixtures/island_progress_timer.luau').read_text())
+        with (cfg/'config.toml').open('a') as f:
+            f.write('\n[osd.kinds]\nlock_keys=false\n[plugins]\nauto_update="none"\nenabled=["noctalia/timer"]\n[[plugins.source]]\nname="outline-test"\nkind="path"\nlocation='+json.dumps(str(plugin_root))+'\nenabled=true\n')
     if '--polish-only' in sys.argv:
         config_path=cfg/'config.toml'
         config_path.write_text(config_path.read_text().replace('[island]','[island]\nscale=1.4'))
@@ -93,7 +99,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         def move(x,y): command(pointer,f'move {x} {y}')
         def click(): command(pointer,'press');command(pointer,'release')
         def key(code): command(keyboard,str(code))
-        if any(mode in sys.argv for mode in ('--battery-only','--privacy-only','--polish-only','--hover-layout-only')):
+        if any(mode in sys.argv for mode in ('--battery-only','--privacy-only','--polish-only','--hover-layout-only','--progress-outline-only')):
             env['DBUS_SYSTEM_BUS_ADDRESS'] = env['DBUS_SESSION_BUS_ADDRESS']
             battery = subprocess.Popen([sys.executable, str(REPO/'tests/fixtures/island_battery.py')], env=env,
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -109,6 +115,66 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         wait(ready, 'shell IPC startup')
         key(1)  # Dismiss Umbriel's first-run keybinding hint.
         time.sleep(3)
+        if '--progress-outline-only' in sys.argv:
+            def shot(name):
+                run(['grim',str(out/('outline-'+name+'.png'))])
+                return Image.open(out/('outline-'+name+'.png')).convert('RGB')
+            original=(cfg/'config.toml').read_text()
+            def configure(enabled,scale=1):
+                move(1100,600)
+                (cfg/'config.toml').write_text(original.replace('[island]',f'[island]\nouter_progress_ring={str(enabled).lower()}\nscale={scale}'))
+                msg('config-reload');time.sleep(1.2)
+            publisher=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_downloads.py')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(publisher)
+            def publish(value,app='test.desktop',visible=True):
+                command(publisher,json.dumps({'uri':'application://'+app,'properties':{'progress':value,'progress-visible':visible}}));time.sleep(.7)
+            move(1100,600);publish(.25);small=shot('default')
+            configure(True);quarter=shot('quarter')
+            assert ImageChops.difference(small.crop((580,8,700,12)),quarter.crop((580,8,700,12))).getbbox(), 'Outer track must appear'
+            publish(.75);threequarters=shot('threequarters')
+            assert quarter.getpixel((640,70)) != threequarters.getpixel((640,70)), 'Progress must travel around the bottom edge'
+            assert ImageChops.difference(quarter.crop((505,23,540,57)),threequarters.crop((505,23,540,57))).getbbox() is None, 'Compact icon must no longer contain a progress ring'
+            publish(0);zero=shot('zero');publish(1);full=shot('full')
+            assert zero.getpixel((640,70)) != full.getpixel((640,70)), 'Zero and full progress must render correctly'
+            publish(.25);publish(.75,'second.desktop');half=shot('multiple')
+            assert half.getpixel((640,9)) == quarter.getpixel((640,9)), 'Multiple downloads keep the same outline track'
+            publish(0,'second.desktop',False);publish(.75)
+            move(640,40);time.sleep(.8);expanded=shot('expanded')
+            publish(.25);expanded_quarter=shot('expanded-quarter')
+            assert ImageChops.difference(expanded.crop((460,60,464,135)),expanded_quarter.crop((460,60,464,135))).getbbox(), 'Expanded outline follows progress on the rounded card'
+            move(1100,600);time.sleep(.8)
+            msg('theme-mode-set','light');time.sleep(.7);shot('light')
+            configure(True,1.4);shot('scaled')
+            msg('theme-mode-set','dark');configure(True)
+            # Timer state wins over download and battery state and updates in place.
+            msg('plugin','noctalia/timer:timer','all','PAUSED','75');time.sleep(1.3);timer=shot('timer')
+            publish(.1);timer_unchanged=shot('timer-priority')
+            assert ImageChops.difference(timer.crop((550,68,730,72)),timer_unchanged.crop((550,68,730,72))).getbbox() is None, 'Download progress must not replace the timer outline'
+            msg('plugin','noctalia/timer:timer','all','PAUSED','25');time.sleep(1.3);timer_quarter=shot('timer-quarter')
+            assert timer.getpixel((640,70)) != timer_quarter.getpixel((640,70)), 'Timer ticks must update the outline without rebuilding controls'
+            msg('plugin','noctalia/timer:timer','all','IDLE','0');time.sleep(1.3)
+            command(battery,json.dumps({'IsPresent':True,'Type':5,'PowerSupply':False,'State':0,'Percentage':75.}));time.sleep(.8)
+            shot('download-battery');publish(0,visible=False);time.sleep(.8);battery_full=shot('battery')
+            command(battery,json.dumps({'Percentage':25.}));time.sleep(.8);battery_quarter=shot('battery-quarter')
+            assert battery_full.getpixel((640,70)) != battery_quarter.getpixel((640,70)), 'Battery percentage must drive the outline when other activities finish'
+            run(['notify-send','-a','Outline test','-t','0','Priority','Notifications hide activity progress.']);time.sleep(.8);shot('notification')
+            msg('notification-clear-active');msg('notification-clear-history');time.sleep(.8)
+            steam=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_steam.py')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(steam)
+            command(steam,'Running Update,Downloading,Staging,');time.sleep(2.5)
+            spinning=shot('indeterminate');time.sleep(.3);spun=shot('indeterminate-moved')
+            for frame in (spinning,spun): frame.paste((0,0,0),(570,14,710,66))
+            assert ImageChops.difference(spinning.crop((420,8,860,72)),spun.crop((420,8,860,72))).getbbox(), 'Unknown download progress must travel around the outline'
+            steam.terminate();steam.wait(timeout=6);time.sleep(2.5)
+            configure(False);shot('disabled')
+            # Exercise the actual toggle and persistence in Settings.
+            msg('settings-open','island');time.sleep(.8);move(495,273);click();time.sleep(.7);shot('settings')
+            move(1070,384);click();time.sleep(.8);shot('settings-enabled')
+            data=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
+            assert data['island']['outer_progress_ring'] is True, data
+            assert shell.poll() is None
+            print('PASS: outer ring progress, expanded geometry, theme/scale, timer/download/battery priority, default mode and Settings persistence')
+            raise SystemExit(0)
         if '--hover-editor-only' in sys.argv:
             def shot(name): run(['grim',str(out/('hover-editor-'+name+'.png'))])
             def saved():

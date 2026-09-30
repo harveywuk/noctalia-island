@@ -446,3 +446,20 @@ keep. Umbriel does not replace or uninstall Hyprland.
 
 The greeter output layout also mirrors the desktop: DP-1 at (0,0), DP-2 at
 (350,1440) with a 180-degree transform and scale 1 on both outputs.
+
+## Outer progress ring
+
+Enable **Settings → Dynamic Island → Layout → Outer progress ring** to trace
+progress around the Island’s edge instead of the compact activity icon. It follows
+the capsule as it expands and scales. The default remains the small icon ring.
+
+Active timers take priority over downloads, followed by the battery indicator.
+For multiple downloads, the outline shows their average progress; if any total is
+unknown, a moving segment indicates activity. Charging batteries pulse and low
+batteries use the warning colour. Notifications, OSD cards and recording hide the
+outline. Expanded rows retain their individual progress indicators.
+
+```toml
+[island]
+outer_progress_ring = true
+```

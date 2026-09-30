@@ -38,6 +38,8 @@ uniform vec2 u_rect_size;
 uniform vec4 u_color;
 uniform float u_thickness;
 uniform float u_progress;
+uniform float u_corner_radius;
+uniform float u_start_offset;
 varying vec2 v_pixel;
 
 const float PI = 3.14159265359;
@@ -57,6 +59,29 @@ void main() {
     float rel = mod(theta - start + 2.0 * PI, 2.0 * PI);
     float arcLen = 2.0 * PI * clamp(u_progress, 0.0, 1.0);
     float arcMask = 1.0 - smoothstep(arcLen - 0.06, arcLen + 0.06, rel);
+
+    if (u_corner_radius >= 0.0) {
+        vec2 halfSize = max(center - u_thickness * 0.5, vec2(0.001));
+        float r = clamp(u_corner_radius - u_thickness * 0.5, 0.001, min(halfSize.x, halfSize.y));
+        vec2 straight = halfSize - r;
+        vec2 q = abs(p);
+        vec2 d = q - straight;
+        float edge = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+        ringMask = 1.0 - smoothstep(-0.75, 0.75, abs(edge) - u_thickness * 0.5);
+        // Arc length from top centre, clockwise, including each straight side.
+        float quarter = straight.x + straight.y + PI * r * 0.5;
+        float distance;
+        if (q.x <= straight.x) distance = q.x;
+        else if (q.y <= straight.y) distance = straight.x + PI * r * 0.5 + straight.y - q.y;
+        else distance = straight.x + atan(q.x - straight.x, q.y - straight.y) * r;
+        if (p.y >= 0.0) distance = 2.0 * quarter - distance;
+        if (p.x < 0.0) distance = 4.0 * quarter - distance;
+        float perimeter = 4.0 * quarter;
+        float along = mod(distance / perimeter - u_start_offset + 1.0, 1.0);
+        float feather = 0.75 / perimeter;
+        arcMask = u_progress >= 1.0 ? 1.0 : u_progress <= 0.0 ? 0.0
+            : 1.0 - smoothstep(u_progress - feather, u_progress + feather, along);
+    }
 
     float alpha = ringMask * arcMask * u_color.a;
     if (alpha <= 0.0) {
@@ -83,6 +108,8 @@ void CountdownRingProgram::ensureInitialized() {
   m_colorLocation = glGetUniformLocation(m_program.id(), "u_color");
   m_thicknessLocation = glGetUniformLocation(m_program.id(), "u_thickness");
   m_progressLocation = glGetUniformLocation(m_program.id(), "u_progress");
+  m_cornerRadiusLocation = glGetUniformLocation(m_program.id(), "u_corner_radius");
+  m_startOffsetLocation = glGetUniformLocation(m_program.id(), "u_start_offset");
   m_transformLocation = glGetUniformLocation(m_program.id(), "u_transform");
 
   if (m_positionLocation < 0
@@ -92,6 +119,8 @@ void CountdownRingProgram::ensureInitialized() {
       || m_rectSizeLocation < 0
       || m_colorLocation < 0
       || m_thicknessLocation < 0
+      || m_cornerRadiusLocation < 0
+      || m_startOffsetLocation < 0
       || m_progressLocation < 0
       || m_transformLocation < 0) {
     throw std::runtime_error("failed to query countdown ring shader locations");
@@ -108,6 +137,8 @@ void CountdownRingProgram::destroy() {
   m_colorLocation = -1;
   m_thicknessLocation = -1;
   m_progressLocation = -1;
+  m_cornerRadiusLocation = -1;
+  m_startOffsetLocation = -1;
   m_transformLocation = -1;
 }
 
@@ -138,6 +169,8 @@ void CountdownRingProgram::draw(
   glUniform4f(m_colorLocation, style.color.r, style.color.g, style.color.b, style.color.a);
   glUniform1f(m_thicknessLocation, style.thickness);
   glUniform1f(m_progressLocation, style.progress);
+  glUniform1f(m_cornerRadiusLocation, style.cornerRadius);
+  glUniform1f(m_startOffsetLocation, style.startOffset);
   glUniformMatrix3fv(m_transformLocation, 1, GL_FALSE, quadTransform.m.data());
   const auto posAttr = static_cast<GLuint>(m_positionLocation);
   glVertexAttribPointer(posAttr, 2, GL_FLOAT, GL_FALSE, 0, vertices.data());
