@@ -8,6 +8,9 @@
 
 namespace compositors::hyprland {
 
+  // Quote selectors as Lua literals, preserving UTF-8 and escaping control bytes.
+  [[nodiscard]] std::string luaStringLiteral(std::string_view value);
+
   class HyprlandEventHandler;
 
   struct IpcSocketPaths {

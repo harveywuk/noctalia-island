@@ -23,6 +23,26 @@ namespace compositors::hyprland {
 
   } // namespace
 
+  std::string luaStringLiteral(std::string_view value) {
+    std::string result = "\"";
+    for (const unsigned char c : value) {
+      if (c == '\\' || c == '"') {
+        result += '\\';
+        result += static_cast<char>(c);
+      } else if (c < 32 || c == 127) {
+        // Three digits stop the next character from becoming part of the escape.
+        result += '\\';
+        result += static_cast<char>('0' + c / 100);
+        result += static_cast<char>('0' + c / 10 % 10);
+        result += static_cast<char>('0' + c % 10);
+      } else {
+        result += static_cast<char>(c);
+      }
+    }
+    result += '"';
+    return result;
+  }
+
   HyprlandRuntime::HyprlandRuntime() {
     ensureResolved();
     updateConfigProvider();

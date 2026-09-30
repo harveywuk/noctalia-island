@@ -76,7 +76,8 @@ namespace compositors::hyprland {
     }
     std::optional<std::string> response;
     if (runtime.configIsLua()) {
-      response = runtime.request(std::format("dispatch hl.dsp.focus({{ monitor = \"{}\" }})", connectorName));
+      response =
+          runtime.request(std::format("dispatch hl.dsp.focus({{ monitor = {} }})", luaStringLiteral(connectorName)));
     } else {
       response = runtime.request(std::format("dispatch focusmonitor {}", connectorName));
     }
@@ -95,8 +96,8 @@ namespace compositors::hyprland {
     if (runtime.configIsLua()) {
       response = runtime.request(
           std::format(
-              R"(dispatch hl.dsp.window.move({{ monitor = "{}", window = "{}", follow = false }}))", connectorName,
-              windowSelector
+              R"(dispatch hl.dsp.window.move({{ monitor = {}, window = {}, follow = false }}))",
+              luaStringLiteral(connectorName), luaStringLiteral(windowSelector)
           )
       );
     } else {

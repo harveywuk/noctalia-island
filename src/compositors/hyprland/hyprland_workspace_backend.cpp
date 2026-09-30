@@ -54,7 +54,9 @@ void HyprlandWorkspaceBackend::activate(const std::string& id) {
   }
 
   if (m_runtime.configIsLua()) {
-    (void)m_runtime.request(std::format("dispatch hl.dsp.focus({{workspace = \"{}\"}})", target));
+    (void)m_runtime.request(
+        std::format("dispatch hl.dsp.focus({{workspace = {}}})", compositors::hyprland::luaStringLiteral(target))
+    );
   } else {
     (void)m_runtime.request(std::format("dispatch workspace {}", target));
   }
@@ -233,11 +235,15 @@ void HyprlandWorkspaceBackend::focusWindow(const std::string& windowId) {
   }
   const std::string target = "address:0x" + normalized;
   if (m_runtime.configIsLua()) {
-    (void)m_runtime.request(std::format("dispatch hl.dsp.focus({{window = \"{}\"}})", target));
+    const auto selector = compositors::hyprland::luaStringLiteral(target);
+    (void)m_runtime.request(std::format("dispatch hl.dsp.focus({{window = {}}})", selector));
+    (void)m_runtime.request(
+        std::format("dispatch hl.dsp.window.alter_zorder({{mode = \"top\", window = {}}})", selector)
+    );
   } else {
     (void)m_runtime.request(std::format("dispatch focuswindow {}", target));
+    (void)m_runtime.request(std::format("dispatch alterzorder top,{}", target));
   }
-  (void)m_runtime.request(std::format("dispatch alterzorder top,{}", target));
 }
 
 void HyprlandWorkspaceBackend::notifyCleanup() {

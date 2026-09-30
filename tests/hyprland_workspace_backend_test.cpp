@@ -5,6 +5,7 @@
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -15,6 +16,16 @@
 #include <vector>
 
 namespace {
+
+  std::mutex requestsMutex;
+  std::vector<std::string> dispatches;
+
+  std::vector<std::string> takeDispatches() {
+    std::lock_guard lock(requestsMutex);
+    auto result = std::move(dispatches);
+    dispatches.clear();
+    return result;
+  }
 
   enum class SnapshotSchema {
     Legacy,
@@ -323,7 +334,7 @@ namespace {
       return schema == SnapshotSchema::NormalIdentity ? std::string(kNormalClientsJson) : "[]";
     }
     if (command.contains("j/status")) {
-      return R"({"configProvider": "lua"})";
+      return schema == SnapshotSchema::Legacy ? R"({"configProvider": "hyprlang"})" : R"({"configProvider": "lua"})";
     }
     return "[]";
   }
@@ -347,6 +358,10 @@ namespace {
           break;
         }
         request.append(buffer, buffer + bytes);
+      }
+      if (request.starts_with("dispatch ")) {
+        std::lock_guard lock(requestsMutex);
+        dispatches.push_back(request);
       }
       const std::string reply = replyFor(request, schema.load());
       (void)::send(client, reply.data(), reply.size(), MSG_NOSIGNAL);
@@ -731,6 +746,15 @@ int main() {
     backend.syncFromCompositor();
 
     ok = checkLegacySnapshot(backend) && ok;
+    ok = check(backend.connectSocket(), "legacy backend must connect") && ok;
+    backend.activate("8");
+    backend.focusWindow("100");
+    const std::vector<std::string> expectedDispatches{
+        "dispatch workspace 8",
+        "dispatch focuswindow address:0x100",
+        "dispatch alterzorder top,address:0x100",
+    };
+    ok = check(takeDispatches() == expectedDispatches, "legacy focus and raise commands must remain compatible") && ok;
   }
 
   schema.store(SnapshotSchema::TypedIdentity);
@@ -739,6 +763,30 @@ int main() {
     HyprlandWorkspaceBackend backend([](wl_output*) { return std::string("WAYLAND-1"); }, runtime);
     ok = check(backend.connectSocket(), "typed-identity backend must connect to the event socket") && ok;
     ok = checkAddressIdentitySnapshot(backend, "typed identity") && ok;
+    backend.activate("name:alpha");
+    backend.focusWindow("0x101");
+    const std::vector<std::string> expectedDispatches{
+        R"(dispatch hl.dsp.focus({workspace = "name:alpha"}))",
+        R"(dispatch hl.dsp.focus({window = "address:0x101"}))",
+        R"(dispatch hl.dsp.window.alter_zorder({mode = "top", window = "address:0x101"}))",
+    };
+    ok = check(
+             takeDispatches() == expectedDispatches,
+             "Lua workspace activation, window focus and raise must all use Lua dispatchers"
+         )
+        && ok;
+    backend.activate("name:Review \"B\"\\draft\n7");
+    ok = check(
+             takeDispatches()
+                 == std::vector<std::string>{R"(dispatch hl.dsp.focus({workspace = "name:Review \"B\"\\draft\0107"}))"},
+             "quoted workspace names and control bytes must remain a single Lua string"
+         )
+        && ok;
+    ok = check(
+             compositors::hyprland::luaStringLiteral("é\t9") == R"("é\0099")",
+             "Lua escaping must preserve UTF-8 and terminate numeric escapes"
+         )
+        && ok;
 
     const auto lastGood = backend.all();
     const auto lastGoodApps = backend.appIdsByWorkspace(nullptr);
