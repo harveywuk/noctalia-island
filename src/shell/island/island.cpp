@@ -1340,7 +1340,7 @@ void Island::prepare(Instance& inst) {
     const float badgeX = view == island::View::Activity ? w - 44 : w - badgeWidth - 10;
     const float badgeY = (cfg.height - 24) / 2;
     auto* badge = control(badgeX, badgeY, badgeWidth, 24, "",
-                          "bell", i18n::tr("notifications.unread-history"), 16, true,
+                          "bell", i18n::tr("notifications.unread-history"), 22, true,
                           [panel] { panel("notifications"); }, 10, 0);
     badge->setRadius(12 * s);
     auto badgePalette = Button::defaultPalette(ButtonVariant::Ghost);
