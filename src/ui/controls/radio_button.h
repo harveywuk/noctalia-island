@@ -23,6 +23,7 @@ public:
 
 private:
   void doLayout(Renderer& renderer) override;
+  void select();
   void applyState();
 
   Box* m_outer = nullptr;

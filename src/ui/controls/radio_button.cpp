@@ -1,5 +1,6 @@
 #include "ui/controls/radio_button.h"
 
+#include "core/input/keybind_matcher.h"
 #include "render/scene/input_area.h"
 #include "ui/controls/box.h"
 #include "ui/palette.h"
@@ -16,19 +17,19 @@ RadioButton::RadioButton() {
   m_inner = static_cast<Box*>(addChild(std::move(inner)));
 
   auto area = std::make_unique<InputArea>();
+  area->setFocusable(true);
   area->setOnEnter([this](const InputArea::PointerData& /*data*/) { applyState(); });
   area->setOnLeave([this]() { applyState(); });
   area->setOnPress([this](const InputArea::PointerData& /*data*/) { applyState(); });
-  area->setOnClick([this](const InputArea::PointerData& /*data*/) {
-    if (!m_enabled || m_checked) {
+  area->setOnFocusGain([this]() { applyState(); });
+  area->setOnFocusLoss([this]() { applyState(); });
+  area->setOnKeyDown([this](const InputArea::KeyData& key) {
+    if (!key.pressed || !KeybindMatcher::matches(KeybindAction::Validate, key.sym, key.modifiers)) {
       return;
     }
-    m_checked = true;
-    applyState();
-    if (m_onChange) {
-      m_onChange(true);
-    }
+    select();
   });
+  area->setOnClick([this](const InputArea::PointerData& /*data*/) { select(); });
   m_inputArea = static_cast<InputArea*>(addChild(std::move(area)));
 
   applyState();
@@ -51,6 +52,17 @@ void RadioButton::setEnabled(bool enabled) {
     m_inputArea->setEnabled(enabled);
   }
   applyState();
+}
+
+void RadioButton::select() {
+  if (!m_enabled || m_checked) {
+    return;
+  }
+  m_checked = true;
+  applyState();
+  if (m_onChange) {
+    m_onChange(true);
+  }
 }
 
 void RadioButton::setOnChange(std::function<void(bool)> callback) { m_onChange = std::move(callback); }
@@ -99,15 +111,25 @@ void RadioButton::applyState() {
 
   ColorSpec fill = colorSpecFromRole(ColorRole::Surface);
   ColorSpec border = colorSpecFromRole(ColorRole::Outline, Style::controlBorderAlpha);
+  float borderWidth = Style::borderWidth * m_scale;
+  const bool focused = m_inputArea != nullptr && m_inputArea->focused();
   if (m_checked) {
     fill = colorSpecFromRole(ColorRole::Primary);
     border = colorSpecFromRole(ColorRole::Primary);
+    if (focused) {
+      border = colorSpecFromRole(ColorRole::Secondary);
+      borderWidth = Style::emphasizedBorderWidth * m_scale;
+    }
+  } else if (focused) {
+    fill = colorSpecFromRole(ColorRole::Secondary, 0.18F);
+    border = colorSpecFromRole(ColorRole::Secondary);
+    borderWidth = Style::emphasizedBorderWidth * m_scale;
   } else if (hovered()) {
     border = colorSpecFromRole(ColorRole::Hover);
   }
 
   m_outer->setFill(fill);
-  m_outer->setBorder(border, Style::borderWidth * m_scale);
+  m_outer->setBorder(border, borderWidth);
 
   const ColorSpec innerFill =
       m_checked ? colorSpecFromRole(ColorRole::OnPrimary) : colorSpecFromRole(ColorRole::Surface);
