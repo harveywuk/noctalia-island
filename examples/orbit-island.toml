@@ -1,4 +1,5 @@
-# Standalone Orbit-inspired island profile for this fork.
+# Legacy standalone Island profile, kept for tests/island_smoke.py.
+# For a current desktop, start from examples/starter.toml (see docs/SETUP.md).
 [island]
 enabled = true
 height = 64

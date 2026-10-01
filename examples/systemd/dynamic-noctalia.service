@@ -1,0 +1,16 @@
+# User service for Dynamic Noctalia. scripts/install-local.sh writes a copy to
+# ~/.config/systemd/user/ with ExecStart pointing at the installed binary.
+[Unit]
+Description=Dynamic Noctalia shell
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+Type=simple
+ExecStart=%h/.local/lib/dynamic-noctalia/bin/noctalia
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

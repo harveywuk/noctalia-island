@@ -143,23 +143,36 @@ events. The dock fixture sends a small relative pointer movement after a warp.
 Wait for asynchronous rendering when checking live content. Capture buffers can
 be checked through the fixture process's file descriptors to verify cleanup.
 
+## Follow-up session (1 October 2026, afternoon)
+
+Priorities 1–3 from the previous checkpoint were worked through, plus Cupertino styling for
+the lock screen, Island and greeter. All 147 unit tests pass; each item below was also checked
+in the isolated Hyprland harness and is installed on the development desktop.
+
+| Area | Change |
+|------|--------|
+| Accessibility | Radio buttons are keyboard focusable; the macOS light outline meets 3:1; High contrast no longer lowers contrast (role-aware transform, `palette_high_contrast` test). |
+| Text fit | `NOCTALIA_DEBUG_TEXT_FIT=1` logs ellipsized labels; `noctalia config settings-pages` and `settings-open <section>/<group>`; `--text-fit-only` audits every page in English and German at 1.5x. Text/path rows stack, template grid reflows (`GridView::setAutoColumnMinWidth`). |
+| Dock previews | `--dock-preview-perf-only` measures cost with real apps. Skipping undamaged frames and requesting display-sized thumbnails cut shell CPU from 14.1% to 3.7% (three videos). |
+| Lock screen | Cupertino login-box layout (default for new setups): date and large time, avatar, glass password pill, shake on failure. `Input::setContentColor`. `--lockscreen-only`. |
+| Island | `island.appearance` = `cupertino` (default) or `theme`: always black, white content, Apple activity tints, bare controls, 42px corners; expanded activity cards show one activity. Island launcher sizes like Spotlight (`Panel::islandWidth/islandHeight`). |
+| Session | logind lookup falls back to the user's display session, so lock-before-suspend works when the shell runs as a user service. |
+| Setup | [SETUP.md](SETUP.md), `scripts/install-local.sh`, `examples/starter.toml`, systemd unit and Hyprland start hook; `--starter-only` boots the starter config. |
+| Greeter | Separate fork `~/Projects/noctalia-greeter`, branch `feature/cupertino` (from v1.5.0): Cupertino layout, frame-loop fix for animations, `tests/visual_smoke.py`, Arch PKGBUILD. Built but not installed. |
+
 ## Proposed next priorities
 
-These are follow-on recommendations, not additional features already implemented
-or a commitment to a particular next task.
-
-1. **Polish and accessibility:** audit keyboard navigation, focus visibility,
-   contrast, long labels, UI scaling and reduced motion across the finished shell.
-2. **Live-preview performance:** measure CPU, GPU and retained memory with several
-   real applications and video playing; cover minimized/off-workspace windows,
-   display disconnects and capture failure. Consider a live/static option or refresh
-   control only if those measurements or user preference justify it.
-3. **A reproducible desktop setup:** document compatible plugin versions and optional
-   dependencies, installation and upgrade steps, and a small example configuration
-   that a new user can try without copying a personal desktop configuration.
-4. **Release preparation:** group remaining issues by subsystem, run the broader
-   integration matrix, expand platform testing and prepare release notes. Keep
-   upstream updates manageable through focused follow-up changes.
+1. **Translations:** the 1,024 strings added by the fork exist only in English in all 26
+   catalogs. Decide between machine translation with review or English fallback.
+2. **Remaining text fit:** two long descriptions exceed five lines at 1.5x; the palette-source
+   row and a few German controls still truncate (run `--text-fit-only`).
+3. **Marquee labels under reduced motion:** they keep scrolling by design; decide whether to
+   stop them when animations are off.
+4. **Greeter rollout:** install the package (see SETUP.md) and verify with the real synced
+   wallpaper, which the test harness cannot read.
+5. **Release preparation:** group remaining issues, run the full integration matrix, prepare
+   release notes and decide which fixes to offer upstream (high contrast, logind fallback,
+   greeter frame loop are generic).
 
 ## Boundaries to preserve
 

@@ -102,6 +102,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-launcher-only' in sys.argv:
             from island_launcher_smoke import prepare
             prepare(base,cfg,env)
+        if '--starter-only' in sys.argv:
+            from starter_smoke import prepare
+            prepare(base,cfg,env)
         if '--dock-motion-only' in sys.argv:
             from dock_motion_smoke import prepare
             prepare(base,cfg,env)
@@ -127,6 +130,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--cupertino-only' in sys.argv:
             from cupertino_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--starter-only' in sys.argv:
+            from starter_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-launcher-only' in sys.argv:

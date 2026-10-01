@@ -46,8 +46,9 @@ Enable the Island in your Noctalia configuration:
 enabled = true
 ```
 
-The [example Island profile](examples/orbit-island.toml) also disables the regular
-bar and dock. Review it before applying it, as it contains other desktop preferences.
+To install the fork and try a complete desktop (Island bar, dock with live previews,
+macOS palette), follow the [setup guide](docs/SETUP.md) and its
+[starter configuration](examples/starter.toml).
 
 General shell configuration is described in [example.toml](example.toml),
 [the bundled user documentation](docs/user/) and the

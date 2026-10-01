@@ -1,0 +1,53 @@
+# Dynamic Noctalia starter configuration.
+#
+# A small, complete desktop to try without copying anyone's personal setup:
+# a Dynamic Island in place of the top bar, a floating magnifying dock with
+# live window previews, and the bundled macOS palette. Copy it to
+# ~/.config/noctalia/config.toml (back up an existing file first), then adjust
+# anything in Settings; changes made there are saved separately in
+# ~/.local/state/noctalia/settings.toml and leave this file untouched.
+#
+# The lock screen and Dynamic Island use their macOS-style ("cupertino")
+# appearance by default, so they need no keys here.
+
+[bar]
+order = ["island"]
+
+[bar.island]
+enabled = true
+presentation = "island"
+reserve_space = true
+
+[bar.island.island]
+height = 64
+clock_size = 24
+# "cupertino" (black, Apple-style) or "theme" (follows the palette).
+appearance = "cupertino"
+
+[dock]
+enabled = true
+position = "bottom"
+smart_auto_hide = true
+reserve_space = false
+layer = "overlay"
+icon_size = 48
+margin_edge = 12
+magnification = true
+magnification_scale = 1.45
+# Hover a running app for a live, paginated window picker (needs a compositor with
+# foreign-toplevel image capture, such as Hyprland 0.56).
+window_previews = true
+preview_delay_ms = 450
+pinned = []
+
+[theme]
+source = "community"
+community_palette = "macOS"
+mode = "auto"
+
+[shell]
+# Keep the first-run wizard: it sets location, avatar and wallpaper interactively.
+setup_wizard_enabled = true
+
+[plugins]
+auto_update = "none"

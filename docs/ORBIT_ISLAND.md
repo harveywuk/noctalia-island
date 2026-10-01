@@ -296,7 +296,10 @@ calculator unit/currency definitions are unavailable in this local build.
 
 ## Try a separate profile
 
-`examples/orbit-island.toml` enables the island and disables the normal bar. To use
+`examples/orbit-island.toml` is the legacy standalone Island profile used by
+`tests/island_smoke.py`; for a current desktop start from
+[`examples/starter.toml`](../examples/starter.toml) instead. The legacy profile enables the
+island and disables the normal bar. To use
 only the monitor from the existing Orbit profile, set `monitors = ["DP-1"]`.
 Configuration homes are XDG-style roots: Noctalia appends `/noctalia` itself.
 
@@ -409,9 +412,9 @@ The default shell is now `noctalia-island.service`; `orbit.service` and
 `~/.local/lib/noctalia-island`. The launcher preserves the existing live config
 and state under `~/.local/state/noctalia-island`, including GUI preferences.
 
-After rebuilding this fork, run `scripts/install-island-local.sh`, then
-`systemctl --user restart noctalia-island.service` to update the running shell.
-The source build itself is no longer the service executable.
+To install or update the fork, run `scripts/install-local.sh` as described in the
+[setup guide](SETUP.md); it builds, tests, installs, keeps the previous binary and
+restarts the running unit.
 
 Hyprland's shell shortcuts and lock/idle commands now use Noctalia. The two
 Orbit-specific recording shortcuts are removed because this port has no recording
