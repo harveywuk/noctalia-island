@@ -48,6 +48,7 @@ private:
       CompletionCallback onComplete
   );
   void scheduleFrame();
+  void skipUnchangedFrame();
 
   WaylandConnection& m_wayland;
   std::unique_ptr<ToplevelThumbnailCapturePending> m_pending;

@@ -200,6 +200,11 @@ namespace shell::dock {
   }
 
   void DockPreview::startCaptures() {
+    // Request thumbnails at the card's image size in buffer pixels; larger frames cost
+    // decode time on every update without adding visible detail.
+    const float renderScale = surface ? std::max(1.0F, surface->renderTarget().renderer().renderScale()) : 1.0F;
+    const int maxWidth = static_cast<int>(std::ceil((m_cardWidth - 8 * m_uiScale) * renderScale));
+    const int maxHeight = static_cast<int>(std::ceil((m_cardHeight - 38 * m_uiScale) * renderScale));
     for (std::size_t slot = 0; slot < m_images.size(); ++slot) {
       const auto& window = windows[m_page * m_pageSize + slot];
       auto* handle = window.extHandle;
@@ -233,7 +238,7 @@ namespace shell::dock {
       auto* stream = capture.get();
       m_captures.push_back(std::move(capture));
       stream->stream(
-          handle, 480, 300, std::chrono::milliseconds{100},
+          handle, std::max(1, maxWidth), std::max(1, maxHeight), std::chrono::milliseconds{100},
           [this, slot](std::optional<ScreencopyImage> image, std::string) {
             // A stopped/unavailable source keeps its last frame (or app icon).
             if (!image)

@@ -143,6 +143,9 @@ struct ToplevelThumbnailCapturePending {
   int maxHeight = 1;
   std::int32_t transform = WL_OUTPUT_TRANSFORM_NORMAL;
   bool bufferInitialized = false;
+  // Set by damage events for the in-flight frame. Without damage the buffer still holds
+  // the previous frame's content, so a stream can skip decoding it.
+  bool frameDamaged = false;
 
   ~ToplevelThumbnailCapturePending() {
     if (frame != nullptr) {
@@ -227,11 +230,19 @@ struct ToplevelThumbnailCapturePending {
     static_cast<ToplevelThumbnailCapturePending*>(data)->transform = static_cast<std::int32_t>(transform);
   }
 
-  static void damage(void*, ext_image_copy_capture_frame_v1*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {}
+  static void
+  damage(void* data, ext_image_copy_capture_frame_v1*, std::int32_t, std::int32_t, std::int32_t, std::int32_t) {
+    static_cast<ToplevelThumbnailCapturePending*>(data)->frameDamaged = true;
+  }
   static void presentationTime(void*, ext_image_copy_capture_frame_v1*, std::uint32_t, std::uint32_t, std::uint32_t) {}
 
   static void ready(void* data, ext_image_copy_capture_frame_v1*) {
     auto& pending = *static_cast<ToplevelThumbnailCapturePending*>(data);
+    if (pending.owner->m_interval.count() > 0 && pending.bufferInitialized && !pending.frameDamaged) {
+      // Compositors may deliver frames for unchanged sources; damage says this one is.
+      pending.owner->skipUnchangedFrame();
+      return;
+    }
     std::optional<ScreencopyImage> thumbnail;
     try {
       thumbnail = capture::makeToplevelThumbnail(
@@ -343,6 +354,7 @@ struct ToplevelThumbnailCapturePending {
       owner->fail("failed to create toplevel capture frame");
       return;
     }
+    frameDamaged = false;
     ext_image_copy_capture_frame_v1_attach_buffer(frame, buffer);
     // This same buffer retains the last frame; only a new buffer needs full
     // client damage. The compositor adds damage from source content changes.
@@ -462,6 +474,13 @@ void ToplevelThumbnailCapture::finish(ScreencopyImage image) {
   if (onComplete) {
     onComplete(std::move(image), {});
   }
+}
+
+void ToplevelThumbnailCapture::skipUnchangedFrame() {
+  m_timeout.stop();
+  ext_image_copy_capture_frame_v1_destroy(m_pending->frame);
+  m_pending->frame = nullptr;
+  scheduleFrame();
 }
 
 void ToplevelThumbnailCapture::scheduleFrame() {
