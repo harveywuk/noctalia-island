@@ -1,4 +1,44 @@
 {
+  "island": {
+    "activities": {
+      "media": "Medya",
+      "downloads": "Daxistin",
+      "timers": "Demjimêr"
+    },
+    "timer": {
+      "title": "Demjimêr",
+      "pomodoro": "Pomodoro",
+      "focus": "Danişîna balkişandinê",
+      "break": "Bêhnvedan",
+      "running": "Dixebite",
+      "paused": "Rawestiyayî",
+      "finished": "Qediya",
+      "pause": "Rawestîne",
+      "resume": "Bidomîne",
+      "cancel": "Betal bike",
+      "open": "Veke"
+    },
+    "privacy": {
+      "audio-controls": "Kontrolên dengî veke"
+    },
+    "battery": {
+      "until-full": "heta tije bibe",
+      "remaining": "maye",
+      "more": "{count} batariya din",
+      "more-plural": "{count} batariyên din"
+    },
+    "downloads": {
+      "title": "Daxistin",
+      "downloading": "Tê daxistin",
+      "installing": "Tê sazkirin",
+      "preparing": "Daxistin tê amadekirin",
+      "verifying": "Pel têne kontrolkirin",
+      "media": "Kontrolên medyayê",
+      "close": "Bigire",
+      "more": "{count} yên din",
+      "more-plural": "{count} yên din"
+    }
+  },
   "auth": {
     "pam": {
       "authentication-failed": "Rastandin têk çû",
@@ -16,6 +56,11 @@
   },
   "bar": {
     "annotate": {
+      "tools-menu": "Amûrên xêzkirinê",
+      "style-menu": "Reng û mezinahî",
+      "style-done": "Qediya",
+      "record-region": "Herêmekê bi dengê sermaseyê tomar bike (guhertina niha tê avêtin); heke tomar didome, wê rawestîne",
+      "record-monitor": "Monîtorekê bi dengê sermaseyê tomar bike (guhertina niha tê avêtin); heke tomar didome, wê rawestîne",
       "color-black": "Reş",
       "color-blue": "Şîn",
       "color-green": "Kesk",
@@ -29,6 +74,8 @@
       "size-large": "Mezin",
       "size-medium": "Navîn",
       "size-small": "Biçûk",
+      "tool-pixelate": "Herêmekê pîkselî bike (i); mezinahî firehiya blokê diyar dike",
+      "tool-magnify": "Herêmekê mezin bike (z); mezinahî rêjeya nêzîkkirinê diyar dike",
       "tool-text": "Nivîs (t)",
       "undo": "Vegerîne (Ctrl+Z)"
     },
@@ -197,9 +244,15 @@
       "media": {
         "playing": "Tê lîstin"
       },
-      "unknown": "nenas"
+      "unknown": "nenas",
+      "customise": "Rûpela sereke kesane bike",
+      "empty": "Li rûpela sereke kart tune ne. Bi bişkoka mîhengan a li jor kartan zêde bike."
     },
     "media": {
+      "previous": "Strana berê",
+      "next": "Strana pêş",
+      "play": "Lêxe",
+      "pause": "Rawestîne",
       "nothing-playing": "Tiştek nayê lîstin",
       "now-playing": "Niha tê lîstin",
       "start-playback": "Lîstinê di sepana MPRIS de dest pê bike"
@@ -513,9 +566,16 @@
     }
   },
   "lockscreen": {
+    "enter-password": "Şîfreyê binivîse",
     "password-placeholder": "Borînpeyv"
   },
   "notifications": {
+    "unread-history": "Agahdariyên nexwendî — dîrokê veke",
+    "unread-count": "{count} agahdariya nexwendî",
+    "unread-count-plural": "{count} agahdariyên nexwendî",
+    "dismiss": "Agahdariyê bigire",
+    "expand": "Tevahiya agahdariyê bixwîne",
+    "collapse": "Agahdariyê bişidîne",
     "actions": {
       "fallback": "Çalakî",
       "open": "Veke"
@@ -619,6 +679,22 @@
     }
   },
   "settings": {
+    "island-editor": {
+      "description": "Widgetan di nav komekê de an di navbera koman de bikişîne. Ji bo livandinê tîran, ji bo vekirina mîhengan çerxa diranan bi kar bîne.",
+      "preset-hint": "Pêşmîheng widgetên dema nîşankirinê û hilbijartinên beşan diguherînin. Vegerandin rêzkirina berî pêşmîhengê vedigerîne.",
+      "undo": "Pêşmîhengê vegerîne",
+      "add": "Widget zêde bike",
+      "empty": "Widgetan li vir berde an jî bi + yekê zêde bike.",
+      "up": "Bilind bike",
+      "down": "Nizm bike",
+      "left": "Bibe koma çepê",
+      "right": "Bibe koma rastê",
+      "presets": {
+        "minimal": "Kêmîn",
+        "media": "Medya",
+        "system": "Çavdêriya pergalê"
+      }
+    },
     "actions": {
       "reset": "Ji nû ve saz bike"
     },
@@ -742,6 +818,8 @@
     },
     "navigation": {
       "groups": {
+        "hyprland-windows": "Pencereyên Hyprland",
+        "hyprland-animations": "Anîmasyonên Hyprland",
         "audio": "Deng",
         "authentication": "Rastandin",
         "background": "Paşrû",
@@ -779,9 +857,52 @@
         "user": "Bikarhêner",
         "wallpaper": "Wêneyê dîwêr",
         "weather": "Rewşa bayê",
-        "widgets": "Sepanok"
+        "widgets": "Sepanok",
+        "clock": "Demjimêr",
+        "calendar": "Salname",
+        "hover-sections": "Beşên nîşankirinê",
+        "hover-timing": "Demê nîşankirinê",
+        "activities": "Çalakî",
+        "hyprland-presets": "Pêşmîhengên Hyprland",
+        "hyprland-shadow-glow": "Sî û ronahî",
+        "hyprland-blur-focus": "Şêlîkirin û bal",
+        "hyprland-app-rules": "Rêzikên sepanan",
+        "hyprland-theme-profiles": "Profîlên temayê",
+        "hyprland-opening_curve": "Vekirina pencereyan",
+        "hyprland-closing_curve": "Girtina pencereyan",
+        "hyprland-moving_curve": "Livandina pencereyan",
+        "hyprland-workspace_curve": "Livîna qadên xebatê",
+        "hyprland-glass": "Hyprglass",
+        "hyprland-plugins": "Nîşanker û nêrîna giştî",
+        "hyprland-input-presets": "Pêşmîheng",
+        "hyprland-input-mouse": "Mişk û nîşanker",
+        "hyprland-input-touchpad": "Touchpad",
+        "hyprland-input-cursor": "Nîşankera dînamîk",
+        "hyprland-input-scroll": "Gerandina kînetîk",
+        "hyprland-input-edge": "Nîşankirina keviyan",
+        "hyprland-behaviour-focus": "Bal",
+        "hyprland-behaviour-resize": "Mezinahî guhertin",
+        "hyprland-behaviour-snap": "Pevgirtin",
+        "hyprland-behaviour-activation": "Çalakkirina sepanan",
+        "hyprland-tiling-layout": "Rêzkirin",
+        "hyprland-tiling-dwindle": "Dwindle",
+        "hyprland-tiling-master": "Master",
+        "hyprland-tiling-special": "Qadên xebatê yên taybet",
+        "hyprland-placement": "Cihgirtina sepanan",
+        "hyprland-input-keyboard": "Klavye",
+        "hyprland-input-gestures": "Tevger",
+        "hyprland-workspaces": "Qadên xebatê",
+        "hyprland-keybinds": "Kurterêyên Hyprland",
+        "startup-apps": "Sepanên destpêkê",
+        "backups": "Paşkopî",
+        "default-apps": "Sepanên standard"
       },
       "sections": {
+        "input-motion": "Têketin û livîn",
+        "displays": "Ekran",
+        "window-behaviour": "Reftara pencereyan",
+        "workspace-tiling": "Qadên xebatê û rêzkirina kaşî",
+        "app-placement": "Cihgirtina sepanan",
         "appearance": "Xuyang",
         "control-center": "Navenda ",
         "location": "Cih",
@@ -794,12 +915,31 @@
         "services": "Raje",
         "shell": "Shell",
         "system": "Pergal ",
-        "wallpaper": "Wêneyê dîwêr"
+        "wallpaper": "Wêneyê dîwêr",
+        "island": "Dynamic Island",
+        "workspaces": "Qadên xebatê",
+        "session": "Danişîn"
+      },
+      "back": "Paş",
+      "categories": {
+        "personalise": "Kesanekirin",
+        "devices": "Amûr",
+        "windows": "Pencere û qadên xebatê",
+        "general": "Giştî",
+        "extensions": "Pêvek",
+        "bars": "Darik û monîtor"
       }
     },
     "notifications": {
       "filter": {
         "add": "Parzûnê tevlî bike",
+        "delivery-label": "Gihandin",
+        "delivery-normal": "Asayî",
+        "delivery-silent": "Bêdeng",
+        "delivery-history": "Tenê dîrok",
+        "delivery-hidden": "Veşartî",
+        "delivery-custom": "Kesane",
+        "delivery-description": "Bêdeng pêşdîtinek bê deng nîşan dide. Tenê dîrok agahdariyan bê pêşdîtin ji bo paşê diparêze. Veşartî hem pêşdîtin hem dîrokê digire.",
         "flag": {
           "history": "dîrok",
           "permanent": "mayînde",
@@ -812,6 +952,10 @@
       }
     },
     "options": {
+      "bar": {
+        "standard": "Darika standard",
+        "island": "Dynamic Island"
+      },
       "clipboard": {
         "auto-paste": {
           "ctrl-shift-v": "Ctrl+Shift+V",
@@ -918,6 +1062,25 @@
           "crop": "Jê bike",
           "repeat": "Dûbare bike"
         }
+      },
+      "home-cards": {
+        "profile": "Profîl",
+        "media": "Medya",
+        "clock": "Demjimêr û hewa",
+        "shortcuts": "Kurterê"
+      },
+      "island": {
+        "timers-downloads-media": "Demjimêr → Daxistin → Medya",
+        "timers-media-downloads": "Demjimêr → Medya → Daxistin",
+        "downloads-timers-media": "Daxistin → Demjimêr → Medya",
+        "downloads-media-timers": "Daxistin → Medya → Demjimêr",
+        "media-timers-downloads": "Medya → Demjimêr → Daxistin",
+        "media-downloads-timers": "Medya → Daxistin → Demjimêr",
+        "appearance-cupertino": "macOS",
+        "appearance-theme": "Tema",
+        "calendar-initials": "Tîpên yekane",
+        "calendar-today": "Tenê îro kurt bike",
+        "calendar-abbreviated": "Her roj kurt bike"
       }
     },
     "plugins": {
@@ -950,6 +1113,97 @@
       }
     },
     "schema": {
+      "hyprland-appearance": {
+        "custom_animations": {
+          "label": "Anîmasyonên pencereyan kesane bike",
+          "description": "Kontrolên livînê yên li jêr bi kar bîne. Girtina wê şêwazên anîmasyonê yên veavakirina te ya Hyprland vedigerîne."
+        },
+        "animation_speed": {
+          "label": "Leza anîmasyonê",
+          "description": "1× leza asayî ye. Nirxên bilindtir derbasbûnên pencere û qadên xebatê bileztir dikin."
+        },
+        "animation_easing": {
+          "label": "Kevana livînê",
+          "description": "Derbasbûn çawa lez dikin û bi cih dibin."
+        },
+        "window_animation": {
+          "label": "Vekirin û girtina pencereyan",
+          "description": "Hilbijêre ka pencere çawa xuya dibin û winda dibin. Livandin û mezinahî guhertin anîmasyonî dimînin."
+        },
+        "workspace_animation": {
+          "label": "Derbasbûnên qadên xebatê",
+          "description": "Hilbijêre ka qadên xebatê yên asayî û taybet çawa têne û diçin."
+        },
+        "easing-smooth": "Nerm",
+        "easing-snappy": "Bilez",
+        "easing-gentle": "Sivik",
+        "easing-linear": "Xêzikî",
+        "style-pop": "Derketin",
+        "style-slide": "Şemitandin",
+        "style-fade": "Tarîbûn",
+        "style-instant": "Yekser",
+        "style-horizontal": "Şemitandina asoyî",
+        "style-vertical": "Şemitandina stûnî",
+        "enabled": {
+          "label": "Xuyabûna pencereyan bi rê ve bibe",
+          "description": "Van kontrolan yekser bisepîne. Girtina wê veavakirina te ya Hyprland vedigerîne."
+        },
+        "follow_theme": {
+          "label": "Rengên çarçoveyê yên Noctalia bi kar bîne",
+          "description": "Çarçoveya pencereya çalak li gorî rengê tekezî yê temaya niha bike."
+        },
+        "gaps_in": {
+          "label": "Valahiyên hundir",
+          "description": "Cihê her aliyî di navbera pencereyên rêzkirî de."
+        },
+        "gaps_out": {
+          "label": "Valahiyên derve",
+          "description": "Cihê di navbera pencereyên rêzkirî û keviyên ekranê de."
+        },
+        "border_size": {
+          "label": "Firehiya çarçoveyê",
+          "description": "Stûriya çarçoveyên pencereyan."
+        },
+        "rounding": {
+          "label": "Nîveşkêla goşeyan",
+          "description": "Girovbûna goşeyên pencereyan."
+        },
+        "active_opacity": {
+          "label": "Nezelaliya pencereya çalak",
+          "description": "Nezelaliya pencereya bi bal, bi naverokê ve."
+        },
+        "inactive_opacity": {
+          "label": "Nezelaliya pencereyên neçalak",
+          "description": "Nezelaliya pencereyên bê bal, bi naverokê ve."
+        },
+        "blur_enabled": {
+          "label": "Şêlîkirina paşxaneyê",
+          "description": "Şêlîkirin li pişt pencereyên zelal. HyprGlass şêlîkirina pencereyên camî bi cuda bi rê ve dibe."
+        },
+        "blur_size": {
+          "label": "Mezinahiya şêlîkirinê",
+          "description": "Nîveşkêla şêlîkirina berhevkerê."
+        },
+        "blur_passes": {
+          "label": "Derbasbûnên şêlîkirinê",
+          "description": "Derbasbûnên zêde şêlîkirinê nermtir dikin û bêtir dema GPU bi kar tînin."
+        },
+        "shadow_enabled": {
+          "label": "Siyên pencereyan",
+          "description": "Li dora pencereyan siyan xêz bike."
+        },
+        "shadow_range": {
+          "label": "Mezinahiya siyê",
+          "description": "Sî çiqasî ji pencereyê derdikeve."
+        },
+        "animations_enabled": {
+          "label": "Anîmasyonên pencereyan",
+          "description": "Anîmasyonên Hyprland çalak bike. Anîmasyonên Noctalia kontrolên xwe hene."
+        },
+        "easing-custom": "Bézier a kesane",
+        "easing-spring": "Lûle",
+        "easing-inherit": "Kevana hevpar bi kar bîne"
+      },
       "appearance": {
         "animation-speed": {
           "label": "Leza anîmasyonê"
@@ -974,6 +1228,10 @@
         }
       },
       "bar": {
+        "presentation": {
+          "label": "Pêşkêşkirin",
+          "description": "Darikeke standard an Dynamic Island hilbijêre. Island li jorê navenda monîtorê ye."
+        },
         "border": {
           "label": "Sînor"
         },
@@ -1008,11 +1266,37 @@
         "inactive-icon-opacity": {
           "label": "Zelaliya îkonê neçalak"
         },
+        "animate-launch": {
+          "label": "Vekirina sepanan anîmasyonî bike",
+          "description": "Dema sepanek dest pê dike sembol bi kurtî baz dide; li gorî mîhenga livînê ya şêlê"
+        },
+        "window-previews": {
+          "label": "Pêşdîtina pencereyan",
+          "description": "Ji bo hilbijartin an girtina pencereyekê nîşankerê bibe ser sepaneke vekirî. Pêşdîtinên zindî tenê dema vekirî ne nû dibin."
+        },
+        "preview-delay": {
+          "label": "Derengiya pêşdîtinê (ms)",
+          "description": "Divê nîşanker çiqas li ser sepanekê bimîne berî ku pencereyên wê xuya bibin."
+        },
+        "hide-delay": {
+          "label": "Derengiya veşartinê (ms)",
+          "description": "Piştî ku nîşanker derdikeve berî veşartinê bisekine; vegerandin derengiyê betal dike"
+        },
         "pinned-apps": {
           "label": "Sepanên bidarxistî"
         },
         "show-dots": {
           "label": "Xalan nîşan bide"
+        }
+      },
+      "panels": {
+        "home-cards": {
+          "label": "Kartên rûpela sereke",
+          "description": "Kartan zêde bike an rake. Ji bo rêzkirina wan di rêzkirina stûnî de tîran bi kar bîne."
+        },
+        "home-stacked": {
+          "label": "Kartên rûpela sereke li ser hev bike",
+          "description": "Kartan bi firehiya tevahî li gorî rêza jorîn nîşan bide. Ji bo rêzkirina panelê bigire."
         }
       },
       "services": {
@@ -1068,6 +1352,156 @@
         },
         "screenshot-directory": {
           "label": "Rêgeha deranê"
+        },
+        "window-switcher-current-workspace-only": {
+          "description": "Tenê pencereyên qada xebatê ya çalak rêz bike; ji bo tevlîkirina pencereyên hemû qadan bigire",
+          "label": "Tenê qada xebatê ya niha"
+        }
+      },
+      "island": {
+        "appearance": {
+          "label": "Xuyabûn",
+          "description": "macOS Island reş bi naveroka spî dihêle û her çalakiyê reng dike, mîna Dynamic Island a Apple. Tema li gorî paleta şêlê ye."
+        },
+        "outer_progress_ring": {
+          "label": "Xeleka pêşketinê ya derve",
+          "description": "Pêşketina demjimêr, daxistin an batariyê li ser keviya Island nîşan bide. Pêşî demjimêr, paşê daxistin, paşê rewşa batariyê."
+        },
+        "hover_widgets": {
+          "label": "Widgetên çepê",
+          "description": "Modul û widgetên pêvekên çalak li aliyê çepê yê nêrîna nîşankirinê zêde bike, rake û rêz bike. Vebijarkên widgetan bi darikê re hevpar in."
+        },
+        "hover_widgets_center": {
+          "label": "Widgetên navendê",
+          "description": "Widgetan li navenda nêrîna nîşankirinê zêde bike, rake û rêz bike."
+        },
+        "hover_widgets_right": {
+          "label": "Widgetên rastê",
+          "description": "Widgetan li aliyê rastê yê nêrîna nîşankirinê zêde bike, rake û rêz bike. Komên qerebalix di rêzên rêkûpêk de li ser hev dibin."
+        },
+        "activity_priority": {
+          "label": "Rêza çalakiyan",
+          "description": "Hêmana çalak a yekem bi vê rêzê nîşan bide. Zivirandin heman rêzê dişopîne û hêmanên neçalak derbas dike."
+        },
+        "cycle_activities": {
+          "label": "Çalakiyan bizivirîne",
+          "description": "Çalakiyên kompakt bi dorê nîşan bide. Dema nîşankirin, panel vekirî, veşartî an hişyarî tê nîşandan radiweste."
+        },
+        "activity_cycle_seconds": {
+          "label": "Navbera zivirandinê (çirke)",
+          "description": "Dema nîşandana her çalakiyê dema zivirandin çalak e."
+        },
+        "hover_open_delay_ms": {
+          "label": "Derengiya vekirinê (ms)",
+          "description": "Berî ku Island bi nîşankirinê fireh bibe bisekine. Sifir yekser vedike."
+        },
+        "hover_close_delay_ms": {
+          "label": "Derengiya girtinê (ms)",
+          "description": "Piştî ku nîşanker derdikeve Island bi kurtî fireh bihêle. Sifir yekser digire."
+        },
+        "hover_show_clock": {
+          "label": "Demjimêr",
+          "description": "Demjimêr li ser nêrîna bêkar nîşan bide."
+        },
+        "hover_show_calendar": {
+          "label": "Salname",
+          "description": "Xêza hefteyê di nêrîna bêkar de nîşan bide."
+        },
+        "hover_show_media": {
+          "label": "Kontrolên medyayê",
+          "description": "Dema lêdanê bi nîşankirinê lêdera niha nîşan bide."
+        },
+        "hover_show_downloads": {
+          "label": "Daxistin",
+          "description": "Pêşketina daxistinê di nêrîna nîşankirinê de nîşan bide."
+        },
+        "hover_show_timers": {
+          "label": "Demjimêr",
+          "description": "Kontrol û kurterêyên demjimêran di nêrîna nîşankirinê de nîşan bide."
+        },
+        "hover_show_batteries": {
+          "label": "Hûrguliyên batariyê",
+          "description": "Asta batariyê û dema mayî di nêrîna nîşankirinê de nîşan bide."
+        },
+        "hover_show_unread": {
+          "label": "Agahdariyên nexwendî",
+          "description": "Hejmara nexwendî û kurterêya dîrokê di nêrîna nîşankirinê de nîşan bide."
+        },
+        "enabled": {
+          "label": "Dynamic Island çalak bike",
+          "description": "Demjimêr, kontrolên medyayê, agahdarî û dengê di Island de nîşan bide."
+        },
+        "reserve_space": {
+          "label": "Cihê sermaseyê veqetîne",
+          "description": "Pencereyan li binê Island a kompakt bihêle."
+        },
+        "height": {
+          "label": "Bilindahiya kompakt",
+          "description": "Bilindahiya Island a kompakt bi pîkselan."
+        },
+        "scale": {
+          "label": "Pîvana Island",
+          "description": "Island ji bilî pîvana navrûyê jî pîvan bike."
+        },
+        "clock_size": {
+          "label": "Mezinahiya demjimêrê",
+          "description": "Mezinahiya nivîsê di Island a kompakt de. Demjimêra fireh jî li gorî wê dipîve."
+        },
+        "clock_seconds": {
+          "label": "Çirkeyan nîşan bide",
+          "description": "Çirkeyan têxe demjimêra Island."
+        },
+        "clock_offset": {
+          "label": "Cihê demjimêra kompakt",
+          "description": "Bi nirxeke neyînî demjimêrê bilind bike an bi nirxeke erênî nizm bike."
+        },
+        "expanded_clock_offset": {
+          "label": "Cihê demjimêra fireh",
+          "description": "Demjimêra salnameyê bilind an nizm bike. Nirxên neyînî wê bilind dikin."
+        },
+        "calendar_labels": {
+          "label": "Etîketên rojên hefteyê",
+          "description": "Tîpên yekane an navên rojan ên kurtkirî hilbijêre. Stûn rêkûpêk dimînin."
+        },
+        "preview-monitors": {
+          "all": "Hemû monîtor",
+          "focused": "Monîtora di fokusê de"
+        },
+        "track_preview_monitor": {
+          "label": "Monîtora pêşdîtina stranan",
+          "description": "Hilbijêre ku sernavên stranên nû li ku derkevin. Monîtora di fokusê de ekrana ku dema stran diguhere di fokusê de ye bi kar tîne."
+        },
+        "bluetooth_preview_monitor": {
+          "label": "Monîtora pêşdîtina girêdana Bluetooth",
+          "description": "Hilbijêre ku piştî girêdanê xelekeya bataryayê li ku derkeve. Hişyariyên bataryaya kêm û hûrguliyên li ser hatinê li ser her Islandê dimînin."
+        },
+        "track_preview_seconds": {
+          "label": "Pêşdîtina stranê (çirk)",
+          "description": "Sernavê strana nû çiqas xuya dimîne. Ji bo girtina pêşdîtinên sernavan 0 bike."
+        },
+        "paused_media_seconds": {
+          "label": "Medyaya rawestandî veşêre piştî (çirk)",
+          "description": "Piştî rawestandinê nîşanderê kompakt demeke kurt bihêle. Ji bo yekser veşartinê 0 bike; kontrolên li ser hatinê berdest dimînin."
+        },
+        "bluetooth_preview_seconds": {
+          "label": "Pêşdîtina bataryaya Bluetooth (çirk)",
+          "description": "Piştî girêdanê xelekeya bataryayê demeke kurt nîşan bide. Tenê ji bo li ser hatinê 0 bike; bataryayên kêm xuya dimînin."
+        },
+        "reveal_on_track_change": {
+          "label": "Dema stran diguhere nîşan bide",
+          "description": "Di dema pêşdîtina stranê de Islanda bixweber veşartî demeke kurt nîşan bide."
+        },
+        "media_artwork_size": {
+          "label": "Mezinahiya bergê",
+          "description": "Mezinahiya bergê di kontrolên medyayê yên firehkirî de. Bergên mezintir kartê bilindtir dikin."
+        },
+        "volume_bar_height": {
+          "label": "Stûriya darika dengê",
+          "description": "Bilindahiya nîşanderê dengê bi pîkselan."
+        },
+        "volume_show_percentage": {
+          "label": "Ji sedî dengê nîşan bide",
+          "description": "Nirxa dengê li ser darikê nîşan bide."
         }
       }
     },
@@ -1083,6 +1517,7 @@
         "output-volume": "Asta dengê deranê"
       },
       "options": {
+        "cupertino": "macOS",
         "output": "Deran"
       },
       "settings": {
@@ -1103,6 +1538,10 @@
         },
         "warning-color": {
           "label": "Rengê hişyariyê"
+        },
+        "workspace-scroll-wrap": {
+          "label": "Gerandina qada xebatê bizivirîne",
+          "description": "Dema çalakiyên guhertina qada xebatê yên vê widgetê bi kar tînî, ji qada xebatê ya dawî derbasî ya yekem bibe û berevajî."
         }
       },
       "types": {
@@ -1129,6 +1568,777 @@
     },
     "window": {
       "title": "Sazkarî"
+    },
+    "hyprland-placement": {
+      "title": "Rêzikên cihgirtina sepanan",
+      "hint": "Sepanekê hilbijêre, cihgirtina wê saz bike, paşê rêzikê çalak bike. Guhertin li pencereyên nû vebûyî tên sepandin; pencereyên heyî li cihê xwe dimînin. Rêzikên lihevhatî yên paşê mîhengên berê derbas dikin.",
+      "active": "Çalak",
+      "disabled": "Neçalak",
+      "reset": "Rêzikê nû bike",
+      "enabled": "Rêzika cihgirtinê çalak bike",
+      "mode": "Veke wekî",
+      "workspace": "Li qada xebatê veke",
+      "workspace_number": "Hejmara qada xebatê",
+      "workspace_name": "Navê qada xebatê",
+      "workspace-name-hint": "Tîp, hejmar, xal, xêzik an binxêzik",
+      "workspace_silent": "Fokusê li qada xebatê ya niha bihêle",
+      "floating-hint": "Mezinahî, cih û pînkirin li pencereyên herikbar tên sepandin. Ji bo ku bandor bikin, li jor Herikbar hilbijêre. Pîvan û guhertin pîkselên mantiqî bi kar tînin.",
+      "size_managed": "Mezinahiya destpêkê saz bike",
+      "width": "Firehiya destpêkê",
+      "height": "Bilindahiya destpêkê",
+      "position": "Cihê destpêkê",
+      "x": "Guhertina asoyî ji keviya çepê ya monîtorê",
+      "y": "Guhertina stûnî ji keviya jorîn a monîtorê",
+      "pin": "Li hemû qadên xebatê yên heman monîtorê xuya ye",
+      "invalid-app": "Ev rêzik ne çalak e: çîneke sepanê ya rast a 1–512 tîpan binivîse.",
+      "invalid-workspace": "Ev rêzik ne çalak e: navên qadên xebatê divê 1–128 tîp, hejmar, xal, xêzik an binxêzik bin.",
+      "kHyprlandPlacementModes-inherit": "Neguherî",
+      "kHyprlandPlacementModes-floating": "Herikbar",
+      "kHyprlandPlacementModes-tiled": "Kaşîkirî",
+      "kHyprlandPlacementWorkspaces-inherit": "Neguherî",
+      "kHyprlandPlacementWorkspaces-number": "Qada xebatê ya bi hejmar",
+      "kHyprlandPlacementWorkspaces-named": "Qada xebatê ya bi nav",
+      "kHyprlandPlacementWorkspaces-special": "Qada xebatê ya taybet",
+      "kHyprlandPlacementPositions-inherit": "Neguherî",
+      "kHyprlandPlacementPositions-center": "Navîn",
+      "kHyprlandPlacementPositions-offset": "Guhertina monîtorê"
+    },
+    "hyprland-tiling": {
+      "layout_managed": "Rêxistina xwerû birêve bibe",
+      "layout_managed-description": "Rêxistina kaşîkirî ya xwerû bi rêya Noctalia hilbijêre. Ji bo vegerandina veavakirina Hyprland a xwe vemirîne.",
+      "layout": "Rêxistina xwerû",
+      "layout-description": "Li qadên xebatê yên bê rêzika rêxistinê ya xwe tê sepandin. Guhertina rêxistinê pencereyên kaşîkirî yên heyî ji nû ve rêz dike.",
+      "dwindle_managed": "Dwindle birêve bibe",
+      "dwindle_managed-description": "Van mîhengên Dwindle bi rêya Noctalia bisepîne. Ji bo vegerandina veavakirina Hyprland a xwe vemirîne.",
+      "preserve_split": "Alîyê parvekirinê biparêze",
+      "preserve_split-description": "Dema konteynerek şiklê xwe diguherîne, parvekirinên heyî asoyî an stûnî bihêle.",
+      "smart_split": "Ber bi nîşanderê ve parve bike",
+      "smart_split-description": "Cihê nîşanderê bi kar bîne da ku çep, rast, jor an jêr hilbijêre. Herwiha aliyên parvekirinê yên heyî diparêze.",
+      "force_split": "Aliyê pencereya nû",
+      "force_split-description": "Aliyê parvekirina nû hilbijêre. Parvekirina li gorî nîşanderê pêşî ye.",
+      "use_active_for_splits": "Pencereya di fokusê de parve bike",
+      "use_active_for_splits-description": "Pencereya di fokusê de wekî armanca parvekirinê tercîh bike. Girtî: pencereya di bin nîşanderê de bi kar bîne.",
+      "default_split_ratio": "Rêjeya parvekirinê ya xwerû",
+      "default_split_ratio-description": "1 du nîvên wekhev dide. Bandor li parvekirinên nû dike; rêjeyên heyî naguherin.",
+      "split_width_multiplier": "Sînorê alîyê parvekirinê",
+      "split_width_multiplier-description": "Nirxên bilindtir parvekirina jor/jêr, yên nizmtir parvekirina tenişt bi tenişt tercîh dikin.",
+      "split_bias": "Rêje li ser",
+      "split_bias-description": "Hilbijêre ka rêjeya parvekirinê mezinahiya aliyê çep/jor an pencereya heyî diyar dike.",
+      "master_managed": "Rêxistina Master birêve bibe",
+      "master_managed-description": "Van mîhengên rêxistina Master bi rêya Noctalia bisepîne. Ji bo vegerandina veavakirina Hyprland a xwe vemirîne.",
+      "master_factor": "Pişka qada sereke",
+      "master_factor-description": "Beşa rêxistinê ya ku qada sereke digire. 0,55 tê wateya ji sedî 55.",
+      "master_orientation": "Cihê qada sereke",
+      "master_orientation-description": "Qada sereke li keviyekê an li navendê bi cih bike.",
+      "new_status": "Rola pencereya nû",
+      "new_status-description": "Pencereyên nû bike sereke, li stûkê zêde bike, an rola pencereya di fokusê de mîras bigire.",
+      "new_on_active": "Cihgirtina pencereya nû",
+      "new_on_active-description": "Pencereyên nû berî an piştî pencereya di fokusê de bi cih bike, an mîhenga destpêk/dawiya stûkê bi kar bîne.",
+      "new_on_top": "Li destpêka stûkê zêde bike",
+      "new_on_top-description": "Dema cihgirtin rêza stûkê bi kar tîne, pencereyên nû li şûna dawiyê li destpêkê bi cih bike.",
+      "special_managed": "Qadên xebatê yên taybet birêve bibe",
+      "special_managed-description": "Van mîhengên qadên xebatê yên taybet bi rêya Noctalia bisepîne. Ji bo vegerandina veavakirina Hyprland a xwe vemirîne.",
+      "close_special_on_empty": "Dema vala be bigire",
+      "close_special_on_empty-description": "Dema pencereya wê ya dawî tê rakirin qada xebatê ya taybet veşêre.",
+      "hide_special_on_workspace_change": "Dema qada xebatê diguhere veşêre",
+      "hide_special_on_workspace_change-description": "Dema qada xebatê ya asayî ya monîtorê diguhere qada xebatê ya taybet veşêre.",
+      "special_fallthrough": "Fokus di nav pencereyên herikbar re",
+      "special_fallthrough-description": "Dema qada taybet tenê pencereyên herikbar hene, destûrê bide fokusa li qada xebatê ya asayî.",
+      "warp_on_special": "Dema veguhastinê nîşanderê bilivîne",
+      "warp_on_special-description": "Dema qada xebatê ya taybet tê veguhastin, here pencereya dawî ya di fokusê de. Her tim mîhenga bê-bazdana nîşanderê derbas dike.",
+      "kHyprlandTilingLayouts-dwindle": "Dwindle",
+      "kHyprlandTilingLayouts-master": "Master",
+      "kHyprlandTilingLayouts-scrolling": "Gerok",
+      "kHyprlandTilingLayouts-monocle": "Monocle",
+      "kHyprlandMasterOrientations-left": "Çep",
+      "kHyprlandMasterOrientations-right": "Rast",
+      "kHyprlandMasterOrientations-top": "Jor",
+      "kHyprlandMasterOrientations-bottom": "Jêr",
+      "kHyprlandMasterOrientations-center": "Navîn",
+      "kHyprlandMasterStatuses-master": "Sereke",
+      "kHyprlandMasterStatuses-slave": "Stûk",
+      "kHyprlandMasterStatuses-inherit": "Rola di fokusê de mîras bigire",
+      "kHyprlandMasterPositions-none": "Rêza stûkê bi kar bîne",
+      "kHyprlandMasterPositions-before": "Berî pencereya di fokusê de",
+      "kHyprlandMasterPositions-after": "Piştî pencereya di fokusê de",
+      "follow-pointer": "Li pey nîşanderê here",
+      "left-top": "Çep / jor",
+      "right-bottom": "Rast / jêr",
+      "directional": "Aliyê çep / jor",
+      "current": "Pencereya heyî",
+      "never": "Qet",
+      "enabled": "Dema bazdana nîşanderê destûr e",
+      "force": "Her tim"
+    },
+    "hyprland-behaviour": {
+      "focus_managed": "Fokusê birêve bibe",
+      "focus_managed-description": "Van mîhengên fokusê bi rêya Noctalia bisepîne. Vemirandin veavakirina Hyprland a te vedigerîne.",
+      "focus_mode": "Moda fokusê",
+      "focus_mode-description": "Hilbijêre ka li ser hatin û klîk çawa bandor li fokusê dikin. Di moda cuda de klîk fokusa klavyeyê naguherîne.",
+      "focus_threshold": "Sînorê tevgera fokusê",
+      "focus_threshold-description": "Kêmtirîn tevgera nîşanderê berî ku fokus li pey mişkê here, bi pîkselên mantiqî.",
+      "mouse_refocus": "Di nav pencereyê de dîsa fokus bike",
+      "mouse_refocus-description": "Destûrê bide ku tevgera di nav pencereyê de fokusa klavyeyê vegerîne. Girtî: fokus tenê dema derbasî pencereyeke din dibe diguhere.",
+      "resize_managed": "Mezinkirinê birêve bibe",
+      "resize_managed-description": "Van mîhengên mezinkirinê bi rêya Noctalia bisepîne. Vemirandin veavakirina Hyprland a te vedigerîne.",
+      "resize_on_border": "Ji sînorên pencereyê mezin bike",
+      "resize_on_border-description": "Ji bo mezinkirinê sînorê pencereyê bikişîne.",
+      "border_grab": "Qada girtina sînor a zêde",
+      "border_grab-description": "Qada mezinkirinê li derveyî her sînorî fireh bike, bi pîkselên mantiqî.",
+      "border_cursor": "Nîşanderê mezinkirinê nîşan bide",
+      "border_cursor-description": "Dema li ser sînorê mezinkirinê yî şiklê nîşanderê biguherîne.",
+      "snap_managed": "Pêvebûnê birêve bibe",
+      "snap_managed-description": "Van mîhengên pêvebûnê bi rêya Noctalia bisepîne. Vemirandin veavakirina Hyprland a te vedigerîne.",
+      "snap_enabled": "Pencereyên herikbar pêve bike",
+      "snap_enabled-description": "Dema tevdigerin an mezin dibin pencereyên herikbar pêve bike.",
+      "snap_window_distance": "Dûrahiya pêvebûna pencereyê",
+      "snap_window_distance-description": "Dûrahiya çalakbûnê ji pencereyên cîran, bi pîkselên mantiqî. Sifir pêvebûna pencereyê digire.",
+      "snap_monitor_distance": "Dûrahiya pêvebûna keviya ekranê",
+      "snap_monitor_distance-description": "Dûrahiya çalakbûnê ji keviyên ekranê, bi pîkselên mantiqî. Sifir pêvebûna keviyê digire.",
+      "snap_border_overlap": "Sînorên pêvebûyî li ser hev bin",
+      "snap_border_overlap-description": "Destûrê bide ku sînorên pencereyên cîran ên pêvebûyî li ser hev bin.",
+      "snap_respect_gaps": "Valahiyên pencereyan biparêze",
+      "snap_respect_gaps-description": "Dema pêvebûnê valahiyên hundir û derve yên sazkirî biparêze.",
+      "activation_managed": "Çalakkirina sepanan birêve bibe",
+      "activation_managed-description": "Vê mîhenga çalakkirinê bi rêya Noctalia bisepîne. Vemirandin veavakirina Hyprland a te vedigerîne.",
+      "focus_on_activate": "Destûrê bide fokusa ku sepan dixwaze",
+      "focus_on_activate-description": "Dema sepanek çalakkirinê dixwaze bila fokusê bigire.",
+      "focus-click": "Ji bo fokusê klîk bike",
+      "focus-follow": "Fokus li pey mişkê diçe",
+      "focus-detached": "Li ser bê, ji bo fokusê klîk bike",
+      "focus-separate": "Fokusa cuda"
+    },
+    "displays": {
+      "title": "Mîhengên ekranê",
+      "description": "Çareserî, rêjeya nûkirinê, VRR, rêveberiya rengan û zivirandin ji bo her ekranê.",
+      "display": "Ekran",
+      "no-displays": "Hyprland ti ekranên girêdayî ranegihand.",
+      "refresh": "Ekranan nû bike",
+      "keep": "Guhertinan bihêle",
+      "revert": "Niha vegerîne",
+      "confirm": "Van mîhengên ekranê bihêlî? Guhertinên nepejirandî piştî 15 çirkan bixweber vedigerin.",
+      "staged": "Guhertin heta Bisepîne li bendê ne. Ji bo tomarkirinê di nav 15 çirkan de bipejirîne.",
+      "keep-current": "Ya niha bihêle",
+      "preferred": "Moda tercîhkirî",
+      "resolution": "Çareserî",
+      "refresh-rate": "Rêjeya nûkirinê",
+      "transform": "Zivirandin û wergerandin",
+      "vrr": "Rêjeya nûkirinê ya guherbar",
+      "vrr--2": "Siyaseta niha bihêle",
+      "vrr--1": "Li pey mîhenga giştî",
+      "vrr-0": "Girtî",
+      "vrr-1": "Her tim",
+      "vrr-2": "Tenê ekrana tije",
+      "vrr-3": "Lîstik û vîdyoyên ekrana tije",
+      "vrr-active": "VRR niha çalak e.",
+      "vrr-inactive": "VRR niha ne çalak e.",
+      "color-mode": "Rêveberiya rengan",
+      "bit-depth": "Kûrahiya bitan",
+      "sdr-brightness": "Ronahiya SDR di HDR de",
+      "sdr-saturation": "Têrbûna SDR di HDR de",
+      "hdr-hint": "HDR û derketina 10-bit piştgiriya ekran û ajokarê dixwazin. Pêşmîhengên HDR ceribandinî ne; ronahî û têrbûna SDR bandor li naveroka SDR di moda HDR de dikin.",
+      "apply": "Bisepîne û biceribîne",
+      "discard": "Guherandinan bavêje",
+      "use-config": "Veavakirina Hyprland bi kar bîne",
+      "transform-0": "Asayî",
+      "transform-1": "90° berevajî saetê",
+      "transform-2": "180°",
+      "transform-3": "270° berevajî saetê",
+      "transform-4": "Wergerandî",
+      "transform-5": "Wergerandî + 90°",
+      "transform-6": "Wergerandî + 180°",
+      "transform-7": "Wergerandî + 270°",
+      "cm-auto": "Bixweber",
+      "cm-srgb": "sRGB",
+      "cm-dcip3": "DCI-P3",
+      "cm-dp3": "Display P3",
+      "cm-adobe": "Adobe RGB",
+      "cm-wide": "Gama fireh (BT.2020)",
+      "cm-edid": "Rengên bingehîn ên ekranê (EDID)",
+      "cm-hdr": "HDR (ceribandinî)",
+      "cm-hdredid": "HDR bi rengên bingehîn ên EDID (ceribandinî)",
+      "layout-hint": "Ekranan bikişîne da ku li gorî maseya te bin. Keviyên nêzîk dikevin cihê xwe; danînên li ser hev tên betalkirin. Hemû guherandin heta Bisepîne li bendê dimînin.",
+      "identify": "Ekranan nas bike",
+      "position": "Cih",
+      "scale": "Pîvan"
+    },
+    "hyprland-input": {
+      "mouse_managed": "Mişk û nîşanderê birêve bibe",
+      "mouse_managed-description": "Van mîhengên nîşander û mişkê bisepîne. Ji bo vegerandina veavakirina Hyprland a xwe vemirîne.",
+      "pointer_sensitivity": "Leza nîşanderê",
+      "pointer_sensitivity-description": "Leza nîşanderê ji bo mişk û touchpadan eyar bike. Mîhengên Hyprland ên taybet bi amûrê pêşî ne.",
+      "pointer_acceleration": "Lezgirtina nîşanderê",
+      "pointer_acceleration-description": "Xwerûya amûrê, lezgirtina adaptîf an bersiveke domdar hilbijêre. Li mişk û touchpadan tê sepandin.",
+      "mouse_left_handed": "Bişkokên çepdestan",
+      "mouse_left_handed-description": "Bişkokên nîşanderê yên sereke û duyem biguherîne.",
+      "mouse_natural_scroll": "Gerandina xwezayî",
+      "mouse_natural_scroll-description": "Gerandina çerxa mişkê berevajî bike da ku naverok rasterast bilive.",
+      "mouse_scroll_factor": "Leza gerandina mişkê",
+      "mouse_scroll_factor-description": "Tevgera çerxa mişkê pîvan bike. Gerandina touchpadê kontrola xwe heye.",
+      "touchpad_managed": "Touchpadê birêve bibe",
+      "touchpad_managed-description": "Van mîhengên touchpadê bisepîne. Ji bo vegerandina veavakirina Hyprland a xwe vemirîne.",
+      "touchpad_natural_scroll": "Gerandina xwezayî",
+      "touchpad_natural_scroll-description": "Naverokê li aliyê tiliyên xwe bilivîne.",
+      "touchpad_scroll_factor": "Leza gerandina touchpadê",
+      "touchpad_scroll_factor-description": "Gerandina touchpadê serbixwe ji çerxa mişkê pîvan bike.",
+      "touchpad_tap_to_click": "Ji bo klîkê bitepîne",
+      "touchpad_tap_to_click-description": "Bi yek, du an sê tiliyan bitepîne da ku bêyî pêlkirina touchpadê klîk bikî.",
+      "touchpad_tap_and_drag": "Bitepîne û bikişîne",
+      "touchpad_tap_and_drag-description": "Bitepîne, paşê destdana duyem bigire da ku tiştekî bikişînî.",
+      "touchpad_drag_lock": "Kilîda kişandinê",
+      "touchpad_drag_lock-description": "Piştî rakirina tiliyê tepandin-kişandinê demeke kurt an heta tepandina din çalak bihêle.",
+      "touchpad_tap_map": "Nexşeya bişkokên tepandinê",
+      "touchpad_tap_map-description": "Bişkokên ku tepandinên bi yek, du û sê tiliyan dişînin hilbijêre.",
+      "touchpad_clickfinger": "Klîk li gorî hejmara tiliyan",
+      "touchpad_clickfinger-description": "Ji bo klîkên fîzîkî hejmara tiliyan bi kar bîne: yek çep, du rast, sê navîn. Ji bo qadên klîkê vemirîne.",
+      "touchpad_middle_emulation": "Klîka navîn teqlîd bike",
+      "touchpad_middle_emulation-description": "Bişkokên çep û rast bi hev re pêl bike da ku klîka navîn bişîne.",
+      "touchpad_disable_while_typing": "Dema nivîsandinê neçalak bike",
+      "touchpad_disable_while_typing-description": "Dema nivîsandinê têketina touchpadê ya bêhemdî asteng bike.",
+      "touchpad_drag_fingers": "Kişandina bi gelek tiliyan",
+      "touchpad_drag_fingers-description": "Li ser touchpadên piştgirîkirî bi sê an çar tiliyan bikişîne.",
+      "HyprlandPointerAcceleration-default": "Xwerûya amûrê",
+      "HyprlandPointerAcceleration-adaptive": "Adaptîf",
+      "HyprlandPointerAcceleration-flat": "Rast (bê lezgirtin)",
+      "HyprlandDragLock-off": "Girtî",
+      "HyprlandDragLock-timeout": "Bi demdorê",
+      "HyprlandDragLock-sticky": "Heta tepandina din",
+      "HyprlandTapMap-default": "Xwerûya amûrê",
+      "HyprlandTapMap-lrm": "Çep → Rast → Navîn",
+      "HyprlandTapMap-lmr": "Çep → Navîn → Rast",
+      "HyprlandDragFingers-off": "Girtî",
+      "HyprlandDragFingers-three": "Sê tilî",
+      "HyprlandDragFingers-four": "Çar tilî",
+      "presets": "Pêşmîhengên têketinê",
+      "presets-description": "Tercîhên nîşander û gerandinê ji profîlên xuyabûna ronî/tarî serbixwe dimînin. Pêşmîheng îstîsnayên sepanan, birêvebirina gerokan, rawestandina fokusê û mîhengên li ser hatina keviyan diparêzin.",
+      "subtle": "Nerm",
+      "playful": "Lîstikî",
+      "reduced": "Tevgera kêmkirî",
+      "tilt": "Xwar bike",
+      "rotate": "Bizivirîne",
+      "stretch": "Dirêj bike",
+      "none": "Sabit",
+      "focus-follow": "Li pey mîhenga fokusa mişkê",
+      "focus-never": "Qet",
+      "focus-always": "Li pey armanca li ser hatina keviyan",
+      "cursor_managed": "Nîşanderê dînamîk birêve bibe",
+      "cursor_managed-description": "Bandorên nîşanderê serbixwe ji profîlên xuyabûnê bisepîne. Vemirandin mîhengên nîşanderê yên heyî vedigerîne.",
+      "cursor_enabled": "Bandorên nîşanderê çalak bike",
+      "cursor_enabled-description": "Pêveka dynamic-cursors çalak bike.",
+      "cursor_mode": "Tevgera nîşanderê",
+      "cursor_mode-description": "Xwarbûn, zivirîn, dirêjbûn an nîşanderekî sabit hilbijêre.",
+      "tilt_limit": "Leza bersiva xwarbûnê",
+      "tilt_limit-description": "Leza tevgerê ya ji bo xwarbûna tevahî. Nirxên bilindtir bandorê nermtir dikin.",
+      "tilt_angle": "Xwarbûna herî zêde",
+      "tilt_angle-description": "Goşeya herî mezin bi pileyan li her alî.",
+      "cursor_window": "Nermkirina tevgerê",
+      "cursor_window-description": "Pencereya demê bi mîlîçirkeyan ji bo xwarbûn û dirêjbûnê. Nirxên bilindtir nermtir lê kêmtir yekser in.",
+      "stretch_limit": "Leza bersiva dirêjbûnê",
+      "stretch_limit-description": "Leza tevgerê ya ji bo dirêjbûna tevahî. Nirxên bilindtir bandorê nermtir dikin.",
+      "rotate_length": "Dirêjahiya zivirînê",
+      "rotate_length-description": "Dirêjahiya nîşanderê ya simulekirî bi pîkselan. Nîşanderê dirêjtir hêdîtir dizivire.",
+      "shake_enabled": "Bihejîne da ku bibînî",
+      "shake_enabled-description": "Dema tu nîşanderê dihejînî wî mezin bike.",
+      "shake_threshold": "Sînorê hestiyariya hejandinê",
+      "shake_threshold-description": "Nirxên nizmtir hejandinê zûtir nas dikin.",
+      "shake_limit": "Mezinkirina herî zêde",
+      "shake_limit-description": "Mezinahiya herî mezin a nîşanderê wekî pirjimara mezinahiya asayî.",
+      "shake_timeout": "Dema mezinkirinê",
+      "shake_timeout-description": "Mîlîçirkeyên ku nîşander piştî hejandinê mezin dimîne.",
+      "scroll_managed": "Gerandina kînetîk birêve bibe",
+      "scroll_managed-description": "Mîhengên lezgirtina touchpadê serbixwe ji profîlên xuyabûnê bisepîne. Vemirandin veavakirina Lua ya te vedigerîne.",
+      "scroll_enabled": "Lezgirtinê çalak bike",
+      "scroll_enabled-description": "Piştî rakirina tiliyan gerandina touchpadê demeke kurt bidomîne.",
+      "scroll_decay": "Parastina lezgirtinê",
+      "scroll_decay-description": "Nirxên bilindtir gerandinê dirêjtir dikin; yên nizmtir zûtir radiwestînin.",
+      "scroll_multiplier": "Hêza gerandinê",
+      "scroll_multiplier-description": "Pêlkirina gerandinê pîvan bike.",
+      "scroll_cutoff": "Sînorê rawestandinê",
+      "scroll_cutoff-description": "Di bin vê lezê de lezgirtinê rawestîne. Nirxên bilindtir gerandinê zûtir diqedînin.",
+      "scroll_interval": "Navbera çarçoveyên lezgirtinê",
+      "scroll_interval-description": "Mîlîçirkeyên di navbera nûkirinên lezgirtinê de. Nirxên nizmtir pirtir nû dikin.",
+      "scroll_browser": "Gerandina xwerû ya gerokê bi kar bîne",
+      "scroll_browser-description": "Bila gerok lezgirtina xwe bi xwe birêve bibin.",
+      "scroll_stop_click": "Bi klîkê rawestîne",
+      "scroll_stop_click-description": "Dema klîk dibe lezgirtina berdewam rawestîne.",
+      "scroll_stop_focus": "Dema fokus diguhere rawestîne",
+      "scroll_stop_focus-description": "Dema fokusa klavyeyê diguhere lezgirtinê rawestîne.",
+      "scroll_stop_target": "Dema armanc diguhere rawestîne",
+      "scroll_stop_target-description": "Dema nîşander derbasî rûyekî din ê gerbar dibe lezgirtinê rawestîne.",
+      "scroll_excluded": "Sepanên derxistî",
+      "scroll_excluded-description": "Çîneyên pencereyê yên rast bi bêhnokan veqetandî, wekî steam an org.telegram.desktop. Ev gerandina xwe ya xwerû diparêzin.",
+      "edge_managed": "Li ser hatina keviyan birêve bibe",
+      "edge_managed-description": "Şandina ji valahiyên derve yên monîtorê ber bi pencereyên cîran ve saz bike. Mîhengên şandinê yên heyî yên daran û panelan tên parastin.",
+      "edge_enabled": "Li ser hatina keviyan çalak bike",
+      "edge_enabled-description": "Bila pencereyên cîran têketina nîşanderê ji valahiyên derve yên monîtorê werbigirin.",
+      "edge_left": "Keviya çep",
+      "edge_left-description": "Şandinê li ser keviya çep çalak bike.",
+      "edge_right": "Keviya rast",
+      "edge_right-description": "Şandinê li ser keviya rast çalak bike.",
+      "edge_top": "Keviya jor",
+      "edge_top-description": "Şandinê li ser keviya jor çalak bike.",
+      "edge_bottom": "Keviya jêr",
+      "edge_bottom-description": "Şandinê li ser keviya jêr çalak bike.",
+      "edge_distance": "Dûrahiya çalakbûnê",
+      "edge_distance-description": "Dûrahiya herî zêde ji keviya ekranê bi pîkselan. Sifir hemû valahiya derve bi kar tîne.",
+      "edge_focus": "Fokusa klavyeyê",
+      "edge_focus-description": "Hilbijêre ka li ser hatina keviyan fokusa klavyeyê diguherîne. Rêzikên fokusa pencereyê hîn derbas dibin.",
+      "edge_click": "Klîkan bişîne",
+      "edge_click-description": "Klîkan ji valahiyên derve bişîne pencereya cîran.",
+      "edge_scroll": "Gerandinê bişîne",
+      "edge_scroll-description": "Bûyerên gerandinê ji valahiyên derve bişîne pencereya cîran.",
+      "keyboard_managed": "Mîhengên klavyeyê birêve bibe",
+      "keyboard_managed-description": "Van tercîhên giştî yên klavyeyê bi kar bîne. Ji bo vegerandina veavakirina Hyprland a xwe vemirîne. Rêzikên li gorî amûrê dikarin wan derbas bikin.",
+      "keyboard_layout": "Rêxistina klavyeyê ya yekem",
+      "keyboard_layout-description": "Ziman an guhertoyekê hilbijêre. Ev rêxistina destpêkê ye; yên vebijarkî bi rêza jêrîn diguherin.",
+      "keyboard_layout_2": "Rêxistina klavyeyê ya duyem",
+      "keyboard_layout_2-description": "Rêxistin an guhertoya duyem a vebijarkî. Ji bo rakirinê Tune hilbijêre.",
+      "keyboard_layout_3": "Rêxistina klavyeyê ya sêyem",
+      "keyboard_layout_3-description": "Rêxistin an guhertoya sêyem a vebijarkî. Ji bo rakirinê Tune hilbijêre.",
+      "keyboard_layout_4": "Rêxistina klavyeyê ya çarem",
+      "keyboard_layout_4-description": "Rêxistin an guhertoya çarem a vebijarkî. Rêxistinên dubare tên paşguhkirin.",
+      "layout-none": "Tune",
+      "layout-search": "Li ziman û guhertoyan bigere…",
+      "layout-not-found": "Ti rêxistina klavyeyê ya lihevhatî tune.",
+      "keyboard_layout_switch": "Kurteriya guhertina rêxistinê",
+      "keyboard_layout_switch-description": "Di nav rêxistinên sazkirî de bigere. Tune guhertinê ji widgeta rêxistina klavyeyê an kurteriyên heyî re dihêle.",
+      "keyboard_repeat_rate": "Leza dubarekirina bişkokan",
+      "keyboard_repeat_rate-description": "Dubarekirin di çirkeyê de dema bişkok tê girtin. 0 dubarekirinê digire.",
+      "keyboard_repeat_delay": "Derengmayîna dubarekirinê",
+      "keyboard_repeat_delay-description": "Mîlîçirkeyên berî ku bişkoka girtî dest bi dubarekirinê bike.",
+      "keyboard_caps_lock": "Tevgera Caps Lock",
+      "keyboard_caps_lock-description": "Caps Lock biparêze, wê ji Escape an Ctrl re veguhezîne, bişkokan biguherîne an wê vemirîne.",
+      "keyboard_num_lock": "Num Lock di destpêkê de",
+      "keyboard_num_lock-description": "Dema Hyprland klavyeyê saz dike Num Lock çalak bike, di nav de destpêk, ji nû ve girêdan û barkirina mîhengan.",
+      "LayoutSwitch-none": "Tune",
+      "LayoutSwitch-alt-shift": "Alt + Shift",
+      "LayoutSwitch-ctrl-shift": "Ctrl + Shift",
+      "LayoutSwitch-super-space": "Super + Valahî",
+      "LayoutSwitch-alt-space": "Alt + Valahî",
+      "LayoutSwitch-both-shifts": "Herdu bişkokên Shift",
+      "CapsLock-normal": "Caps Lock a asayî",
+      "CapsLock-escape": "Caps Lock → Escape",
+      "CapsLock-control": "Caps Lock → Ctrl",
+      "CapsLock-swap-escape": "Caps Lock û Escape biguherîne",
+      "CapsLock-swap-control": "Caps Lock û Ctrl biguherîne",
+      "CapsLock-disabled": "Neçalak",
+      "gestures_managed": "Tevgerên touchpadê birêve bibe",
+      "gestures_managed-description": "Van tevgerên qadên xebatê û nêrîna giştî bi kar bîne. Ji bo vegerandina mîhengên tevgerên Hyprland a xwe vemirîne.",
+      "workspace_gesture_enabled": "Di navbera qadên xebatê de bişemitîne",
+      "workspace_gesture_enabled-description": "Bi şemitandineke asoyî qada xebatê biguherîne, bêyî girtina bişkokên guherker.",
+      "workspace_gesture_fingers": "Tiliyên şemitandina qadan",
+      "workspace_gesture_fingers-description": "Ji bo şemitandinên asoyî yên qadên xebatê sê an çar tiliyan hilbijêre.",
+      "workspace_gesture_sensitivity": "Hestiyariya şemitandina qadan",
+      "workspace_gesture_sensitivity-description": "Nirxên bilindtir bi heman tevgera tiliyan dûrtir diçin. 1 hestiyariya asayî ye.",
+      "workspace_gesture_distance": "Dûrahiya şemitandina qadan",
+      "workspace_gesture_distance-description": "Tevgera touchpadê bi pîkselan ji bo derbasbûneke tevahî, berî pirjimarkerê hestiyariyê.",
+      "workspace_gesture_invert": "Aliyê şemitandina qadan berevajî bike",
+      "workspace_gesture_invert-description": "Bandora şemitandina çep û rast biguherîne.",
+      "overview_gesture_enabled": "Ji bo Hyprspace bişemitîne",
+      "overview_gesture_enabled-description": "Piştî şemitandineke stûnî ya temam nêrîna giştî veke an bigire. Pêveka Hyprspace pêwîst e.",
+      "overview_gesture_fingers": "Tiliyên nêrîna giştî",
+      "overview_gesture_fingers-description": "Ji bo tevgera nêrîna giştî sê an çar tiliyan hilbijêre.",
+      "overview_gesture_direction": "Aliyê şemitandina nêrîna giştî",
+      "overview_gesture_direction-description": "Ji bo guhertina nêrîna giştî şemitandina jor an jêr hilbijêre.",
+      "overview_gesture_distance": "Dûrahiya herî kêm a şemitandina nêrîna giştî",
+      "overview_gesture_distance-description": "Tevgera touchpadê ya pêwîst bi pîkselan. Şemitandinên kurt an betalkirî tiştekî nakin.",
+      "gesture-three": "Sê tilî",
+      "gesture-four": "Çar tilî",
+      "gesture-up": "Ber bi jor bişemitîne",
+      "gesture-down": "Ber bi jêr bişemitîne"
+    },
+    "hyprland-editor": {
+      "theme-profiles": "Profîlên temayê",
+      "profile-dark-built-in": "Soft Glass Tarî (navxweyî)",
+      "profile-light-built-in": "Soft Glass Ronî (navxweyî)",
+      "profile-auto-status": "Guhertina xuyabûnê ya bixweber vekirî ye.",
+      "profile-manual-status": "Xuyabûna destî çalak e. Guhertinên temayê xuyabûna ku te hilbijartiye diparêzin.",
+      "profile-light-active": "Profîla moda ronî:",
+      "profile-dark-active": "Profîla moda tarî:",
+      "profile-fallback": "Ev profîla tomarkirî tune ye an nederbasdar e. Heta ku tu profîleke berdest hilbijêrî mîhengên xuyabûnê yên destî tên bikaranîn.",
+      "profile-switching-hint": "Li pey moda ronî/tarî ya ku Noctalia diyar dike here, di nav de guhertinên demsazkirî. Profîlên navxweyî cam, şêlûbûn, sî û ronahiyê eyar dikin û rêxistin û tevgerê diparêzin. Ji bo rawestandina guhertinê û sererastkirinê xuyabûna niha bihêle. Rêzikên sepanan serbixwe dimînin.",
+      "profile-keep-current": "Xuyabûna niha bihêle û sererast bike",
+      "profile-follow-mode": "Li pey moda ronî/tarî here",
+      "profile-light_profile": "Dema Noctalia ronî ye",
+      "profile-dark_profile": "Dema Noctalia tarî ye",
+      "profile-unavailable": "Ne berdest e",
+      "profile-preset-hint": "Hilbijartina xuyabûnekê an betalkirin guhertina bixweber radiwestîne. \"Xuyabûna niha tomar bike\" profîla çalak digire. Guhertinê ji Profîlên temayê bidomîne.",
+      "app-rules": "Rêzikên xuyabûna sepanan",
+      "app-rules-hint": "Bi çîneyeke sepanê ya rast re li hev bîne. Sepanên dixebitin nasnameyên herî pêbawer didin; nasnameyên sepanên sazkirî li jêr dikarin bên sererastkirin. Rêzik li pey \"Xuyabûna pencereyan birêve bibe\" diçin. Rêzikên bi qad ji rêzikên hemû pencereyan pêşîtir in. Hyprglass Girtî ji Vekirî pêşîtir e. Vekirî destûrê dide bandorên standard lê bandorên bi giştî girtî venake.",
+      "pick-app": "Sepanekê hilbijêre",
+      "search-app": "Li sepanên dixebitin û sazkirî bigere…",
+      "running-app": "Dixebite",
+      "no-apps": "Ti sepana lihevhatî tune. Tu dikarî çîneya sepanê bi destan binivîsî.",
+      "app-class": "Çîneya sepanê ya rast, wekî kitty",
+      "add-app": "Çîneya sepanê zêde bike",
+      "rule-inherit": "Mîras bigire",
+      "rule-on": "Vekirî",
+      "rule-off": "Girtî",
+      "rule-all": "Hemû pencere",
+      "rule-floating": "Tenê pencereyên herikbar",
+      "rule-fullscreen": "Tenê pencereyên ekrana tije",
+      "rule-scope": "Bisepîne li",
+      "rule-preset-terminal": "Termînal",
+      "rule-preset-readable": "Xwendbar",
+      "rule-preset-fullscreen": "Ekrana tije",
+      "rule-preset-dialog": "Diyalog",
+      "rule-opacity": "Nezelaliya pencereyê derbas bike",
+      "rule-enabled": "Rêzikê çalak bike",
+      "rule-active_opacity": "Nezelaliya çalak",
+      "rule-inactive_opacity": "Nezelaliya neçalak",
+      "rule-fullscreen_opacity": "Nezelaliya ekrana tije",
+      "rule-rounding": "Nîvçapa goşeyan derbas bike",
+      "rule-blur": "Şêlûbûna standard",
+      "rule-shadow": "Sî",
+      "rule-dim": "Tarîkirina neçalak",
+      "rule-animations": "Anîmasyon",
+      "rule-glass": "Hyprglass",
+      "rule-reset": "Xuyabûna sepanê nû bike",
+      "rule-remove": "Derbaskirinên rêzikê rake",
+      "blur_focus_managed": "Şêlûbûn û fokusê kesane bike",
+      "blur_focus_managed-description": "Rengê şêlûbûnê, tarîkirin û şiklê goşeyan kontrol bike. Vemirandin van hûrguliyan ji veavakirina Hyprland a te vedigerîne.",
+      "rounding_power": "Şiklê goşeyan",
+      "rounding_power-description": "2 goşeyên girover dide. Nirxên bilindtir şiklê squircle çêdikin. Nîvçapeke goşeyê ya ne sifir pêwîst e.",
+      "fullscreen_opacity": "Nezelaliya ekrana tije",
+      "fullscreen_opacity-description": "Nezelaliya pencereyên ekrana tije; 1 wan bi tevahî nezelal dihêle.",
+      "dim_inactive": "Pencereyên neçalak tarî bike",
+      "dim_inactive-description": "Pencereyên bê fokus tarî bike da ku bal bikişîne ser pencereya çalak.",
+      "dim_strength": "Hêza tarîkirina neçalak",
+      "dim_strength-description": "Pencereyên neçalak çiqas tarî bibin. Sifir ronahiya wan naguherîne.",
+      "dim_special": "Tarîkirina qadên taybet",
+      "dim_special-description": "Dema qadeke xebatê ya taybet vekirî ye mayîna sermaseyê tarî bike.",
+      "blur_brightness": "Ronahiya şêlûbûnê",
+      "blur_brightness-description": "Ronahiya şêlûbûna standard a Hyprland. Hyprglass kontrolên şêlûbûnê yên xwe hene.",
+      "blur_contrast": "Kontrasta şêlûbûnê",
+      "blur_contrast-description": "Kontrasta rengên li pişt pencereyên nîvzelal.",
+      "blur_vibrancy": "Zindîtiya şêlûbûnê",
+      "blur_vibrancy-description": "Têrbûna rengan di paşxaneya şêlû de zêde bike.",
+      "blur_noise": "Gewrbûna şêlûbûnê",
+      "blur_noise-description": "Dengê hûr li paşxaneyên şêlû zêde bike. Nirxên biçûk teşeyeke nazik didin.",
+      "blur_popups": "Pencereyên derdikevin şêlû bike",
+      "blur_popups-description": "Li pişt menû û pencereyên derdikevin ên nîvzelal şêlû bike.",
+      "blur_popups_ignorealpha": "Sînorê zelaliya pencereyên derdikevin",
+      "blur_popups_ignorealpha-description": "Di bin vê nezelaliya pîkselê de şêlûbûnê derbas bike da ku keviyên zelal paqij bimînin.",
+      "blur_special": "Qadên xebatê yên taybet şêlû bike",
+      "blur_special-description": "Sermaseya li pişt qadên xebatê yên taybet şêlû bike. Ev karê nîşandanê zêde dike.",
+      "reset-blur-focus": "Şêlûbûn û fokusê nû bike",
+      "soft-glass": "Soft Glass",
+      "decoration_effects_managed": "Sî û ronahiyê kesane bike",
+      "decoration_effects_managed-description": "Hûrguliyên siya pencereyê û ronahiya hundir kontrol bike. Vemirandin van hûrguliyan ji veavakirina Hyprland a te vedigerîne.",
+      "shadow_color": "Rengê siyê",
+      "shadow_color-description": "Rengekî sabit an rengekî ku li pey temaya Noctalia diçe hilbijêre.",
+      "shadow_inactive_color": "Rengê siya neçalak",
+      "shadow_inactive_color-description": "Rengê siya çalak bi kar bîne an ji bo pencereyên bê fokus rengekî cuda hilbijêre.",
+      "shadow_opacity": "Nezelaliya siyê",
+      "shadow_opacity-description": "Nezelaliya siyan li ser pencereyên di fokusê de.",
+      "shadow_inactive_opacity": "Nezelaliya siya neçalak",
+      "shadow_inactive_opacity-description": "Nezelaliya siyan li ser pencereyên bê fokus.",
+      "shadow_power": "Kêmbûna siyê",
+      "shadow_power-description": "Nirxên bilindtir dihêlin ku sî ji pencereyê dûr dibe zûtir winda bibe.",
+      "shadow_sharp": "Siyên tûj",
+      "shadow_sharp-description": "Li şûna kêmbûna nerm keviyên hişk bi kar bîne.",
+      "shadow_offset_x": "Guhertina asoyî ya siyê",
+      "shadow_offset_x-description": "Siyê ber bi çep an rast bilivîne, bi pîkselan.",
+      "shadow_offset_y": "Guhertina stûnî ya siyê",
+      "shadow_offset_y-description": "Siyê ber bi jor an jêr bilivîne, bi pîkselan.",
+      "shadow_scale": "Pîvana siyê",
+      "shadow_scale-description": "Siyê li gorî pencereyê pîvan bike; 1 mezinahiya tevahî ye.",
+      "glow_enabled": "Ronahiya hundir",
+      "glow_enabled-description": "Di nav keviyên pencereyê de ronahiyeke nerm zêde bike.",
+      "glow_range": "Mezinahiya ronahiyê",
+      "glow_range-description": "Ronahî çiqas dikeve nav pencereyê, bi pîkselan.",
+      "glow_power": "Kêmbûna ronahiyê",
+      "glow_power-description": "Nirxên bilindtir ronahiyê nêzîkî keviya pencereyê dihêlin.",
+      "glow_color": "Rengê ronahiyê",
+      "glow_color-description": "Ji bo şopandina rengê temayê Seretayî hilbijêre, an rengekî sabit hilbijêre.",
+      "glow_inactive_color": "Rengê ronahiya neçalak",
+      "glow_inactive_color-description": "Rengê ronahiya çalak bi kar bîne an ji bo pencereyên bê fokus rengekî cuda hilbijêre.",
+      "glow_opacity": "Nezelaliya ronahiyê",
+      "glow_opacity-description": "Hêza ronahiyê li ser pencereyên di fokusê de.",
+      "glow_inactive_opacity": "Nezelaliya ronahiya neçalak",
+      "glow_inactive_opacity-description": "Hêza ronahiyê li ser pencereyên bê fokus. Sifir ronahiya neçalak vedimirîne.",
+      "match-active": "Bi rengê çalak re li hev bîne",
+      "reset-shadow-glow": "Sî û ronahiyê nû bike",
+      "enabled": "Pêşmîhengên xuyabûnê",
+      "enabled-description": "Xuyabûnekê tomar bike an vegere nirxên xwerû yên sazkirî.",
+      "curve": "Kevana hevpar",
+      "curve-description": "Ji aliyê derbasbûnên ku nermkirina hevpar mîras digirin ve tê bikaranîn.",
+      "opening_curve": "Kevana vekirinê",
+      "opening_curve-description": "Nermkirin ji bo pencereyên nû û derketina wan.",
+      "closing_curve": "Kevana girtinê",
+      "closing_curve-description": "Nermkirin dema pencere tên girtin.",
+      "moving_curve": "Kevana tevgerê",
+      "moving_curve-description": "Nermkirin ji bo livandin û mezinkirina pencereyan.",
+      "workspace_curve": "Kevana qadên xebatê",
+      "workspace_curve-description": "Nermkirin ji bo derbasbûnên qadên xebatê û qadên taybet.",
+      "opening_duration": "Dema vekirinê",
+      "opening_duration-description": "Dem bi leza 1×. Pirjimarkerê leza giştî jî tê sepandin.",
+      "closing_duration": "Dema girtinê",
+      "closing_duration-description": "Dem bi leza 1×. Pirjimarkerê leza giştî jî tê sepandin.",
+      "moving_duration": "Dema tevgerê",
+      "moving_duration-description": "Dem bi leza 1×. Pirjimarkerê leza giştî jî tê sepandin.",
+      "workspace_duration": "Dema qadên xebatê",
+      "workspace_duration-description": "Dem bi leza 1×. Pirjimarkerê leza giştî jî tê sepandin.",
+      "glass_managed": "Hyprglass birêve bibe",
+      "glass_managed-description": "Dema Hyprglass barkirî ye van mîhengan bisepîne. Vemirandin veavakirina Lua ya te vedigerîne.",
+      "glass_enabled": "Bandorên camê",
+      "glass_enabled-description": "Bandora pencereyê ya Hyprglass çalak bike.",
+      "glass_light": "Cama ronî",
+      "glass_light-description": "Temaya cama ronî bi kar bîne.",
+      "glass_layers": "Cam li ser panelan",
+      "glass_layers-description": "Li ser rûyên tebeqeyê yên lihevhatî camê çalak bike, li gorî rêzikên navqadê yên di pêvekê de sazkirî.",
+      "glass_blur": "Şêlûbûna camê",
+      "glass_blur-description": "Hêza şêlûbûna paşxaneya camê.",
+      "glass_refraction": "Şikestina ronahiyê",
+      "glass_refraction-description": "Xeşimandin di nav keviyên camê re.",
+      "glass_chromatic": "Veqetandina rengan",
+      "glass_chromatic-description": "Aberasyona kromatîk li dora keviyên camê.",
+      "glass_lens": "Xeşimandina lensê",
+      "glass_lens-description": "Rêjeya xeşimandina mîna lensê.",
+      "glass_opacity": "Nezelaliya camê",
+      "glass_opacity-description": "Hêza rûyê camê.",
+      "glass_fresnel": "Ronîdana keviyan",
+      "glass_fresnel-description": "Hêza ronîdanê li nêzî keviyên camê.",
+      "glass_specular": "Biriqîn",
+      "glass_specular-description": "Hêza biriqînên ronîdayî.",
+      "cursor_managed": "Dynamic Cursors birêve bibe",
+      "cursor_managed-description": "Dema Dynamic Cursors barkirî ye van mîhengan bisepîne. Vemirandin veavakirina Lua ya te vedigerîne.",
+      "cursor_enabled": "Bandorên nîşanderê dînamîk",
+      "cursor_enabled-description": "Dema nîşander dilive wî anîme bike.",
+      "cursor_stretch": "Nîşanderê dirêj bike",
+      "cursor_stretch-description": "Dema tevgerê dirêj bike. Ji bo xwarbûnê vemirîne.",
+      "cursor_shake": "Bihejîne da ku nîşanderê bibînî",
+      "cursor_shake-description": "Dema tê hejandin nîşanderê mezin bike.",
+      "cursor_shake_limit": "Mezinahiya herî zêde ya hejandinê",
+      "cursor_shake_limit-description": "Mezinkirina herî zêde ya nîşanderê dema hejandinê.",
+      "overview_managed": "Hyprspace birêve bibe",
+      "overview_managed-description": "Dema Hyprspace barkirî ye van mîhengan bisepîne. Vemirandin veavakirina Lua ya te vedigerîne.",
+      "overview_bottom": "Nêrîna giştî li jêr",
+      "overview_bottom-description": "Panela qadên xebatê li binê nêrîna giştî bi cih bike.",
+      "overview_hide_layers": "Di nêrîna giştî de panelan veşêre",
+      "overview_hide_layers-description": "Dema nêrîna giştî vekirî ye rûyên top û overlay veşêre.",
+      "overview_height": "Bilindahiya panela nêrîna giştî",
+      "overview_height-description": "Bilindahiya panela qadên xebatê bi pîkselan.",
+      "overview_preset": "Nêrîna giştî ya Soft Glass",
+      "overview_preset-description": "Rengên temayê yên nîvzelal, ronîkirineke zelal a qada çalak û tevgera nerm bi kar bîne. Bilindahî, cih û xuyabûna tebeqeyên panelê diparêze.",
+      "overview_style_managed": "Xuyabûna nêrîna giştî kesane bike",
+      "overview_style_managed-description": "Reng, valahî, şêlûbûn û tevgerê birêve bibe. Vemirandin van nirxan ji veavakirina Lua ya te vedigerîne.",
+      "overview_centered": "Pêşdîtinên qadan bike navend",
+      "overview_centered-description": "Li şûna ber bi çep ve rêzkirinê pêşdîtinan bike navend.",
+      "overview_blur": "Paşxaneyên nêrîna giştî şêlû bike",
+      "overview_blur-description": "Li pişt paşxaneyên nîvzelal ên panel û qadên xebatê şêlû bike.",
+      "overview_margin": "Valahiya pêşdîtinan",
+      "overview_margin-description": "Valahiya li dora pêşdîtinên qadên xebatê, bi pîkselan.",
+      "overview_panel_border": "Stûriya sînorê panelê",
+      "overview_panel_border-description": "Stûrî bi pîkselan. Sifir sînor vedişêre.",
+      "overview_workspace_border": "Stûriya sînorê qadan",
+      "overview_workspace_border-description": "Stûriya sînorê her pêşdîtina qada xebatê bi pîkselan.",
+      "overview_drag_opacity": "Nezelaliya pencereya tê kişandin",
+      "overview_drag_opacity-description": "Nezelaliya pencereyan dema di nêrîna giştî de tên kişandin.",
+      "overview_duration": "Dema anîmasyona nêrîna giştî",
+      "overview_duration-description": "Nirxên nizmtir zûtir in. Sifir li pey demkirina anîmasyona pencereyê diçe; kevanên yayê fîzîka xwe bi kar tînin. Cara din a ku tu nêrîna giştî vedikî derbas dibe.",
+      "overview_panel_color": "Rengê panela nêrîna giştî",
+      "overview_panel_color-description": "Rolên temayê li pey moda ronî/tarî diçin. Ji bo paşxaneya camê şemitoka nezelaliyê ya jêrîn bi kar bîne.",
+      "overview_panel_opacity": "Nezelaliya panelê",
+      "overview_panel_opacity-description": "Zelaliya paşxaneya panela nêrîna giştî.",
+      "overview_panel_border_opacity": "Nezelaliya sînorê panelê",
+      "overview_panel_border_opacity-description": "Zelaliya sînorê panelê.",
+      "overview_active_background_opacity": "Nezelaliya paşxaneya qada çalak",
+      "overview_active_background_opacity-description": "Hêza rengdana paşxaneya qada hilbijartî.",
+      "overview_inactive_background_opacity": "Nezelaliya paşxaneya qadên din",
+      "overview_inactive_background_opacity-description": "Hêza rengdana paşxaneya qadên din.",
+      "overview_active_border_opacity": "Nezelaliya sînorê qada çalak",
+      "overview_active_border_opacity-description": "Hêza ronîkirina sînorê qada hilbijartî.",
+      "overview_inactive_border_opacity": "Nezelaliya sînorê qadên din",
+      "overview_inactive_border_opacity-description": "Hêza sînorên qadên din.",
+      "overview_panel_border_color": "Rengê sînorê panelê",
+      "overview_panel_border_color-description": "Reng û nezelaliya sînorê panelê.",
+      "overview_active_background": "Paşxaneya qada çalak",
+      "overview_active_background-description": "Rengê paşxaneyê û nezelaliya pêşdîtina qada hilbijartî.",
+      "overview_inactive_background": "Paşxaneyên qadên din",
+      "overview_inactive_background-description": "Rengê paşxaneyê û nezelaliya pêşdîtinên din.",
+      "overview_active_border": "Sînorê qada çalak",
+      "overview_active_border-description": "Ji bo ronîkirina qada hilbijartî rengê seretayî yê temayê bi kar bîne.",
+      "overview_inactive_border": "Sînorên qadên din",
+      "overview_inactive_border-description": "Reng û nezelaliya sînorên li dora pêşdîtinên din.",
+      "undo": "Guhertina dawî betal bike",
+      "reset-all": "Hemû derbaskirinên xuyabûnê nû bike",
+      "minimal": "Hindik",
+      "soft": "Nerm",
+      "expressive": "Bi îfade",
+      "profile-name": "Navê pêşmîhengê",
+      "save-profile": "Xuyabûna niha tomar bike",
+      "delete-profile": "Jê bibe",
+      "reset-windows": "Xuyabûna pencereyan nû bike",
+      "reset-animations": "Anîmasyonan nû bike",
+      "reset-glass": "Hyprglass nû bike",
+      "reset-plugins": "Nîşander û nêrîna giştî nû bike",
+      "easing": "Nermkirin",
+      "curve-hint": "Yek ji destikan bikişîne an koordînatan sererast bike. Asoyî: dem; stûnî: pêşveçûn (−1 heta 2). Pêşdîtinên yayê tevgerê nîşan didin.",
+      "preview": "Pêşdîtinê bilîze / rawestîne",
+      "stiffness": "Hişkiya yayê",
+      "damping": "Kêmkirina lerizîna yayê",
+      "reset-curve": "Vê kevanê nû bike"
+    },
+    "hyprland-workspaces": {
+      "title": "Qadên xebatê",
+      "hint": "Ji bo hebên qadên xebatê yên Noctalia nav û sembolan diyar bike, û tayînkirinên monîtorê yên Hyprland û qadên domdar birêve bibe. Têketin di destpêkê de neçalak in. Etîket divê di widgeta qadên xebatê de bên çalakkirin.",
+      "target-hint": "Hejmara qadekê (1–1000) an qadeke bi nav wekî name:work hilbijêre.",
+      "target-placeholder": "1 an name:work",
+      "add": "Qada xebatê zêde bike",
+      "invalid-target": "Hejmareke ji 1 heta 1000 bi kar bîne, an name: û li pey wê tîp, hejmar, binxêzik an xêzik.",
+      "duplicate": "Ji bo vê qada xebatê berê têketinek heye.",
+      "enabled": "Vê qada xebatê birêve bibe",
+      "label": "Navê qada xebatê",
+      "label-placeholder": "Nav an hejmara kompozîtorê bi kar bîne",
+      "icon": "Îkon (sembol an emojî)",
+      "icon-placeholder": "Vebijarkî, wekî ★ an ♥",
+      "monitor": "Monîtora tercîhkirî",
+      "automatic": "Veavakirina Hyprland bi kar bîne",
+      "disconnected": "Neghêdayî",
+      "persistent": "Dema vala be xuya bihêle",
+      "monitor-hint": "Qadên xebatê yên domdar heta vala bin jî dimînin û xuya dibin. Monîtora tercîhkirî dema qad tê afirandin derbas dibe; qadên domdar jî diçin wê derê. Dema ev têketin tê neçalakkirin mîhengên Lua yên heyî vedigerin.",
+      "restore": "Derbaskirinan rake / veavakirinê vegerîne"
+    },
+    "hyprland-keybinds": {
+      "title": "Kurteriyên Hyprland",
+      "hint": "Kombînasyoneke bişkokan tomar bike an binivîse, çalakiyekê hilbijêre, paşê wê çalak bike. Girêdanên nakok neçalak dimînin heta ku tu biryar bidî wan biguherînî. Noctalia derbaskirinan ji pela Lua ya te cuda tomar dike.",
+      "add": "Kurterî zêde bike",
+      "refresh": "Nakokiyan nû bike",
+      "new": "Kurteriya nû",
+      "enabled": "Kurteriyê çalak bike",
+      "record": "Kurteriyê tomar bike",
+      "recording": "Kurteriyekê pêl bike · Escape betal dike",
+      "record-unavailable": "Tomarkirina kurteriyan li ser vê kompozîtorê ne berdest e. Kombînasyonê li jêr binivîse.",
+      "chord-placeholder": "SUPER+SHIFT+F",
+      "action": "Çalakî",
+      "action-workspace": "Qada xebatê biguherîne",
+      "action-move_workspace": "Pencereyê bibe qada xebatê",
+      "action-focus_direction": "Pencereya li aliyekî fokus bike",
+      "action-move_direction": "Pencereyê ber bi aliyekî ve bilivîne",
+      "action-fullscreen": "Ekrana tije veke/bigire",
+      "action-floating": "Moda herikbar veke/bigire",
+      "action-close": "Pencereyê bigire",
+      "action-overview": "Hyprspace veke/bigire",
+      "action-exec": "Sepan an fermanê bide destpêkirin",
+      "left": "Çep",
+      "right": "Rast",
+      "up": "Jor",
+      "down": "Jêr",
+      "workspace-hint": "Hejmara qadê, name:work, e+1 (ya din), e-1 (ya berê) an previous (ya dawî ya serdankirî).",
+      "command-hint": "Fermana ku dema ev kurterî tê pêlkirin dixebite. Hilbijartina vê çalakiyê wê naxebitîne.",
+      "command-placeholder": "kitty an firefox",
+      "repeating": "Dema tê girtin dubare bike",
+      "replace_existing": "Kurteriya Lua ya heyî biguherîne",
+      "replace-hint": "Guhertin bandorê li girêdanên asayî yên di submapa xwerû de dike. Neçalakkirina vê kurteriyê girêdana Lua vedigerîne. Rakirina derbaskirinan mîhengên bingehîn ên Noctalia vedigerîne. Nakokiyên bişkokên fîzîkî û submapan sererastkirina veavakirina Lua dixwazin.",
+      "invalid-chord": "Kurteriyekê tomar bike an kombînasyoneke derbasdar binivîse. Bişkokên tîp û hejmaran Super, Ctrl an Alt dixwazin.",
+      "invalid-action": "Çalakiyek û qadeke xebatê, aliyek an fermaneke derbasdar hilbijêre.",
+      "duplicate": "Kurteriyeke din a çalak a Noctalia vê kombînasyonê bi kar tîne. Yek ji wan biguherîne an neçalak bike.",
+      "unavailable": "Girêdanên Hyprland nayên xwendin. Ev kurterî heta ku ew berdest nebin nayê sepandin.",
+      "conflict": "Ev kombînasyon di Hyprland de berê hatiye girêdan. Bişkokeke din hilbijêre an li jêr guhertinê çalak bike.",
+      "physical-conflict": "Girêdaneke bişkoka fîzîkî van guherkeran bi kar tîne. Noctalia nikare bi ewlehî diyar bike ka ew li hev dikevin; wê girêdanê di Lua de sererast bike an guherkerên din hilbijêre.",
+      "submap-conflict": "Ev kombînasyon di submapekê de tê bikaranîn. Noctalia wê naguherîne; kombînasyoneke din hilbijêre an di Lua de sererast bike.",
+      "active": "Çalak. Piştî ji nû ve barkirina kompozîtorê nakokî dîsa tên kontrolkirin.",
+      "disabled": "Neçalak. Dema amade be vê kurteriyê çalak bike.",
+      "restore": "Derbaskirinan rake / veavakirinê vegerîne"
+    },
+    "startup-apps": {
+      "title": "Sepanên destpêkê",
+      "hint": "Sepanên ku dema têketinê vedibin hilbijêre. Guhertin di têketina din de derbas dibin; ji nû ve destpêkirina Noctalia wan dîsa venake. Derengmayîn dema Noctalia cara yekem di danişînê de dest pê dike dest pê dikin.",
+      "add-app": "Sepaneke sazkirî zêde bike",
+      "add-command": "Fermanê zêde bike",
+      "pick-app": "Sepana destpêkê hilbijêre",
+      "search-app": "Li sepanên sazkirî bigere…",
+      "no-apps": "Ti sepana lihevhatî tune",
+      "new": "Têketina destpêkê ya nû",
+      "enabled": "Di têketinê de dest pê bike",
+      "label": "Nav",
+      "label-placeholder": "Navê vebijarkî",
+      "app": "Sepana sazkirî",
+      "command": "Ferman",
+      "command-placeholder": "Fermana ku di têketinê de dixebite",
+      "delay": "Derengmayîna destpêkê",
+      "restore": "Derbaskirinan rake / veavakirinê vegerîne",
+      "restore-hint": "Rakirina derbaskirinan her têketinê ji pela veavakirinê vedigerîne. Ji bo neçalakkirinê \"Di têketinê de dest pê bike\" vemirîne.",
+      "command-hint": "Ferman bi rêya şêla te dixebitin. Fermana tevahî, bi argumanan re, binivîse.",
+      "scope-hint": "Ev lîste têketinên li vir hatine zêdekirin birêve dibe. Sepanên ku berê ji aliyê Hyprland, karûbarên pergalê an amûrên din ên destpêkê ve tên destpêkirin li wir tên birêvebirin.",
+      "missing-app": "Ev sepan êdî ne sazkirî ye. Berî çalakkirina vê têketinê sepaneke din hilbijêre.",
+      "invalid-command": "Fermaneke ne vala binivîse (heta 4096 tîpan).",
+      "invalid-kind": "Cureyê têketinê nenas e. Vê têketinê rake û ji nû ve biafirîne.",
+      "next-login": "Ji bo têketina din çalak e.",
+      "disabled": "Neçalak."
+    },
+    "backups": {
+      "title": "Paşeke",
+      "hint": "Sazkirina xwe tomar bike, guhertinan binirxîne û beşên hilbijartî vegerîne.",
+      "automatic": "Paşekeya bixweber",
+      "review": "Vegerandinê binirxîne:",
+      "reverted": "Ceribandina ekranê qediya. Ti mîheng nehatin vegerandin.",
+      "restored": "Mîheng hatin vegerandin. Sazkirina te ya berê di paşekeyeke bixweber de hat tomarkirin.",
+      "display-confirm": "Ji bo vegerandina beşên hilbijartî van mîhengên ekranê di nav 15 çirkan de bihêle. Wekî din ceribandina ekranê bixweber vedigere.",
+      "keep": "Bihêle û vegerîne",
+      "no-changes": "Ev paşeke bi mîhengên hilbijartî re li hev e.",
+      "undo-hint": "Vegerandin pêşî paşekeyeke bixweber a mîhengên te yên niha tomar dike. Beşên nehilbijartî wekî xwe dimînin.",
+      "test-displays": "Berî vegerandinê ekranan biceribîne",
+      "restore": "Beşên hilbijartî vegerîne",
+      "display-unavailable": "Ceribandina ekranê ne berdest e an ceribandineke din dixebite. Wê biqedîne an hilbijartina Ekranan rake.",
+      "cancel": "Betal bike / vegerîne",
+      "changes": "guhertinên ji bo nirxandinê",
+      "before": "Niha:",
+      "after": "Paşeke:",
+      "more": "Guhertinên zêdetir nîşan bide",
+      "name": "Navê paşekeyê",
+      "save": "Paşekeyê tomar bike",
+      "refresh": "Lîsteyê nû bike",
+      "undo": "Pêşdîtina betalkirinê",
+      "saved": "Paşeke hat tomarkirin.",
+      "scope-hint": "Paşeke li cihê xwe tên tomarkirin û mîhengên Noctalia digirin. Pelên wêneyên paşxaneyê, pêvekên sazkirî, veşartiyên li derveyî mîhengan û pelên Hyprland ên bi destan nivîsandî ne tê de ne. Veavakirina Noctalia ya bi destan nivîsandî divê hîn bi beşên hilbijartî re li hev be.",
+      "empty": "Hîn ti paşekeya tomarkirî tune.",
+      "choose": "Paşekeyekê hilbijêre",
+      "search": "Li paşekeyan bigere",
+      "sections": "Beşên ji bo vegerandinê",
+      "preview": "Pêşdîtina vegerandinê",
+      "appearance": "Xuyabûn û wêneyê paşxaneyê",
+      "bars": "Dar û Dynamic Island",
+      "input": "Têketin û tevger",
+      "displays": "Ekran",
+      "shortcuts": "Kurterî",
+      "workspaces": "Qadên xebatê û tevgera pencereyan",
+      "session": "Danişîn û sepanên destpêkê",
+      "other": "Mîhengên din (pêvek, enerjî û ewlehî jî tê de)",
+      "display-review-changed": "Mîhengên ekranê yên tomarkirî guherîn. Ceribandina ekranê hat vegerandin; paşekeyê dîsa pêşdîtin bike.",
+      "review-updated": "Nirxandin piştî eyarkirina ekranê hat nûkirin. Berî ku van mîhengan bihêlî nirxan kontrol bike."
+    },
+    "default-apps": {
+      "title": "Sepanên xwerû",
+      "hint": "Sepanên ku sermaseya te ji bo girêdan û pelan bi kar tîne hilbijêre. Guhertin dema tu sepanekê hilbijêrî derbas dibin.",
+      "refresh": "Nû bike",
+      "undo": "Guhertina sepanê betal bike",
+      "undone": "Mîhenga berê hat vegerandin.",
+      "saved": "Sepana xwerû hat nûkirin.",
+      "unset": "Nehatiye diyarkirin",
+      "mixed": "Sepanên cuda",
+      "search": "Li sepanên sazkirî bigere",
+      "no-apps": "Ti sepaneke sazkirî piştgiriya vê kategoriyê nake.",
+      "browser": "Geroka webê",
+      "browser-hint": "Girêdanên webê û belgeyên HTML.",
+      "email": "E-name",
+      "email-hint": "Girêdanên e-nameyê (mailto).",
+      "files": "Rêveberê pelan",
+      "files-hint": "Peldank.",
+      "text": "Edîtora nivîsê",
+      "text-hint": "Belgeyên nivîsa sade.",
+      "pdf": "Nîşanderê PDF",
+      "pdf-hint": "Belgeyên PDF.",
+      "terminal": "Termînala Noctalia",
+      "terminal-hint": "Ji aliyê Noctalia ve ji bo sepanên termînalê û fermanên pêvekan tê bikaranîn. Kurteriyên Hyprland ên heyî fermanên xwe yên sazkirî diparêzin.",
+      "automatic": "Dîtina bixweber",
+      "unavailable": "Ne berdest:",
+      "no-terminals": "Ti termînaleke sazkirî ya piştgirîkirî nehat dîtin.",
+      "terminal-saved": "Termînala Noctalia hat nûkirin.",
+      "test-terminal": "Termînalê veke",
+      "undo-terminal": "Guhertina termînalê betal bike",
+      "terminal-failed": "Termînal nehat vekirin. Kontrol bike ka hîn sazkirî ye."
     }
   },
   "setup-wizard": {
