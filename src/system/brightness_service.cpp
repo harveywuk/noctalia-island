@@ -5,6 +5,7 @@
 #include "core/inotify/inotify.h"
 #include "core/log.h"
 #include "core/process/process.h"
+#include "dbus/logind/logind_session.h"
 #include "dbus/system_bus.h"
 #include "ipc/ipc_arg_parse.h"
 #include "ipc/ipc_service.h"
@@ -367,32 +368,7 @@ namespace {
   }
 
   sdbus::ObjectPath resolveSessionPath(sdbus::IConnection& connection) {
-    try {
-      auto managerProxy = sdbus::createProxy(connection, kLogindBusName, sdbus::ObjectPath{"/org/freedesktop/login1"});
-
-      if (const char* sessionId = std::getenv("XDG_SESSION_ID"); sessionId != nullptr && sessionId[0] != '\0') {
-        try {
-          sdbus::ObjectPath sessionPath;
-          managerProxy->callMethod("GetSession")
-              .onInterface(kLogindManagerInterface)
-              .withArguments(std::string(sessionId))
-              .storeResultsTo(sessionPath);
-          return sessionPath;
-        } catch (const sdbus::Error& e) {
-          kLog.debug("failed to resolve logind session via XDG_SESSION_ID={}: {}", sessionId, e.what());
-        }
-      }
-
-      sdbus::ObjectPath sessionPath;
-      managerProxy->callMethod("GetSessionByPID")
-          .onInterface(kLogindManagerInterface)
-          .withArguments(static_cast<std::uint32_t>(::getpid()))
-          .storeResultsTo(sessionPath);
-      return sessionPath;
-    } catch (const sdbus::Error& e) {
-      kLog.warn("failed to resolve logind session: {}", e.what());
-      return sdbus::ObjectPath{"/org/freedesktop/login1/session/auto"};
-    }
+    return logind::resolveSessionPath(connection).value_or(sdbus::ObjectPath{"/org/freedesktop/login1/session/auto"});
   }
 
   std::optional<int> parseTrailingInteger(std::string_view input) {
