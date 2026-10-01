@@ -118,8 +118,14 @@ private:
   void applyLabelMaxWidth(bool honorAssignedBox);
 
   void ensureBadge();
+  // Icon-only buttons draw their glyph at no less than 60% of the control height (Tabler glyphs
+  // fill about 70% of their em box), so a close or
+  // overflow button reads at the same weight as the toolbar icons around it.
+  void applyIconOnlyGlyphFloor();
 
   Glyph* m_glyph = nullptr;
+  float m_requestedGlyphSize = 0.0F;
+  float m_appliedGlyphSize = 0.0F;
   Label* m_label = nullptr;
   Flex* m_badge = nullptr;
   Label* m_badgeLabel = nullptr;

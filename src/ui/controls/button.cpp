@@ -10,6 +10,7 @@
 #include "ui/palette.h"
 #include "ui/style.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -298,13 +299,35 @@ void Button::setFontSize(float size) {
   ensureLabel();
   m_label->setFontSize(size);
   if (m_glyph != nullptr) {
+    m_requestedGlyphSize = size;
+    m_appliedGlyphSize = size;
     m_glyph->setGlyphSize(size);
   }
 }
 
 void Button::setGlyphSize(float size) {
   ensureGlyph();
+  m_requestedGlyphSize = size;
+  m_appliedGlyphSize = size;
   m_glyph->setGlyphSize(size);
+}
+
+void Button::applyIconOnlyGlyphFloor() {
+  if (m_glyph == nullptr) {
+    return;
+  }
+  const bool glyphOnly = m_label == nullptr || !m_label->visible();
+  const float floor = glyphOnly && minHeight() > 0.0F ? std::round(minHeight() * 0.6F) : 0.0F;
+  // Glyphs that never had a size requested use Glyph's default body size.
+  const float requested = m_requestedGlyphSize > 0.0F ? m_requestedGlyphSize : Style::fontSizeBody;
+  const float target = std::max(requested, floor);
+  if (m_appliedGlyphSize <= 0.0F && target == requested) {
+    return;
+  }
+  if (target != m_appliedGlyphSize) {
+    m_appliedGlyphSize = target;
+    m_glyph->setGlyphSize(target);
+  }
 }
 
 void Button::setControlHeight(float height) {
@@ -746,6 +769,7 @@ void Button::applyLabelMaxWidth(bool honorAssignedBox) {
 }
 
 void Button::doLayout(Renderer& renderer) {
+  applyIconOnlyGlyphFloor();
   const bool useCurrentSize = arrangingByLayout() || !sizeAssignedByLayout();
   const float assignedWidth = useCurrentSize ? width() : 0.0F;
   const float assignedHeight = useCurrentSize ? height() : 0.0F;
@@ -857,6 +881,7 @@ void Button::doLayout(Renderer& renderer) {
 }
 
 LayoutSize Button::doMeasure(Renderer& renderer, const LayoutConstraints& constraints) {
+  applyIconOnlyGlyphFloor();
   // Measuring reports intrinsic size; the assigned box is last pass's and would cap it.
   applyLabelMaxWidth(/*honorAssignedBox=*/false);
   return measureByLayout(renderer, constraints);

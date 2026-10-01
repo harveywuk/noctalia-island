@@ -590,7 +590,7 @@ std::unique_ptr<Flex> HomeTab::create() {
     auto btn = ui::button({
         .text = showLabels ? std::optional<std::string>{label} : std::nullopt,
         .glyph = shortcut->displayIcon(),
-        .glyphSize = Style::fontSizeTitle * 1.35F * scale,
+        .glyphSize = Style::fontSizeTitle * 1.75F * scale,
         .contentAlign = showLabels ? ButtonContentAlign::Start : ButtonContentAlign::Center,
         .minHeight = 0.0F,
         .padding = Style::spaceSm * scale,
@@ -994,7 +994,7 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
         continue;
       }
       if (showLabels) {
-        pad.glyph->setGlyphSize(Style::fontSizeTitle * 1.35F * scale);
+        pad.glyph->setGlyphSize(Style::fontSizeTitle * 1.75F * scale);
       } else {
         const float dynamicGlyphSize = std::clamp(cellSide * 0.28F, 22.0F * scale, 44.0F * scale);
         pad.glyph->setGlyphSize(dynamicGlyphSize);
@@ -1536,7 +1536,7 @@ void HomeTab::syncScaledFonts() {
     if (pad.glyph != nullptr) {
       // Icon-only glyphs are sized from cell side in doLayout.
       if (m_config == nullptr || m_config->config().controlCenter.showShortcutLabels) {
-        pad.glyph->setGlyphSize(Style::fontSizeTitle * 1.35F * s);
+        pad.glyph->setGlyphSize(Style::fontSizeTitle * 1.75F * s);
       }
     }
   }

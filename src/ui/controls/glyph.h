@@ -27,6 +27,7 @@ public:
   void measure(Renderer& renderer);
 
   [[nodiscard]] float baselineOffset() const noexcept { return m_baselineOffset; }
+  [[nodiscard]] float glyphSize() const noexcept { return m_logicalFontSize; }
 
 private:
   void doLayout(Renderer& renderer) override;

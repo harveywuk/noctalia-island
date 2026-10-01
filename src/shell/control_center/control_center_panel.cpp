@@ -41,7 +41,7 @@ namespace {
   void configureIslandAction(Button& button, float scale) {
     if (button.variant() != ButtonVariant::Destructive)
       button.setVariant(ButtonVariant::Tab);
-    button.setGlyphSize(18.0F * scale);
+    button.setGlyphSize(21.0F * scale);
     button.setRadius(Style::scaledRadiusLg(scale));
   }
 

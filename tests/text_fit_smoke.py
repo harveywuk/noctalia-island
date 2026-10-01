@@ -20,9 +20,11 @@ PASSES = [
     ('de-1.5x', 'de', 1.5, False),
     ('en-1.5x', 'en', 1.5, False),
 ]
-# NOCTALIA_TEXT_FIT_LANGS=ru,fr,ja replaces the stress passes with one 1x pass per language.
+# NOCTALIA_TEXT_FIT_LANGS=ru,fr,ja replaces the stress passes with one pass per language, at
+# NOCTALIA_TEXT_FIT_SCALE (default 1).
 if os.environ.get('NOCTALIA_TEXT_FIT_LANGS'):
-    PASSES = PASSES[:1] + [(lang, lang, 1.0, True)
+    _scale = float(os.environ.get('NOCTALIA_TEXT_FIT_SCALE', '1'))
+    PASSES = PASSES[:1] + [(lang, lang, _scale, _scale == 1.0)
                            for lang in os.environ['NOCTALIA_TEXT_FIT_LANGS'].split(',') if lang]
 
 TEXT_FIT = re.compile(r"text-fit: ellipsized '(.*)' \(budget")

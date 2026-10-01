@@ -188,5 +188,40 @@ int main() {
     return 1;
   }
 
+  // Icon-only buttons draw their glyph at no less than 60% of the control height, whether or not
+  // a smaller size was requested; labelled buttons keep the requested size.
+  const auto glyphSizeAfterLayout = [&renderer](Button& b) {
+    b.arrange(renderer, LayoutRect{.x = 0.0F, .y = 0.0F, .width = 40.0F, .height = 40.0F});
+    return b.glyph() == nullptr ? -1.0F : b.glyph()->glyphSize();
+  };
+  Button close;
+  close.setGlyph("close");
+  close.setGlyphSize(Style::fontSizeCaption);
+  close.setMinHeight(32.0F);
+  Button unset;
+  unset.setGlyph("chevron-left");
+  unset.setMinHeight(32.0F);
+  Button large;
+  large.setGlyph("home");
+  large.setGlyphSize(24.0F);
+  large.setMinHeight(32.0F);
+  Button labelled;
+  labelled.setGlyph("home");
+  labelled.setGlyphSize(Style::fontSizeCaption);
+  labelled.setText("Home");
+  labelled.setMinHeight(32.0F);
+  const float closeSize = glyphSizeAfterLayout(close);
+  const float unsetSize = glyphSizeAfterLayout(unset);
+  const float largeSize = glyphSizeAfterLayout(large);
+  const float labelledSize = glyphSizeAfterLayout(labelled);
+  if (!near(closeSize, 19.0F) || !near(unsetSize, 19.0F) || !near(largeSize, 24.0F)
+      || !near(labelledSize, Style::fontSizeCaption)) {
+    std::println(
+        stderr, "button_layout_test: icon floor gave close {} unset {} large {} labelled {}", closeSize, unsetSize,
+        largeSize, labelledSize
+    );
+    return 1;
+  }
+
   return 0;
 }
