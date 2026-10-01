@@ -1299,6 +1299,7 @@ if build_tests
     'template_apply_notify',
     'template_hook_async',
     'template_hook_runner',
+    'palette_high_contrast',
     'theme_shell_mode',
     'time_format',
     'toplevel_thumbnail_capture',
