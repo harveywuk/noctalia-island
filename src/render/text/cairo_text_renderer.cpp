@@ -500,6 +500,7 @@ CairoTextRenderer::TextMetrics CairoTextRenderer::metricsFromLayout(float conten
   m.inkLeft = inkLeft;
   m.inkRight = inkRight;
   m.lineCount = pango_layout_get_line_count(layout);
+  m.ellipsized = pango_layout_is_ellipsized(layout) != 0;
   return m;
 }
 

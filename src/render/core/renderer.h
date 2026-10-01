@@ -57,6 +57,8 @@ struct TextMetrics {
   // consumer tell single-line from wrapped text from the measured result rather
   // than re-deriving it from the requested width/line budget.
   int lineCount = 0;
+  // True when the text did not fit its width/line budget and was ellipsized.
+  bool ellipsized = false;
 };
 
 class Renderer {

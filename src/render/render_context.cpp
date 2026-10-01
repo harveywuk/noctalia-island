@@ -266,7 +266,8 @@ TextMetrics RenderContext::measureTextScaled(
       .inkBottom = m.inkBottom,
       .inkLeft = m.inkLeft,
       .inkRight = m.inkRight,
-      .lineCount = m.lineCount
+      .lineCount = m.lineCount,
+      .ellipsized = m.ellipsized
   };
 }
 

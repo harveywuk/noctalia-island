@@ -394,6 +394,11 @@ void SettingsWindow::open(std::string context) {
     m_selectedGroup.clear();
     m_searchQuery.clear();
     m_contentScrollState.offset = 0.0F;
+    // "<section>/<group>" opens a page directly; see `noctalia config settings-pages`.
+    if (const auto slash = context.find('/'); slash != std::string::npos) {
+      m_selectedGroup = context.substr(slash + 1);
+      context.resize(slash);
+    }
     m_selectedSection = std::move(context);
   }
 

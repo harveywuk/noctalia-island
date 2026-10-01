@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <memory>
 
 namespace {
@@ -18,6 +19,16 @@ namespace {
   constexpr Logger kLog("label");
 
   constexpr const char* kMarqueeGap = " ";
+
+  // NOCTALIA_DEBUG_TEXT_FIT=1 logs every label whose text is ellipsized, so layout
+  // checks can find labels cut short by translations or UI scaling.
+  bool debugTextFit() {
+    static const bool enabled = [] {
+      const char* value = std::getenv("NOCTALIA_DEBUG_TEXT_FIT");
+      return value != nullptr && value[0] != '\0' && value[0] != '0';
+    }();
+    return enabled;
+  }
 
 } // namespace
 
@@ -551,6 +562,11 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
   // surface it loudly instead of letting it land as pixel drift.
   if (!fromArrange) {
     m_measuredLineCount = metrics.lineCount;
+    if (metrics.ellipsized && debugTextFit()) {
+      kLog.warn(
+          "text-fit: ellipsized '{}' (budget {:.0f}px, {} lines)", m_plainText, measureMaxWidth, effectiveMaxLines
+      );
+    }
   } else if (m_measuredLineCount > 0 && metrics.lineCount != m_measuredLineCount) {
     kLog.warn(
         "label '{}': line count changed between measure ({}) and arrange ({}); wrap budgets diverged", m_plainText,

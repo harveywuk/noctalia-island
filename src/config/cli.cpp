@@ -439,6 +439,50 @@ namespace noctalia::config {
       return 0;
     }
 
+    int runSettingsPages(int argc, char* argv[]) {
+      auto parsed = cli::parseOrReport(
+          cli::kConfigSettingsPagesCmd, "noctalia config settings-pages",
+          std::span<char* const>{argv + 3, static_cast<std::size_t>(argc - 3)}
+      );
+      if (!parsed)
+        return 1;
+      if (parsed->helpRequested)
+        return 0;
+
+      setLogLevel(LogLevel::Warn);
+      ConfigService configService;
+      const Config& cfg = configService.config();
+      // Assume every optional capability so pages gated on the running session are listed too.
+      settings::RegistryEnvironment env;
+      env.hyprlandAppearanceSupported = true;
+      env.niriBackdropSupported = true;
+      env.niriOverviewTypeToLaunchSupported = true;
+      env.umbrielOverviewTypeToLaunchSupported = true;
+      env.screencopySupported = true;
+      env.ddcutilAvailable = true;
+      env.systemdUserManaged = true;
+      env.gammaControlAvailable = true;
+      env.greeterSyncAvailable = true;
+      env.batteryAvailable = true;
+      env.systemBatteryAvailable = true;
+      const std::vector<settings::SettingEntry> registry = settings::buildSettingsRegistry(cfg, nullptr, nullptr, env);
+
+      for (const auto& descriptor : settings::settingsSectionDescriptors()) {
+        std::vector<std::string_view> groups;
+        for (const auto& entry : registry) {
+          if (settings::settingsSectionId(entry.section) == descriptor.id
+              && !entry.group.empty()
+              && std::ranges::find(groups, entry.group) == groups.end()) {
+            groups.push_back(entry.group);
+          }
+        }
+        for (const std::string_view group : groups) {
+          std::println("{}/{}", descriptor.id, group);
+        }
+      }
+      return 0;
+    }
+
   } // namespace
 
   int runCli(int argc, char* argv[]) {
@@ -453,6 +497,8 @@ namespace noctalia::config {
       return runExport(argc, argv);
     if (std::strcmp(argv[2], "settings-count") == 0)
       return runSettingsCount(argc, argv);
+    if (std::strcmp(argv[2], "settings-pages") == 0)
+      return runSettingsPages(argc, argv);
     if (std::strcmp(argv[2], "replay-report") == 0) {
       auto parsed = cli::parseOrReport(
           cli::kConfigReplayReportCmd, "noctalia config replay-report",

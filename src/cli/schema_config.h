@@ -60,6 +60,19 @@ namespace noctalia::cli {
       false,
   };
 
+  inline constexpr Command kConfigSettingsPagesCmd{
+      "settings-pages",
+      "List Settings UI pages",
+      "Prints one <section>/<group> line per Settings page, in sidebar order, including\n"
+      "pages that only appear when optional compositor or hardware support is present.\n"
+      "Each line can be passed to `noctalia msg settings-open`.",
+      {},
+      {},
+      {},
+      {},
+      false,
+  };
+
   inline constexpr std::array kConfigReplayFlags{
       Flag{"--target", {}, "<dir>", "Directory where replay files are written", {}, {}, false, true},
       Flag{"--flattened", {}, {}, "Write only merged_config.content as config.toml", {}, {}, false, false},
@@ -81,10 +94,7 @@ namespace noctalia::cli {
   };
 
   inline constexpr std::array kConfigSubcommands{
-      kConfigExportCmd,
-      kConfigReplayReportCmd,
-      kConfigSettingsCountCmd,
-      kConfigValidateCmd,
+      kConfigExportCmd, kConfigReplayReportCmd, kConfigSettingsCountCmd, kConfigSettingsPagesCmd, kConfigValidateCmd,
   };
   inline constexpr Command kConfigCmd{
       "config", "Validate config and support/replay helpers", {}, {}, {}, {}, kConfigSubcommands, false,
