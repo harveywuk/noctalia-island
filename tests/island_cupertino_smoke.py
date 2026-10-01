@@ -105,10 +105,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             capture = subprocess.Popen(['parec', '--device=island-style-mic', '--client-name=Island privacy test',
                                         '--stream-name=Island capture'], env=env, stdout=subprocess.DEVNULL,
                                        stderr=subprocess.DEVNULL)
-            helpers.append(capture); time.sleep(.7); shot(mode+'-privacy-preview')
-            time.sleep(1.5); hover(); shot(mode+'-privacy')
-            words = ' '.join(w.get('text', '') for w in text()).lower()
+            helpers.append(capture); time.sleep(.7)
+            # The expanded Island shows capture as a clickable icon; the preview names it.
+            words = ' '.join(w.get('text') or '' for w in text(mode+'-privacy-preview')).lower()
             assert 'icrophone' in words, 'Capture indicator missing: '+words
+            time.sleep(1.5); hover(); shot(mode+'-privacy')
             capture.terminate(); capture.wait(timeout=5)
 
             leave(); player = start([sys.executable, str(repo/'tests/fixtures/island_player.py')], mode+'-player.log')

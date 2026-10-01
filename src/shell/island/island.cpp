@@ -1947,34 +1947,16 @@ void Island::prepare(Instance& inst) {
       }
     }
   }
-  if (expandedView) {
-    const float sectionTop = h;
-    for (const auto& activity : privacyList) {
-      if (activity.kind == PrivacyCaptureKind::Microphone) {
-        auto* icon = control(
-            18, h + 5, 36, 36, "", activity.icon(), i18n::tr("island.privacy.audio-controls"), 20, true,
-            [panel] { panel("audio"); }
-        );
-        auto iconPalette =
-            (gCupertino ? islandButtonPalette(ButtonVariant::Ghost) : Button::defaultPalette(ButtonVariant::Ghost));
-        iconPalette.normal.label = islandRole(ColorRole::Primary);
-        icon->setCustomPalette(std::move(iconPalette));
-      } else
-        glyph(activity.icon(), 26, h + 13, 20, islandRole(ColorRole::Primary));
-      label(i18n::tr(activity.labelKey()), 66, h + 4, w - 88, 13);
-      label(activity.appNames(), 66, h + 26, w - 88, 12, muted, false, 1, FontWeight::Normal, true);
-      h += 54;
-    }
-    sectionCard(sectionTop, h);
-  } else if (!privacyList.empty()) {
-    // Keep capture indicators visible even while a notification or OSD occupies the island.
+  if (!privacyList.empty()) {
+    // Capture indicators are clickable icons in every view: compact, beside notifications and OSDs,
+    // and as a centred row in the expanded Island. Hovering names the capturing app.
     const float x = compactView
         ? w - (showUnread ? (view == island::View::Activity ? 48 : 38) : 14) - (showBattery ? 42 : 0) - privacyWidth
         : (w - privacyWidth + 8) / 2;
     const float y = compactView ? (cfg.height - 24) / 2 : h;
     for (std::size_t i = 0; i < privacyList.size(); ++i) {
       const auto& activity = privacyList[i];
-      if (!compactView && activity.kind != PrivacyCaptureKind::Microphone) {
+      if (!compactView && !expandedView && activity.kind != PrivacyCaptureKind::Microphone) {
         glyph(activity.icon(), x + static_cast<float>(i) * 24 + 4, y + 4, 16, islandRole(ColorRole::Primary));
         continue;
       }
@@ -1993,6 +1975,14 @@ void Island::prepare(Instance& inst) {
           },
           10, 0
       );
+      if (expandedView) {
+        // In the expanded Island a button click that lends the surface to a panel loses the
+        // panel's focus grab, so the icon keeps its hover and tooltip while the click falls
+        // through to the Island's own action handling, as the media card's panel link does.
+        icon->inputArea()->setAcceptedButtons(0);
+        if (activity.kind == PrivacyCaptureKind::Microphone)
+          action(x + static_cast<float>(i) * 24, y, 24, 24, "privacy-microphone", [panel] { panel("audio"); });
+      }
       auto iconPalette =
           (gCupertino ? islandButtonPalette(ButtonVariant::Ghost) : Button::defaultPalette(ButtonVariant::Ghost));
       iconPalette.normal.label = islandRole(ColorRole::Primary);
