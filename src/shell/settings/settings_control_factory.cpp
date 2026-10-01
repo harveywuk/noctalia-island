@@ -312,19 +312,39 @@ namespace settings {
     tagTabFocusKey(*control, joinSettingPath(entry.path));
     actions->addChild(std::move(control));
 
-    auto row = ui::row(
-        {.align = FlexAlign::Center,
-         .justify = FlexJustify::SpaceBetween,
-         .gap = Style::spaceXs * scale,
-         .paddingV = 8.0F * scale,
-         .paddingH = 0.0F,
-         .minHeight = Style::controlHeight * scale},
-        std::move(copy), std::move(actions)
-    );
-
     if (!section.children().empty())
       section.addChild(ui::separator());
-    section.addChild(std::move(row));
+
+    // Text and path fields are wide, so beside them a description is squeezed into a
+    // narrow column and cut short once translations or UI scaling lengthen it. Stack
+    // these rows: the description takes the full width and the field sits beneath it.
+    if (std::holds_alternative<TextSetting>(entry.control) && !entry.subtitle.empty()) {
+      auto controlRow = ui::row({.justify = FlexJustify::End, .fillWidth = true});
+      controlRow->addChild(std::move(actions));
+      section.addChild(
+          ui::column(
+              {.align = FlexAlign::Stretch,
+               .gap = Style::spaceSm * scale,
+               .paddingV = 8.0F * scale,
+               .paddingH = 0.0F,
+               .fillWidth = true},
+              std::move(copy), std::move(controlRow)
+          )
+      );
+      return;
+    }
+
+    section.addChild(
+        ui::row(
+            {.align = FlexAlign::Center,
+             .justify = FlexJustify::SpaceBetween,
+             .gap = Style::spaceXs * scale,
+             .paddingV = 8.0F * scale,
+             .paddingH = 0.0F,
+             .minHeight = Style::controlHeight * scale},
+            std::move(copy), std::move(actions)
+        )
+    );
   }
 
   std::unique_ptr<Toggle> SettingsControlFactory::makeToggle(
