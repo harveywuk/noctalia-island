@@ -527,6 +527,15 @@ void Input::setEmbeddedOnSolidPrimary(bool embedded) {
   markPaintDirty();
 }
 
+void Input::setContentColor(std::optional<ColorSpec> color) {
+  if (m_contentColor == color) {
+    return;
+  }
+  m_contentColor = std::move(color);
+  applyVisualState();
+  markPaintDirty();
+}
+
 void Input::setFontWeight(FontWeight fontWeight) {
   if (m_label != nullptr) {
     m_label->setFontWeight(fontWeight);
@@ -1544,9 +1553,26 @@ void Input::applyVisualState() {
     m_background->setVisible(false);
   }
 
-  if (m_embeddedOnSolidPrimary && !m_frameVisible) {
+  if ((m_embeddedOnSolidPrimary || m_contentColor.has_value()) && !m_frameVisible) {
+    // Content colour overrides the on-primary pairing; the caret and selection follow it.
+    const auto content = [this](float alpha) {
+      if (m_contentColor.has_value()) {
+        Color color = resolveColorSpec(*m_contentColor);
+        color.a *= alpha;
+        return color;
+      }
+      return resolved(ColorRole::OnPrimary, alpha);
+    };
+    const auto contentSpec = [this](float alpha) {
+      if (m_contentColor.has_value()) {
+        ColorSpec spec = *m_contentColor;
+        spec.alpha *= alpha;
+        return spec;
+      }
+      return colorSpecFromRole(ColorRole::OnPrimary, alpha);
+    };
     auto selectionStyleEmb = m_selectionRect->style();
-    selectionStyleEmb.fill = resolved(ColorRole::Surface, 0.4F);
+    selectionStyleEmb.fill = m_contentColor.has_value() ? content(0.3F) : resolved(ColorRole::Surface, 0.4F);
     selectionStyleEmb.fillMode = FillMode::Solid;
     selectionStyleEmb.radius = 2.0F;
     m_selectionRect->setStyle(selectionStyleEmb);
@@ -1555,7 +1581,7 @@ void Input::applyVisualState() {
     }
 
     auto cursorStyleEmb = m_cursor->style();
-    cursorStyleEmb.fill = resolved(ColorRole::Surface);
+    cursorStyleEmb.fill = m_contentColor.has_value() ? content(1.0F) : resolved(ColorRole::Surface);
     cursorStyleEmb.fillMode = FillMode::Solid;
     cursorStyleEmb.radius = 1.0F;
     m_cursor->setStyle(cursorStyleEmb);
@@ -1564,21 +1590,20 @@ void Input::applyVisualState() {
     if (m_invalid) {
       m_label->setColor(colorSpecFromRole(ColorRole::Error));
     } else if (showingPlaceholder) {
-      m_label->setColor(colorSpecFromRole(ColorRole::OnPrimary, kPrimaryPlaceholderAlpha));
+      m_label->setColor(contentSpec(kPrimaryPlaceholderAlpha));
     } else if (readOnly) {
-      m_label->setColor(colorSpecFromRole(ColorRole::OnPrimary, 0.65F));
+      m_label->setColor(contentSpec(0.65F));
     } else {
-      m_label->setColor(colorSpecFromRole(ColorRole::OnPrimary));
+      m_label->setColor(contentSpec(1.0F));
     }
     const Color passwordGlyphEmb = m_invalid
         ? resolved(ColorRole::Error)
-        : (showingPlaceholder ? resolved(ColorRole::OnPrimary, kPrimaryPlaceholderAlpha)
-                              : (readOnly ? resolved(ColorRole::OnPrimary, 0.65F) : resolved(ColorRole::OnPrimary)));
+        : (showingPlaceholder ? content(kPrimaryPlaceholderAlpha) : (readOnly ? content(0.65F) : content(1.0F)));
     for (auto* glyph : m_passwordGlyphs) {
       glyph->setColor(passwordGlyphEmb);
     }
     if (m_clearButtonGlyph != nullptr) {
-      m_clearButtonGlyph->setColor(resolved(ColorRole::OnPrimary, clearButtonHovered ? 1.0F : 0.72F));
+      m_clearButtonGlyph->setColor(content(clearButtonHovered ? 1.0F : 0.72F));
     }
     return;
   }

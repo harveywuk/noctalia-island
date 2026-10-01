@@ -25,18 +25,25 @@
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/clamp.h"
+#include "util/file_utils.h"
 #include "util/string_utils.h"
 #include "wayland/wayland_connection.h"
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <format>
 #include <memory>
+#include <numbers>
+#include <pwd.h>
 #include <string_view>
 #include <tuple>
+#include <unistd.h>
 #include <utility>
 #include <wayland-client-core.h>
 
@@ -534,6 +541,52 @@ LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) :
       )
   );
 
+  // Cupertino chrome. Hidden unless that layout is active; the identity block reuses
+  // the login panel so the password field, keyboard chip and session row stay shared.
+  m_root.addChild(
+      ui::flex(
+          FlexDirection::Vertical,
+          {
+              .out = &m_cupClock,
+              .align = FlexAlign::Center,
+              .justify = FlexJustify::Start,
+              .gap = 0.0F,
+              .visible = false,
+              .configure = [](Flex& flex) { flex.setZIndex(2); },
+          }
+      )
+  );
+  m_cupClock->addChild(ui::label({.out = &m_cupDate, .fontWeight = FontWeight::SemiBold, .maxLines = 1}));
+  m_cupClock->addChild(ui::label({.out = &m_cupTime, .fontWeight = FontWeight::Bold, .maxLines = 1}));
+  for (Label* label : {m_cupDate, m_cupTime}) {
+    label->setTextAlign(TextAlign::Center);
+    label->setShadow(rgba(0.0F, 0.0F, 0.0F, 0.28F), 0.0F, 1.0F);
+  }
+
+  auto avatar = ui::box({
+      .out = &m_cupAvatarHolder,
+      .visible = false,
+      .configure = [](Box& box) { box.setClipChildren(true); },
+  });
+  avatar->addChild(ui::label({.out = &m_cupInitials, .fontWeight = FontWeight::SemiBold, .maxLines = 1}));
+  avatar->addChild(ui::image({.out = &m_cupAvatar, .fit = ImageFit::Cover, .visible = false}));
+  m_loginPanel->insertChildAt(0, std::move(avatar));
+  m_loginPanel->insertChildAt(
+      1, ui::label({.out = &m_cupName, .fontWeight = FontWeight::SemiBold, .maxLines = 1, .visible = false})
+  );
+  m_cupName->setShadow(rgba(0.0F, 0.0F, 0.0F, 0.28F), 0.0F, 1.0F);
+  {
+    const auto& children = m_loginPanel->children();
+    const auto sessionIt =
+        std::ranges::find_if(children, [this](const auto& child) { return child.get() == m_sessionRow; });
+    m_loginPanel->insertChildAt(
+        static_cast<std::size_t>(sessionIt - children.begin()),
+        ui::label({.out = &m_cupStatus, .maxLines = 2, .visible = false})
+    );
+    m_cupStatus->setTextAlign(TextAlign::Center);
+    m_cupStatus->setShadow(rgba(0.0F, 0.0F, 0.0F, 0.28F), 0.0F, 1.0F);
+  }
+
   {
     auto transitionCover = std::make_unique<LockscreenTransitionCover>();
     transitionCover->setVisible(false);
@@ -675,10 +728,14 @@ void LockSurface::setPromptState(
       && m_authenticating == authenticating) {
     return;
   }
+  const bool newError = error && (!m_error || m_status != status);
   m_user = std::move(user);
   m_password = std::move(password);
   m_status = std::move(status);
   m_error = error;
+  if (newError && resolveLoginStyle().layout == lockscreen_login_box::LayoutMode::Cupertino) {
+    startErrorShake();
+  }
   m_authenticating = authenticating;
   requestUpdate();
 }
@@ -1161,6 +1218,7 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     if (m_authPanel != nullptr) {
       m_authPanel->setVisible(false);
     }
+    setCupertinoChromeVisible(false);
     layoutTransitionCover();
     syncTransitionCover();
     return;
@@ -1179,8 +1237,9 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   m_loginButton->setVisible(loginVisible && loginStyle.showLoginButton);
 
   const bool regular = loginVisible && loginStyle.layout == lockscreen_login_box::LayoutMode::Regular;
+  const bool cupertino = loginVisible && loginStyle.layout == lockscreen_login_box::LayoutMode::Cupertino;
   ensureLayoutChipInPasswordRow();
-  if (regular && loginStyle.showSessionButtons) {
+  if ((regular || cupertino) && loginStyle.showSessionButtons) {
     rebuildSessionButtons();
   }
   const bool showSession = regular && loginStyle.showSessionButtons && !m_sessionButtons.empty();
@@ -1233,13 +1292,27 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     const bool showTint = tintIntensity > 0.0F;
     m_tintOverlay->setVisible(showTint);
     if (showTint) {
+      // Cupertino draws white chrome on the wallpaper in both themes, so its scrim
+      // always darkens; a light surface tint would wash out the text.
       m_tintOverlay->setStyle(
           RoundedRectStyle{
-              .fill = colorForRole(ColorRole::Surface, tintIntensity),
+              .fill = cupertino ? rgba(0.0F, 0.0F, 0.0F, std::min(0.45F, tintIntensity * 0.6F))
+                                : colorForRole(ColorRole::Surface, tintIntensity),
               .fillMode = FillMode::Solid,
           }
       );
     }
+  }
+
+  setCupertinoChromeVisible(cupertino);
+  if (cupertino) {
+    if (m_authPanel != nullptr) {
+      m_authPanel->setVisible(false);
+    }
+    layoutCupertino(renderer, sw, sh, loginStyle);
+    layoutTransitionCover();
+    syncTransitionCover();
+    return;
   }
 
   m_loginPanel->setFill(loginStyle.panelFill);
@@ -1492,6 +1565,306 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   syncTransitionCover();
 }
 
+namespace {
+
+  // Lock-screen chrome sits on the wallpaper, so it uses fixed white like macOS rather
+  // than palette roles that may be dark in light mode. A scrim keeps it legible.
+  [[nodiscard]] ColorSpec onWallpaper(float alpha) { return fixedColorSpec(rgba(1.0F, 1.0F, 1.0F, alpha)); }
+
+  [[nodiscard]] std::string displayNameFor(const std::string& user) {
+    if (user.empty()) {
+      return {};
+    }
+    std::vector<char> buffer(4096);
+    passwd pwd{};
+    passwd* result = nullptr;
+    if (getpwnam_r(user.c_str(), &pwd, buffer.data(), buffer.size(), &result) == 0
+        && result != nullptr
+        && result->pw_gecos != nullptr
+        && result->pw_gecos[0] != '\0') {
+      const std::string_view gecos(result->pw_gecos);
+      const auto name = gecos.substr(0, gecos.find(','));
+      if (!name.empty()) {
+        return std::string(name);
+      }
+    }
+    return user;
+  }
+
+  [[nodiscard]] std::string initialsFor(std::string_view name) {
+    std::string initials;
+    bool atWordStart = true;
+    for (std::size_t i = 0; i < name.size() && initials.size() < 2; ++i) {
+      const auto ch = static_cast<unsigned char>(name[i]);
+      if (std::isspace(ch) != 0) {
+        atWordStart = true;
+        continue;
+      }
+      if (atWordStart && std::isalnum(ch) != 0) {
+        initials.push_back(static_cast<char>(std::toupper(ch)));
+      }
+      atWordStart = false;
+    }
+    return initials;
+  }
+
+  [[nodiscard]] std::string avatarFileFor(const std::string& user, const Config& config) {
+    std::vector<std::string> candidates;
+    if (!config.shell.avatarPath.empty()) {
+      candidates.push_back(FileUtils::expandUserPath(config.shell.avatarPath).string());
+    }
+    if (!user.empty()) {
+      candidates.push_back("/var/lib/AccountsService/icons/" + user);
+    }
+    if (const char* home = std::getenv("HOME"); home != nullptr) {
+      candidates.push_back(std::string(home) + "/.face");
+    }
+    for (const auto& path : candidates) {
+      std::error_code ec;
+      if (std::filesystem::is_regular_file(path, ec) && access(path.c_str(), R_OK) == 0) {
+        return path;
+      }
+    }
+    return {};
+  }
+
+} // namespace
+
+void LockSurface::setCupertinoChromeVisible(bool visible) {
+  if (m_cupClock != nullptr) {
+    m_cupClock->setVisible(visible);
+  }
+  if (m_cupAvatarHolder != nullptr) {
+    m_cupAvatarHolder->setVisible(visible);
+  }
+  if (m_cupName != nullptr) {
+    m_cupName->setVisible(visible);
+  }
+  if (m_cupStatus != nullptr && !visible) {
+    m_cupStatus->setVisible(false);
+  }
+  if (visible) {
+    if (!m_cupClockTimer.active()) {
+      scheduleCupertinoClock();
+    }
+    return;
+  }
+  m_cupClockTimer.stop();
+  // Restore the shared controls for the panel layouts.
+  m_loginPanel->setAlign(FlexAlign::Stretch);
+  m_loginPanel->setGap(Style::spaceSm);
+  m_loginContentRow->clearBorder();
+  m_loginContentRow->setFill(clearColorSpec());
+  m_loginContentRow->setPadding(0.0F);
+  m_loginContentRow->setMinWidth(0.0F);
+  m_passwordField->setFrameVisible(true);
+  m_passwordField->setContentColor(std::nullopt);
+  if (m_sessionRow != nullptr) {
+    m_sessionRow->setPadding(0.0F);
+    m_sessionRow->setJustify(FlexJustify::SpaceBetween);
+    m_sessionRow->setGap(Style::spaceSm);
+  }
+  m_passwordField->setPlaceholder(i18n::tr("lockscreen.password-placeholder"));
+  m_loginButton->setGlyph("check");
+  m_loginButton->setVariant(ButtonVariant::Primary);
+}
+
+void LockSurface::scheduleCupertinoClock() {
+  const auto now = std::chrono::system_clock::now();
+  const auto nextMinute = std::chrono::ceil<std::chrono::minutes>(now + std::chrono::milliseconds{1});
+  const auto delay =
+      std::chrono::duration_cast<std::chrono::milliseconds>(nextMinute - now) + std::chrono::milliseconds{50};
+  m_cupClockTimer.start(delay, [this, alive = std::weak_ptr<void>(m_aliveGuard)]() {
+    if (alive.expired()) {
+      return;
+    }
+    syncCupertinoClock();
+    requestLayout();
+    scheduleCupertinoClock();
+  });
+}
+
+void LockSurface::syncCupertinoClock() {
+  if (m_cupDate == nullptr || m_cupTime == nullptr) {
+    return;
+  }
+  m_cupDate->setText(formatLocalTime("%A %-d %B"));
+  m_cupTime->setText(formatLocalTime("%H:%M"));
+}
+
+void LockSurface::syncCupertinoIdentity(Renderer& renderer) {
+  if (m_cupName == nullptr || m_cupInitials == nullptr || m_cupAvatar == nullptr) {
+    return;
+  }
+  if (m_cupNameFor != m_user) {
+    m_cupNameFor = m_user;
+    const std::string name = displayNameFor(m_user);
+    m_cupName->setText(name);
+    m_cupInitials->setText(initialsFor(name));
+  }
+  const std::string path = m_config != nullptr ? avatarFileFor(m_user, m_config->config()) : std::string{};
+  if (path != m_cupAvatarPath) {
+    m_cupAvatarPath = path;
+    const bool loaded = !path.empty()
+        && m_cupAvatar->setSourceFile(
+            renderer, path, static_cast<int>(lockscreen_login_box::kCupertinoAvatarSize * 2.0F), true, true
+        );
+    m_cupAvatar->setVisible(loaded);
+    m_cupInitials->setVisible(!loaded);
+  }
+}
+
+void LockSurface::startErrorShake() {
+  if (m_shakeAnimation != 0) {
+    m_animations.cancel(m_shakeAnimation);
+  }
+  // Damped side-to-side shake, as on macOS. Reduced motion jumps to the end (no offset).
+  m_shakeAnimation = m_animations.animate(
+      0.0F, 1.0F, 420.0F, Easing::Linear,
+      [this](float t) {
+        m_shakeOffset = std::sin(t * std::numbers::pi_v<float> * 6.0F) * 10.0F * (1.0F - t);
+        requestLayout();
+      },
+      [this]() {
+        m_shakeAnimation = 0;
+        m_shakeOffset = 0.0F;
+        requestLayout();
+      },
+      this
+  );
+}
+
+void LockSurface::layoutCupertino(
+    Renderer& renderer, float sw, float sh, const lockscreen_login_box::LoginBoxStyle& style
+) {
+  namespace box = lockscreen_login_box;
+  syncCupertinoClock();
+  syncCupertinoIdentity(renderer);
+
+  // Clock: date above a large time, near the top like macOS.
+  const float timeSize = std::clamp(sh * 0.15F, 64.0F, 136.0F);
+  m_cupDate->setFontSize(std::max(Style::fontSizeHeader, timeSize * 0.2F));
+  m_cupDate->setColor(onWallpaper(0.9F));
+  m_cupTime->setFontSize(timeSize);
+  m_cupTime->setColor(onWallpaper(0.88F));
+  m_cupClock->layout(renderer);
+  const float clockY = std::max(Style::spaceLg, std::round(sh * 0.07F));
+  m_cupClock->arrange(
+      renderer,
+      LayoutRect{std::round((sw - m_cupClock->width()) * 0.5F), clockY, m_cupClock->width(), m_cupClock->height()}
+  );
+
+  // Identity block: placed by the login-box widget position, else centred near the bottom.
+  const bool showSession = style.showSessionButtons && !m_sessionButtons.empty();
+  const float panelWidth = std::min(box::kCupertinoPanelWidth, sw - Style::spaceLg * 2.0F);
+  const float panelHeight = box::cupertinoPanelHeight(showSession);
+  float cx = sw * 0.5F;
+  float cy = sh - panelHeight * 0.5F - std::max(48.0F, sh * 0.07F);
+  if (m_config != nullptr) {
+    if (const DesktopWidgetState* loginBox =
+            box::findForOutput(m_config->config().lockscreenWidgets.widgets, m_outputKey);
+        loginBox != nullptr && loginBox->cx > 0.0F && loginBox->cy > 0.0F) {
+      cx = loginBox->cx;
+      cy = loginBox->cy;
+    }
+  }
+  const float panelX = util::clampOrdered(cx - panelWidth * 0.5F, Style::spaceLg, sw - panelWidth - Style::spaceLg);
+  const float panelY = util::clampOrdered(cy - panelHeight * 0.5F, Style::spaceLg, sh - panelHeight - Style::spaceLg);
+
+  m_loginPanel->setFill(clearColorSpec());
+  m_loginPanel->clearBorder();
+  m_loginPanel->setAlign(FlexAlign::Center);
+  m_loginPanel->setJustify(FlexJustify::Start);
+  m_loginPanel->setGap(Style::spaceMd);
+  m_loginPanel->setPadding(0.0F);
+  m_loginPanel->setClipChildren(false);
+  if (m_infoRow != nullptr) {
+    m_infoRow->setVisible(false);
+  }
+
+  const float avatarSize = box::kCupertinoAvatarSize;
+  m_cupAvatarHolder->setSize(avatarSize, avatarSize);
+  m_cupAvatarHolder->setRadius(avatarSize * 0.5F);
+  m_cupAvatarHolder->setFill(onWallpaper(0.22F));
+  m_cupAvatarHolder->setBorder(onWallpaper(0.35F), Style::borderWidth);
+  m_cupAvatar->setPosition(0.0F, 0.0F);
+  m_cupAvatar->setSize(avatarSize, avatarSize);
+  m_cupAvatar->setRadius(avatarSize * 0.5F);
+  m_cupInitials->setFontSize(avatarSize * 0.38F);
+  m_cupInitials->setColor(onWallpaper(0.95F));
+  m_cupInitials->layout(renderer);
+  m_cupInitials->setPosition(
+      std::round((avatarSize - m_cupInitials->width()) * 0.5F),
+      std::round((avatarSize - m_cupInitials->height()) * 0.5F)
+  );
+
+  m_cupName->setFontSize(Style::fontSizeTitle);
+  m_cupName->setColor(onWallpaper(0.95F));
+  m_cupName->setMaxWidth(panelWidth);
+
+  // Glass pill around the password field and its keyboard chip / submit arrow.
+  const float fieldHeight = box::kCupertinoFieldHeight;
+  m_loginContentRow->setFill(onWallpaper(0.2F));
+  m_loginContentRow->setBorder(onWallpaper(0.28F), Style::borderWidth);
+  m_loginContentRow->setRadius(fieldHeight * 0.5F);
+  m_loginContentRow->setPadding(0.0F, Style::spaceSm, 0.0F, Style::spaceMd);
+  m_loginContentRow->setMinWidth(box::kCupertinoFieldWidth);
+  m_loginContentRow->setMaxWidth(box::kCupertinoFieldWidth);
+  m_loginContentRow->setMinHeight(fieldHeight);
+  m_loginContentRow->setMaxHeight(fieldHeight);
+  m_loginContentRow->setGap(Style::spaceXs);
+  m_passwordField->setFrameVisible(false);
+  m_passwordField->setContentColor(onWallpaper(1.0F));
+  m_passwordField->setPlaceholder(i18n::tr("lockscreen.enter-password"));
+  m_passwordField->setTextAlign(style.centerPasswordText ? TextAlign::Center : TextAlign::Start);
+  m_passwordField->setControlHeight(fieldHeight);
+  m_passwordField->setFontSize(Style::fontSizeCaption);
+
+  const bool showArrow = style.showLoginButton && !m_password.empty();
+  m_loginButton->setVisible(showArrow);
+  if (showArrow) {
+    m_loginButton->setGlyph("arrow-right");
+    m_loginButton->setVariant(ButtonVariant::Ghost);
+    m_loginButton->setRadius(11.0F);
+    m_loginButton->setSize(22.0F, 22.0F);
+    m_loginButton->setGlyphSize(14.0F);
+  }
+  if (m_layoutChip != nullptr && m_layoutChip->visible() && style.showKeyboardLayout) {
+    m_layoutChip->setRadius(fieldHeight * 0.5F);
+    m_layoutChip->setFontSize(Style::fontSizeMini);
+    m_layoutChip->setGlyphSize(Style::fontSizeMini);
+    m_layoutChip->setMinHeight(22.0F);
+    m_layoutChip->setMaxHeight(22.0F);
+  }
+
+  bool statusError = false;
+  std::string statusText = resolveStatusText(style, statusError);
+  if (!statusError && !m_authenticating && m_status.empty()) {
+    statusText.clear(); // the field's placeholder already says what to do
+  }
+  // Keep the line's space so a message appearing does not move the session buttons.
+  m_cupStatus->setVisible(true);
+  m_cupStatus->setText(statusText.empty() ? std::string("\u00a0") : statusText);
+  m_cupStatus->setFontSize(Style::fontSizeCaption);
+  m_cupStatus->setColor(onWallpaper(statusError ? 0.95F : 0.7F));
+  m_cupStatus->setMaxWidth(panelWidth);
+
+  if (m_sessionRow != nullptr) {
+    m_sessionRow->setVisible(showSession);
+    m_sessionRow->setJustify(FlexJustify::Center);
+    m_sessionRow->setGap(Style::spaceLg * 2.0F);
+    m_sessionRow->setMinHeight(0.0F);
+    m_sessionRow->setMaxHeight(0.0F);
+    m_sessionRow->setMaxWidth(panelWidth);
+    m_sessionRow->setPadding(Style::spaceLg, 0.0F, 0.0F, 0.0F);
+  }
+
+  m_loginPanel->arrange(renderer, LayoutRect{panelX, panelY, panelWidth, panelHeight});
+  if (m_shakeOffset != 0.0F) {
+    m_loginContentRow->setPosition(m_loginContentRow->x() + m_shakeOffset, m_loginContentRow->y());
+  }
+}
+
 void LockSurface::updateCopy() {
   m_passwordField->setValue(m_password);
   m_passwordField->setEnabled(!m_authenticating);
@@ -1608,22 +1981,87 @@ void LockSurface::rebuildSessionButtons() {
   }
 
   const auto actions = resolveSessionActions();
+  const bool cupertino = resolveLoginStyle().layout == lockscreen_login_box::LayoutMode::Cupertino;
   std::vector<std::string> keys;
   keys.reserve(actions.size());
   for (const auto& action : actions) {
     keys.push_back(action.action + "|" + (action.label.value_or("")) + "|" + (action.glyph.value_or("")));
   }
-  if (keys == m_lastSessionActionKeys && !m_sessionButtons.empty()) {
+  if (keys == m_lastSessionActionKeys && !m_sessionButtons.empty() && cupertino == m_sessionButtonsCupertino) {
     return;
   }
   m_lastSessionActionKeys = std::move(keys);
+  m_sessionButtonsCupertino = cupertino;
 
   while (!m_sessionRow->children().empty()) {
     m_sessionRow->removeChild(m_sessionRow->children().front().get());
   }
   m_sessionButtons.clear();
+  m_sessionLabels.clear();
 
   if (m_sessionActions == nullptr) {
+    return;
+  }
+
+  if (cupertino) {
+    // macOS login-window style: a glass circle per action with its label underneath.
+    const float size = lockscreen_login_box::kCupertinoSessionButtonSize;
+    const auto glass = [](float bg, float border) {
+      return Button::ButtonStateColors{
+          .bg = onWallpaper(bg),
+          .border = onWallpaper(border),
+          .label = onWallpaper(1.0F),
+      };
+    };
+    for (const auto& cfg : actions) {
+      const std::string labelText =
+          cfg.label.has_value() && !cfg.label->empty() ? *cfg.label : i18n::tr(session_action::labelKey(cfg.action));
+      Button* button = nullptr;
+      Label* caption = nullptr;
+      auto column = ui::column({.align = FlexAlign::Center, .gap = Style::spaceXs});
+      column->addChild(
+          ui::button({
+              .out = &button,
+              .glyph =
+                  cfg.glyph.has_value() && !cfg.glyph->empty() ? *cfg.glyph : session_action::defaultGlyph(cfg.action),
+              .glyphSize = 18.0F,
+              .contentAlign = ButtonContentAlign::Center,
+              .customPalette =
+                  Button::ButtonPalette{
+                      .borderWidth = Style::borderWidth,
+                      .normal = glass(0.18F, 0.3F),
+                      .hover = glass(0.3F, 0.45F),
+                      .pressed = glass(0.42F, 0.55F),
+                      .disabled = glass(0.1F, 0.2F),
+                      .selected = std::nullopt,
+                  },
+              .tooltip = labelText,
+              .minWidth = size,
+              .minHeight = size,
+              .radius = size * 0.5F,
+              .width = size,
+              .height = size,
+              .onClick = [this, cfg]() {
+                if (m_sessionActions != nullptr) {
+                  m_sessionActions->invoke(cfg);
+                }
+              },
+          })
+      );
+      column->addChild(
+          ui::label({
+              .out = &caption,
+              .text = labelText,
+              .fontSize = Style::fontSizeCaption,
+              .color = onWallpaper(0.85F),
+              .maxLines = 1,
+          })
+      );
+      caption->setShadow(rgba(0.0F, 0.0F, 0.0F, 0.28F), 0.0F, 1.0F);
+      m_sessionButtons.push_back(button);
+      m_sessionLabels.push_back(caption);
+      m_sessionRow->addChild(std::move(column));
+    }
     return;
   }
 

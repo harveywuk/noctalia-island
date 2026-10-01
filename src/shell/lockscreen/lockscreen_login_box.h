@@ -23,6 +23,10 @@ namespace lockscreen_login_box {
   constexpr std::string_view kLayoutKey = "layout";
   constexpr std::string_view kLayoutCompact = "compact";
   constexpr std::string_view kLayoutRegular = "regular";
+  // macOS-style: date and large time at the top; avatar, name and a pill password
+  // field without a panel; optional round session buttons.
+  constexpr std::string_view kLayoutCupertino = "cupertino";
+  constexpr std::string_view kLayoutDefault = kLayoutCupertino;
   constexpr std::string_view kShowSessionButtonsKey = "show_session_buttons";
   constexpr std::string_view kShowMediaKey = "show_media";
   constexpr std::string_view kShowWeatherKey = "show_weather";
@@ -37,6 +41,7 @@ namespace lockscreen_login_box {
   enum class LayoutMode : std::uint8_t {
     Compact,
     Regular,
+    Cupertino,
   };
 
   struct LoginBoxStyle {
@@ -81,6 +86,13 @@ namespace lockscreen_login_box {
   constexpr float kRegularMinPanelWidth = 720.0F;
   constexpr float kCompactMaxPanelHeight = 140.0F;
   constexpr float kRegularMaxPanelHeight = 320.0F;
+  // Cupertino has no visible panel; these bound the identity block for placement.
+  constexpr float kCupertinoPanelWidth = 320.0F;
+  constexpr float kCupertinoAvatarSize = 72.0F;
+  constexpr float kCupertinoFieldWidth = 220.0F;
+  constexpr float kCupertinoFieldHeight = 32.0F;
+  constexpr float kCupertinoSessionButtonSize = 40.0F;
+  [[nodiscard]] float cupertinoPanelHeight(bool showSessionButtons);
 
   // Matches lock-surface media art / forecast glyph sizes used in Regular layout.
   constexpr float kRegularMediaArtSize = 40.0F;

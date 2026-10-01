@@ -111,11 +111,14 @@ namespace lockscreen_login_box {
     if (layout == kLayoutCompact) {
       return LayoutMode::Compact;
     }
-    return LayoutMode::Regular;
+    if (layout == kLayoutRegular) {
+      return LayoutMode::Regular;
+    }
+    return LayoutMode::Cupertino;
   }
 
   LayoutMode resolveLayout(const std::unordered_map<std::string, WidgetSettingValue>& settings) {
-    return resolveLayout(readString(settings, kLayoutKey, kLayoutRegular));
+    return resolveLayout(readString(settings, kLayoutKey, kLayoutDefault));
   }
 
   InfoExtrasVisibility
@@ -142,7 +145,26 @@ namespace lockscreen_login_box {
     return std::max(0.0F, (contentWidth - Style::spaceMd) * 0.5F);
   }
 
+  float cupertinoPanelHeight(bool showSessionButtons) {
+    // avatar, name, field, status line, then optional session buttons with their labels.
+    float height = kCupertinoAvatarSize
+        + Style::spaceMd
+        + Style::fontSizeTitle
+        + Style::spaceMd
+        + kCupertinoFieldHeight
+        + Style::spaceSm
+        + Style::fontSizeCaption
+        + Style::spaceXs;
+    if (showSessionButtons) {
+      height += Style::spaceLg + kCupertinoSessionButtonSize + Style::spaceXs + Style::fontSizeCaption + Style::spaceXs;
+    }
+    return std::ceil(height);
+  }
+
   float minPanelWidth(LayoutMode layout) {
+    if (layout == LayoutMode::Cupertino) {
+      return kCupertinoPanelWidth;
+    }
     return layout == LayoutMode::Regular ? kRegularMinPanelWidth : kCompactMinPanelWidth;
   }
 
@@ -188,6 +210,9 @@ namespace lockscreen_login_box {
 
   float minPanelHeight(LayoutMode layout, bool showSessionButtons, bool showInfoExtras) {
     const float pad = Style::spaceLg * 2.0F;
+    if (layout == LayoutMode::Cupertino) {
+      return cupertinoPanelHeight(showSessionButtons);
+    }
     if (layout != LayoutMode::Regular) {
       return pad + Style::controlHeight;
     }
@@ -207,10 +232,16 @@ namespace lockscreen_login_box {
   }
 
   float maxPanelHeight(LayoutMode layout) {
+    if (layout == LayoutMode::Cupertino) {
+      return cupertinoPanelHeight(true);
+    }
     return layout == LayoutMode::Regular ? kRegularMaxPanelHeight : kCompactMaxPanelHeight;
   }
 
   float defaultPanelWidth(float screenWidth, LayoutMode layout) {
+    if (layout == LayoutMode::Cupertino) {
+      return std::min(screenWidth - Style::spaceLg * 2.0F, kCupertinoPanelWidth);
+    }
     const float widthCap = layout == LayoutMode::Regular ? kRegularDefaultWidthCap : kCompactDefaultWidthCap;
     return std::min(screenWidth - Style::spaceLg * 2.0F, widthCap);
   }
@@ -331,7 +362,7 @@ namespace lockscreen_login_box {
       std::unordered_map<std::string, WidgetSettingValue>& settings, desktop_settings::DesktopWidgetSettingsScope scope
   ) {
     if (scope == desktop_settings::DesktopWidgetSettingsScope::Widget) {
-      settings.insert_or_assign(std::string(kLayoutKey), std::string(kLayoutRegular));
+      settings.insert_or_assign(std::string(kLayoutKey), std::string(kLayoutDefault));
       settings.insert_or_assign(std::string(kShowSessionButtonsKey), true);
       settings.insert_or_assign(std::string(kShowMediaKey), true);
       settings.insert_or_assign(std::string(kShowWeatherKey), true);
@@ -357,11 +388,11 @@ namespace lockscreen_login_box {
 
   void normalizeSettings(std::unordered_map<std::string, WidgetSettingValue>& settings) {
     if (!settings.contains(std::string(kLayoutKey))) {
-      settings.insert_or_assign(std::string(kLayoutKey), std::string(kLayoutRegular));
+      settings.insert_or_assign(std::string(kLayoutKey), std::string(kLayoutDefault));
     } else {
-      const std::string layout = readString(settings, kLayoutKey, kLayoutRegular);
-      if (layout != kLayoutCompact && layout != kLayoutRegular) {
-        settings.insert_or_assign(std::string(kLayoutKey), std::string(kLayoutRegular));
+      const std::string layout = readString(settings, kLayoutKey, kLayoutDefault);
+      if (layout != kLayoutCompact && layout != kLayoutRegular && layout != kLayoutCupertino) {
+        settings.insert_or_assign(std::string(kLayoutKey), std::string(kLayoutDefault));
       }
     }
     if (!settings.contains(std::string(kShowSessionButtonsKey))) {

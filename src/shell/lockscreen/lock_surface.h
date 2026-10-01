@@ -2,6 +2,7 @@
 
 #include "capture/screencopy_capture.h"
 #include "config/config_service.h"
+#include "core/timer_manager.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/blur_cache.h"
 #include "render/core/color.h"
@@ -141,6 +142,13 @@ private:
   void updateCopy();
   void syncRegularExtras(Renderer& renderer);
   void rebuildSessionButtons();
+  // Cupertino layout: clock at the top, identity block without a panel.
+  void layoutCupertino(Renderer& renderer, float sw, float sh, const lockscreen_login_box::LoginBoxStyle& style);
+  void setCupertinoChromeVisible(bool visible);
+  void syncCupertinoClock();
+  void scheduleCupertinoClock();
+  void syncCupertinoIdentity(Renderer& renderer);
+  void startErrorShake();
   void ensureLayoutChipInPasswordRow();
   [[nodiscard]] std::vector<SessionPanelActionConfig> resolveSessionActions() const;
   [[nodiscard]] lockscreen_login_box::LoginBoxStyle resolveLoginStyle() const;
@@ -244,4 +252,19 @@ private:
   std::string m_lastMediaArtist;
   std::string m_lastWeatherFingerprint;
   std::vector<std::string> m_lastSessionActionKeys;
+  bool m_sessionButtonsCupertino = false;
+  Flex* m_cupClock = nullptr;
+  Label* m_cupDate = nullptr;
+  Label* m_cupTime = nullptr;
+  Box* m_cupAvatarHolder = nullptr;
+  Label* m_cupInitials = nullptr;
+  Image* m_cupAvatar = nullptr;
+  Label* m_cupName = nullptr;
+  Label* m_cupStatus = nullptr;
+  std::vector<Label*> m_sessionLabels;
+  std::string m_cupAvatarPath;
+  std::string m_cupNameFor;
+  Timer m_cupClockTimer;
+  float m_shakeOffset = 0.0F;
+  AnimationManager::Id m_shakeAnimation = 0;
 };

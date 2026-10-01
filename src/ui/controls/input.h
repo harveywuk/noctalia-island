@@ -3,6 +3,7 @@
 #include "core/timer_manager.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
+#include "ui/palette.h"
 #include "ui/signal.h"
 #include "ui/style.h"
 #include "ui/text_input_client.h"
@@ -12,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,6 +52,9 @@ public:
   void setFrameVisible(bool visible);
   /// When the frame is hidden, treat the field as sitting on a solid Primary fill (e.g. segmented control center).
   void setEmbeddedOnSolidPrimary(bool embedded);
+  // With the frame hidden, draws text, placeholder, mask glyphs and caret in this colour
+  // (placeholder dimmed) so the field can sit on glass or imagery. nullopt restores defaults.
+  void setContentColor(std::optional<ColorSpec> color);
   void setFontWeight(FontWeight fontWeight);
   void setMinLayoutWidth(float width);
   void setTextAlign(TextAlign align);
@@ -236,6 +241,7 @@ private:
   bool m_invalid = false;
   bool m_frameVisible = true;
   bool m_embeddedOnSolidPrimary = false;
+  std::optional<ColorSpec> m_contentColor;
   float m_surfaceOpacity = 1.0F;
   float m_frameRadius = Style::radiusMd;
   bool m_enabled = true;

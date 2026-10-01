@@ -438,12 +438,14 @@ namespace desktop_settings {
       add(boolSpec("shadow", true));
     } else if (type == "login_box") {
       add(segmentedSpec(
-          "layout", "regular",
-          {{"compact", "settings.widgets.options.compact"}, {"regular", "settings.widgets.options.regular"}}
+          "layout", "cupertino",
+          {{"cupertino", "settings.widgets.options.cupertino"},
+           {"compact", "settings.widgets.options.compact"},
+           {"regular", "settings.widgets.options.regular"}}
       ));
       const WidgetSettingVisibility regularOnly{"layout", {"regular"}};
       auto showSessionButtons = boolSpec("show_session_buttons", true);
-      showSessionButtons.visibleWhen = regularOnly;
+      showSessionButtons.visibleWhen = WidgetSettingVisibility{"layout", {"regular", "cupertino"}};
       add(std::move(showSessionButtons));
       auto showMedia = boolSpec("show_media", true);
       showMedia.visibleWhen = regularOnly;
