@@ -1019,6 +1019,10 @@ void Island::prepare(Instance& inst) {
       || view == island::View::Downloads
       || view == island::View::Timers;
   const bool showSwitcher = expandedView && inst.activities.switching && availableActivities.count() > 0;
+  // Cupertino focuses an expanded activity on that activity alone, like Apple's Dynamic
+  // Island; batteries, unread history and hover widgets stay in the idle (calendar) view.
+  // Privacy indicators always show.
+  const bool showExtras = !gCupertino || view == island::View::Calendar;
   const auto batteryList =
       !recording && (compactView || expandedView) ? batteries(cfg, inst.output) : std::vector<island::Battery>{};
   const bool showBattery = compactView && !batteryList.empty() && batteryList.front().compact();
@@ -1160,7 +1164,7 @@ void Island::prepare(Instance& inst) {
       && !recording
       && !outlineTimer
       && !outlineDownload
-      && (showBattery || (expandedView && cfg.hoverShowBatteries && !batteryList.empty()));
+      && (showBattery || (expandedView && showExtras && cfg.hoverShowBatteries && !batteryList.empty()));
   const auto updateOutline = [&] {
     if (!inst.progressOutline)
       return;
@@ -1874,6 +1878,7 @@ void Island::prepare(Instance& inst) {
   if (expandedView
       && cfg.hoverShowTimers
       && !timers.empty()
+      && (showExtras || view == island::View::Timers)
       && (!inst.activities.switching || view == island::View::Timers)) {
     auto displayTimers = timers;
     // Compact priority can change on pause; keep hover buttons under the same pointer.
@@ -2027,7 +2032,7 @@ void Island::prepare(Instance& inst) {
   };
   if (showBattery)
     batteryRing(batteryList.front(), w - 50 - (showUnread ? 36 : 0), (cfg.height - 36) / 2, 36, !outlineBattery);
-  if (expandedView && cfg.hoverShowBatteries && !batteryList.empty()) {
+  if (expandedView && showExtras && cfg.hoverShowBatteries && !batteryList.empty()) {
     const float sectionTop = h;
     const auto rows = std::min(batteryList.size(), std::size_t{4});
     for (std::size_t i = 0; i < rows; ++i) {
@@ -2054,7 +2059,7 @@ void Island::prepare(Instance& inst) {
     h += 6;
     sectionCard(sectionTop, h);
   }
-  if (showUnread && expandedView && cfg.hoverShowUnread) {
+  if (showUnread && expandedView && showExtras && cfg.hoverShowUnread) {
     const float sectionTop = h;
     control(
         22, h, w - 44, 24, i18n::trp("notifications.unread-count", unreadCount), "",
@@ -2121,6 +2126,7 @@ void Island::prepare(Instance& inst) {
     h += 42;
   }
   if (expandedView
+      && showExtras
       && m_widgetFactory
       && (!cfg.hoverWidgets.empty() || !cfg.hoverWidgetsCenter.empty() || !cfg.hoverWidgetsRight.empty())) {
     if (!retainedWidgets) {
