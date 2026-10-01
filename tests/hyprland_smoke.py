@@ -93,6 +93,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--dock-preview-only' in sys.argv:
             from dock_preview_smoke import prepare
             prepare(base,cfg,env)
+        if '--dock-preview-perf-only' in sys.argv:
+            from dock_preview_perf_smoke import prepare
+            prepare(base,cfg,env)
         if '--dock-motion-only' in sys.argv:
             from dock_motion_smoke import prepare
             prepare(base,cfg,env)
@@ -118,6 +121,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--cupertino-only' in sys.argv:
             from cupertino_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--dock-preview-perf-only' in sys.argv:
+            from dock_preview_perf_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--dock-preview-only' in sys.argv:
