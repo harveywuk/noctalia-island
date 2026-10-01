@@ -1366,6 +1366,18 @@ float LauncherPanel::fittedHeight() const {
       : preferredHeight();
 }
 
+// Spotlight-like proportions in the Island: a share of the screen, never narrower than the
+// standalone launcher, and a height that follows the results up to a cap instead of
+// stretching a long list down the whole output.
+float LauncherPanel::islandWidth(float availableWidth) const {
+  return std::clamp(availableWidth * 0.42F, preferredWidth(), std::max(preferredWidth(), scaled(880.0F)));
+}
+
+float LauncherPanel::islandHeight(float availableHeight) const {
+  const float cap = std::clamp(availableHeight * 0.55F, preferredHeight(), std::max(preferredHeight(), scaled(760.0F)));
+  return std::min(fittedHeight(), cap);
+}
+
 void LauncherPanel::doLayout(Renderer& renderer, float width, float height) {
   if (m_container == nullptr || m_input == nullptr) {
     return;

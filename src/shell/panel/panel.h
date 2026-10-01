@@ -53,6 +53,17 @@ public:
   // Called after content layout by the island host; standalone hosts keep their
   // normal preferred size. Implementations include their outer panel padding.
   [[nodiscard]] virtual float fittedHeight() const { return preferredHeight(); }
+  // Size while hosted by the Dynamic Island, given the extent available on the output.
+  // Defaults keep the preferred width and fitted height; panels whose content can grow
+  // without bound (long result lists) override these to stay proportional to the screen.
+  [[nodiscard]] virtual float islandWidth(float availableWidth) const {
+    (void)availableWidth;
+    return preferredWidth();
+  }
+  [[nodiscard]] virtual float islandHeight(float availableHeight) const {
+    (void)availableHeight;
+    return fittedHeight();
+  }
   // Span the output's available extent on this axis (floating panels only). The
   // surface is dual-anchored with a requested size of 0 so the compositor
   // assigns the size, subtracting every exclusive zone on the output; the

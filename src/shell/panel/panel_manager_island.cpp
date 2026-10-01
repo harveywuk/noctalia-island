@@ -31,7 +31,7 @@ bool PanelManager::openIslandPanel(wl_output* output, std::string_view sourceBar
   const auto* monitor = m_platform->findOutputByWl(m_output);
   const float maxWidth = monitor ? static_cast<float>(monitor->effectiveLogicalWidth() - 32) : 800;
   const float maxHeight = monitor ? static_cast<float>(monitor->effectiveLogicalHeight() - 32) : 600;
-  m_panelVisualWidth = static_cast<std::uint32_t>(std::clamp(m_activePanel->preferredWidth(), 1.0F, maxWidth));
+  m_panelVisualWidth = static_cast<std::uint32_t>(std::clamp(m_activePanel->islandWidth(maxWidth), 1.0F, maxWidth));
   m_panelVisualHeight = static_cast<std::uint32_t>(std::clamp(m_activePanel->preferredHeight(), 1.0F, maxHeight));
   m_islandCollapsedWidth = host.width;
   m_islandCollapsedHeight = host.height;
@@ -124,8 +124,8 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
   if (!m_closing) {
     const float maxHeight = std::max(1.0F, static_cast<float>(height) - 32 * m_islandSurface->scale);
     const float maxWidth = std::max(1.0F, static_cast<float>(width) - 32 * m_islandSurface->scale);
-    const float targetWidth = std::round(std::clamp(m_activePanel->preferredWidth(), 1.0F, maxWidth));
-    const float targetHeight = std::round(std::clamp(m_activePanel->fittedHeight(), 1.0F, maxHeight));
+    const float targetWidth = std::round(std::clamp(m_activePanel->islandWidth(maxWidth), 1.0F, maxWidth));
+    const float targetHeight = std::round(std::clamp(m_activePanel->islandHeight(maxHeight), 1.0F, maxHeight));
     if (first
         || std::abs(targetWidth - static_cast<float>(m_panelVisualWidth)) >= 2
         || std::abs(targetHeight - static_cast<float>(m_panelVisualHeight)) >= 2) {
