@@ -141,6 +141,7 @@ private:
 
   float m_userMaxWidth = 0.0F;
   int m_userMaxLines = 0;
+  [[nodiscard]] bool autoScrollActive() const noexcept;
   bool m_autoScroll = false;
   bool m_autoScrollHoverOnly = false;
   // True while syncHoverInteraction owns enter/leave for hover-only marquee.

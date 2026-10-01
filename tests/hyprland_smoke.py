@@ -132,6 +132,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             from cupertino_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
+        if '--marquee-motion-only' in sys.argv:
+            from marquee_motion_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
         if '--starter-only' in sys.argv:
             from starter_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)

@@ -4,6 +4,7 @@
 #include "core/log.h"
 #include "render/animation/animation.h"
 #include "render/animation/animation_manager.h"
+#include "render/animation/motion_service.h"
 #include "render/core/renderer.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -113,7 +114,7 @@ void Label::setMaxWidth(float maxWidth) {
     return;
   }
   m_userMaxWidth = maxWidth;
-  if (!m_autoScroll) {
+  if (!autoScrollActive()) {
     m_textNode->setMaxWidth(maxWidth);
   }
   m_measureCached = false;
@@ -124,7 +125,7 @@ void Label::setMaxLines(int maxLines) {
     return;
   }
   m_userMaxLines = maxLines;
-  if (!m_autoScroll) {
+  if (!autoScrollActive()) {
     m_textNode->setMaxLines(maxLines);
   }
   m_measureCached = false;
@@ -200,6 +201,9 @@ void Label::clearShadow() {
   m_textNode->clearShadow();
 }
 
+// Scrolling text is motion: with animations off it is shown truncated instead.
+bool Label::autoScrollActive() const noexcept { return m_autoScroll && MotionService::instance().enabled(); }
+
 void Label::setAutoScroll(bool enabled) {
   if (m_autoScroll == enabled) {
     return;
@@ -222,7 +226,7 @@ void Label::setAutoScrollOnlyWhenHovered(bool enabled) {
 }
 
 void Label::syncHoverInteraction() {
-  if (m_autoScroll && m_autoScrollHoverOnly) {
+  if (autoScrollActive() && m_autoScrollHoverOnly) {
     setHitTestVisible(true);
     setOnEnter([this](const PointerData&) { restartScrollIfNeeded(); });
     setOnLeave([this]() { restartScrollIfNeeded(); });
@@ -247,7 +251,7 @@ void Label::setAutoScrollSpeed(float pixelsPerSecond) {
     return;
   }
   m_scrollSpeedPxPerSec = next;
-  if (!m_autoScroll) {
+  if (!autoScrollActive()) {
     return;
   }
   stopScrollAnimations();
@@ -257,7 +261,7 @@ void Label::setAutoScrollSpeed(float pixelsPerSecond) {
 }
 
 void Label::syncTextNodeConstraints() {
-  if (m_autoScroll) {
+  if (autoScrollActive()) {
     m_textNode->setMaxWidth(0.0F);
     m_textNode->setMaxLines(1);
   } else {
@@ -267,7 +271,7 @@ void Label::syncTextNodeConstraints() {
 }
 
 void Label::applyScrollPosition() {
-  const bool rtlOverflow = Style::rtl() && m_autoScroll && m_fullTextWidth > width() + 0.5F;
+  const bool rtlOverflow = Style::rtl() && autoScrollActive() && m_fullTextWidth > width() + 0.5F;
   const float targetX = rtlOverflow ? m_textBaseX + m_scrollOffset : m_textBaseX - m_scrollOffset;
   const float targetY = m_baselineOffset;
 
@@ -364,7 +368,7 @@ void Label::startSnapToZero() {
 }
 
 void Label::startMarqueeLoop() {
-  if (!m_autoScroll || animationManager() == nullptr) {
+  if (!autoScrollActive() || animationManager() == nullptr) {
     return;
   }
   if (m_autoScrollHoverOnly && !hovered()) {
@@ -411,7 +415,7 @@ void Label::startMarqueeLoop() {
 }
 
 void Label::restartScrollIfNeeded() {
-  const bool overflow = m_autoScroll && width() > 0.0F && m_fullTextWidth > width() + 0.5F;
+  const bool overflow = autoScrollActive() && width() > 0.0F && m_fullTextWidth > width() + 0.5F;
   const bool runMarquee = overflow && (!m_autoScrollHoverOnly || hovered());
 
   // Skip the reset path when none of the marquee-relevant inputs have changed
@@ -420,7 +424,7 @@ void Label::restartScrollIfNeeded() {
   // constraints across measure/arrange phases) and we must not snap the scroll
   // offset back to 0 unless the geometry or mode actually changed.
   if (m_marqueeStateValid
-      && m_marqueeStateAutoScroll == m_autoScroll
+      && m_marqueeStateAutoScroll == autoScrollActive()
       && m_marqueeStateHoverOnly == m_autoScrollHoverOnly
       && m_marqueeStateHovered == hovered()
       && m_marqueeStateWidth == width()
@@ -435,7 +439,7 @@ void Label::restartScrollIfNeeded() {
   }
 
   m_marqueeStateValid = true;
-  m_marqueeStateAutoScroll = m_autoScroll;
+  m_marqueeStateAutoScroll = autoScrollActive();
   m_marqueeStateHoverOnly = m_autoScrollHoverOnly;
   m_marqueeStateHovered = hovered();
   m_marqueeStateWidth = width();
@@ -508,10 +512,10 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
     measureMaxWidth =
         configuredMaxWidth > 0.0F ? std::min(configuredMaxWidth, constraints.maxWidth) : constraints.maxWidth;
   }
-  if (m_autoScroll) {
+  if (autoScrollActive()) {
     measureMaxWidth = 0.0F;
   }
-  const int effectiveMaxLines = m_autoScroll ? 1 : m_userMaxLines;
+  const int effectiveMaxLines = autoScrollActive() ? 1 : m_userMaxLines;
   const TextAlign align = m_textNode->textAlign();
   const FontWeight fontWeight = m_textNode->fontWeight();
   const float renderScale = renderer.renderScale();
@@ -531,7 +535,7 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
       && m_cachedTextMetricsGeneration == textMetricsGeneration
       && m_cachedTextAlign == align
       && m_cachedBaselineMode == m_baselineMode
-      && m_cachedAutoScroll == m_autoScroll) {
+      && m_cachedAutoScroll == autoScrollActive()) {
     return LayoutSize{.width = width(), .height = height()};
   }
 
@@ -546,7 +550,7 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
     // that was used to measure metrics. Without this, a Label inside a Flex with
     // stretch-derived width would measure correctly but paint unwrapped.
     // Skipped for auto-scroll: marquee needs the unconstrained text width.
-    if (!m_autoScroll) {
+    if (!autoScrollActive()) {
       m_textNode->setMaxWidth(measureMaxWidth);
       m_textNode->setMaxLines(effectiveMaxLines);
     }
@@ -577,9 +581,9 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
   // width/line budget: a label with no explicit budget wraps freely, so only the
   // measured line count tells us whether to apply single-line cap-band centering
   // or lay out a multi-line block. Auto-scroll always renders a single marquee line.
-  const bool singleLine = m_autoScroll || metrics.lineCount <= 1;
+  const bool singleLine = autoScrollActive() || metrics.lineCount <= 1;
   const float measuredWidth = measureMaxWidth > 0.0F ? std::min(metrics.width, measureMaxWidth) : metrics.width;
-  m_fullTextWidth = m_autoScroll ? measuredWidth : 0.0F;
+  m_fullTextWidth = autoScrollActive() ? measuredWidth : 0.0F;
   const bool hasAssignedWidth = constraints.hasExactWidth();
   const float assignedWidth = constraints.maxWidth;
 
@@ -626,7 +630,7 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
           capHeight > 0.0F ? height * 0.5F + capHeight * 0.5F : -metrics.top + (height - actualHeight) * 0.5F;
     }
     float finalWidth = 0.0F;
-    if (m_autoScroll) {
+    if (autoScrollActive()) {
       float boxW = m_fullTextWidth;
       if (hasAssignedWidth) {
         boxW = assignedWidth;
@@ -655,7 +659,7 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
     const float inkSpan = inkHeight > 0.0F ? (metrics.inkBottom - metrics.inkTop) : actualHeight;
     const float height = std::max(actualHeight, inkSpan);
     float finalWidth = 0.0F;
-    if (m_autoScroll) {
+    if (autoScrollActive()) {
       float boxW = m_fullTextWidth;
       if (hasAssignedWidth) {
         boxW = assignedWidth;
@@ -677,8 +681,8 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
     setSize(std::ceil(m_minWidth), height());
   }
   const float layoutWidth = width();
-  const bool overflow = m_autoScroll && m_fullTextWidth > layoutWidth + 0.5F;
-  const float alignWidth = m_autoScroll ? m_fullTextWidth : measuredWidth;
+  const bool overflow = autoScrollActive() && m_fullTextWidth > layoutWidth + 0.5F;
+  const float alignWidth = autoScrollActive() ? m_fullTextWidth : measuredWidth;
   float textX = 0.0F;
   if (isIconGlyph) {
     // Center the icon's ink (not its advance) within the box.
@@ -697,7 +701,7 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
     m_scrollOffset = 0.0F;
   }
 
-  if (overflow && m_autoScroll) {
+  if (overflow && autoScrollActive()) {
     auto gapMetrics =
         renderer.measureText(kMarqueeGap, m_textNode->fontSize(), fontWeight, 0.0F, 1, align, m_textNode->fontFamily());
     m_marqueeLoopPeriod = m_fullTextWidth + gapMetrics.width;
@@ -726,7 +730,7 @@ LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstra
   m_cachedHasConstraintMaxWidth = constraints.hasMaxWidth;
   m_cachedTextAlign = align;
   m_cachedBaselineMode = m_baselineMode;
-  m_cachedAutoScroll = m_autoScroll;
+  m_cachedAutoScroll = autoScrollActive();
   m_measureCached = true;
 
   restartScrollIfNeeded();
