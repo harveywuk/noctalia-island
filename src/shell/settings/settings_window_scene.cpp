@@ -1,6 +1,7 @@
 #include "calendar/calendar_service.h"
 #include "compositors/compositor_detect.h"
 #include "compositors/compositor_platform.h"
+#include "compositors/hyprland/hyprland_runtime.h"
 #include "config/config_service.h"
 #include "config/schema/config_schema.h"
 #include "config/schema/engine.h"
@@ -17,6 +18,7 @@
 #include "shell/bar/widget_action.h"
 #include "shell/greeter/greeter_appearance_sync.h"
 #include "shell/profile/avatar_path.h"
+#include "shell/settings/display_identifier.h"
 #include "shell/settings/font_family_catalog.h"
 #include "shell/settings/settings_bar_management.h"
 #include "shell/settings/settings_content.h"
@@ -711,7 +713,9 @@ void SettingsWindow::scrollSidebarNodeIntoView(const Node* node) {
 }
 
 void SettingsWindow::scrollFocusedAreaIntoView(InputArea* area) {
-  if (area == nullptr) {
+  // A pointer press already targets a visible control. Scrolling it on focus can
+  // move the release outside that control and silently cancel the click.
+  if (area == nullptr || m_pointerFocusChange) {
     return;
   }
 
@@ -743,6 +747,8 @@ settings::RegistryEnvironment SettingsWindow::buildRegistryEnvironment() const {
   if (m_config != nullptr) {
     env.shellAvatarPath = shell::resolvedAvatarPath(m_accounts, m_config->config());
   }
+  env.hyprlandAppearanceSupported =
+      m_platform != nullptr && compositors::isHyprland() && m_platform->hyprlandRuntime().configIsLua();
   env.niriBackdropSupported = (m_wayland != nullptr && compositors::isNiri());
   env.screencopySupported = m_wayland != nullptr && m_wayland->hasScreencopy();
   env.niriOverviewTypeToLaunchSupported = (m_wayland != nullptr && compositors::isNiri());
@@ -900,6 +906,14 @@ settings::SettingsContentContext SettingsWindow::makeContentContext(
       .scale = uiScale(),
       .searchQuery = m_searchQuery,
       .selectedSection = m_selectedSection,
+      .selectedGroup = m_selectedGroup,
+      .navigateGroup =
+          [this](std::string group) {
+            clearTransientSettingsState();
+            m_selectedGroup = std::move(group);
+            m_contentScrollState.offset = 0.0F;
+            requestSceneRebuild();
+          },
       .selectedBar = selectedBar,
       .selectedMonitorOverride = selectedMonitorOverride,
       .showAdvanced = m_showAdvanced,
@@ -978,6 +992,23 @@ settings::SettingsContentContext SettingsWindow::makeContentContext(
       .closeHostedEditor = {},
       .supportsTaskbarWorkspaceGrouping = m_platform != nullptr && m_platform->supportsTaskbarWorkspaceGrouping(),
       .hoverLayoutUndo = &m_hoverLayoutUndo,
+      .hyprlandUndo = &m_hyprlandUndo,
+      .runningAppIds = [this] { return m_platform ? m_platform->runningAppIds() : std::vector<std::string>{}; },
+      .hyprlandRuntime = m_platform && compositors::isHyprland() ? &m_platform->hyprlandRuntime() : nullptr,
+      .recordHyprlandShortcut = [this](bool recording) { return setShortcutRecording(recording); },
+      .canRecordHyprlandShortcut = m_wayland && m_wayland->shortcutsInhibitManager(),
+      .displays = m_displays,
+      .displayEditor = &m_displayEditor,
+      .identifyDisplays =
+          [this](const auto& names) {
+            if (!m_wayland || !m_renderContext)
+              return;
+            if (!m_displayIdentifier)
+              m_displayIdentifier = std::make_shared<settings::DisplayIdentifier>(*m_wayland, *m_renderContext);
+            m_displayIdentifier->show(names);
+          },
+      .backupEditor = &m_backupEditor,
+      .defaultAppsEditor = &m_defaultAppsEditor,
   };
 }
 
@@ -1039,36 +1070,37 @@ void SettingsWindow::rebuildSettingsContent() {
   logSettingsProfile("rebuildContent setup", phaseProfileWatch);
   phaseProfileWatch.reset();
 
-  settings::addSettingsBarManagement(
-      *m_contentContainer,
-      settings::SettingsBarManagementContext{
-          .config = cfg,
-          .configService = m_config,
-          .scale = scale,
-          .searchQuery = m_searchQuery,
-          .selectedSection = m_selectedSection,
-          .selectedBar = selectedBar,
-          .selectedMonitorOverride = selectedMonitorOverride,
-          .renamingBarName = m_renamingBarName,
-          .pendingDeleteBarName = m_pendingDeleteBarName,
-          .renamingMonitorOverrideBarName = m_renamingMonitorOverrideBarName,
-          .renamingMonitorOverrideMatch = m_renamingMonitorOverrideMatch,
-          .pendingDeleteMonitorOverrideBarName = m_pendingDeleteMonitorOverrideBarName,
-          .pendingDeleteMonitorOverrideMatch = m_pendingDeleteMonitorOverrideMatch,
-          .requestRebuild = [this]() { requestContentRebuild(/*refreshRegistry=*/true, /*refreshFilterRow=*/true); },
-          .renameBar =
-              [this](std::string oldName, std::string newName) { renameBar(std::move(oldName), std::move(newName)); },
-          .deleteBar = [this](std::string name) { deleteBar(std::move(name)); },
-          .moveBar = [this](std::string name, int direction) { moveBar(std::move(name), direction); },
-          .renameMonitorOverride =
-              [this](std::string barName, std::string oldMatch, std::string newMatch) {
-                renameMonitorOverride(std::move(barName), std::move(oldMatch), std::move(newMatch));
-              },
-          .deleteMonitorOverride = [this](
-                                       std::string barName, std::string match
-                                   ) { deleteMonitorOverride(std::move(barName), std::move(match)); },
-      }
-  );
+  if (m_selectedGroup.empty())
+    settings::addSettingsBarManagement(
+        *m_contentContainer,
+        settings::SettingsBarManagementContext{
+            .config = cfg,
+            .configService = m_config,
+            .scale = scale,
+            .searchQuery = m_searchQuery,
+            .selectedSection = m_selectedSection,
+            .selectedBar = selectedBar,
+            .selectedMonitorOverride = selectedMonitorOverride,
+            .renamingBarName = m_renamingBarName,
+            .pendingDeleteBarName = m_pendingDeleteBarName,
+            .renamingMonitorOverrideBarName = m_renamingMonitorOverrideBarName,
+            .renamingMonitorOverrideMatch = m_renamingMonitorOverrideMatch,
+            .pendingDeleteMonitorOverrideBarName = m_pendingDeleteMonitorOverrideBarName,
+            .pendingDeleteMonitorOverrideMatch = m_pendingDeleteMonitorOverrideMatch,
+            .requestRebuild = [this]() { requestContentRebuild(/*refreshRegistry=*/true, /*refreshFilterRow=*/true); },
+            .renameBar =
+                [this](std::string oldName, std::string newName) { renameBar(std::move(oldName), std::move(newName)); },
+            .deleteBar = [this](std::string name) { deleteBar(std::move(name)); },
+            .moveBar = [this](std::string name, int direction) { moveBar(std::move(name), direction); },
+            .renameMonitorOverride =
+                [this](std::string barName, std::string oldMatch, std::string newMatch) {
+                  renameMonitorOverride(std::move(barName), std::move(oldMatch), std::move(newMatch));
+                },
+            .deleteMonitorOverride = [this](
+                                         std::string barName, std::string match
+                                     ) { deleteMonitorOverride(std::move(barName), std::move(match)); },
+        }
+    );
   logSettingsProfile("rebuildContent barManagement", phaseProfileWatch);
   phaseProfileWatch.reset();
 
@@ -1086,6 +1118,14 @@ void SettingsWindow::rebuildSettingsContent() {
         settings::SettingsPluginsContext{
             .scale = scale,
             .selectedSection = m_selectedSection,
+            .selectedGroup = m_selectedGroup,
+            .navigateGroup =
+                [this](std::string group) {
+                  clearTransientSettingsState();
+                  m_selectedGroup = std::move(group);
+                  m_contentScrollState.offset = 0.0F;
+                  requestSceneRebuild();
+                },
             .searchQuery = m_pluginSearchQuery,
             .setSearchQuery =
                 [this](std::string query) {
@@ -1229,6 +1269,46 @@ std::unique_ptr<Flex> SettingsWindow::buildHeaderRow(float scale) {
   );
 }
 
+std::unique_ptr<Node> SettingsWindow::buildSearchInput(float scale) {
+  Input* searchInputPtr = nullptr;
+  auto input = ui::input({
+      .out = &searchInputPtr,
+      .value = m_searchQuery,
+      .placeholder = i18n::tr("settings.window.search-placeholder"),
+      .fontSize = Style::fontSizeBody * scale,
+      .controlHeight = Style::controlHeight * scale,
+      .horizontalPadding = Style::spaceSm * scale,
+      .clearButtonEnabled = true,
+      .width = 224.0F * scale,
+      .height = Style::controlHeight * scale,
+      .onChange = [this](const std::string& value) {
+        const bool wasSearchActive = !m_searchQuery.empty();
+        m_searchQuery = value;
+        const bool searchActiveChanged = wasSearchActive != !m_searchQuery.empty();
+        const bool hadPendingReset = !m_pendingResetPageScope.empty() || !m_pendingResetSettingPaths.empty();
+        m_pendingResetPageScope.clear();
+        m_pendingResetSettingPaths.clear();
+
+        if (hadPendingReset || searchActiveChanged) {
+          // Toggling between empty/non-empty changes surrounding chrome and recreates the
+          // search input, so rebuild immediately and restore focus.
+          m_searchDebounceTimer.stop();
+          m_focusSearchOnRebuild = true;
+          requestSceneRebuild();
+        } else {
+          // Typing/deleting within an active query only re-filters the content list. Coalesce
+          // bursts (held backspace, fast typing) so each key repeat doesn't walk the registry.
+          m_searchDebounceTimer.start(kSearchDebounceInterval, [this]() { requestContentRebuild(); });
+        }
+      },
+  });
+  m_settingsSearchInput = searchInputPtr;
+  if (searchInputPtr != nullptr && searchInputPtr->inputArea() != nullptr) {
+    searchInputPtr->inputArea()->setTabFocusKey("settings.search");
+  }
+  return input;
+}
+
 std::unique_ptr<Flex> SettingsWindow::buildFilterRow(
     float scale, const std::string& resetPageScope, std::vector<std::vector<std::string>> resetPagePaths
 ) {
@@ -1243,44 +1323,6 @@ std::unique_ptr<Flex> SettingsWindow::buildFilterRow(
       .gap = Style::spaceMd * scale,
   });
 
-  Input* searchInputPtr = nullptr;
-  filters->addChild(
-      ui::input({
-          .out = &searchInputPtr,
-          .value = m_searchQuery,
-          .placeholder = i18n::tr("settings.window.search-placeholder"),
-          .fontSize = Style::fontSizeBody * scale,
-          .controlHeight = Style::controlHeight * scale,
-          .horizontalPadding = Style::spaceSm * scale,
-          .clearButtonEnabled = true,
-          .width = 320.0F * scale,
-          .height = Style::controlHeight * scale,
-          .onChange = [this](const std::string& value) {
-            const bool wasSearchActive = !m_searchQuery.empty();
-            m_searchQuery = value;
-            const bool searchActiveChanged = wasSearchActive != !m_searchQuery.empty();
-            const bool hadPendingReset = !m_pendingResetPageScope.empty() || !m_pendingResetSettingPaths.empty();
-            m_pendingResetPageScope.clear();
-            m_pendingResetSettingPaths.clear();
-
-            if (hadPendingReset || searchActiveChanged) {
-              // Toggling between empty/non-empty changes surrounding chrome and recreates the
-              // search input, so rebuild immediately and restore focus.
-              m_searchDebounceTimer.stop();
-              m_focusSearchOnRebuild = true;
-              requestSceneRebuild();
-            } else {
-              // Typing/deleting within an active query only re-filters the content list. Coalesce
-              // bursts (held backspace, fast typing) so each key repeat doesn't walk the registry.
-              m_searchDebounceTimer.start(kSearchDebounceInterval, [this]() { requestContentRebuild(); });
-            }
-          },
-      })
-  );
-  m_settingsSearchInput = searchInputPtr;
-  if (searchInputPtr != nullptr && searchInputPtr->inputArea() != nullptr) {
-    searchInputPtr->inputArea()->setTabFocusKey("settings.search");
-  }
   filters->addChild(ui::spacer());
 
   static const bool translatorMode = SysUtils::isEnvFlagOn("NOCTALIA_TRANSLATOR");
@@ -1425,6 +1467,7 @@ std::unique_ptr<Flex> SettingsWindow::buildBody(
   };
   const auto clearTransientSettingsState = [this]() { this->clearTransientSettingsState(); };
   const auto clearSearchQuery = [this]() {
+    m_selectedGroup.clear();
     m_searchQuery.clear();
     m_pluginSearchQuery.clear();
     m_pluginSearchDebounceTimer.stop();
@@ -1458,8 +1501,19 @@ std::unique_ptr<Flex> SettingsWindow::buildBody(
       }
   );
   m_sidebarScrollView = dynamic_cast<ScrollView*>(sidebar.get());
+  sidebar->setFlexGrow(1.0F);
 
-  body->addChild(std::move(sidebar));
+  auto sidebarColumn = ui::column(
+      {.align = FlexAlign::Stretch,
+       .gap = Style::spaceMd * scale,
+       .padding = Style::spaceSm * scale,
+       .fill = colorSpecFromRole(ColorRole::OnSurface, 0.035F),
+       .radius = Style::scaledRadiusMd(scale),
+       .width = 240.0F * scale}
+  );
+  sidebarColumn->addChild(buildSearchInput(scale));
+  sidebarColumn->addChild(std::move(sidebar));
+  body->addChild(std::move(sidebarColumn));
   body->addChild(ui::separator());
 
   auto contentColumn = ui::column({.align = FlexAlign::Stretch, .gap = Style::spaceSm * scale, .flexGrow = 1.0F});
@@ -1473,6 +1527,9 @@ std::unique_ptr<Flex> SettingsWindow::buildBody(
           },
       })
   );
+  m_filterRow = contentColumn->addChild(buildFilterRow(
+      scale, pageScopeKey(m_selectedSection, m_selectedBarName, m_selectedMonitorOverride), currentPageResetPaths()
+  ));
   contentColumn->addChild(
       ui::row({
           .out = &m_groupJumpRow,
@@ -2027,7 +2084,8 @@ std::vector<std::vector<std::string>> SettingsWindow::currentPageResetPaths() co
     return resetPagePaths;
   }
   for (const auto& entry : m_settingsRegistry) {
-    if (!settingEntryBelongsToPage(entry, m_selectedSection, m_selectedBarName, m_selectedMonitorOverride)) {
+    if ((!m_selectedGroup.empty() && entry.group != m_selectedGroup)
+        || !settingEntryBelongsToPage(entry, m_selectedSection, m_selectedBarName, m_selectedMonitorOverride)) {
       continue;
     }
 
@@ -2089,7 +2147,10 @@ void SettingsWindow::rebuildFilterRow(float scale) {
     return;
   }
 
-  const auto& children = m_mainContainer->children();
+  auto* host = m_filterRow->parent();
+  if (host == nullptr)
+    return;
+  const auto& children = host->children();
   auto it =
       std::ranges::find_if(children, [this](const std::unique_ptr<Node>& child) { return child.get() == m_filterRow; });
   if (it == children.end()) {
@@ -2097,11 +2158,9 @@ void SettingsWindow::rebuildFilterRow(float scale) {
   }
 
   const auto index = static_cast<std::size_t>(std::distance(children.begin(), it));
-  (void)m_mainContainer->removeChild(m_filterRow);
+  (void)host->removeChild(m_filterRow);
   const std::string resetPageScope = pageScopeKey(m_selectedSection, m_selectedBarName, m_selectedMonitorOverride);
-  m_filterRow = m_mainContainer->insertChildAt(
-      index, centeredRow(buildFilterRow(scale, resetPageScope, currentPageResetPaths()))
-  );
+  m_filterRow = host->insertChildAt(index, buildFilterRow(scale, resetPageScope, currentPageResetPaths()));
 }
 
 void SettingsWindow::buildScene(std::uint32_t width, std::uint32_t height) {
@@ -2208,7 +2267,7 @@ void SettingsWindow::buildScene(std::uint32_t width, std::uint32_t height) {
   });
 
   m_headerRow = main->addChild(centeredRow(buildHeaderRow(scale)));
-  m_filterRow = main->addChild(centeredRow(buildFilterRow(scale, resetPageScope, std::move(resetPagePaths))));
+
   if (auto status = buildStatusRow(scale)) {
     main->addChild(centeredRow(std::move(status)));
   }
@@ -2223,6 +2282,15 @@ void SettingsWindow::buildScene(std::uint32_t width, std::uint32_t height) {
 
   main->setSize(w, h);
   main->layout(renderer);
+  if (m_sidebarNav != nullptr && m_searchQuery.empty()) {
+    for (const auto& child : m_sidebarNav->children()) {
+      if (const auto* button = dynamic_cast<const Button*>(child.get());
+          button != nullptr && button->variant() == ButtonVariant::TabActive) {
+        scrollSidebarNodeIntoView(button);
+        break;
+      }
+    }
+  }
   logSettingsProfile("buildScene layout", phaseProfileWatch);
   phaseProfileWatch.reset();
   applyPendingContentScrollTarget(Style::spaceMd * scale);

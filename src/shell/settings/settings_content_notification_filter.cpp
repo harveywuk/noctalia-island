@@ -14,7 +14,9 @@
 #include "util/string_utils.h"
 
 #include <algorithm>
+#include <array>
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,7 +25,7 @@ namespace settings {
 
   namespace {
 
-    void addToggleRow(
+    Toggle* addToggleRow(
         Flex& parent, float scale, std::string label, bool checked, const std::function<void(bool)>& onChange
     ) {
       auto row = ui::row({
@@ -35,14 +37,17 @@ namespace settings {
       row->addChild(makeLabel(
           std::move(label), Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Normal
       ));
+      Toggle* toggle = nullptr;
       row->addChild(
           ui::toggle({
+              .out = &toggle,
               .checked = checked,
               .scale = scale,
               .onChange = onChange,
           })
       );
       parent.addChild(std::move(row));
+      return toggle;
     }
 
   } // namespace
@@ -136,6 +141,43 @@ namespace settings {
     matchContentBlock->addChild(std::move(matchContentInput));
     body->addChild(std::move(matchContentBlock));
 
+    auto deliveryToggles = std::make_shared<std::array<Toggle*, 3>>();
+    Select* deliverySelect = nullptr;
+    body->addChild(makeLabel(
+        i18n::tr("settings.notifications.filter.delivery-label"), Style::fontSizeCaption * scale,
+        colorSpecFromRole(ColorRole::OnSurfaceVariant)
+    ));
+    body->addChild(
+        ui::select({
+            .out = &deliverySelect,
+            .options =
+                std::vector<std::string>{
+                    i18n::tr("settings.notifications.filter.delivery-normal"),
+                    i18n::tr("settings.notifications.filter.delivery-silent"),
+                    i18n::tr("settings.notifications.filter.delivery-history"),
+                    i18n::tr("settings.notifications.filter.delivery-hidden"),
+                    i18n::tr("settings.notifications.filter.delivery-custom")
+                },
+            .selectedIndex = static_cast<std::size_t>(notificationDelivery(row)),
+            .fontSize = Style::fontSizeBody * scale,
+            .controlHeight = Style::controlHeight * scale,
+            .onSelectionChanged = [&row, persistDraft, deliveryToggles](std::size_t index, std::string_view) {
+              if (index >= static_cast<std::size_t>(NotificationDelivery::Custom))
+                return;
+              setNotificationDelivery(row, static_cast<NotificationDelivery>(index));
+              (*deliveryToggles)[0]->setChecked(row.showToast);
+              (*deliveryToggles)[1]->setChecked(row.saveHistory);
+              (*deliveryToggles)[2]->setChecked(row.playSound);
+              persistDraft();
+            },
+        })
+    );
+    body->addChild(makeSettingSubtitleLabel(i18n::tr("settings.notifications.filter.delivery-description"), scale));
+    const auto persistDelivery = [&row, deliverySelect, persistDraft] {
+      deliverySelect->setSelectedIndexSilently(static_cast<std::size_t>(notificationDelivery(row)));
+      persistDraft();
+    };
+
     auto flagsBlock = ui::column(
         {.align = FlexAlign::Stretch, .gap = Style::spaceSm * scale},
         makeLabel(
@@ -185,25 +227,25 @@ namespace settings {
         [setUrgency](bool value) { setUrgency("critical", value); }
     );
     body->addChild(std::move(urgenciesBlock));
-    addToggleRow(
+    (*deliveryToggles)[0] = addToggleRow(
         *flagsBlock, scale, i18n::tr("settings.notifications.filter.show-toast"), row.showToast,
-        [&row, persistDraft](bool value) {
+        [&row, persistDelivery](bool value) {
           row.showToast = value;
-          persistDraft();
+          persistDelivery();
         }
     );
-    addToggleRow(
+    (*deliveryToggles)[1] = addToggleRow(
         *flagsBlock, scale, i18n::tr("settings.notifications.filter.save-history"), row.saveHistory,
-        [&row, persistDraft](bool value) {
+        [&row, persistDelivery](bool value) {
           row.saveHistory = value;
-          persistDraft();
+          persistDelivery();
         }
     );
-    addToggleRow(
+    (*deliveryToggles)[2] = addToggleRow(
         *flagsBlock, scale, i18n::tr("settings.notifications.filter.play-sound"), row.playSound,
-        [&row, persistDraft](bool value) {
+        [&row, persistDelivery](bool value) {
           row.playSound = value;
-          persistDraft();
+          persistDelivery();
         }
     );
     addToggleRow(

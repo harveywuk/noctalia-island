@@ -133,6 +133,9 @@ namespace config_export {
 
     BarConfig applyMonitorOverride(const BarConfig& base, const BarMonitorOverride& ovr) {
       BarConfig resolved = base;
+      if (ovr.presentation)
+        resolved.presentation = *ovr.presentation;
+      resolved.island = applyIslandOverride(resolved.island, ovr.island);
       if (ovr.position)
         resolved.position = *ovr.position;
       if (ovr.enabled)

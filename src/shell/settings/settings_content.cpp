@@ -4,10 +4,15 @@
 #include "config/config_types.h"
 #include "i18n/i18n.h"
 #include "notification/notification_filter.h"
+#include "shell/settings/backup_editor.h"
 #include "shell/settings/bar_widget_editor.h"
+#include "shell/settings/default_apps_editor.h"
+#include "shell/settings/hyprland_display_editor.h"
+#include "shell/settings/hyprland_editor.h"
 #include "shell/settings/island_widget_editor.h"
 #include "shell/settings/settings_content_common.h"
 #include "shell/settings/settings_control_factory.h"
+#include "shell/settings/startup_apps_editor.h"
 #include "ui/builders.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
@@ -158,7 +163,7 @@ namespace settings {
               .glyphSize = Style::fontSizeHeader * scale,
               .color = colorSpecFromRole(ColorRole::Primary),
           }),
-          makeLabel(title, Style::fontSizeHeader * scale, colorSpecFromRole(ColorRole::Primary), FontWeight::Bold)
+          makeLabel(title, Style::fontSizeHeader * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Bold)
       );
       auto section = ui::column({
           .align = FlexAlign::Stretch,
@@ -168,7 +173,7 @@ namespace settings {
       });
       if (ctx.pageTitleRow != nullptr && ctx.searchQuery.empty() && ctx.pageTitleRow->children().empty()) {
         ctx.pageTitleRow->addChild(std::move(titleRow));
-      } else {
+      } else if (!ctx.searchQuery.empty() || ctx.selectedGroup.empty()) {
         section->addChild(std::move(titleRow));
       }
       auto* raw = section.get();
@@ -1283,7 +1288,6 @@ namespace settings {
       return matchesNormalizedSettingQuery(entry, normalizedSearchQuery);
     };
 
-    std::string pageKey;
     std::vector<std::string> pageGroupKeys;
     if (ctx.searchQuery.empty()) {
       std::unordered_set<std::string> seenGroupKeys;
@@ -1292,49 +1296,73 @@ namespace settings {
         if (!entryPassesFilters(entry) || entry.group.empty()) {
           continue;
         }
-        if (pageKey.empty()) {
-          pageKey = barSettingContentSectionKey(entry);
-        }
         if (seenGroupKeys.insert(entry.group).second) {
           pageGroupKeys.push_back(entry.group);
         }
       }
     }
-    const bool collapsibleGroups = ctx.searchQuery.empty() && !pageGroupKeys.empty();
-    std::unordered_set<std::string>* expandedGroups = nullptr;
-    if (collapsibleGroups) {
-      auto [pageIt, fresh] = ctx.expandedGroupsByPage.try_emplace(pageKey);
-      if (fresh) {
-        if (ctx.config.shell.settingsExpandAllGroups) {
-          pageIt->second.insert(pageGroupKeys.begin(), pageGroupKeys.end());
-        } else {
-          pageIt->second.insert(pageGroupKeys.front());
+    const bool detailNavigation = ctx.searchQuery.empty() && bool(ctx.navigateGroup);
+    const bool singleGroup = ctx.selectedGroup.empty() && pageGroupKeys.size() == 1;
+    const std::string_view detailGroup = singleGroup ? std::string_view(pageGroupKeys.front()) : ctx.selectedGroup;
+    const bool detailPage = detailNavigation && (!ctx.selectedGroup.empty() || singleGroup);
+    if (detailNavigation && !detailPage && !pageGroupKeys.empty()) {
+      const auto first =
+          std::ranges::find_if(entryOrder, [&](std::size_t index) { return entryPassesFilters(registry[index]); });
+      if (first != entryOrder.end()) {
+        const auto& entry = registry[*first];
+        std::string title = sectionLabel(entry.section);
+        if (entry.section == SettingsSection::Bar && ctx.selectedBar != nullptr) {
+          title = i18n::tr("settings.entities.bar.label", "name", ctx.selectedBar->name);
+          if (ctx.selectedMonitorOverride)
+            title += " / " + ctx.selectedMonitorOverride->match;
         }
-      }
-      expandedGroups = &pageIt->second;
-    }
-
-    std::unordered_map<std::string, Button*> pillByGroup;
-    if (collapsibleGroups && ctx.groupJumpRow != nullptr) {
-      for (const auto& group : pageGroupKeys) {
-        Button* pill = nullptr;
-        ctx.groupJumpRow->addChild(
-            ui::button({
-                .out = &pill,
-                .text = groupLabel(group),
-                .fontSize = Style::fontSizeCaption * scale,
-                .variant = expandedGroups->contains(group) ? ButtonVariant::Primary : ButtonVariant::Default,
-                .radius = Style::scaledRadiusMd(scale),
-            })
+        auto* overview = makeSection(title, entry.section);
+        auto card = ui::column(
+            {.align = FlexAlign::Stretch,
+             .gap = 0.0F,
+             .padding = Style::spaceSm * scale,
+             .fill = colorSpecFromRole(ColorRole::OnSurface, 0.045F),
+             .radius = Style::scaledRadiusMd(scale)}
         );
-        pillByGroup.emplace(group, pill);
+        for (const auto& group : pageGroupKeys) {
+          if (!card->children().empty())
+            card->addChild(ui::separator());
+          card->addChild(
+              ui::button({
+                  .text = groupLabel(group) + "   ›",
+                  .fontSize = Style::fontSizeBody * scale,
+                  .contentAlign = ButtonContentAlign::Start,
+                  .variant = ButtonVariant::Ghost,
+                  .minHeight = 52.0F * scale,
+                  .paddingH = Style::spaceMd * scale,
+                  .onClick = [navigate = ctx.navigateGroup, group] { navigate(group); },
+              })
+          );
+        }
+        overview->addChild(std::move(card));
+        return pageGroupKeys.size();
       }
+    }
+    if (detailPage && !ctx.selectedGroup.empty() && ctx.pageTitleRow) {
+      ctx.pageTitleRow->addChild(
+          ui::button({
+              .text = i18n::tr("settings.navigation.back"),
+              .glyph = "chevron-left",
+              .fontSize = Style::fontSizeCaption * scale,
+              .variant = ButtonVariant::Ghost,
+              .onClick = [navigate = ctx.navigateGroup] { navigate(""); },
+          })
+      );
+      ctx.pageTitleRow->addChild(makeLabel(
+          groupLabel(ctx.selectedGroup), Style::fontSizeHeader * scale, colorSpecFromRole(ColorRole::OnSurface),
+          FontWeight::Bold
+      ));
     }
 
     bool islandWidgetEditorAdded = false;
     for (const std::size_t entryIndex : entryOrder) {
       const auto& entry = registry[entryIndex];
-      if (!entryPassesFilters(entry)) {
+      if (!entryPassesFilters(entry) || (detailPage && entry.group != detailGroup)) {
         continue;
       }
       // Cap only once a genuinely-matching entry is about to be rendered, so the truncation hint never
@@ -1374,18 +1402,16 @@ namespace settings {
           activeGroupKey = entry.group;
           activeKeybindRow = nullptr;
           activeKeybindRowCount = 0;
-          if (collapsibleGroups && !entry.group.empty()) {
-            activeGroupBody = addSettingsGroupCard(
-                SettingsGroupCardProps{
-                    .parent = *activeSection,
-                    .group = entry.group,
-                    .title = groupLabel(entry.group),
-                    .scale = scale,
-                    .expandedGroups = *expandedGroups,
-                    .pill = pillByGroup[entry.group],
-                    .scrollToTop = ctx.scrollContentToTop,
-                }
+          if (detailPage) {
+            auto card = ui::column(
+                {.align = FlexAlign::Stretch,
+                 .gap = Style::spaceSm * scale,
+                 .paddingV = Style::spaceSm * scale,
+                 .paddingH = Style::spaceMd * scale,
+                 .fill = colorSpecFromRole(ColorRole::OnSurface, 0.045F),
+                 .radius = Style::scaledRadiusMd(scale)}
             );
+            activeGroupBody = static_cast<Flex*>(activeSection->addChild(std::move(card)));
           } else if (!entry.group.empty()) {
             activeGroupBody = addSettingsCard(*activeSection, groupLabel(entry.group), scale);
           } else {
@@ -1410,10 +1436,20 @@ namespace settings {
           activeKeybindRow = nullptr;
           activeKeybindRowCount = 0;
         }
-        if (const auto* list = std::get_if<ListSetting>(&entry.control)) {
+        if (entry.section == SettingsSection::System && entry.group == "default-apps") {
+          activeGroupBody->addChild(makeDefaultAppsEditor(ctx));
+        } else if (entry.section == SettingsSection::System && entry.group == "backups") {
+          activeGroupBody->addChild(makeBackupEditor(ctx));
+        } else if (entry.section == SettingsSection::Session && entry.group == "startup-apps") {
+          activeGroupBody->addChild(makeStartupAppsEditor(ctx));
+        } else if (auto displays = makeHyprlandDisplayEditor(entry, ctx)) {
+          activeGroupBody->addChild(std::move(displays));
+        } else if (auto editor = makeHyprlandEditor(entry, ctx)) {
+          activeGroupBody->addChild(std::move(editor));
+        } else if (const auto* list = std::get_if<ListSetting>(&entry.control)) {
           if (hoverWidgetGroup(entry.path)) {
             if (!islandWidgetEditorAdded) {
-              addIslandWidgetEditor(*activeGroupBody, factory);
+              addIslandWidgetEditor(*activeGroupBody, factory, {entry.path.begin(), entry.path.end() - 1});
               islandWidgetEditorAdded = true;
             }
           } else if (isFirstBarWidgetListPath(entry.path)) {
@@ -1471,7 +1507,7 @@ namespace settings {
            .justify = FlexJustify::Center,
            .gap = Style::spaceSm * scale,
            .padding = (Style::spaceLg * 2.0F) * scale,
-           .fill = colorSpecFromRole(ColorRole::SurfaceVariant, 0.24F),
+           .fill = colorSpecFromRole(ColorRole::OnSurface, 0.045F),
            .radius = Style::scaledRadiusMd(scale),
            .border = colorSpecFromRole(ColorRole::Outline),
            .minWidth = 360.0F * scale,

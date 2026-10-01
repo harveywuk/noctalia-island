@@ -142,6 +142,7 @@ struct ToplevelThumbnailCapturePending {
   int maxWidth = 1;
   int maxHeight = 1;
   std::int32_t transform = WL_OUTPUT_TRANSFORM_NORMAL;
+  bool bufferInitialized = false;
 
   ~ToplevelThumbnailCapturePending() {
     if (frame != nullptr) {
@@ -153,18 +154,27 @@ struct ToplevelThumbnailCapturePending {
     if (source != nullptr) {
       ext_image_capture_source_v1_destroy(source);
     }
+    releaseBuffer();
+  }
+
+  void releaseBuffer() {
     if (buffer != nullptr) {
       wl_buffer_destroy(buffer);
+      buffer = nullptr;
     }
     if (pool != nullptr) {
       wl_shm_pool_destroy(pool);
+      pool = nullptr;
     }
     if (mapped != MAP_FAILED) {
       munmap(mapped, mappedSize);
+      mapped = MAP_FAILED;
     }
     if (fd >= 0) {
       close(fd);
+      fd = -1;
     }
+    bufferInitialized = false;
   }
 
   void beginConstraints() {
@@ -204,7 +214,7 @@ struct ToplevelThumbnailCapturePending {
   static void constraintsDone(void* data, ext_image_copy_capture_session_v1*) {
     auto& pending = *static_cast<ToplevelThumbnailCapturePending*>(data);
     pending.receivingConstraints = false;
-    if (pending.frame == nullptr) {
+    if (pending.frame == nullptr && !pending.owner->m_refresh.active()) {
       pending.captureFrame();
     }
   }
@@ -222,25 +232,36 @@ struct ToplevelThumbnailCapturePending {
 
   static void ready(void* data, ext_image_copy_capture_frame_v1*) {
     auto& pending = *static_cast<ToplevelThumbnailCapturePending*>(data);
+    std::optional<ScreencopyImage> thumbnail;
     try {
-      auto thumbnail = capture::makeToplevelThumbnail(
+      thumbnail = capture::makeToplevelThumbnail(
           std::span(static_cast<const std::uint8_t*>(pending.mapped), pending.mappedSize), pending.bufferWidth,
           pending.bufferHeight, pending.bufferFormat, pending.maxWidth, pending.maxHeight, pending.transform
       );
-      if (!thumbnail.has_value()) {
-        pending.owner->fail("failed to decode toplevel thumbnail");
-        return;
-      }
-      pending.owner->finish(std::move(*thumbnail));
     } catch (const std::bad_alloc&) {
       pending.owner->fail("failed to allocate toplevel thumbnail");
+      return;
     }
+    if (!thumbnail.has_value()) {
+      pending.owner->fail("failed to decode toplevel thumbnail");
+      return;
+    }
+    pending.owner->finish(std::move(*thumbnail));
   }
 
   static void failed(void* data, ext_image_copy_capture_frame_v1*, std::uint32_t reason) {
     auto* owner = static_cast<ToplevelThumbnailCapturePending*>(data)->owner;
     switch (reason) {
     case EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_BUFFER_CONSTRAINTS:
+      if (owner->m_interval.count() > 0) {
+        // A resize can race with a submitted frame. Retry against the newest
+        // constraints without replacing the session or clearing the last image.
+        ext_image_copy_capture_frame_v1_destroy(owner->m_pending->frame);
+        owner->m_pending->frame = nullptr;
+        owner->m_pending->releaseBuffer();
+        owner->scheduleFrame();
+        return;
+      }
       owner->fail("toplevel capture buffer constraints changed");
       return;
     case EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_STOPPED:
@@ -269,6 +290,8 @@ struct ToplevelThumbnailCapturePending {
   };
 
   void captureFrame() {
+    if (frame != nullptr || receivingConstraints)
+      return;
     if (width == 0 || height == 0) {
       owner->fail("toplevel image is unavailable (empty buffer constraints)");
       return;
@@ -282,32 +305,38 @@ struct ToplevelThumbnailCapturePending {
       owner->fail("toplevel capture buffer is too large");
       return;
     }
-    bufferWidth = static_cast<int>(width);
-    bufferHeight = static_cast<int>(height);
-    bufferFormat = format;
-    const int stride = bufferWidth * 4;
-    mappedSize = static_cast<std::size_t>(stride) * height;
+    if (buffer == nullptr
+        || bufferWidth != static_cast<int>(width)
+        || bufferHeight != static_cast<int>(height)
+        || bufferFormat != format) {
+      releaseBuffer();
+      bufferWidth = static_cast<int>(width);
+      bufferHeight = static_cast<int>(height);
+      bufferFormat = format;
+      const int stride = bufferWidth * 4;
+      mappedSize = static_cast<std::size_t>(stride) * height;
 #ifdef __linux__
-    fd = memfd_create("noctalia-toplevel-thumbnail", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+      fd = memfd_create("noctalia-toplevel-thumbnail", MFD_CLOEXEC | MFD_ALLOW_SEALING);
 #endif
-    if (fd < 0 || ftruncate(fd, static_cast<off_t>(mappedSize)) < 0) {
-      owner->fail("failed to allocate toplevel capture shared-memory file");
-      return;
-    }
-    mapped = mmap(nullptr, mappedSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mapped == MAP_FAILED) {
-      owner->fail("failed to map toplevel capture shared-memory buffer");
-      return;
-    }
-    pool = wl_shm_create_pool(owner->m_wayland.shm(), fd, static_cast<std::int32_t>(mappedSize));
-    if (pool == nullptr) {
-      owner->fail("failed to create toplevel capture shared-memory pool");
-      return;
-    }
-    buffer = wl_shm_pool_create_buffer(pool, 0, bufferWidth, bufferHeight, stride, bufferFormat);
-    if (buffer == nullptr) {
-      owner->fail("failed to create toplevel capture shared-memory buffer");
-      return;
+      if (fd < 0 || ftruncate(fd, static_cast<off_t>(mappedSize)) < 0) {
+        owner->fail("failed to allocate toplevel capture shared-memory file");
+        return;
+      }
+      mapped = mmap(nullptr, mappedSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      if (mapped == MAP_FAILED) {
+        owner->fail("failed to map toplevel capture shared-memory buffer");
+        return;
+      }
+      pool = wl_shm_create_pool(owner->m_wayland.shm(), fd, static_cast<std::int32_t>(mappedSize));
+      if (pool == nullptr) {
+        owner->fail("failed to create toplevel capture shared-memory pool");
+        return;
+      }
+      buffer = wl_shm_pool_create_buffer(pool, 0, bufferWidth, bufferHeight, stride, bufferFormat);
+      if (buffer == nullptr) {
+        owner->fail("failed to create toplevel capture shared-memory buffer");
+        return;
+      }
     }
     frame = ext_image_copy_capture_session_v1_create_frame(session);
     if (frame == nullptr || ext_image_copy_capture_frame_v1_add_listener(frame, &frameListener, this) != 0) {
@@ -315,7 +344,10 @@ struct ToplevelThumbnailCapturePending {
       return;
     }
     ext_image_copy_capture_frame_v1_attach_buffer(frame, buffer);
-    ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0, bufferWidth, bufferHeight);
+    // This same buffer retains the last frame; only a new buffer needs full
+    // client damage. The compositor adds damage from source content changes.
+    if (!bufferInitialized)
+      ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0, bufferWidth, bufferHeight);
     ext_image_copy_capture_frame_v1_capture(frame);
     if (wl_display_flush(owner->m_wayland.display()) < 0 && errno != EAGAIN) {
       owner->fail("failed to submit toplevel capture frame");
@@ -337,6 +369,20 @@ bool ToplevelThumbnailCapture::available() const noexcept {
 void ToplevelThumbnailCapture::capture(
     ext_foreign_toplevel_handle_v1* handle, int maxWidth, int maxHeight, CompletionCallback onComplete
 ) {
+  startCapture(handle, maxWidth, maxHeight, std::chrono::milliseconds{0}, std::move(onComplete));
+}
+
+void ToplevelThumbnailCapture::stream(
+    ext_foreign_toplevel_handle_v1* handle, int maxWidth, int maxHeight, std::chrono::milliseconds interval,
+    CompletionCallback onFrame
+) {
+  startCapture(handle, maxWidth, maxHeight, std::max(interval, std::chrono::milliseconds{100}), std::move(onFrame));
+}
+
+void ToplevelThumbnailCapture::startCapture(
+    ext_foreign_toplevel_handle_v1* handle, int maxWidth, int maxHeight, std::chrono::milliseconds interval,
+    CompletionCallback onComplete
+) {
   if (busy() || !available() || handle == nullptr || maxWidth <= 0 || maxHeight <= 0) {
     if (onComplete) {
       onComplete(std::nullopt, busy() ? "toplevel capture already in progress" : "toplevel capture unavailable");
@@ -352,6 +398,7 @@ void ToplevelThumbnailCapture::capture(
     return;
   }
   m_onComplete = std::move(onComplete);
+  m_interval = interval;
   m_pending->owner = this;
   m_pending->maxWidth = maxWidth;
   m_pending->maxHeight = maxHeight;
@@ -381,6 +428,7 @@ void ToplevelThumbnailCapture::capture(
 
 void ToplevelThumbnailCapture::cancelInFlight() {
   m_timeout.stop();
+  m_refresh.stop();
   m_pending.reset();
   m_onComplete = {};
 }
@@ -388,6 +436,7 @@ void ToplevelThumbnailCapture::cancelInFlight() {
 void ToplevelThumbnailCapture::fail(std::string message) {
   auto onComplete = std::exchange(m_onComplete, {});
   m_timeout.stop();
+  m_refresh.stop();
   m_pending.reset();
   if (onComplete) {
     onComplete(std::nullopt, std::move(message));
@@ -395,10 +444,29 @@ void ToplevelThumbnailCapture::fail(std::string message) {
 }
 
 void ToplevelThumbnailCapture::finish(ScreencopyImage image) {
+  if (m_interval.count() > 0) {
+    m_timeout.stop();
+    ext_image_copy_capture_frame_v1_destroy(m_pending->frame);
+    m_pending->frame = nullptr;
+    m_pending->bufferInitialized = true;
+    scheduleFrame();
+    // The callback may cancel capture or destroy its owner.
+    auto onFrame = m_onComplete;
+    if (onFrame)
+      onFrame(std::move(image), {});
+    return;
+  }
   auto onComplete = std::exchange(m_onComplete, {});
   m_timeout.stop();
   m_pending.reset();
   if (onComplete) {
     onComplete(std::move(image), {});
   }
+}
+
+void ToplevelThumbnailCapture::scheduleFrame() {
+  m_refresh.start(m_interval, [this] {
+    if (m_pending)
+      m_pending->captureFrame();
+  });
 }

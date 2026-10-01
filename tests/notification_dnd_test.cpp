@@ -42,6 +42,25 @@ int main() {
   const uint32_t secondId = addNotification("second");
 
   bool ok = true;
+  {
+    NotificationManager held;
+    int updated = 0;
+    held.addEventCallback([&](const Notification& notification, NotificationEvent event) {
+      if (event == NotificationEvent::Updated)
+        ++updated;
+      if (event != NotificationEvent::Closed)
+        held.pauseExpiry(notification.id);
+    });
+    NotificationRequest request{
+        .appName = "urgent-test", .summary = "Urgent", .urgency = Urgency::Critical, .timeout = 1000, .transient = true
+    };
+    request.replacesId = held.addOrReplace(request);
+    held.addOrReplace(request);
+    ok &= check(
+        updated == 1 && !held.all().front().expiryTime,
+        "identical replacement lets presenters retain an urgent or hover hold"
+    );
+  }
   ok &= check(firstId != secondId, "notifications receive distinct IDs");
   ok &= check(manager.all().size() == 2, "notifications are active before DND");
 

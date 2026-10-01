@@ -3,6 +3,7 @@
 #include "config/config_service.h"
 #include "core/ui_phase.h"
 #include "i18n/i18n.h"
+#include "render/animation/motion_service.h"
 #include "render/core/renderer.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
@@ -14,6 +15,7 @@
 #include "system/internal_app_metadata.h"
 #include "ui/app_icon_colorization.h"
 #include "ui/builders.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/layer_surface.h"
@@ -41,7 +43,6 @@ namespace {
   constexpr float kDotGap = 3.0F;
   constexpr float kCellPad = 6.0F;
   constexpr float kLauncherGlyphSizeRatio = 0.8F;
-  constexpr float kHoverZoomLerp = 0.28F;
   constexpr float kHoverZoomReferenceFrameMs = 1000.0F / 60.0F;
   // Pointer hit padding (in item pitches) — keep generous so edge icons still magnify.
   constexpr float kHoverZoomInfluence = 2.25F;
@@ -141,8 +142,8 @@ namespace {
   }
 
   [[nodiscard]] float hoverZoomFrameLerp(float deltaMs) {
-    const float clampedMs = std::clamp(deltaMs, 1.0F, 50.0F);
-    return 1.0F - std::pow(1.0F - kHoverZoomLerp, clampedMs / kHoverZoomReferenceFrameMs);
+    const auto& motion = MotionService::instance();
+    return Motion::followFactor(deltaMs, motion.enabled(), motion.speed());
   }
 
   [[nodiscard]] bool lerpHoverMainOffset(float& current, float target, float lerpFactor) {
@@ -328,7 +329,7 @@ namespace {
       instance.animations.cancel(animId);
     }
     animId = instance.animations.animate(
-        visualScale, targetScale, Style::animNormal, Easing::EaseOutCubic,
+        visualScale, targetScale, Motion::feedbackMs, Motion::reveal,
         [node = iconNode, visualScalePtr = &visualScale](float value) {
           *visualScalePtr = value;
           node->setScale(value);
@@ -458,6 +459,14 @@ namespace shell::dock {
     auto* instPtr = &instance;
     configureDockTooltip(*areaNode, cfg, i18n::tr("dock.launcher"));
     areaNode->setAcceptedButtons(InputArea::buttonMask({BTN_LEFT}));
+    areaNode->setOnPress([instPtr](const InputArea::PointerData& d) {
+      if (d.button == BTN_LEFT && instPtr->launcherIconNode)
+        instPtr->launcherIconNode->setOpacity(d.pressed ? 0.65F : 1.0F);
+    });
+    areaNode->setOnCancel([instPtr] {
+      if (instPtr->launcherIconNode)
+        instPtr->launcherIconNode->setOpacity(1.0F);
+    });
     areaNode->setOnClick([instPtr, clickContext](const InputArea::PointerData& d) {
       if (d.button == BTN_LEFT && clickContext->callbacks.toggleLauncher) {
         clickContext->callbacks.toggleLauncher(*instPtr);
@@ -547,6 +556,9 @@ namespace shell::dock {
       const float cellMain = iSize + 2.0F * kCellPad;
       const float cellCross = iSize + 2.0F * kCellPad;
       auto areaNode = ui::inputArea({});
+      auto motionNode = std::make_unique<Node>();
+      motionNode->setSize(cellMain, cellCross);
+      item.motionNode = areaNode->addChild(std::move(motionNode));
       if (!vert) {
         areaNode->setSize(cellMain, cellCross);
       } else {
@@ -579,9 +591,9 @@ namespace shell::dock {
       });
 
       if (iconImg->hasImage()) {
-        item.iconImage = static_cast<Image*>(areaNode->addChild(std::move(iconImg)));
+        item.iconImage = static_cast<Image*>(item.motionNode->addChild(std::move(iconImg)));
       } else {
-        item.iconGlyph = static_cast<Glyph*>(areaNode->addChild(
+        item.iconGlyph = static_cast<Glyph*>(item.motionNode->addChild(
             ui::glyph({
                 .glyph = "app-window",
                 .glyphSize = iSize,
@@ -600,7 +612,7 @@ namespace shell::dock {
         for (auto& dotIndicator : item.dotIndicators) {
           dotIndicator = static_cast<Box*>(areaNode->addChild(
               ui::box({
-                  .fill = colorSpecFromRole(ColorRole::Secondary),
+                  .fill = colorSpecFromRole(ColorRole::OnSurface, 0.6F),
                   .radius = dot * 0.5F,
                   .width = dot,
                   .height = dot,
@@ -624,7 +636,7 @@ namespace shell::dock {
         const float badgeX = kCellPad + iSize - bd * kBadgeCornerInsetX;
         const float badgeY = kCellPad - bd * kBadgeCornerInsetY;
 
-        areaNode->addChild(
+        item.motionNode->addChild(
             ui::box({
                 .out = &item.badge,
                 .radius = bd * 0.5F,
@@ -649,12 +661,24 @@ namespace shell::dock {
       auto* instPtr = &instance;
 
       configureDockTooltip(*areaNode, cfg, dockItemTooltipText(model.entry));
+      if (cfg.windowPreviews && model.running)
+        areaNode->clearTooltip();
+      areaNode->setOnEnter([instPtr, clickContext, action](const auto&) {
+        if (clickContext->callbacks.hoverPreview)
+          clickContext->callbacks.hoverPreview(*instPtr, action);
+      });
+      areaNode->setOnLeave([instPtr, clickContext, action] {
+        if (clickContext->callbacks.leavePreview)
+          clickContext->callbacks.leavePreview(*instPtr, action);
+      });
       areaNode->setAcceptedButtons(InputArea::buttonMask({BTN_LEFT, BTN_RIGHT}));
       const bool itemPinned = itemIndex < pinnedCount;
       areaNode->setOnPress([instPtr, clickContext, itemIndex, itemPinned](const InputArea::PointerData& d) {
         if (d.button != BTN_LEFT) {
           return;
         }
+        if (itemIndex < instPtr->items.size() && instPtr->items[itemIndex].motionNode)
+          instPtr->items[itemIndex].motionNode->setOpacity(d.pressed ? 0.65F : 1.0F);
         auto& drag = instPtr->drag;
         const auto& dockCfg = clickContext->config.config().dock;
         if (d.pressed) {
@@ -714,6 +738,10 @@ namespace shell::dock {
         } else if (instPtr->drag.armed && clickContext->callbacks.beginDrag) {
           clickContext->callbacks.beginDrag(*instPtr, itemIndex, mainPos);
         }
+      });
+      areaNode->setOnCancel([instPtr, itemIndex] {
+        if (itemIndex < instPtr->items.size() && instPtr->items[itemIndex].motionNode)
+          instPtr->items[itemIndex].motionNode->setOpacity(1.0F);
       });
       areaNode->setOnClick([action = std::move(action), instPtr, clickContext](const InputArea::PointerData& d) {
         if (d.button == BTN_RIGHT) {
@@ -783,6 +811,11 @@ namespace shell::dock {
     for (std::size_t itemIndex = 0; itemIndex < itemCount; ++itemIndex) {
       auto& item = instance.items[itemIndex];
       const auto& model = snapshot.items[itemIndex];
+      if (cfg.windowPreviews && model.running) {
+        if (item.area->hasTooltip())
+          item.area->clearTooltip();
+      } else if (!item.area->hasTooltip())
+        configureDockTooltip(*item.area, cfg, dockItemTooltipText(model.entry));
       const bool dragActive = instance.drag.active;
       const bool isDraggedItem = dragActive && itemIndex == instance.drag.sourceIndex;
       const float iconScale = model.active ? cfg.activeScale : cfg.inactiveScale;
@@ -829,7 +862,7 @@ namespace shell::dock {
               instance.animations.cancel(item.opacityAnimId);
             }
             item.opacityAnimId = instance.animations.animate(
-                item.visualOpacity, iconOpacity, Style::animNormal, Easing::EaseOutCubic,
+                item.visualOpacity, iconOpacity, Motion::feedbackMs, Motion::reveal,
                 [node = iconNode, itemPtr = &item](float value) {
                   itemPtr->visualOpacity = value;
                   node->setOpacity(value);
@@ -859,7 +892,7 @@ namespace shell::dock {
           Box* dotNode = item.dotIndicators[dotIndex];
           const bool visible = dotIndex < dotCount;
           dotNode->setVisible(visible);
-          dotNode->setFill(colorSpecFromRole(model.active ? ColorRole::Primary : ColorRole::Secondary));
+          dotNode->setFill(colorSpecFromRole(ColorRole::OnSurface, model.active ? 0.9F : 0.6F));
           if (visible) {
             const float main = groupStart + static_cast<float>(dotIndex) * (dot + kDotGap);
             if (verticalDots) {
@@ -928,6 +961,11 @@ namespace shell::dock {
 
   void clearHoverZoom(DockInstance& instance, DockItemSceneDependencies deps, const DockSnapshot& snapshot) {
     instance.hoverPointerValid = false;
+    for (auto& item : instance.items)
+      if (item.motionNode)
+        item.motionNode->setOpacity(1.0F);
+    if (instance.launcherIconNode)
+      instance.launcherIconNode->setOpacity(1.0F);
     if (instance.surface == nullptr) {
       return;
     }
@@ -987,7 +1025,8 @@ namespace shell::dock {
     const float itemPitch = cellMain + static_cast<float>(cfg.itemSpacing);
     const float badgeSize = std::max(kBadgeMinSize, iSize * kBadgeSizeRatio);
     const float baseLauncherScale = cfg.inactiveScale;
-    const bool pointerActive = instance.pointerInside && instance.hoverPointerValid;
+    const bool pointerActive =
+        MotionService::instance().enabled() && instance.pointerInside && instance.hoverPointerValid;
     const std::size_t itemCount = std::min(instance.items.size(), snapshot.items.size());
     bool needsMoreFrames = false;
 
@@ -1264,5 +1303,29 @@ namespace shell::dock {
   }
 
   void dismissDockTooltip() { dismissDockTooltipImpl(); }
+
+  void animateLaunch(DockInstance& instance, const DockConfig& cfg, std::string_view idLower) {
+    if (!cfg.animateLaunch || !MotionService::instance().enabled())
+      return;
+    for (std::size_t i = 0; i < instance.items.size() && i < instance.snapshot.items.size(); ++i) {
+      if (instance.snapshot.items[i].idLower != idLower || !instance.items[i].motionNode)
+        continue;
+      auto* node = instance.items[i].motionNode;
+      instance.animations.cancelForOwner(node);
+      const float lift = static_cast<float>(cfg.iconSize) * 0.22F;
+      instance.animations.animate(
+          0, 1, 650, Easing::Linear,
+          [node, edge = cfg.position, lift](float t) {
+            float x = 0, y = 0;
+            shiftAlongEdge(edge, x, y, -lift * Motion::launchLift(t));
+            node->setPosition(x, y);
+          },
+          {}, node
+      );
+      if (instance.surface)
+        instance.surface->requestRedraw();
+      break;
+    }
+  }
 
 } // namespace shell::dock

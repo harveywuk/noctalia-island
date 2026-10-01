@@ -17,6 +17,27 @@ namespace {
 
 int main() {
   bool ok = true;
+  NotificationFilterConfig delivery;
+  delivery.match = "test.app";
+  delivery.overrideDuration = 2000;
+  delivery.bypassDnd = true;
+  for (const auto mode :
+       {NotificationDelivery::Normal, NotificationDelivery::Silent, NotificationDelivery::HistoryOnly,
+        NotificationDelivery::Hidden}) {
+    setNotificationDelivery(delivery, mode);
+    ok &= check(notificationDelivery(delivery) == mode, "delivery choice round trips");
+    const auto resolved = resolveNotificationFilter({delivery}, {.appName = "test.app"});
+    ok &= check(
+        resolved.showToast == (mode == NotificationDelivery::Normal || mode == NotificationDelivery::Silent),
+        "delivery preview policy"
+    );
+    ok &= check(resolved.saveHistory == (mode != NotificationDelivery::Hidden), "delivery history policy");
+    ok &= check(resolved.playSound == (mode == NotificationDelivery::Normal), "delivery sound policy");
+    ok &= check(resolved.bypassDnd && resolved.overrideDuration == 2000, "delivery preserves independent choices");
+  }
+  delivery.showToast = true;
+  delivery.saveHistory = false;
+  ok &= check(notificationDelivery(delivery) == NotificationDelivery::Custom, "custom flags stay custom");
 
   const std::vector<std::string> blacklist = normalizeNotificationBlacklist({" Discord ", "discord", ""});
 

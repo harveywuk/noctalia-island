@@ -10,15 +10,20 @@ namespace Style {
   inline constexpr int animNormal = 200;
   inline constexpr int animSlow = 400;
 
-  inline constexpr float radiusSm = 3.0F;
-  inline constexpr float radiusMd = 6.0F;
-  inline constexpr float radiusLg = 9.0F;
-  inline constexpr float radiusXl = 12.0F;
+  inline constexpr float radiusSm = 5.0F;
+  inline constexpr float radiusMd = 8.0F;
+  inline constexpr float radiusLg = 12.0F;
+  inline constexpr float radiusXl = 18.0F;
 
   inline constexpr float borderWidth = 1.0F;
   inline constexpr float emphasizedBorderWidth = 3.0F;
   inline constexpr float focusRingWidth = 2.0F;
-  inline constexpr float disabledOutlineAlpha = 0.5F;
+  // Quiet chrome keeps accent colours for selection, focus and active controls.
+  inline constexpr float hairlineAlpha = 0.32F;
+  inline constexpr float controlBorderAlpha = 0.5F;
+  inline constexpr float hoverFillAlpha = 0.08F;
+  inline constexpr float pressedFillAlpha = 0.14F;
+  inline constexpr float disabledOutlineAlpha = 0.2F;
 
   inline constexpr float spaceXs = 4.0F;
   inline constexpr float spaceSm = 8.0F;
@@ -90,7 +95,7 @@ namespace Style {
 
   // Slider geometry.
   inline constexpr float sliderDefaultWidth = 180.0F;
-  inline constexpr float sliderTrackHeight = 8.0F;
+  inline constexpr float sliderTrackHeight = 6.0F;
   inline constexpr float sliderThumbSize = 18.0F;
   inline constexpr float sliderHorizontalPadding = 2.0F;
 

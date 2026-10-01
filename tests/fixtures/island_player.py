@@ -28,11 +28,11 @@ def change(key,value):
  bus.emit_signal(None,path,'org.freedesktop.DBus.Properties','PropertiesChanged',GLib.Variant('(sa{sv}as)',(player,{key:value},[])))
 def method(connection,sender,path,interface,name,parameters,invocation):
  with open(os.environ['ISLAND_TEST_EVENTS'],'a') as f:f.write(name+' '+str(parameters.unpack())+'\n')
- if name in ['PlayPause','Play','Pause']:
+ if name in ['PlayPause','Play','Pause','Stop']:
   playing=props[player]['PlaybackStatus'].unpack()=='Playing'
-  state='Playing' if name=='Play' or name=='PlayPause' and not playing else 'Paused'
+  state='Stopped' if name=='Stop' else 'Playing' if name=='Play' or name=='PlayPause' and not playing else 'Paused'
   change('PlaybackStatus',GLib.Variant('s',state))
- if name in ['Next','Previous']:change('Metadata',metadata('Another orbit'))
+ if name in ['Next','Previous']:change('Metadata',metadata('Another orbit' if name=='Next' else os.environ.get('ISLAND_TEST_TITLE','A little closer to home')))
  if name=='SetPosition':change('Position',GLib.Variant('x',parameters.unpack()[1]))
  invocation.return_value(None)
 for info in Gio.DBusNodeInfo.new_for_xml(xml).interfaces:

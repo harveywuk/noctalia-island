@@ -9,6 +9,7 @@
 
 class WidgetFactory;
 struct Config;
+struct IslandConfig;
 struct wl_output;
 namespace noctalia::bar {
   class WidgetActionDispatcher;
@@ -20,7 +21,7 @@ public:
   IslandWidgetHost(
       WidgetFactory&, const Config&, wl_output*, float scale, AnimationManager*,
       const noctalia::bar::WidgetActionDispatcher*, std::function<void()> update, std::function<void()> redraw,
-      std::function<void()> frame
+      std::function<void()> frame, const IslandConfig&, const std::string& barName
   );
   ~IslandWidgetHost() override;
   void updateWidgets(Renderer&, float availableWidth);

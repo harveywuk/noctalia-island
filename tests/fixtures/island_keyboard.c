@@ -38,13 +38,20 @@ int main(void) {
   zwp_virtual_keyboard_v1_keymap(keyboard, WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, fd, size);
   wl_display_roundtrip(display);
   uint32_t shift = 1u << xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_SHIFT);
+  uint32_t ctrl = 1u << xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_CTRL);
+  uint32_t alt = 1u << xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_ALT);
+  uint32_t logo = 1u << xkb_keymap_mod_get_index(keymap, XKB_MOD_NAME_LOGO);
   close(fd); free(text); xkb_keymap_unref(keymap); xkb_context_unref(context);
   unsigned key;
   char line[64];
   while (fgets(line, sizeof(line), stdin)) {
     uint32_t modifiers = 0;
     if (!strncmp(line, "shift-tab", 9)) { key = 15; modifiers = shift; }
-    else if (sscanf(line, "%u", &key) != 1) return 4;
+    else if (!strncmp(line, "chord ", 6)) {
+      unsigned mask;
+      if (sscanf(line, "chord %u %u", &mask, &key) != 2) return 4;
+      modifiers = ((mask & 1) ? shift : 0) | ((mask & 2) ? ctrl : 0) | ((mask & 4) ? alt : 0) | ((mask & 8) ? logo : 0);
+    } else if (sscanf(line, "%u", &key) != 1) return 4;
     struct timespec now; clock_gettime(CLOCK_MONOTONIC, &now);
     uint32_t stamp = (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000);
     zwp_virtual_keyboard_v1_modifiers(keyboard, modifiers, 0, 0, 0);

@@ -100,7 +100,19 @@ When `magnification = true` (default), icons grow as the pointer moves along the
 - Magnification applies on top of `active_scale` / `inactive_scale`.
 - Icons may extend past the dock capsule into a small cross-axis pad (macOS-style); the background slab stays fixed size.
 - The launcher button participates when shown.
-- Hovering an entry shows a tooltip with its app name (launcher button shows **Launcher**).
+- Hovering an entry shows its app name, or its window picker when previews are enabled (the launcher button shows **Launcher**).
+
+Magnification follows the shell's animation speed. Turning off animations under **Appearance → Motion** also disables hover magnification and launch bounces; app activation and auto-hide continue to work immediately.
+
+**Animate Opening Apps** (`animate_launch = true`) adds a brief settling bounce when an app is launched from the dock. It can be disabled independently in **Dock → Focus Styling**. Pressing an icon gives immediate visual feedback, and clicking a running app activates it (repeated clicks cycle its windows).
+
+## Window previews
+
+Enable **Dock → Behavior → Window Previews** (`window_previews = true`, off by default) to open a window picker when hovering over a running app. **Preview Delay (ms)** (`preview_delay_ms`, default `450`, range `150`–`1500`) controls how long to hover.
+
+Click a card to switch to that window, or its close button to close only that window. The dock stays visible while the picker is open, with a short grace period for moving between the icon and the cards. Large groups use pages, keeping every window reachable within the monitor.
+
+Previews update live at up to 10 frames per second while the picker is open. Only the current page captures windows (at most six); changing pages or closing the picker releases those capture sessions and buffers. Sessions reuse their buffers and can wait for content changes, avoiding repeated work for unchanged windows. Compositors or windows that cannot provide an image show the app icon and title instead; a stopped capture keeps its last frame. The picker follows the shell palette and reduced-motion preference, while live window content continues updating. Turning previews off restores the app-name tooltip.
 
 ## Reordering pinned apps
 
@@ -125,6 +137,8 @@ Dock settings expose **Off**, **On**, and **Smart** as one control. In config th
 - **Smart**: workspace-based hide (`smart_auto_hide = true`, `auto_hide = false`)
 
 When `auto_hide = true`, the dock slides out after the pointer leaves and slides back in when the pointer reaches the matching screen edge trigger strip.
+
+**Hide Delay (ms)** (`hide_delay_ms = 200`, range `0`–`2000`) gives the pointer a short grace period before the dock slides away. Re-entering cancels the delay. The dock remains available while its app menu is open. This delay applies to both pointer and smart auto-hide; workspace occupancy changes are handled immediately.
 
 ### Smart auto-hide
 

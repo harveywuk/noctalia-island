@@ -158,13 +158,11 @@ namespace shell::dock {
 
   std::int32_t dockHoverZoomCrossPad(const DockConfig& cfg) {
     const float peak = dockHoverZoomPeakScale(cfg);
-    if (peak <= 1.0F) {
-      return 0;
-    }
+    const float launchPad = cfg.animateLaunch ? static_cast<float>(cfg.iconSize) * 0.22F : 0;
     // Icons grow fully away from the screen edge (shiftAlongEdge), not half-and-half.
     const float iconGrowth = static_cast<float>(cfg.iconSize) * (peak - 1.0F);
-    const float extra = iconGrowth + dockHoverZoomBadgeOverhang(cfg);
-    return static_cast<std::int32_t>(std::ceil(extra + static_cast<float>(kCellPad)));
+    const float extra = iconGrowth + dockHoverZoomBadgeOverhang(cfg) + launchPad;
+    return extra > 0 ? static_cast<std::int32_t>(std::ceil(extra + static_cast<float>(kCellPad))) : 0;
   }
 
   std::int32_t dockHoverZoomMainPad(const DockConfig& cfg) {

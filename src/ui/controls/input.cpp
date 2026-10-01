@@ -1520,7 +1520,8 @@ void Input::applyVisualState() {
     const Color border = m_invalid
         ? resolved(ColorRole::Error)
         : (focused ? resolveColorSpec(focusRingColorSpec())
-                   : (inputHovered ? resolved(ColorRole::Hover) : resolved(ColorRole::Outline)));
+                   : (inputHovered ? resolved(ColorRole::Outline)
+                                   : resolved(ColorRole::Outline, Style::controlBorderAlpha)));
 
     float resolvedBorderWidth = 0.0F;
     if (focused) {

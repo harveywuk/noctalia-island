@@ -15,6 +15,7 @@
 #include "render/scene/input_area.h"
 #include "shell/bar/bar_corner_shape.h"
 #include "shell/bar/bar_reserved_zone.h"
+#include "shell/bar/bar_visibility.h"
 #include "shell/bar/widget.h"
 #include "shell/bar/widget_gesture_defaults.h"
 #include "shell/bar/widgets/plugin_widget.h"
@@ -73,53 +74,7 @@ namespace {
     return instance.barConfig.autoHide;
   }
 
-  [[nodiscard]] bool workspaceKeyMatchesAssignment(std::string_view assignmentKey, const Workspace& workspace) {
-    if (assignmentKey.empty()) {
-      return false;
-    }
-    if (!workspace.id.empty() && assignmentKey == workspace.id) {
-      return true;
-    }
-    if (!workspace.name.empty() && assignmentKey == workspace.name) {
-      return true;
-    }
-    if (workspace.index > 0 && assignmentKey == std::to_string(workspace.index)) {
-      return true;
-    }
-    return false;
-  }
-
-  [[nodiscard]] bool activeWorkspaceHasWindows(const CompositorPlatform& platform, wl_output* output) {
-    const auto workspaces = platform.workspaces(output);
-    const Workspace* active = nullptr;
-    for (const auto& workspace : workspaces) {
-      if (workspace.active) {
-        active = &workspace;
-        break;
-      }
-    }
-    if (active == nullptr) {
-      return false;
-    }
-
-    const auto assignments = platform.workspaceWindowAssignments(output);
-    for (const auto& assignment : assignments) {
-      if (workspaceKeyMatchesAssignment(assignment.workspaceKey, *active)) {
-        return true;
-      }
-    }
-    if (!assignments.empty()) {
-      return false;
-    }
-    return active->occupied;
-  }
-
-  [[nodiscard]] bool smartAutoHideWantsPinnedVisible(const CompositorPlatform& platform, wl_output* output) {
-    if (platform.hasOverviewState() && platform.isOverviewOpen()) {
-      return true;
-    }
-    return !activeWorkspaceHasWindows(platform, output);
-  }
+  using noctalia::bar::smartAutoHideWantsPinnedVisible;
 
   [[nodiscard]] int barAutoHideEdgeGutter(const BarConfig& cfg) noexcept {
     if (!barConfigUsesSlideSurface(cfg) || cfg.marginEdge <= 0) {
@@ -1454,6 +1409,7 @@ bool Bar::initialize(const BarServices& services) {
   m_lastBars = m_config->config().bars;
   m_lastWidgets = m_config->config().widgets;
   m_lastShadow = m_config->config().shell.shadow;
+  m_lastWorkspacePreferences = m_config->config().shell.hyprlandWorkspaces;
   m_lastPlugins = m_config->config().plugins;
   m_config->addReloadCallback(
       [this]() {
@@ -1461,6 +1417,7 @@ bool Bar::initialize(const BarServices& services) {
         if (cfg.bars == m_lastBars
             && cfg.widgets == m_lastWidgets
             && cfg.shell.shadow == m_lastShadow
+            && cfg.shell.hyprlandWorkspaces == m_lastWorkspacePreferences
             && cfg.plugins == m_lastPlugins) {
           return;
         }
@@ -1521,6 +1478,7 @@ void Bar::reload() {
   m_lastBars = m_config->config().bars;
   m_lastWidgets = m_config->config().widgets;
   m_lastShadow = m_config->config().shell.shadow;
+  m_lastWorkspacePreferences = m_config->config().shell.hyprlandWorkspaces;
   m_lastPlugins = m_config->config().plugins;
   m_widgetFactory = std::make_unique<WidgetFactory>(services());
 
@@ -1563,7 +1521,7 @@ void Bar::reload() {
       return true;
     }
     auto resolved = ConfigService::resolveForOutput(*it->second.first, *outIt);
-    if (!resolved.enabled) {
+    if (!resolved.enabled || resolved.presentation == BarPresentation::Island) {
       return true;
     }
     return !barConfigSurfaceFieldsEqual(inst.barConfig, resolved, previousShadow, m_lastShadow);
@@ -1607,7 +1565,7 @@ void Bar::reload() {
     }
 
     auto resolved = ConfigService::resolveForOutput(*it->second.first, *outIt);
-    if (!resolved.enabled) {
+    if (!resolved.enabled || resolved.presentation == BarPresentation::Island) {
       return destroy();
     }
 
@@ -2358,7 +2316,7 @@ void Bar::syncInstances() {
       });
       if (!exists) {
         auto resolved = ConfigService::resolveForOutput(bars[barIdx], output);
-        if (!resolved.enabled) {
+        if (!resolved.enabled || resolved.presentation == BarPresentation::Island) {
           continue;
         }
         createInstance(output, barIdx, resolved);

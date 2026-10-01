@@ -39,7 +39,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     if '--polish-only' in sys.argv:
         config_path=cfg/'config.toml'
         config_path.write_text(config_path.read_text().replace('[island]','[island]\nscale=1.4'))
-    if '--timer-only' in sys.argv or '--polish-only' in sys.argv:
+    if any(mode in sys.argv for mode in ('--timer-only','--polish-only','--activity-switcher-only')):
         import shutil
         timer_source=pathlib.Path(os.environ.get('ISLAND_TIMER_SOURCE','/tmp/noctalia-official-timer-review'))/'timer'
         pomo_source=pathlib.Path(os.environ.get('ISLAND_POMODORO_SOURCE','/tmp/noctalia-community-timer-review'))/'pomodoro'
@@ -105,6 +105,11 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
             processes.append(battery)
             assert battery.stdout.readline().strip() == 'ok'
+        if '--bluetooth-preview-only' in sys.argv or '--island-timing-only' in sys.argv:
+            bluetooth = subprocess.Popen([sys.executable, str(REPO/'tests/fixtures/island_bluetooth.py')], env=env,
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            processes.append(bluetooth)
+            assert bluetooth.stdout.readline().strip() == 'ok'
         binary=str(REPO/'build-rishot/noctalia'); shell=start([binary],'noctalia.log')
         wait(lambda:(runtime/f"noctalia-{env['WAYLAND_DISPLAY']}.sock").exists(),'shell start')
         def msg(*words): return run([binary,'msg',*words])
@@ -115,6 +120,329 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         wait(ready, 'shell IPC startup')
         key(1)  # Dismiss Umbriel's first-run keybinding hint.
         time.sleep(3)
+        if '--activity-switcher-only' in sys.argv:
+            def state(name):
+                try:return json.loads((plugin_root/name/'test-state.json').read_text()) or {}
+                except (FileNotFoundError,json.JSONDecodeError):return {}
+            def timer(event,*payload):msg('plugin','noctalia/timer:island-test','all',event,*payload)
+            def shot(name):
+                path=out/('activity-'+name+'.png');run(['grim',str(path)])
+                return Image.open(path).convert('RGB')
+            def events():
+                path=out/'player-actions.log'
+                return path.read_text() if path.exists() else ''
+            wait(lambda:state('timer').get('state')=='IDLE','Timer plugin ready')
+            msg('theme-mode-set','dark');move(1100,600)
+            env['ISLAND_TEST_ART']=(REPO/'assets/noctalia-wallpaper.png').as_uri()
+            env['ISLAND_TEST_EVENTS']=str(out/'player-actions.log')
+            player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'activity-player.log')
+            time.sleep(1);move(640,40);time.sleep(.7)
+            publisher=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_downloads.py')],env=env,
+                stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True);processes.append(publisher)
+            def download(value,visible=True):
+                command(publisher,json.dumps({'uri':'application://switcher-download.desktop',
+                    'properties':{'progress':value,'progress-visible':visible}}))
+            download(.25);timer('start','600');time.sleep(1)
+            shot('media-new-activities')
+            move(640,207);click();time.sleep(.6)
+            assert events().count('PlayPause')==1,'New activities stole the selected media view'
+            time.sleep(3.3);shot('paused-media')
+            move(590,159);command(pointer,'press');move(720,159);command(pointer,'release');time.sleep(.3)
+            assert 'SetPosition' in events(),'Seeking failed below the tab row'
+            move(750,31);click();time.sleep(.6);shot('timers')
+            move(530,127);click()
+            wait(lambda:state('timer').get('state')=='PAUSED','Timer tab pause control')
+            move(640,31);click();time.sleep(.6);shot('downloads')
+            download(.65);time.sleep(.4);shot('download-progress')
+            move(750,31);click();time.sleep(.6);before=shot('timer-before-alert')
+            notification=int(run(['notify-send','-p','-a','Activity test','-u','critical','-t','0','Urgent alert','Activities stay behind this notification.']).strip())
+            time.sleep(.7);alert=shot('urgent')
+            assert ImageChops.difference(before.crop((470,50,810,150)),alert.crop((470,50,810,150))).getbbox(),'Urgent notification did not interrupt activity'
+            run(['gdbus','call','--session','--dest','org.freedesktop.Notifications','--object-path','/org/freedesktop/Notifications','--method','org.freedesktop.Notifications.CloseNotification',str(notification)])
+            time.sleep(.7);shot('timer-after-alert');move(530,127);click()
+            wait(lambda:state('timer').get('state')=='RUNNING','Selected timer did not return after alert dismissal')
+            move(640,31);click();time.sleep(.5);download(1,False);time.sleep(.7);shot('download-ended')
+            move(640,207);click();time.sleep(.4)
+            assert events().count('PlayPause')==2,'Finished download did not fall back to media'
+            move(720,31);click();time.sleep(.5);timer('RESET');time.sleep(.7)
+            move(640,207);click();time.sleep(.4)
+            assert events().count('PlayPause')==3,'Cancelled timer did not fall back to media'
+            move(1100,600);time.sleep(.7);shot('compact')
+            move(640,40);time.sleep(.7);move(640,163);click();time.sleep(.4)
+            assert events().count('PlayPause')==4,'Leaving did not reset the switcher to the single-activity layout'
+            # Keyboard focus survives another activity arriving and reaches the tabs.
+            move(1100,600);time.sleep(.5);msg('island-focus');time.sleep(.5)
+            download(.3);timer('start','600');time.sleep(.7)
+            key(15);key(28);time.sleep(.4)
+            assert events().count('PlayPause')==5,'Activity arrival stole media keyboard focus'
+            key(15);key(15);key(15);key(15);key(28);time.sleep(.5)
+            shot('keyboard-timers')
+            # Timers tab retains focus; next Tab cycles to its pause control.
+            key(15);key(28)
+            wait(lambda:state('timer').get('state')=='PAUSED','Keyboard switching did not reach timer controls')
+            key(1);move(1100,600);time.sleep(.5)
+            base_config=(cfg/'config.toml').read_text()
+            (cfg/'config.toml').write_text(base_config.replace('[island]','[island]\nhover_show_media=false\nhover_show_timers=false'))
+            msg('config-reload');time.sleep(.6);move(640,40);time.sleep(.6);shot('hidden-sections')
+            player.terminate();player.wait(timeout=6)
+            assert shell.poll() is None
+            print('PASS: activity selection, paused media/seek, timer controls, download progress, urgent priority, completed-activity fallback, collapse, keyboard switching and hidden sections')
+            raise SystemExit(0)
+        if '--island-timing-only' in sys.argv:
+            move(1100,600);msg('theme-mode-set','dark')
+            original=(cfg/'config.toml').read_text()
+            managed='\n[bar]\norder=["timing","default"]\n[bar.timing]\npresentation="island"\nenabled=true\n[bar.timing.island]\ntrack_preview_seconds=8\npaused_media_seconds=7\nbluetooth_preview_seconds=10\n[bar.timing.monitor.HEADLESS-1.island]\ntrack_preview_seconds=2\npaused_media_seconds=1\nbluetooth_preview_seconds=2\nreveal_on_track_change=false\n'
+            def configure(text):
+                (cfg/'config.toml').write_text(original+text);msg('config-reload');time.sleep(.7)
+            def shot(name):
+                path=out/('timing-'+name+'.png');run(['grim',str(path)])
+                return Image.open(path).convert('RGB')
+            def width(image):
+                left=right=640
+                while left>200 and max(image.getpixel((left-1,12)))<45:left-=1
+                while right<1080 and max(image.getpixel((right+1,12)))<45:right+=1
+                return right-left+1
+            def media(method):
+                return run(['gdbus','call','--session','--dest','org.mpris.MediaPlayer2.islandtest',
+                    '--object-path','/org/mpris/MediaPlayer2','--method','org.mpris.MediaPlayer2.Player.'+method])
+            def bt(**properties):command(bluetooth,json.dumps(properties))
+            configure(managed)
+            bt(Connected=True,Percentage=75);time.sleep(.5)
+            assert width(shot('bluetooth-preview'))>210
+            time.sleep(2)
+            assert width(shot('bluetooth-expired'))<200,'Monitor Bluetooth duration was ignored'
+            bt(Connected=False)
+            env['ISLAND_TEST_ART']=(REPO/'assets/noctalia-wallpaper.png').as_uri()
+            env['ISLAND_TEST_EVENTS']=str(out/'player-actions.log')
+            env['ISLAND_TEST_TICK']='1'
+            player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'timing-player.log')
+            time.sleep(.8)
+            assert width(shot('track-preview'))>380
+            time.sleep(2)
+            assert 250<width(shot('track-expired'))<310,'Monitor track duration was ignored'
+            media('Pause');time.sleep(.4)
+            assert width(shot('pause-grace'))>240
+            time.sleep(1)
+            assert width(shot('pause-expired'))<200,'Monitor pause duration was ignored'
+            zero=managed.replace('track_preview_seconds=2','track_preview_seconds=0').replace('paused_media_seconds=1','paused_media_seconds=0').replace('bluetooth_preview_seconds=2','bluetooth_preview_seconds=0')
+            configure(zero);media('Play');media('Next');time.sleep(.6)
+            assert 250<width(shot('zero-track'))<310,'Zero must disable track previews'
+            media('Pause');time.sleep(.6)
+            assert width(shot('zero-pause'))<200,'Zero must hide paused media immediately'
+            bt(Connected=True,Percentage=75);time.sleep(.6)
+            assert width(shot('zero-bluetooth'))<200,'Zero must disable Bluetooth previews'
+            bt(Percentage=5);time.sleep(.6)
+            assert width(shot('zero-low-battery'))>210,'Zero preview duration must preserve low-battery warnings'
+            bt(Connected=False)
+            hidden=managed.replace('enabled=true','enabled=true\nauto_hide=true')
+            configure(hidden);before=shot('auto-hidden').crop((300,5,980,95))
+            media('Play');media('Previous');time.sleep(.8)
+            assert ImageChops.difference(before,shot('no-reveal').crop((300,5,980,95))).getbbox() is None,'Reveal disabled on monitor was ignored'
+            configure(hidden.replace('reveal_on_track_change=false','reveal_on_track_change=true'))
+            media('Next');time.sleep(.7)
+            assert width(shot('reveal-enabled'))>380
+            time.sleep(2)
+            assert ImageChops.difference(before,shot('reveal-expired').crop((300,5,980,95))).getbbox() is None,'Reveal did not end at monitor duration'
+            player.terminate();player.wait(timeout=6)
+            configure(managed)
+            msg('settings-open','bar');time.sleep(.8);shot('settings')
+            (out/'timing-inspect-env.json').write_text(json.dumps(env))
+            if os.environ.get('NOCTALIA_TEST_TIMING_INSPECT'):
+                print('INSPECT: timing settings ready',flush=True)
+                until=time.monotonic()+int(os.environ['NOCTALIA_TEST_TIMING_INSPECT'])
+                while time.monotonic()<until:time.sleep(.25)
+            print('PASS: monitor preview/pause/Bluetooth durations, zero values, low battery and per-monitor reveal preference')
+            raise SystemExit(0)
+        if '--media-polish-only' in sys.argv:
+            move(1100,600);msg('theme-mode-set','dark')
+            env['ISLAND_TEST_ART']=(REPO/'assets/noctalia-wallpaper.png').as_uri()
+            env['ISLAND_TEST_EVENTS']=str(out/'player-actions.log')
+            env['ISLAND_TEST_TICK']='1'
+            def shot(name):
+                path=out/('media-polish-'+name+'.png');run(['grim',str(path)])
+                return Image.open(path).convert('RGB')
+            def width(image):
+                # Measure the uninterrupted dark capsule above its text and artwork.
+                left=right=640
+                while left>200 and max(image.getpixel((left-1,12)))<45:left-=1
+                while right<1080 and max(image.getpixel((right+1,12)))<45:right+=1
+                return right-left+1
+            def media(method):
+                return run(['gdbus','call','--session','--dest','org.mpris.MediaPlayer2.islandtest',
+                    '--object-path','/org/mpris/MediaPlayer2','--method','org.mpris.MediaPlayer2.Player.'+method])
+            def until(deadline):time.sleep(max(0,deadline-time.monotonic()))
+            player=start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'media-polish-player.log')
+            started=time.monotonic();time.sleep(1.2)
+            assert width(shot('first-track'))>380,'First track must show the wider title preview'
+            until(started+3);msg('config-reload');time.sleep(.6)
+            assert width(shot('preview-reload'))>380,'Reload interrupted the preview'
+            until(started+6)
+            assert 250<width(shot('compact'))<310,'Position updates/reload restarted the five-second preview'
+            media('Next');changed=time.monotonic();time.sleep(.7)
+            assert width(shot('next-track'))>380,'Track change did not show a title preview'
+            msg('panel-open','control-center');time.sleep(.5);msg('panel-close');time.sleep(.6)
+            assert width(shot('preview-panel-return'))>380,'Closing a panel lost the preview width'
+            until(changed+5.8)
+            assert 250<width(shot('next-compact'))<310,'Track preview did not collapse'
+            media('Pause');paused=time.monotonic();time.sleep(.6)
+            assert 250<width(shot('pause-grace'))<310,'Pause should retain a compact indicator briefly'
+            msg('config-reload');until(paused+3.8)
+            assert width(shot('paused-hidden'))<200,'Paused indicator did not hide after three seconds'
+            move(640,35);time.sleep(.8);shot('paused-hover')
+            move(640,163);click();time.sleep(.6)
+            assert 'PlayPause' in (out/'player-actions.log').read_text(),'Paused controls unavailable on hover'
+            click();time.sleep(3.5);shot('pause-held-hover')
+            assert (out/'player-actions.log').read_text().count('PlayPause')==2,'Pause button moved during playback update'
+            move(590,115);command(pointer,'press');move(720,115);command(pointer,'release');time.sleep(.4)
+            assert 'SetPosition' in (out/'player-actions.log').read_text(),'Paused hover seeking did not reach MPRIS'
+            move(1100,600);time.sleep(.6)
+            assert width(shot('pause-left'))<200,'Leaving paused controls did not restore the clock'
+            media('Play');time.sleep(.5)
+            assert 250<width(shot('resumed'))<310,'Resume should restore compact playback without repeating the title'
+            media('Stop');time.sleep(.6)
+            assert width(shot('stopped'))<200,'Stopped player left a stale indicator'
+            path=cfg/'config.toml'
+            path.write_text(path.read_text()+'\n[bar.media]\npresentation="island"\nenabled=true\nauto_hide=true\n')
+            msg('config-reload');time.sleep(.8)
+            hidden=shot('auto-hidden').crop((300,5,980,95))
+            media('Play');media('Previous');time.sleep(.7)
+            assert width(shot('auto-reveal'))>380,'Track preview did not reveal an auto-hidden Island'
+            time.sleep(5.2)
+            assert ImageChops.difference(hidden,shot('auto-hidden-again').crop((300,5,980,95))).getbbox() is None,'Island did not hide after the track preview'
+            run(['notify-send','-a','Media priority','-u','critical','-t','0','Urgent notification','Keep this above the track preview.'])
+            time.sleep(.8);urgent=shot('urgent')
+            media('Next');time.sleep(.7)
+            assert ImageChops.difference(urgent.crop((400,5,880,175)),shot('urgent-track-change').crop((400,5,880,175))).getbbox() is None,'Track change replaced an urgent notification'
+            msg('notification-clear-active');msg('notification-clear-history');time.sleep(.6)
+            assert width(shot('preview-after-urgent'))>380,'Remaining track preview did not return after notification dismissal'
+            path.write_text(path.read_text().replace('auto_hide=true','auto_hide=false'))
+            msg('config-reload');time.sleep(.5)
+            media('Play');time.sleep(.3);player.terminate();player.wait(timeout=6);time.sleep(.6)
+            assert width(shot('player-closed'))<200,'Closing the player left a stale indicator'
+            print('PASS: five-second track previews, reload/position stability, panel return, pause grace, paused hover controls/seek, resume, stop, auto-hide, urgent priority and player removal')
+            raise SystemExit(0)
+        if '--notification-polish-only' in sys.argv:
+            def send(title,body='Notification details',urgency='normal',timeout=0,app='Preview test',replace=None):
+                args=['notify-send','-p','-a',app,'-u',urgency,'-t',str(timeout)]
+                if replace is not None:args+=['-r',str(replace)]
+                return int(run(args+[title,body]).strip())
+            def close(identifier):
+                run(['gdbus','call','--session','--dest','org.freedesktop.Notifications',
+                     '--object-path','/org/freedesktop/Notifications','--method',
+                     'org.freedesktop.Notifications.CloseNotification',str(identifier)])
+                time.sleep(.6)
+            def shot(name):
+                path=out/('notification-'+name+'.png');run(['grim',str(path)])
+                return Image.open(path).convert('RGB')
+            def history():
+                path=base/'state/noctalia/notification_history.json'
+                return json.loads(path.read_text())['entries'] if path.exists() else []
+            def entry(identifier):
+                return next((e for e in history() if e['notification']['id']==identifier),None)
+            def tall(image):
+                # Wallpaper at this location is much lighter than the Island card.
+                return max(image.getpixel((500,95)))<35
+            move(1100,600);msg('notification-clear-active');msg('notification-clear-history')
+            normal=send('Ordinary preview');start_time=time.monotonic();time.sleep(.8)
+            assert tall(shot('preview')),'New notification did not expand'
+            time.sleep(1);send('Updated preview',replace=normal)
+            time.sleep(max(0,start_time+5.8-time.monotonic()))
+            assert not tall(shot('collapsed')),'Ordinary preview did not collapse after five seconds'
+            assert entry(normal) and not entry(normal)['active'] and not entry(normal)['seen'],'Preview expiry must retain unread history'
+            move(640,40);time.sleep(.8);shot('unread-hover')
+            msg('panel-open','control-center','notifications');time.sleep(.8)
+            assert entry(normal)['seen'],'Opening history should mark notifications seen'
+            msg('panel-close');move(1100,600);time.sleep(.7)
+            urgent=send('Urgent stays visible',urgency='critical',timeout=1000);time.sleep(.8)
+            move(640,60);time.sleep(.3);move(1100,600)
+            msg('config-reload');time.sleep(1.5)
+            assert tall(shot('urgent')) and entry(urgent)['active'],'Urgent alert expired after pointer leave or reload'
+            send('Urgent stays visible',urgency='critical',timeout=1000,replace=urgent);time.sleep(1.5)
+            assert tall(shot('urgent-identical-update')) and entry(urgent)['active'],'Identical urgent replacement lost its persistent display'
+            first=shot('urgent-first')
+            send('Ordinary while urgent',timeout=2000);time.sleep(.7)
+            assert ImageChops.difference(first.crop((420,35,860,160)),shot('urgent-uninterrupted').crop((420,35,860,160))).getbbox() is None,'Ordinary alert replaced an urgent alert'
+            second=send('Second urgent',urgency='critical',timeout=1000);time.sleep(1.5)
+            assert entry(second)['active'],'Queued urgent alert expired'
+            close(urgent);shot('urgent-next');time.sleep(1.2)
+            assert tall(shot('urgent-next-later')) and entry(second)['active'],'Next urgent did not remain visible'
+            close(second)
+            hovered=send('Reading a preview',timeout=2000);time.sleep(.7);move(640,70);time.sleep(5.3)
+            assert tall(shot('hover-held')) and entry(hovered)['active'],'Hovered preview disappeared while reading'
+            move(1100,600);time.sleep(.8)
+            assert not tall(shot('hover-left')) and not entry(hovered)['active'],'Expired hover preview did not collapse on leave'
+            settings=cfg/'config.toml';original=settings.read_text()
+            settings.write_text(original+'''\n[notification.filter."Silent app"]
+match="silent-app"
+play_sound=false
+[notification.filter."History app"]
+match="history-app"
+show_toast=false
+play_sound=false
+[notification.filter."Hidden app"]
+match="hidden-app"
+show_toast=false
+save_history=false
+play_sound=false
+''');msg('config-reload');time.sleep(.5)
+            hidden=send('Hidden notification',app='hidden-app');time.sleep(.5)
+            assert not tall(shot('hidden-app')) and entry(hidden) is None,'Hidden application leaked into preview or history'
+            quiet=send('Saved for later',app='history-app');time.sleep(.6)
+            assert not tall(shot('history-app')) and entry(quiet),'History-only application displayed a preview or lost its history'
+            silent=send('Silent preview',app='silent-app');time.sleep(.7)
+            assert tall(shot('silent-app')) and entry(silent),'Silent application lost its visual preview'
+            close(silent)
+            msg('notification-dnd-set','on');suppressed=send('Respect DND',urgency='critical',timeout=1000);time.sleep(1.5)
+            assert not tall(shot('urgent-dnd')),'Urgent alert bypassed Do Not Disturb'
+            msg('notification-dnd-set','off')
+            msg('settings-open','notifications');time.sleep(.7);shot('settings')
+            move(635,273);click();time.sleep(.5)
+            move(1027,522);click();time.sleep(.5);shot('delivery-editor')
+            move(630,370);click();time.sleep(.3);shot('delivery-options')
+            move(330,450);click();time.sleep(.6)
+            saved=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
+            delivery=next(f for f in saved['notification']['filter'].values() if f['match']=='hidden-app')
+            assert delivery['show_toast'] and delivery['save_history'] and not delivery['play_sound'],'Silent dropdown choice did not persist its delivery policy'
+            shot('delivery-saved')
+            if os.environ.get('NOCTALIA_TEST_NOTIFICATION_INSPECT'):
+                (out/'notification-inspect-env.json').write_text(json.dumps(env))
+                print('INSPECT: notification filter settings ready',flush=True)
+                time.sleep(int(os.environ['NOCTALIA_TEST_NOTIFICATION_INSPECT']))
+            assert shell.poll() is None
+            print('PASS: five-second previews, replacement timing, unread history, urgent retention/queue, hover pause, DND and per-app delivery')
+            raise SystemExit(0)
+        if '--bluetooth-preview-only' in sys.argv:
+            def publish(**values): command(bluetooth,json.dumps(values))
+            def shot(name):
+                path=out/('bluetooth-'+name+'.png');run(['grim',str(path)])
+                return Image.open(path).convert('RGB')
+            def differs(a,b,bounds=(400,8,880,64)):
+                a=a.crop(bounds);b=b.crop(bounds)
+                if bounds==(400,8,880,64):
+                    a.paste((0,0,0),(180,0,300,56));b.paste((0,0,0),(180,0,300,56))
+                return ImageChops.difference(a,b).getbbox() is not None
+            move(1100,600);absent=shot('disconnected')
+            publish(Connected=True,Percentage=75);connected_at=time.monotonic();time.sleep(.7)
+            assert differs(absent,shot('connected')),'Connection must show the battery ring'
+            time.sleep(1);publish(Percentage=42);msg('config-reload')
+            time.sleep(max(0,connected_at+4.1-time.monotonic()))
+            assert differs(absent,shot('four-seconds')),'Battery ring disappeared before five seconds'
+            time.sleep(max(0,connected_at+5.8-time.monotonic()))
+            assert not differs(absent,shot('expired')),'Battery updates or reload restarted the connection countdown'
+            move(640,40);time.sleep(.8);hover=shot('hover')
+            publish(Connected=False);time.sleep(.8)
+            assert differs(hover,shot('disconnected-hover'),(440,135,840,235)),'Expired battery must remain in hover details'
+            move(1100,600);publish(Connected=True,Percentage=42);time.sleep(.7)
+            assert differs(absent,shot('reconnected')),'Reconnect must restart the preview'
+            time.sleep(5);publish(Percentage=5);time.sleep(.7)
+            assert differs(absent,shot('low')),'Low battery must stay visible after preview expiry'
+            time.sleep(5.2)
+            assert differs(absent,shot('low-later')),'Low battery ring must not time out'
+            publish(Percentage=75);time.sleep(.8)
+            assert not differs(absent,shot('recovered')),'Healthy battery must return to hover-only after recovery'
+            assert shell.poll() is None
+            print('PASS: Bluetooth five-second connection preview, battery updates/reload, hover-only details, reconnect, persistent low battery and recovery')
+            raise SystemExit(0)
         if '--progress-outline-only' in sys.argv:
             def shot(name):
                 run(['grim',str(out/('outline-'+name+'.png'))])
@@ -422,25 +750,22 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             for index in range(4): download(index,.25)
             dispatch('noctalia/timer','start','600');dispatch('thepunkoff/pomodoro','toggle')
             time.sleep(1.2);move(1100,600);shot('compact');move(640,40);time.sleep(1);shot('busy-top')
-            # The footer must remain bounded even at a larger UI scale.
+            # Separating timers from downloads keeps the scaled card within the output.
             before=Image.open(out/'polish-busy-top.png').convert('RGB')
             assert before.getpixel((640,715)) != before.getpixel((640,650)), 'Island must leave clearance at the bottom'
-            move(640,580);command(pointer,'scroll 100');time.sleep(.8);shot('busy-bottom')
-            bottom=Image.open(out/'polish-busy-bottom.png').convert('RGB')
-            assert ImageChops.difference(before.crop((410,430,870,690)),bottom.crop((410,430,870,690))).getbbox(), 'Crowded footer must scroll'
-            # Progress updates should not reset scroll position or the long name marquee.
+            # Progress updates must preserve the tab row and selected download card.
             download(0,.65);time.sleep(.3);shot('progress')
             after=Image.open(out/'polish-progress.png').convert('RGB')
-            assert ImageChops.difference(bottom.crop((450,670,830,687)),after.crop((450,670,830,687))).getbbox() is None, 'Progress preserves footer position'
-            # Keyboard entry scrolls the first timer into view; reverse Tab reveals Close.
+            assert ImageChops.difference(before.crop((410,15,870,61)),after.crop((410,15,870,61))).getbbox() is None, 'Progress preserves the activity tabs'
+            # Reverse Tab reaches Close; reopening allows keyboard switching to Timers.
             msg('island-focus');time.sleep(.7);shot('keyboard-first')
             key('shift-tab');time.sleep(.5);shot('keyboard-last');key(28);time.sleep(.7);shot('closed')
             closed=Image.open(out/'polish-closed.png').convert('RGB')
             assert ImageChops.difference(after.crop((450,200,830,680)),closed.crop((450,200,830,680))).getbbox(), 'Keyboard Close collapses the crowded view'
-            msg('island-focus');time.sleep(.6);key(28)
-            wait(lambda:state('timer').get('state')=='PAUSED','First keyboard control pauses Timer after reopening')
+            msg('island-focus');time.sleep(.6);key(15);key(28);time.sleep(.5);key(15);key(28)
+            wait(lambda:state('timer').get('state')=='PAUSED','Keyboard Timers tab reaches Pause after reopening')
             key(1);assert shell.poll() is None
-            print('PASS: crowded scaled island, footer scrolling, stable progress updates, keyboard reveal/close/pause')
+            print('PASS: scaled activity tabs, bounded cards, stable progress updates, keyboard reveal/close/switch/pause')
             raise SystemExit(0)
         if '--timer-only' in sys.argv:
             def shot(name): run(['grim',str(out/('timer-'+name+'.png'))])
@@ -458,7 +783,9 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             assert ImageChops.difference(idle_footer,hidden_footer).getbbox() is None, 'Hidden timer shortcuts must leave no footer'
             (cfg/'config.toml').write_text(timer_config);time.sleep(1.2);move(1100,600);move(640,40);time.sleep(.8)
             move(550,160);click();time.sleep(.8);shot('panel')
+            move(640,164);click()  # Give the duration input explicit pointer focus.
             key(3);key(11);key(11);key(28)  # Enter 200 (2:00) in the actual plugin panel.
+            shot('panel-started')
             wait(lambda:state('timer').get('state')=='RUNNING','Timer starts from its panel');key(1);move(1100,600);time.sleep(1.1)
             shot('running');move(640,40);time.sleep(.8);shot('hover')
             (cfg/'config.toml').write_text(timer_config.replace('[island]','[island]\nhover_show_timers=false'))

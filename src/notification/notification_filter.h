@@ -29,6 +29,24 @@ struct ResolvedNotificationFilter {
   bool matched = false;
 };
 
+enum class NotificationDelivery : std::uint8_t { Normal, Silent, HistoryOnly, Hidden, Custom };
+
+[[nodiscard]] inline NotificationDelivery notificationDelivery(const NotificationFilterConfig& filter) {
+  if (filter.showToast && filter.saveHistory)
+    return filter.playSound ? NotificationDelivery::Normal : NotificationDelivery::Silent;
+  if (!filter.showToast && !filter.playSound)
+    return filter.saveHistory ? NotificationDelivery::HistoryOnly : NotificationDelivery::Hidden;
+  return NotificationDelivery::Custom;
+}
+
+inline void setNotificationDelivery(NotificationFilterConfig& filter, NotificationDelivery delivery) {
+  if (delivery == NotificationDelivery::Custom)
+    return;
+  filter.showToast = delivery == NotificationDelivery::Normal || delivery == NotificationDelivery::Silent;
+  filter.saveHistory = delivery != NotificationDelivery::Hidden;
+  filter.playSound = delivery == NotificationDelivery::Normal;
+}
+
 [[nodiscard]] std::string normalizeNotificationMatchToken(std::string token);
 
 [[nodiscard]] bool notificationMatchesToken(std::string_view token, const NotificationFilterFields& fields);

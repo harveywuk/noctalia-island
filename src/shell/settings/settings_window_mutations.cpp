@@ -1,3 +1,4 @@
+#include "compositors/hyprland/hyprland_appearance.h"
 #include "config/config_service.h"
 #include "core/deferred_call.h"
 #include "i18n/i18n.h"
@@ -14,7 +15,30 @@
 
 namespace {
 
+  bool isHyprlandAppearancePath(const std::vector<std::string>& path) {
+    return path.size() >= 2 && path[0] == "shell" && path[1] == "hyprland_appearance";
+  }
+
   bool settingPathNeedsSceneRebuild(const std::vector<std::string>& path) {
+    if (!path.empty()
+        && (path[0] == "island"
+            || (path[0] == "bar"
+                && (path.back() == "presentation" || std::ranges::find(path, "island") != path.end()))))
+      return true;
+    if (path.size() >= 2
+        && path[0] == "shell"
+        && (path[1] == "hyprland_input" || path[1] == "hyprland_window_behaviour" || path[1] == "hyprland_tiling"))
+      return true;
+    if (path.size() >= 2 && path[0] == "shell" && path[1] == "hyprland_profile_switching")
+      return true;
+    if (path.size() >= 2 && path[0] == "shell" && path[1] == "hyprland_app_rules")
+      return true;
+    if (path.size() >= 2 && path[0] == "shell" && path[1] == "hyprland_placement_rules")
+      return true;
+    if (path.size() >= 2
+        && path[0] == "shell"
+        && (path[1] == "hyprland_appearance" || path[1] == "hyprland_appearance_profiles"))
+      return true;
     if (path.size() == 2 && path[0] == "shell") {
       return path[1] == "corner_radius_scale"
           || path[1] == "font_family"
@@ -127,7 +151,11 @@ void SettingsWindow::setSettingOverride(std::vector<std::string> path, ConfigOve
     const bool needsSceneRebuild = settingPathNeedsSceneRebuild(path);
     const ConfigOverrideValue patchValue = value;
     const auto previousResetPaths = currentPageResetPaths();
+    const auto appearanceBefore =
+        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
     if (m_config->setOverride(path, std::move(value), &changed)) {
+      if (changed && isHyprlandAppearancePath(path))
+        m_hyprlandUndo = appearanceBefore;
       const bool registryPatched = changed && !needsSceneRebuild && tryPatchSettingsRegistryValue(path, patchValue);
       finishSettingsWrite(changed, needsSceneRebuild, previousResetPaths != currentPageResetPaths(), registryPatched);
       warnOnUnusableCustomSchedule(path);
@@ -154,7 +182,12 @@ void SettingsWindow::setSettingOverrides(
     });
     const auto patchOverrides = overrides;
     const auto previousResetPaths = currentPageResetPaths();
+    const auto appearanceBefore =
+        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
     if (m_config->setOverrides(std::move(overrides), &changed)) {
+      if (changed
+          && std::ranges::any_of(patchOverrides, [](const auto& v) { return isHyprlandAppearancePath(v.first); }))
+        m_hyprlandUndo = appearanceBefore;
       const bool registryPatched = changed && !needsSceneRebuild && tryPatchSettingsRegistryOverrides(patchOverrides);
       finishSettingsWrite(changed, needsSceneRebuild, previousResetPaths != currentPageResetPaths(), registryPatched);
       return;
@@ -171,11 +204,15 @@ void SettingsWindow::clearSettingOverride(std::vector<std::string> path) {
     bool changed = false;
     const bool needsSceneRebuild = settingPathNeedsSceneRebuild(path);
     const auto previousResetPaths = currentPageResetPaths();
+    const auto appearanceBefore =
+        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
     if (!m_config->clearOverrides({path}, &changed)) {
       markSettingsWriteError(i18n::tr("settings.errors.write"));
       return;
     }
 
+    if (changed && isHyprlandAppearancePath(path))
+      m_hyprlandUndo = appearanceBefore;
     const std::vector<std::vector<std::string>> paths{path};
     const bool registryPatched = changed && !needsSceneRebuild && tryPatchSettingsRegistryResetValues(paths);
     finishSettingsWrite(
@@ -193,7 +230,11 @@ void SettingsWindow::clearSettingOverrides(std::vector<std::vector<std::string>>
     bool changed = false;
     const bool needsSceneRebuild = settingPathsNeedSceneRebuild(paths);
     const auto previousResetPaths = currentPageResetPaths();
+    const auto appearanceBefore =
+        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
     const bool success = m_config->clearOverrides(paths, &changed);
+    if (success && changed && std::ranges::any_of(paths, isHyprlandAppearancePath))
+      m_hyprlandUndo = appearanceBefore;
     m_pendingResetPageScope.clear();
     if (!success) {
       markSettingsWriteError(i18n::tr("settings.errors.reset-page"));
@@ -266,6 +307,7 @@ void SettingsWindow::createBar(std::string name) {
     }
     if (m_config->createBarOverride(name)) {
       m_selectedSection = "bar";
+      m_selectedGroup.clear();
       m_selectedBarName = name;
       m_selectedMonitorOverride.clear();
       m_creatingBarName.clear();
@@ -351,6 +393,7 @@ void SettingsWindow::createMonitorOverride(std::string barName, std::string matc
     }
     if (m_config->createMonitorOverride(barName, match)) {
       m_selectedSection = "bar";
+      m_selectedGroup.clear();
       m_selectedBarName = barName;
       m_selectedMonitorOverride = match;
       m_renamingMonitorOverrideBarName.clear();

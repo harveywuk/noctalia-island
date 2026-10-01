@@ -17,9 +17,16 @@ class InputArea;
 class Label;
 class Node;
 class ConfigService;
+namespace compositors::hyprland {
+  class HyprlandDisplays;
+  class HyprlandRuntime;
+} // namespace compositors::hyprland
 
 namespace settings {
   struct HoverLayout;
+  struct DisplayEditorState;
+  struct BackupEditorState;
+  struct DefaultAppsEditorState;
 
   // Pango line budget for setting descriptions: wrap up to this many lines, then ellipsize.
   inline constexpr int kSettingDescriptionMaxLines = 5;
@@ -44,6 +51,8 @@ namespace settings {
     float scale = 1.0F;
     std::string_view searchQuery;
     std::string_view selectedSection;
+    std::string_view selectedGroup;
+    std::function<void(std::string)> navigateGroup;
     const BarConfig* selectedBar = nullptr;
     const BarMonitorOverride* selectedMonitorOverride = nullptr;
     bool showAdvanced = false;
@@ -60,7 +69,7 @@ namespace settings {
     std::string& pendingGestureVerb;
     std::string& actionsExpandedFor;
     std::unordered_map<std::string, std::unordered_set<std::string>>& expandedGroupsByPage;
-    // Fixed page title row above the group pills, null when no host exists.
+    // Fixed page title and Back navigation, null when no host exists.
     Flex* pageTitleRow = nullptr;
     // Sticky pill row above the content scroll view, null when no host exists.
     Flex* groupJumpRow = nullptr;
@@ -105,6 +114,16 @@ namespace settings {
     std::function<void()> closeHostedEditor;
     bool supportsTaskbarWorkspaceGrouping = true;
     std::shared_ptr<HoverLayout>* hoverLayoutUndo = nullptr;
+    std::optional<HyprlandAppearanceConfig>* hyprlandUndo = nullptr;
+    std::function<std::vector<std::string>()> runningAppIds;
+    compositors::hyprland::HyprlandRuntime* hyprlandRuntime = nullptr;
+    std::function<bool(bool)> recordHyprlandShortcut;
+    bool canRecordHyprlandShortcut = false;
+    compositors::hyprland::HyprlandDisplays* displays = nullptr;
+    std::shared_ptr<DisplayEditorState>* displayEditor = nullptr;
+    std::function<void(const std::vector<std::string>&)> identifyDisplays;
+    std::shared_ptr<BackupEditorState>* backupEditor = nullptr;
+    std::shared_ptr<DefaultAppsEditorState>* defaultAppsEditor = nullptr;
   };
 
   std::size_t

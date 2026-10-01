@@ -37,10 +37,10 @@ private:
 
   RectNode* m_rectStart = nullptr;
   RectNode* m_rectEnd = nullptr;
-  ColorSpec m_color = colorSpecFromRole(ColorRole::Outline);
+  ColorSpec m_color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha);
   float m_thickness = 1.0F;
   float m_spacing = 0.0F;
   SeparatorOrientation m_orientation = SeparatorOrientation::Auto;
-  bool m_gradientEdges = true;
+  bool m_gradientEdges = false;
   Signal<>::ScopedConnection m_paletteConn;
 };

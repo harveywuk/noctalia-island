@@ -17,6 +17,7 @@ class IconResolver;
 class Image;
 class InputArea;
 class Label;
+class Node;
 class RenderContext;
 struct DockConfig;
 
@@ -27,6 +28,7 @@ namespace shell::dock {
 
   struct DockItemView {
     InputArea* area = nullptr;
+    Node* motionNode = nullptr;
     std::array<Box*, 3> dotIndicators{};
     Box* badge = nullptr;
     Label* badgeLabel = nullptr;
@@ -65,6 +67,8 @@ namespace shell::dock {
     std::function<void(DockInstance&, const DockItemAction&)> activateOrLaunch;
     std::function<void(DockInstance&)> toggleLauncher;
     std::function<void(DockInstance&, const DockItemAction&)> openItemMenu;
+    std::function<void(DockInstance&, const DockItemAction&)> hoverPreview;
+    std::function<void(DockInstance&, const DockItemAction&)> leavePreview;
     // Drag-to-reorder: only called when the source item is pinned.
     std::function<void(DockInstance&, std::size_t itemIndex, float mainPos)> beginDrag;
     std::function<void(DockInstance&, float mainPos)> updateDrag;
@@ -87,6 +91,7 @@ namespace shell::dock {
   void applyDragVisuals(DockInstance& instance, const DockConfig& cfg);
   void clearDragVisuals(DockInstance& instance, const DockConfig& cfg);
   void dismissDockTooltip();
+  void animateLaunch(DockInstance& instance, const DockConfig& cfg, std::string_view idLower);
   [[nodiscard]] std::size_t computeDragTargetIndex(const DockInstance& instance, const DockConfig& cfg, float mainPos);
 
 } // namespace shell::dock

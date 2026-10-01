@@ -668,6 +668,10 @@ void CompositorPlatform::cleanup() {
 
 wl_display* CompositorPlatform::display() const noexcept { return m_wayland.display(); }
 
+compositors::hyprland::HyprlandRuntime& CompositorPlatform::hyprlandRuntime() noexcept {
+  return m_runtimeRegistry->hyprland();
+}
+
 compositors::niri::NiriRuntime& CompositorPlatform::niriRuntime() noexcept { return m_runtimeRegistry->niri(); }
 
 const compositors::niri::NiriRuntime& CompositorPlatform::niriRuntime() const noexcept {

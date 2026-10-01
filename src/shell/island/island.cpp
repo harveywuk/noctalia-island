@@ -1,33 +1,37 @@
 #include "shell/island/island.h"
-#include "shell/island/island_progress_outline.h"
-#include "shell/island/island_widget_host.h"
-#include "shell/bar/widget_factory.h"
-#include "capture/screen_recorder.h"
-#include "pipewire/pipewire_spectrum.h"
-#include "ui/visuals/audio_visualizer.h"
 
+#include "capture/screen_recorder.h"
 #include "config/config_service.h"
-#include "core/ui_phase.h"
-#include "core/log.h"
-#include "dbus/downloads/download_progress_service.h"
+#include "core/deferred_call.h"
 #include "core/input/keybind_matcher.h"
+#include "core/log.h"
+#include "core/ui_phase.h"
+#include "dbus/downloads/download_progress_service.h"
 #include "dbus/mpris/mpris_art.h"
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
 #include "notification/notification_manager.h"
+#include "pipewire/pipewire_spectrum.h"
+#include "render/animation/motion_service.h"
 #include "render/core/renderer.h"
 #include "render/render_context.h"
-#include "render/scene/node.h"
 #include "render/scene/countdown_ring_node.h"
 #include "render/scene/input_dispatcher.h"
-#include "shell/island/island_state.h"
-#include "shell/island/island_battery.h"
-#include "shell/island/island_timer.h"
+#include "render/scene/node.h"
 #include "scripting/plugin_registry.h"
 #include "scripting/plugin_state_store.h"
-#include "render/animation/motion_service.h"
-#include "time/time_format.h"
+#include "shell/bar/bar_services.h"
+#include "shell/bar/bar_visibility.h"
+#include "shell/bar/widget_factory.h"
+#include "shell/island/island_activity.h"
+#include "shell/island/island_battery.h"
+#include "shell/island/island_progress_outline.h"
+#include "shell/island/island_state.h"
+#include "shell/island/island_style.h"
+#include "shell/island/island_timer.h"
+#include "shell/island/island_widget_host.h"
 #include "shell/tooltip/tooltip_manager.h"
+#include "time/time_format.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
 #include "ui/controls/glyph.h"
@@ -36,16 +40,20 @@
 #include "ui/controls/progress_bar.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/controls/spinner.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
+#include "ui/visuals/audio_visualizer.h"
 #include "wayland/wayland_connection.h"
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <ctime>
 #include <format>
 #include <glib.h>
 #include <linux/input-event-codes.h>
+#include <ranges>
 
 using namespace std::chrono_literals;
 
@@ -87,8 +95,17 @@ namespace {
 } // namespace
 
 struct Island::Instance {
+  BarConfig barConfig;
+  IslandConfig config;
+  float visibility = 1;
+  bool wantsVisible = true;
+  AnimationManager::Id hideAnimation = 0;
+  std::string workspaceId;
+  bool workspacePeek = false;
+  Timer peek;
   wl_output* output = nullptr;
   std::unique_ptr<LayerSurface> surface;
+  std::optional<std::array<int, 4>> inputRegion;
   AnimationManager animations;
   InputDispatcher input;
   std::unique_ptr<Node> root;
@@ -108,7 +125,9 @@ struct Island::Instance {
   bool hovered = false;
   bool badgeHovered = false;
   bool keyboardMode = false;
-  bool keyboardDownloads = false;
+  island::ActivitySelection activities;
+  island::CompactActivity compactActivity;
+  Timer activityTimeout;
   std::optional<std::uint32_t> keyboardNotification;
   bool heldMedia = false;
   bool suppressHover = false;
@@ -159,8 +178,11 @@ namespace {
   // Reuse the shell's native ring and spinner renderers at the same size.
   class DownloadRing final : public Node {
   public:
-    DownloadRing(float diameter, float thickness, std::optional<float> progress,
-                 ColorRole role = ColorRole::Primary, bool charging = false) : m_role(role), m_charging(charging) {
+    DownloadRing(
+        float diameter, float thickness, std::optional<float> progress, ColorRole role = ColorRole::Primary,
+        bool charging = false
+    )
+        : m_role(role), m_charging(charging) {
       setSize(diameter, diameter);
       setHitTestVisible(false);
       if (!progress) {
@@ -189,25 +211,38 @@ namespace {
 
     void setAnimationManager(AnimationManager* manager) override {
       Node::setAnimationManager(manager);
-      if (!manager) { m_pulse = 0; return; }
-      if (m_charging && !m_pulse) pulse();
+      if (!manager) {
+        m_pulse = 0;
+        return;
+      }
+      if (m_charging && !m_pulse)
+        pulse();
     }
     void setProgress(float progress) {
-      if (m_fill) { m_fill->setProgress(progress); m_fill->setVisible(progress > 0); }
+      if (m_fill) {
+        m_fill->setProgress(progress);
+        m_fill->setVisible(progress > 0);
+      }
     }
 
   private:
     void pulse() {
       if (!animationManager() || !MotionService::instance().enabled()) {
-        if (m_fill) m_fill->setOpacity(1);
+        if (m_fill)
+          m_fill->setOpacity(1);
         return;
       }
-      m_pulse = animationManager()->animate(0, 1, 1800, Easing::Linear,
-          [this](float t) { m_fill->setOpacity(0.72F + 0.28F * std::cos(t * 6.2831853F)); },
-          [this] { m_pulse = 0; pulse(); }, this);
+      m_pulse = animationManager()->animate(
+          0, 1, 1800, Easing::Linear, [this](float t) { m_fill->setOpacity(0.72F + 0.28F * std::cos(t * 6.2831853F)); },
+          [this] {
+            m_pulse = 0;
+            pulse();
+          },
+          this
+      );
     }
     void applyPalette() {
-      m_track->setColor(resolveColorSpec(colorSpecFromRole(ColorRole::SurfaceVariant)));
+      m_track->setColor(resolveColorSpec(colorSpecFromRole(ColorRole::OnSurface, 0.16F)));
       m_fill->setColor(resolveColorSpec(colorSpecFromRole(m_role)));
     }
     ColorRole m_role;
@@ -230,18 +265,20 @@ namespace {
   const ColorSpec muted = colorSpecFromRole(ColorRole::OnSurfaceVariant);
 } // namespace
 
-Island::Island() = default;
+Island::Island() : m_batteryConnections(std::make_unique<island::BatteryConnections>()) {}
 Island::~Island() { destroySurfaces(); }
 
 void Island::initializeWidgets(const BarServices& services, IpcService* ipc) {
+  m_platform = &services.platform;
   m_widgetFactory = std::make_unique<WidgetFactory>(services);
   m_widgetActions.setIpcService(ipc);
+  onWorkspaceChanged();
 }
 
 void Island::initialize(
     WaylandConnection& wayland, ConfigService* config, RenderContext* renderer, MprisService* mpris,
-    NotificationManager* notifications, HttpClient* http, SessionBus* bus, UPowerService* upower, BluetoothService* bluetooth,
-    PipeWireService* pipewire, PipeWireSpectrum* spectrum
+    NotificationManager* notifications, HttpClient* http, SessionBus* bus, UPowerService* upower,
+    BluetoothService* bluetooth, PipeWireService* pipewire, PipeWireSpectrum* spectrum
 ) {
   m_wayland = &wayland;
   m_config = config;
@@ -264,18 +301,34 @@ void Island::initialize(
   onConfigReload();
 }
 
-bool Island::enabled() const { return m_config && m_config->config().island.enabled; }
+bool Island::enabled() const {
+  if (!m_config)
+    return false;
+  const auto& config = m_config->config();
+  return config.island.enabled || std::ranges::any_of(config.bars, [](const auto& bar) {
+           return bar.presentation == BarPresentation::Island
+               || std::ranges::any_of(bar.monitorOverrides, [](const auto& o) {
+                    return o.presentation == BarPresentation::Island;
+                  });
+         });
+}
 bool Island::osdVisible() const { return enabled() && m_osd.has_value(); }
 
-std::vector<island::Battery> Island::batteries() const {
-  return island::batterySnapshot(m_upower ? m_upower->batteryDevices() : std::vector<UPowerDeviceInfo>{},
+std::vector<island::Battery> Island::batteries(const IslandConfig& cfg, wl_output* output) const {
+  const auto* info = m_wayland->findOutputByWl(output);
+  return island::batterySnapshot(
+      m_upower ? m_upower->batteryDevices() : std::vector<UPowerDeviceInfo>{},
       m_bluetooth ? m_bluetooth->devices() : std::vector<BluetoothDeviceInfo>{}, m_config->config().battery,
-      m_upower ? m_upower->defaultSystemBattery() : nullptr);
+      m_upower ? m_upower->defaultSystemBattery() : nullptr, m_batteryConnections.get(),
+      island::BatteryConnections::Clock::now(), cfg.bluetoothPreviewSeconds, cfg.bluetoothPreviewMonitor,
+      info ? info->connectorName : ""
+  );
 }
 
 std::vector<island::PrivacyActivity> Island::privacy() const {
-  return m_privacySummary.snapshot(m_pipewire ? m_pipewire->privacyState() : PrivacyState{},
-                                    m_config->config().shell.privacy);
+  return m_privacySummary.snapshot(
+      m_pipewire ? m_pipewire->privacyState() : PrivacyState{}, m_config->config().shell.privacy
+  );
 }
 
 std::vector<island::Countdown> Island::countdowns() const {
@@ -287,21 +340,29 @@ std::vector<island::Countdown> Island::countdowns() const {
   };
   std::vector<island::Countdown> result;
   if (registry.hasEntry("noctalia/timer:timer"))
-    if (auto timer = island::timerSnapshot(value("noctalia/timer", "timer.state"),
-        value("noctalia/timer", "timer.remaining"), value("noctalia/timer", "timer.duration"))) result.push_back(*timer);
+    if (auto timer = island::timerSnapshot(
+            value("noctalia/timer", "timer.state"), value("noctalia/timer", "timer.remaining"),
+            value("noctalia/timer", "timer.duration")
+        ))
+      result.push_back(*timer);
   if (registry.hasEntry("thepunkoff/pomodoro:pomodoro"))
-    if (auto timer = island::pomodoroSnapshot(value("thepunkoff/pomodoro", "pomodoro.state"),
-        value("thepunkoff/pomodoro", "pomodoro.sessionData"))) result.push_back(*timer);
+    if (auto timer = island::pomodoroSnapshot(
+            value("thepunkoff/pomodoro", "pomodoro.state"), value("thepunkoff/pomodoro", "pomodoro.sessionData")
+        ))
+      result.push_back(*timer);
   std::ranges::stable_sort(result, [](const auto& a, const auto& b) {
-    if (a.active != b.active) return a.active;
-    if (a.running != b.running) return a.running;
+    if (a.active != b.active)
+      return a.active;
+    if (a.running != b.running)
+      return a.running;
     return a.plugin < b.plugin;
   });
   return result;
 }
 
 void Island::timerCommand(const island::Countdown& timer, const std::string& command) {
-  if (!scripting::PluginRegistry::instance().hasEntry(timer.panel)) return;
+  if (!scripting::PluginRegistry::instance().hasEntry(timer.panel))
+    return;
   scripting::PluginStateStore::instance().set(timer.plugin, timer.commandKey(), nlohmann::json(command).dump());
   refresh();
 }
@@ -317,27 +378,46 @@ void Island::destroySurfaces() {
 }
 
 void Island::onConfigReload() {
-  if (m_notification && m_notification->timeout > 0)
-    m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
   destroySurfaces();
   m_tick.stop();
   m_osd.reset();
-  m_notification.reset();
   m_osdTimeout.stop();
   if (enabled()) {
     onOutputChange();
     m_tick.startRepeating(1s, [this] { refresh(); });
+  } else {
+    updateNotificationPreview();
   }
 }
 
 void Island::onOutputChange() {
   if (!enabled() || !m_wayland || !m_renderContext)
     return;
-  const auto& cfg = m_config->config().island;
-  const auto selected = [&](const WaylandOutput& output) {
-    return cfg.monitors.empty() || std::ranges::any_of(cfg.monitors, [&](const std::string& selector) {
-             return outputMatchesSelector(selector, output);
+  const auto& config = m_config->config();
+  auto bars = config.bars;
+  const bool managed = std::ranges::any_of(bars, [](const auto& bar) {
+    return bar.presentation == BarPresentation::Island || std::ranges::any_of(bar.monitorOverrides, [](const auto& o) {
+             return o.presentation == BarPresentation::Island;
            });
+  });
+  if (!managed && config.island.enabled) {
+    BarConfig legacy;
+    legacy.name = "__legacy_island";
+    legacy.presentation = BarPresentation::Island;
+    legacy.island = config.island;
+    legacy.scale = config.island.scale;
+    legacy.reserveSpace = config.island.reserveSpace;
+    bars.push_back(std::move(legacy));
+  }
+  const auto selected = [&](const BarConfig& bar, const WaylandOutput& output) {
+    if (bar.name == "__legacy_island"
+        && !config.island.monitors.empty()
+        && std::ranges::none_of(config.island.monitors, [&](const auto& selector) {
+             return outputMatchesSelector(selector, output);
+           }))
+      return false;
+    const auto resolved = ConfigService::resolveForOutput(bar, output);
+    return resolved.enabled && resolved.presentation == BarPresentation::Island;
   };
   // Match Orbit's explicit monitor choice; never mirror private alerts to another output as a fallback.
   // End a borrow before resizing/removing an output's surface.
@@ -345,121 +425,251 @@ void Island::onOutputChange() {
     closeHostedPanel();
   std::erase_if(m_instances, [&](const auto& inst) {
     const auto* output = m_wayland->findOutputByWl(inst->output);
-    return !output || !output->done || !output->hasUsableGeometry() || !selected(*output);
+    const auto bar = std::ranges::find(bars, inst->barConfig.name, &BarConfig::name);
+    return !output || !output->done || !output->hasUsableGeometry() || bar == bars.end() || !selected(*bar, *output);
   });
-  for (const auto& output : m_wayland->outputs()) {
-    if (!output.done || !output.output || !output.hasUsableGeometry() || !selected(output))
-      continue;
-    const float scale = std::min(
-        {cfg.scale * m_config->config().accessibility.uiScale,
-         static_cast<float>(output.effectiveLogicalWidth()) / 480.0F,
-         static_cast<float>(output.effectiveLogicalHeight()) / 300.0F}
-    );
-    // Keep the compositor viewport stable across capsule/panel transitions.
-    // Recentring a resized layer surface adds a second, sideways animation on
-    // Hyprland. Only the capsule's scene geometry and input region should move.
-    const auto sw = static_cast<std::uint32_t>(output.effectiveLogicalWidth());
-    const auto sh = static_cast<std::uint32_t>(output.effectiveLogicalHeight());
-    const auto existing =
-        std::ranges::find_if(m_instances, [&](const auto& inst) { return inst->output == output.output; });
-    if (existing != m_instances.end()) {
-      auto& current = **existing;
-      current.scale = scale;
-      current.signature.clear();
-      current.surface->requestSize(sw, sh);
-      current.surface->setExclusiveZone(cfg.reserveSpace ? static_cast<int>(std::ceil((cfg.height + 12) * scale)) : -1);
-      current.surface->requestUpdate();
-      continue;
-    }
-    auto inst = std::make_unique<Instance>();
-    inst->output = output.output;
-    inst->scale = scale;
-    LayerSurfaceConfig surfaceConfig{
-        .nameSpace = "noctalia-island",
-        .layer = LayerShellLayer::Top,
-        .anchor = LayerShellAnchor::Top,
-        .width = sw,
-        .height = sh,
-        .exclusiveZone = cfg.reserveSpace ? static_cast<int>(std::ceil((cfg.height + 12) * inst->scale)) : -1,
-        .keyboard = LayerShellKeyboard::None,
-        .defaultWidth = sw,
-        .defaultHeight = sh,
-    };
-    inst->surface = std::make_unique<LayerSurface>(*m_wayland, surfaceConfig);
-    inst->surface->setRenderContext(m_renderContext);
-    auto* ptr = inst.get();
-    inst->input.setCursorShapeCallback([this](std::uint32_t serial, std::uint32_t shape) {
-      m_wayland->setCursorShape(serial, shape);
-    });
-    inst->input.setHoverChangeCallback([ptr](InputArea*, InputArea* next) {
-      if (next)
-        next->setTooltipPlacement(TooltipPlacement::Below);
-      TooltipManager::instance().onHoverChange(next, ptr->surface->layerSurface(), ptr->output);
-    });
-    inst->input.setFocusChangeCallback([ptr](InputArea* old, InputArea* next) {
-      if (old)
-        if (auto* button = dynamic_cast<Button*>(old->parent())) button->setKeyboardFocusHint(false);
-      if (next)
-        if (auto* button = dynamic_cast<Button*>(next->parent())) button->setKeyboardFocusHint(ptr->keyboardMode);
-      if (next && ptr->keyboardMode && ptr->activityScroll) {
-        auto* scroll = ptr->activityScroll;
-        float top = 0;
-        Node* node = next;
-        for (; node && node != scroll->content(); node = node->parent()) top += node->y();
-        if (node) {
-          const float bottom = top + next->height();
-          const float offset = scroll->scrollOffset();
-          if (top < offset) scroll->setScrollOffset(top);
-          else if (bottom > offset + scroll->contentViewportHeight())
-            scroll->setScrollOffset(bottom - scroll->contentViewportHeight());
-        }
+  for (const auto& bar : bars)
+    for (const auto& output : m_wayland->outputs()) {
+      if (!output.done || !output.output || !output.hasUsableGeometry() || !selected(bar, output))
+        continue;
+      const auto resolved = ConfigService::resolveForOutput(bar, output);
+      auto cfg = resolved.island;
+      cfg.scale = resolved.scale;
+      cfg.reserveSpace = resolved.reserveSpace;
+      const float scale = std::min(
+          {cfg.scale * m_config->config().accessibility.uiScale,
+           static_cast<float>(output.effectiveLogicalWidth()) / 480.0F,
+           static_cast<float>(output.effectiveLogicalHeight()) / 300.0F}
+      );
+      // Keep the compositor viewport stable across capsule/panel transitions.
+      // Recentring a resized layer surface adds a second, sideways animation on
+      // Hyprland. Only the capsule's scene geometry and input region should move.
+      const auto sw = static_cast<std::uint32_t>(output.effectiveLogicalWidth());
+      const auto sh = static_cast<std::uint32_t>(output.effectiveLogicalHeight());
+      const auto existing = std::ranges::find_if(m_instances, [&](const auto& inst) {
+        return inst->output == output.output && inst->barConfig.name == bar.name;
+      });
+      if (existing != m_instances.end()) {
+        auto& current = **existing;
+        current.barConfig = resolved;
+        current.config = cfg;
+        current.scale = scale;
+        current.signature.clear();
+        current.surface->requestSize(sw, sh);
+        current.surface->setExclusiveZone(
+            cfg.reserveSpace ? static_cast<int>(std::ceil((cfg.height + 12) * scale)) : -1
+        );
+        current.surface->requestUpdate();
+        continue;
       }
-    });
-    inst->surface->setConfigureCallback([ptr](std::uint32_t, std::uint32_t) {
-      ptr->signature.clear();
-      ptr->surface->requestUpdate();
-    });
-    inst->surface->setPrepareFrameCallback([this, ptr](bool, bool) { prepare(*ptr); });
-    inst->surface->setAnimationManager(&inst->animations);
-    inst->surface->setFrameTickCallback([ptr](float dt) {
-      if (!ptr->panelHosted && ptr->visualizer)
-        ptr->visualizer->onFrameTick(dt);
-      if (!ptr->panelHosted && ptr->hoverWidgets)
-        ptr->hoverWidgets->tickWidgets(dt);
-    });
-    if (!inst->surface->initialize(output.output))
-      continue;
-    inst->surface->setInputRegion({});
-    m_instances.push_back(std::move(inst));
-  }
-  if (m_notification && m_notification->timeout > 0 && std::ranges::none_of(m_instances, [](const auto& inst) {
-        return inst->inside || inst->keyboardMode;
-      }))
+      auto inst = std::make_unique<Instance>();
+      inst->barConfig = resolved;
+      inst->config = cfg;
+      inst->output = output.output;
+      inst->scale = scale;
+      LayerSurfaceConfig surfaceConfig{
+          .nameSpace = "noctalia-island",
+          .layer = resolved.layer == "overlay" ? LayerShellLayer::Overlay : LayerShellLayer::Top,
+          .anchor = LayerShellAnchor::Top,
+          .width = sw,
+          .height = sh,
+          .exclusiveZone = cfg.reserveSpace ? static_cast<int>(std::ceil((cfg.height + 12) * inst->scale)) : -1,
+          .keyboard = LayerShellKeyboard::None,
+          .defaultWidth = sw,
+          .defaultHeight = sh,
+      };
+      inst->surface = std::make_unique<LayerSurface>(*m_wayland, surfaceConfig);
+      inst->surface->setRenderContext(m_renderContext);
+      auto* ptr = inst.get();
+      inst->input.setCursorShapeCallback([this](std::uint32_t serial, std::uint32_t shape) {
+        m_wayland->setCursorShape(serial, shape);
+      });
+      inst->input.setHoverChangeCallback([ptr](InputArea*, InputArea* next) {
+        if (next)
+          next->setTooltipPlacement(TooltipPlacement::Below);
+        TooltipManager::instance().onHoverChange(next, ptr->surface->layerSurface(), ptr->output);
+      });
+      inst->input.setFocusChangeCallback([ptr](InputArea* old, InputArea* next) {
+        if (old)
+          if (auto* button = dynamic_cast<Button*>(old->parent()))
+            button->setKeyboardFocusHint(false);
+        if (next)
+          if (auto* button = dynamic_cast<Button*>(next->parent()))
+            button->setKeyboardFocusHint(ptr->keyboardMode);
+        if (next && ptr->keyboardMode && ptr->activityScroll) {
+          auto* scroll = ptr->activityScroll;
+          float top = 0;
+          Node* node = next;
+          for (; node && node != scroll->content(); node = node->parent())
+            top += node->y();
+          if (node) {
+            const float bottom = top + next->height();
+            const float offset = scroll->scrollOffset();
+            if (top < offset)
+              scroll->setScrollOffset(top);
+            else if (bottom > offset + scroll->contentViewportHeight())
+              scroll->setScrollOffset(bottom - scroll->contentViewportHeight());
+          }
+        }
+      });
+      inst->surface->setConfigureCallback([ptr](std::uint32_t, std::uint32_t) {
+        ptr->signature.clear();
+        ptr->surface->requestUpdate();
+      });
+      inst->surface->setPrepareFrameCallback([this, ptr](bool, bool) { prepare(*ptr); });
+      inst->surface->setAnimationManager(&inst->animations);
+      inst->surface->setFrameTickCallback([ptr](float dt) {
+        if (!ptr->panelHosted && ptr->visualizer)
+          ptr->visualizer->onFrameTick(dt);
+        if (!ptr->panelHosted && ptr->hoverWidgets)
+          ptr->hoverWidgets->tickWidgets(dt);
+      });
+      if (!inst->surface->initialize(output.output))
+        continue;
+      inst->surface->setInputRegion({});
+      m_instances.push_back(std::move(inst));
+    }
+  if (m_notification
+      && m_notification->urgency != Urgency::Critical
+      && m_notification->timeout > 0
+      && std::ranges::none_of(m_instances, [](const auto& inst) { return inst->inside || inst->keyboardMode; }))
     m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
-  refresh();
+  if (m_platform)
+    onWorkspaceChanged();
+  else
+    refresh();
+}
+
+bool Island::trackPreview(const IslandConfig& cfg, wl_output* output) const {
+  const auto* info = m_wayland->findOutputByWl(output);
+  return info
+      && m_mediaActivity.announcing(island::MediaActivity::Clock::now(), cfg.trackPreviewSeconds)
+      && m_mediaActivity.targets(cfg.trackPreviewMonitor, info->connectorName);
 }
 
 void Island::refresh() {
   if (!enabled())
     return;
+  const auto now = island::BatteryConnections::Clock::now();
+  std::vector<std::string> outputs;
+  for (const auto& inst : m_instances)
+    if (const auto* output = m_wayland->findOutputByWl(inst->output))
+      if (std::ranges::find(outputs, output->connectorName) == outputs.end())
+        outputs.push_back(output->connectorName);
+  const auto* focused =
+      m_wayland->findOutputByWl(m_platform ? m_platform->preferredInteractiveOutput() : m_wayland->lastPointerOutput());
+  island::PreviewTarget target;
+  target.reconcile(outputs, focused ? focused->connectorName : "");
+  m_batteryConnections->update(
+      m_bluetooth ? m_bluetooth->devices() : std::vector<BluetoothDeviceInfo>{}, now, target.output
+  );
+  m_batteryConnections->reconcileOutputs(outputs, target.output);
   hideDndSuppressed();
+  updateNotificationPreview();
   const auto player = m_mpris ? m_mpris->activePlayer() : std::nullopt;
   const std::string track = player ? player->busName + logicalTrackSignature(*player) : "";
-  if (track != m_trackSignature) {
-    if (!m_trackSignature.empty() && player && player->playbackStatus == "Playing") {
-      m_announcement = player->title;
-      m_announcementTimeout.start(3500ms, [this] {
-        m_announcement.clear();
+  m_mediaActivity.update(track, player ? player->playbackStatus : "", now, target.output);
+  m_mediaActivity.reconcileOutputs(outputs, target.output);
+  m_trackSignature = track;
+  std::optional<TimePoint> mediaExpiry, batteryExpiry;
+  for (const auto& inst : m_instances) {
+    const auto& cfg = inst->config;
+    if (const auto expiry = m_mediaActivity.nextExpiry(now, cfg.trackPreviewSeconds, cfg.pausedMediaSeconds);
+        expiry && (!mediaExpiry || *expiry < *mediaExpiry))
+      mediaExpiry = expiry;
+    if (const auto expiry = m_batteryConnections->nextExpiry(now, cfg.bluetoothPreviewSeconds);
+        expiry && (!batteryExpiry || *expiry < *batteryExpiry))
+      batteryExpiry = expiry;
+  }
+  if (mediaExpiry)
+    m_mediaTimeout.start(std::chrono::ceil<std::chrono::milliseconds>(*mediaExpiry - now), [this] { refresh(); });
+  else
+    m_mediaTimeout.stop();
+  if (batteryExpiry)
+    m_batteryTimeout.start(std::chrono::ceil<std::chrono::milliseconds>(*batteryExpiry - now), [this] { refresh(); });
+  else
+    m_batteryTimeout.stop();
+  const auto timers = countdowns();
+  const bool timerActive = std::ranges::any_of(timers, [](const auto& timer) { return timer.active; });
+  const bool downloadActive = m_downloads && !m_downloads->active().empty();
+  for (auto& inst : m_instances) {
+    updateVisibility(*inst);
+    const auto& cfg = inst->config;
+    inst->compactActivity.update(
+        {player && m_mediaActivity.compact(now, cfg.pausedMediaSeconds), downloadActive, timerActive},
+        cfg.activityPriority, cfg.cycleActivities, cfg.activityCycleSeconds,
+        inst->inside
+            || inst->hovered
+            || inst->keyboardMode
+            || inst->panelHosted
+            || !inst->wantsVisible
+            || m_notification
+            || m_osd
+            || ScreenRecorder::instance().active(),
+        now
+    );
+    if (const auto expiry = inst->compactActivity.nextExpiry())
+      inst->activityTimeout.start(std::chrono::ceil<std::chrono::milliseconds>(*expiry - now), [this] { refresh(); });
+    else
+      inst->activityTimeout.stop();
+    if (!inst->panelHosted) {
+      inst->surface->requestUpdate();
+    }
+  }
+}
+
+void Island::onWorkspaceChanged() {
+  if (!m_platform)
+    return;
+  for (auto& inst : m_instances) {
+    std::string active;
+    for (const auto& workspace : m_platform->workspaces(inst->output))
+      if (workspace.active) {
+        active = workspace.id;
+        break;
+      }
+    if (!inst->workspaceId.empty()
+        && active != inst->workspaceId
+        && inst->barConfig.isAutoHideEnabled()
+        && inst->barConfig.showOnWorkspaceSwitch) {
+      inst->workspacePeek = true;
+      inst->peek.start(std::chrono::milliseconds(450), [this, ptr = inst.get()] {
+        ptr->workspacePeek = false;
         refresh();
       });
     }
-    m_trackSignature = track;
+    inst->workspaceId = active;
   }
-  if (!player || player->playbackStatus != "Playing")
-    m_announcement.clear();
-  for (auto& inst : m_instances)
-    if (!inst->panelHosted)
-      inst->surface->requestUpdate();
+  refresh();
+}
+
+void Island::updateVisibility(Instance& inst) {
+  const bool smartVisible = inst.barConfig.smartAutoHide
+      && m_platform
+      && noctalia::bar::smartAutoHideWantsPinnedVisible(*m_platform, inst.output);
+  const bool visible = !inst.barConfig.isAutoHideEnabled()
+      || smartVisible
+      || inst.inside
+      || inst.hovered
+      || inst.keyboardMode
+      || inst.panelHosted
+      || inst.workspacePeek
+      || (inst.config.revealOnTrackChange && trackPreview(inst.config, inst.output))
+      || m_osd
+      || m_notification
+      || ScreenRecorder::instance().active();
+  if (inst.wantsVisible == visible)
+    return;
+  inst.wantsVisible = visible;
+  inst.animations.cancel(inst.hideAnimation);
+  inst.hideAnimation = inst.animations.animate(
+      inst.visibility, visible ? 1.0F : 0.0F, visible ? Motion::revealMs : Motion::dismissMs,
+      visible ? Motion::reveal : Motion::dismiss, [this, &inst](float value) {
+        inst.visibility = value;
+        geometry(inst);
+      }
+  );
+  inst.surface->requestFrameTick();
 }
 
 bool Island::showOsd(const OsdContent& content) {
@@ -481,11 +691,14 @@ bool Island::showOsd(const OsdContent& content) {
 
 bool Island::onNotification(const Notification& n, NotificationEvent event) {
   for (auto& inst : m_instances)
-    if (inst->keyboardMode && ((event == NotificationEvent::Closed && inst->keyboardNotification == n.id)
-        || (event == NotificationEvent::Added && inst->keyboardNotification != n.id
-            && !(m_notifications->doNotDisturb() && n.dndPolicy == NotificationDndPolicy::Respect))))
+    if (inst->keyboardMode
+        && ((event == NotificationEvent::Closed && inst->keyboardNotification == n.id)
+            || (event == NotificationEvent::Added
+                && inst->keyboardNotification != n.id
+                && !(m_notifications->doNotDisturb() && n.dndPolicy == NotificationDndPolicy::Respect))))
       releaseKeyboard(*inst);
   if (event == NotificationEvent::Closed) {
+    std::erase_if(m_urgentNotifications, [&](const auto& queued) { return queued.id == n.id; });
     if (m_notification && m_notification->id == n.id) {
       m_notification.reset();
       refresh();
@@ -494,26 +707,65 @@ bool Island::onNotification(const Notification& n, NotificationEvent event) {
   }
   if (!enabled() || m_instances.empty())
     return false;
-  if (event == NotificationEvent::Updated && (!m_notification || m_notification->id != n.id))
-    return true;
   // Preserve Noctalia's full reply editor for notifications requiring text input.
   for (std::size_t i = 0; i + 1 < n.actions.size(); i += 2)
     if (n.actions[i] == "inline-reply")
       return false;
   if (m_notifications->doNotDisturb() && n.dndPolicy == NotificationDndPolicy::Respect)
     return true;
+  if (auto queued = std::ranges::find(m_urgentNotifications, n.id, &Notification::id);
+      queued != m_urgentNotifications.end()) {
+    if (n.urgency == Urgency::Critical) {
+      *queued = n;
+      m_notifications->pauseExpiry(n.id);
+    } else {
+      m_urgentNotifications.erase(queued);
+    }
+    return true;
+  }
+  if (m_notification && m_notification->id != n.id && m_notification->urgency == Urgency::Critical) {
+    if (n.urgency == Urgency::Critical) {
+      m_urgentNotifications.push_back(n);
+      m_notifications->pauseExpiry(n.id);
+    }
+    refresh();
+    return true;
+  }
+  if (event == NotificationEvent::Updated
+      && (!m_notification || m_notification->id != n.id)
+      && n.urgency != Urgency::Critical)
+    return true;
   if (m_notification && m_notification->timeout > 0)
     m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
-  if (!m_notification || m_notification->id != n.id)
-    for (auto& inst : m_instances) inst->expandedNotification.reset();
+  const bool newPreview = !m_notification || m_notification->id != n.id || m_notification->urgency != n.urgency;
+  if (newPreview)
+    for (auto& inst : m_instances)
+      inst->expandedNotification.reset();
   m_notification = n;
-  if (n.timeout > 0 && std::ranges::any_of(m_instances, [](const auto& inst) { return inst->inside || inst->keyboardMode; }))
+  if (n.urgency == Urgency::Critical) {
+    m_notificationDeadline.reset();
+    m_notificationPreviewTimer.stop();
+  } else if (newPreview) {
+    m_notificationDeadline = Clock::now() + 5s;
+    m_notificationPreviewTimer.start(5s, [this] { refresh(); });
+  }
+  if (n.urgency == Urgency::Critical || (n.timeout > 0 && std::ranges::any_of(m_instances, [](const auto& inst) {
+                                           return inst->inside || inst->keyboardMode;
+                                         })))
     m_notifications->pauseExpiry(n.id);
   refresh();
   return true;
 }
 
 void Island::hideDndSuppressed() {
+  std::erase_if(m_urgentNotifications, [&](const auto& queued) {
+    if (m_notifications->doNotDisturb() && queued.dndPolicy == NotificationDndPolicy::Respect) {
+      if (queued.timeout > 0)
+        m_notifications->resumeExpiry(queued.id, queued.timeout);
+      return true;
+    }
+    return false;
+  });
   if (m_notification
       && m_notifications
       && m_notifications->doNotDisturb()
@@ -523,6 +775,43 @@ void Island::hideDndSuppressed() {
     m_notification.reset();
     for (auto& inst : m_instances)
       inst->surface->requestUpdate();
+  }
+}
+
+void Island::updateNotificationPreview() {
+  if (m_instances.empty() || !enabled()) {
+    if (m_notification && m_notification->timeout > 0)
+      m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
+    for (const auto& queued : m_urgentNotifications)
+      if (queued.timeout > 0)
+        m_notifications->resumeExpiry(queued.id, queued.timeout);
+    m_urgentNotifications.clear();
+    m_notification.reset();
+    m_notificationDeadline.reset();
+    m_notificationPreviewTimer.stop();
+    return;
+  }
+  if (!m_notification && !m_urgentNotifications.empty()) {
+    m_notification = m_urgentNotifications.front();
+    m_urgentNotifications.erase(m_urgentNotifications.begin());
+    m_notificationDeadline.reset();
+    m_notificationPreviewTimer.stop();
+  }
+  if (m_notification
+      && m_notification->urgency != Urgency::Critical
+      && m_notificationDeadline
+      && Clock::now() >= *m_notificationDeadline
+      && std::ranges::none_of(m_instances, [](const auto& inst) { return inst->inside || inst->keyboardMode; })) {
+    const auto id = m_notification->id;
+    m_notification.reset();
+    m_notificationDeadline.reset();
+    m_notificationPreviewTimer.stop();
+    // Notification updates can call refresh from inside the manager's event dispatch.
+    // Close after that dispatch finishes so its current notification remains valid.
+    DeferredCall::callLater([this, id, alive = std::weak_ptr<void>(m_lifetime)] {
+      if (!alive.expired())
+        m_notifications->close(id, CloseReason::Expired);
+    });
   }
 }
 
@@ -540,13 +829,14 @@ void Island::geometry(Instance& inst) {
     return;
   const float s = inst.scale;
   const float x = (static_cast<float>(inst.surface->width()) - inst.width * s) / 2;
-  inst.background->setPosition(x, 8 * s);
+  const float y = (8 - (inst.height + 12) * (1 - inst.visibility)) * s;
+  inst.background->setPosition(x, y);
   inst.background->setSize(inst.width * s, inst.height * s);
-  inst.background->setRadius(std::min(inst.height / 2, 30.0F) * s);
+  const float radius = island::surfaceRadius(inst.height * s, s);
+  inst.background->setRadius(radius);
   if (inst.progressOutline) {
-    inst.progressOutline->setPosition(x, 8 * s);
-    inst.progressOutline->setGeometry(inst.width * s, inst.height * s,
-                                     std::min(inst.height / 2, 30.0F) * s, s);
+    inst.progressOutline->setPosition(x, y);
+    inst.progressOutline->setGeometry(inst.width * s, inst.height * s, radius, s);
   }
   if (inst.content) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
@@ -555,11 +845,18 @@ void Island::geometry(Instance& inst) {
     inst.content->setOpacity(std::clamp(1 - gap / 55, 0.0F, 1.0F));
     inst.content->setHitTestVisible(inst.content->opacity() > 0.1F);
   }
-  inst.surface->setInputRegion({InputRect{
+  const std::array<int, 4> inputRegion{
       static_cast<int>(std::floor(x)), 0, static_cast<int>(std::ceil(inst.width * s)),
-      static_cast<int>(std::ceil((inst.height + 8) * s))
-  }});
-  inst.surface->requestRedraw();
+      inst.wantsVisible ? static_cast<int>(std::ceil((inst.height + 8) * s)) : 3
+  };
+  if (inst.inputRegion != inputRegion) {
+    inst.inputRegion = inputRegion;
+    inst.surface->setInputRegion({InputRect{inputRegion[0], inputRegion[1], inputRegion[2], inputRegion[3]}});
+    // A changed input region needs a commit even if no scene node changed.
+    inst.surface->requestRedraw();
+  }
+  // Node setters invalidate actual geometry/content changes. Repeated clock or
+  // window-title updates must not redraw an otherwise unchanged capsule.
   inst.input.syncPointerHover();
   TooltipManager::instance().syncAnchor(inst.input.hoveredArea());
 }
@@ -568,42 +865,79 @@ void Island::prepare(Instance& inst) {
   if (!enabled() || inst.panelHosted)
     return;
   UiPhaseScope phase(UiPhase::Layout);
-  m_renderContext->makeCurrent(inst.surface->renderTarget());
+  // Evaluate the visible state before binding a GPU surface. On multiple
+  // monitors, even unchanged title notifications otherwise switch EGL targets.
   auto& renderer = inst.surface->renderTarget().renderer();
-  const auto& cfg = m_config->config().island;
+  const auto& cfg = inst.config;
   const auto player = m_mpris ? m_mpris->activePlayer() : std::nullopt;
   const bool playing = player && player->playbackStatus == "Playing";
+  const std::string announcement = player && trackPreview(cfg, inst.output) ? player->title : "";
   const auto downloads = m_downloads ? m_downloads->active() : std::vector<DownloadProgress>{};
   const auto timers = countdowns();
   const bool timerActive = !timers.empty() && timers.front().active;
   const bool recording = ScreenRecorder::instance().active();
-  if (inst.keyboardMode && (recording
-      || (inst.keyboardNotification && (!m_notification || m_notification->id != inst.keyboardNotification))
-      || (!inst.keyboardNotification && inst.keyboardDownloads != !downloads.empty())
-      || (!inst.keyboardNotification && !player && downloads.empty() && !timerActive)))
+  if (inst.keyboardMode
+      && (recording
+          || (inst.keyboardNotification && (!m_notification || m_notification->id != inst.keyboardNotification))
+          || (!inst.keyboardNotification && !player && downloads.empty() && !timerActive)))
     releaseKeyboard(inst);
   const bool expansionRequested = inst.hovered || inst.keyboardMode;
-  if (player && expansionRequested && (playing || inst.keyboardMode))
+  if (player && expansionRequested && (playing || player->playbackStatus == "Paused" || inst.keyboardMode))
     inst.heldMedia = true;
   if (!player || !expansionRequested)
     inst.heldMedia = false;
-  const auto view = recording ? island::View::Rest : island::view(m_notification.has_value(), m_osd.has_value() && !inst.keyboardMode, expansionRequested, playing, inst.heldMedia, !downloads.empty(), timerActive, cfg.hoverShowMedia, cfg.hoverShowDownloads);
-  const bool compactView = view == island::View::Rest || view == island::View::Activity || view == island::View::DownloadActivity || view == island::View::TimerActivity;
-  const bool expandedView = view == island::View::Calendar || view == island::View::Media || view == island::View::Downloads;
-  const auto batteryList = !recording && (compactView || expandedView) ? batteries() : std::vector<island::Battery>{};
+  const island::Activities availableActivities{
+      cfg.hoverShowMedia && player && (playing || inst.heldMedia), cfg.hoverShowDownloads && !downloads.empty(),
+      cfg.hoverShowTimers && timerActive
+  };
+  inst.activities.update(expansionRequested && !recording, availableActivities);
+  // Keep the existing calendar/timer layout for a lone timer, until switching is useful.
+  const auto selected = inst.activities.selected == island::Activity::Timers && !inst.activities.switching
+      ? island::Activity::None
+      : inst.activities.selected;
+  const auto view = recording
+      ? island::View::Rest
+      : island::view(
+            m_notification.has_value(), m_osd.has_value() && !inst.keyboardMode, expansionRequested,
+            player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
+            inst.heldMedia, !downloads.empty(), timerActive, cfg.hoverShowMedia, cfg.hoverShowDownloads, selected,
+            inst.compactActivity.selected()
+        );
+  const bool compactView = view == island::View::Rest
+      || view == island::View::Activity
+      || view == island::View::DownloadActivity
+      || view == island::View::TimerActivity;
+  const bool expandedView = view == island::View::Calendar
+      || view == island::View::Media
+      || view == island::View::Downloads
+      || view == island::View::Timers;
+  const bool showSwitcher = expandedView && inst.activities.switching && availableActivities.count() > 0;
+  const auto batteryList =
+      !recording && (compactView || expandedView) ? batteries(cfg, inst.output) : std::vector<island::Battery>{};
   const bool showBattery = compactView && !batteryList.empty() && batteryList.front().compact();
   const auto privacyList = privacy();
   const float privacyWidth = privacyList.empty() ? 0 : static_cast<float>(privacyList.size()) * 24 + 8;
   const auto unreadCount = m_notifications
-      ? std::ranges::count_if(m_notifications->history(), [](const auto& entry) { return !entry.seen; }) : 0;
-  const bool showUnread = unreadCount > 0 && !recording
-      && (view == island::View::Rest || view == island::View::Activity
-          || view == island::View::Calendar || view == island::View::Media
-          || view == island::View::DownloadActivity || view == island::View::Downloads || view == island::View::TimerActivity);
+      ? std::ranges::count_if(m_notifications->history(), [](const auto& entry) { return !entry.seen; })
+      : 0;
+  const bool showUnread = unreadCount > 0
+      && !recording
+      && (view == island::View::Rest
+          || view == island::View::Activity
+          || view == island::View::Calendar
+          || view == island::View::Media
+          || view == island::View::DownloadActivity
+          || view == island::View::Downloads
+          || view == island::View::Timers
+          || view == island::View::TimerActivity);
   constexpr float badgeWidth = 24.0F;
   // A gesture belongs to the track and card where it started.
-  if (inst.seeking && (view != island::View::Media || !player || !player->canSeek
-                      || inst.seekTrackSignature != m_trackSignature || inst.seekLengthUs != player->lengthUs)) {
+  if (inst.seeking
+      && (view != island::View::Media
+          || !player
+          || !player->canSeek
+          || inst.seekTrackSignature != m_trackSignature
+          || inst.seekLengthUs != player->lengthUs)) {
     inst.seeking = false;
     inst.activeSeek = {};
   }
@@ -631,10 +965,13 @@ void Island::prepare(Instance& inst) {
         + m_notification->appName
         + m_notification->summary
         + m_notification->body
-        + actionSignature + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed");
+        + actionSignature
+        + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed");
     break;
   case island::View::Osd:
-    signature += std::format("{}|{}|{}|{}|{}", static_cast<int>(m_osd->kind), m_osd->value, m_osd->icon, m_osd->progress, m_osd->showProgress);
+    signature += std::format(
+        "{}|{}|{}|{}|{}", static_cast<int>(m_osd->kind), m_osd->value, m_osd->icon, m_osd->progress, m_osd->showProgress
+    );
     break;
   case island::View::Media:
     signature += std::format(
@@ -642,11 +979,13 @@ void Island::prepare(Instance& inst) {
         player ? joinedArtists(player->artists) : ""
     );
     if (player)
-      signature += std::format("|{}|{}|{}|{}|{}|{}|{}|{}", player->lengthUs, player->canPlay, player->canPause,
-                               player->canGoPrevious, player->canGoNext, player->canSeek, player->identity, player->desktopEntry);
+      signature += std::format(
+          "|{}|{}|{}|{}|{}|{}|{}|{}", player->lengthUs, player->canPlay, player->canPause, player->canGoPrevious,
+          player->canGoNext, player->canSeek, player->identity, player->desktopEntry
+      );
     break;
   case island::View::Activity:
-    signature += time + m_announcement + artPath;
+    signature += time + announcement + artPath + (playing ? "playing" : "paused");
     break;
   case island::View::Calendar:
     signature += time + date;
@@ -655,51 +994,80 @@ void Island::prepare(Instance& inst) {
     signature += recording ? "recording" : time;
     break;
   case island::View::TimerActivity:
+  case island::View::Timers:
     break;
   case island::View::DownloadActivity:
   case island::View::Downloads:
     signature += view == island::View::Downloads ? std::to_string(player.has_value()) : time;
     for (const auto& download : downloads)
-      signature += std::format("|{}|{}|{}|{}|{}", download.desktopId, download.name,
-                               view == island::View::Downloads ? 0L : std::lround(download.progress * 100), download.determinate, download.phase);
+      signature += std::format(
+          "|{}|{}|{}|{}|{}", download.desktopId, download.name,
+          view == island::View::Downloads ? 0L : std::lround(download.progress * 100), download.determinate,
+          download.phase
+      );
     break;
   }
   if (view != island::View::Notification && view != island::View::Osd)
-    signature += std::format("|unread:{}|count:{}", showUnread,
-        showUnread && (view == island::View::Calendar || view == island::View::Media || view == island::View::Downloads) ? unreadCount : 0);
+    signature += std::format("|unread:{}|count:{}", showUnread, showUnread && expandedView ? unreadCount : 0);
   signature += std::format("|keyboard:{}", inst.keyboardMode);
+  if (expandedView)
+    signature += std::format(
+        "|switcher:{}:{}:{}:{}", showSwitcher, availableActivities.media, availableActivities.downloads,
+        availableActivities.timers
+    );
   if (expandedView || view == island::View::TimerActivity)
     for (const auto& timer : timers)
-      signature += std::format("|timer:{}|{}|{}|{}|{}|{}|{}", timer.plugin, timer.titleKey, timer.running,
-          timer.active, timer.finished, timer.duration, timer.session);
+      signature += std::format(
+          "|timer:{}|{}|{}|{}|{}|{}|{}", timer.plugin, timer.titleKey, timer.running, timer.active, timer.finished,
+          timer.duration, timer.session
+      );
   for (const auto& activity : privacyList)
     signature += std::format("|privacy:{}:{}", static_cast<int>(activity.kind), activity.appNames());
   if (showBattery || expandedView)
     for (const auto& battery : batteryList)
-      signature += std::format("|battery:{}|{}|{}|{}|{}|{}|{}", battery.id, battery.name, battery.icon,
-          std::lround(battery.percentage), static_cast<int>(battery.state), battery.seconds / 60, battery.low);
+      signature += std::format(
+          "|battery:{}|{}|{}|{}|{}|{}|{}", battery.id, battery.name, battery.icon, std::lround(battery.percentage),
+          static_cast<int>(battery.state), battery.seconds / 60, battery.low
+      );
+  if (expandedView && cfg.hoverShowUnread && m_notifications)
+    signature += "|history:" + std::to_string(m_notifications->changeSerial());
   if (expandedView && inst.hoverWidgets) {
+    m_renderContext->makeCurrent(inst.surface->renderTarget());
     const float oldHeight = inst.hoverWidgets->height();
     inst.hoverWidgets->updateWidgets(renderer, inst.hoverWidgets->width());
-    if (oldHeight != inst.hoverWidgets->height()) inst.signature.clear();
+    if (oldHeight != inst.hoverWidgets->height())
+      inst.signature.clear();
   }
-  const bool outlineTimer = cfg.outerProgressRing && !recording && timerActive
-      && (view == island::View::TimerActivity || (expandedView && cfg.hoverShowTimers));
-  const bool outlineDownload = cfg.outerProgressRing && !recording && !outlineTimer
-      && (view == island::View::DownloadActivity || view == island::View::Downloads) && !downloads.empty();
-  const bool outlineBattery = cfg.outerProgressRing && !recording && !outlineTimer && !outlineDownload
+  const bool outlineTimer = cfg.outerProgressRing
+      && !recording
+      && timerActive
+      && (view == island::View::TimerActivity
+          || view == island::View::Timers
+          || (expandedView && !inst.activities.switching && cfg.hoverShowTimers));
+  const bool outlineDownload = cfg.outerProgressRing
+      && !recording
+      && !outlineTimer
+      && (view == island::View::DownloadActivity || view == island::View::Downloads)
+      && !downloads.empty();
+  const bool outlineBattery = cfg.outerProgressRing
+      && !recording
+      && !outlineTimer
+      && !outlineDownload
       && (showBattery || (expandedView && cfg.hoverShowBatteries && !batteryList.empty()));
   const auto updateOutline = [&] {
-    if (!inst.progressOutline) return;
+    if (!inst.progressOutline)
+      return;
     std::optional<float> fraction;
     ColorRole role = ColorRole::Primary;
     bool charging = false;
-    if (outlineTimer) fraction = timers.front().fraction();
+    if (outlineTimer)
+      fraction = timers.front().fraction();
     else if (outlineDownload) {
       // Each download gets equal weight; one unknown total makes the group indeterminate.
       if (std::ranges::all_of(downloads, [](const auto& d) { return d.determinate; })) {
         float total = 0;
-        for (const auto& d : downloads) total += static_cast<float>(d.progress);
+        for (const auto& d : downloads)
+          total += static_cast<float>(d.progress);
         fraction = total / static_cast<float>(downloads.size());
       }
     } else if (outlineBattery) {
@@ -711,25 +1079,35 @@ void Island::prepare(Instance& inst) {
   };
   updateOutline();
   if (signature == inst.signature && inst.root) {
+    if ((recording && inst.recordingLabel)
+        || !inst.timerUi.empty()
+        || !inst.downloadUi.empty()
+        || (view == island::View::Media && player))
+      m_renderContext->makeCurrent(inst.surface->renderTarget());
+    geometry(inst);
     // Timer ticks must not rebuild the stop action between pointer press and release.
     if (recording && inst.recordingLabel) {
       inst.recordingLabel->setText(time);
       inst.recordingLabel->measure(renderer);
-      const float clockY = (cfg.height * inst.scale - inst.recordingLabel->height()) / 2.0F
-          + cfg.clockOffset * inst.scale;
-      inst.recordingLabel->setPosition(inst.recordingLabel->x(), std::clamp(clockY, 0.0F,
-          std::max(0.0F, cfg.height * inst.scale - inst.recordingLabel->height())));
+      const float clockY =
+          (cfg.height * inst.scale - inst.recordingLabel->height()) / 2.0F + cfg.clockOffset * inst.scale;
+      inst.recordingLabel->setPosition(
+          inst.recordingLabel->x(),
+          std::clamp(clockY, 0.0F, std::max(0.0F, cfg.height * inst.scale - inst.recordingLabel->height()))
+      );
     }
     for (const auto& ui : inst.timerUi) {
       const auto timer = std::ranges::find(timers, ui.plugin, &island::Countdown::plugin);
-      if (timer == timers.end()) continue;
+      if (timer == timers.end())
+        continue;
       ui.label->setText(timer->time());
       ui.label->measure(renderer);
       ui.setFraction(timer->fraction());
     }
     for (const auto& ui : inst.downloadUi) {
       const auto download = std::ranges::find(downloads, ui.desktopId, &DownloadProgress::desktopId);
-      if (download == downloads.end()) continue;
+      if (download == downloads.end())
+        continue;
       ui.percentage->setText(std::format("{}%", std::lround(download->progress * 100)));
       ui.percentage->measure(renderer);
       ui.progress->setProgress(static_cast<float>(download->progress));
@@ -737,9 +1115,12 @@ void Island::prepare(Instance& inst) {
     // Keep the title's marquee alive while the playback position advances.
     if (view == island::View::Media && player) {
       if (inst.seekProgress)
-        inst.seekProgress->setProgress(inst.seeking ? inst.seekFraction : player->lengthUs > 0
-            ? std::clamp(static_cast<float>(player->positionUs) / static_cast<float>(player->lengthUs), 0.0F, 1.0F)
-            : 0.0F);
+        inst.seekProgress->setProgress(
+            inst.seeking ? inst.seekFraction
+                : player->lengthUs > 0
+                ? std::clamp(static_cast<float>(player->positionUs) / static_cast<float>(player->lengthUs), 0.0F, 1.0F)
+                : 0.0F
+        );
       if (inst.mediaPosition) {
         inst.mediaPosition->setText(std::format("{}:{:02}", displayPosition / 60, displayPosition % 60));
         inst.mediaPosition->setColor(inst.seeking ? colorSpecFromRole(ColorRole::Primary) : muted);
@@ -748,13 +1129,20 @@ void Island::prepare(Instance& inst) {
     }
     return;
   }
+  m_renderContext->makeCurrent(inst.surface->renderTarget());
   inst.signature = signature;
   const float s = inst.scale;
-  auto [w, h] = island::size(view, cfg.height, cfg.clockSize, cfg.clockSeconds,
-                            cfg.calendarLabels != IslandCalendarLabels::Initials, cfg.mediaArtworkSize);
+  auto [w, h] = island::size(
+      view, cfg.height, cfg.clockSize, cfg.clockSeconds, cfg.calendarLabels != IslandCalendarLabels::Initials,
+      cfg.mediaArtworkSize, !announcement.empty()
+  );
+  if (showSwitcher)
+    w = std::max(w, 360.0F);
   w = island::batteryWidth(w, view, showBattery, showUnread);
-  if (recording) w = std::max(w, 250.0F);
-  if (compactView) w += 2 * privacyWidth;
+  if (recording)
+    w = std::max(w, 250.0F);
+  if (compactView)
+    w += 2 * privacyWidth;
   w = std::min(w, static_cast<float>(inst.surface->width()) / s - 16);
   if (!inst.root) {
     inst.root = std::make_unique<Node>();
@@ -772,14 +1160,20 @@ void Island::prepare(Instance& inst) {
     inst.width = w;
     inst.height = h;
   }
+  if (view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical)
+    inst.background->setBorder(colorSpecFromRole(ColorRole::Error), Style::borderWidth);
+  else
+    inst.background->clearBorder();
   inst.root->setSize(static_cast<float>(inst.surface->width()), static_cast<float>(inst.surface->height()));
   const auto keyboardFocus = inst.input.captureTabFocus();
-  const float activityOffset = inst.activityScroll && inst.previousView == view ? inst.activityScroll->scrollOffset() : 0;
+  const float activityOffset =
+      inst.activityScroll && inst.previousView == view ? inst.activityScroll->scrollOffset() : 0;
   inst.previousView = view;
   inst.activityScroll = nullptr;
   inst.badgeHovered = false;
   inst.pressedAction.clear();
-  const bool showVisualizer = view == island::View::Activity && !showUnread && !showBattery && privacyList.empty();
+  const bool showMediaStatus = view == island::View::Activity && !showUnread && !showBattery && privacyList.empty();
+  const bool showVisualizer = showMediaStatus && playing;
   std::unique_ptr<Node> retainedWidgets;
   if (expandedView && inst.hoverWidgets)
     retainedWidgets = inst.hoverWidgets->parent()->removeChild(inst.hoverWidgets);
@@ -834,10 +1228,21 @@ void Island::prepare(Instance& inst) {
     node->setPosition(x * s, y * s);
     canvas->addChild(std::move(node));
   };
-  const auto progress = [&](float value, float x, float y, float width, float height = 5.0F) {
+  const auto sectionCard = [&](float top, float bottom) {
+    if (bottom - top <= 6)
+      return;
+    auto card = std::make_unique<Box>();
+    card->setCardStyle(s, 1.0F, Style::cardBordersEnabled());
+    card->setPosition(12 * s, (top + 2) * s);
+    card->setSize((w - 24) * s, (bottom - top - 6) * s);
+    card->setHitTestVisible(false);
+    card->setZIndex(-1);
+    canvas->addChild(std::move(card));
+  };
+  const auto progress = [&](float value, float x, float y, float width, float height = Style::sliderTrackHeight) {
     auto node = std::make_unique<ProgressBar>();
-    node->setTrack(colorSpecFromRole(ColorRole::SurfaceVariant));
-    node->setFill(foreground);
+    node->setTrack(colorSpecFromRole(ColorRole::OnSurface, 0.16F));
+    node->setFill(colorSpecFromRole(ColorRole::Primary));
     node->setSize(width * s, height * s);
     node->setRadius(height * s / 2.0F);
     node->setProgress(std::clamp(value, 0.0F, 1.0F));
@@ -850,16 +1255,20 @@ void Island::prepare(Instance& inst) {
     inst.actions.push_back({x, y, width, height, std::move(id), std::move(cb)});
   };
   const auto control = [&](float x, float y, float width, float height, const std::string& text,
-                           const std::string& icon, const std::string& tooltip, float iconSize,
-                           bool available, std::function<void()> cb, float fontSize = 12, float padding = -1) {
+                           const std::string& icon, const std::string& tooltip, float iconSize, bool available,
+                           std::function<void()> cb, float fontSize = Style::fontSizeCaption, float padding = -1) {
     auto node = std::make_unique<Button>();
     node->setVariant(ButtonVariant::Ghost);
-    if (!text.empty()) node->setText(text);
-    if (!icon.empty()) node->setGlyph(icon);
-    if (!text.empty()) node->setFontSize(fontSize * s);
-    if (!icon.empty()) node->setGlyphSize(iconSize * s);
+    if (!text.empty())
+      node->setText(text);
+    if (!icon.empty())
+      node->setGlyph(icon);
+    if (!text.empty())
+      node->setFontSize(fontSize * s);
+    if (!icon.empty())
+      node->setGlyphSize(iconSize * s);
     node->setPadding(padding >= 0 ? padding * s : (text.empty() ? 0 : 8 * s));
-    node->setRadius(14 * s);
+    node->setRadius(Style::scaledRadiusMd(s));
     node->setMinWidth(width * s);
     node->setMaxWidth(width * s);
     node->setControlHeight(height * s);
@@ -875,7 +1284,8 @@ void Island::prepare(Instance& inst) {
     return result;
   };
   const auto panel = [this, &inst](const std::string& name) {
-    if (inst.keyboardMode) releaseKeyboard(inst);
+    if (inst.keyboardMode)
+      releaseKeyboard(inst);
     inst.suppressHover = true;
     inst.hovered = false;
     inst.heldMedia = false;
@@ -886,14 +1296,13 @@ void Island::prepare(Instance& inst) {
   const auto artwork = [&](float x, float y, float size) {
     auto image = std::make_unique<Image>();
     image->setSize(size * s, size * s);
-    image->setRadius(10 * s);
+    image->setRadius(Style::scaledRadiusLg(s));
     image->setFit(ImageFit::Cover);
     image->setPosition(x * s, y * s);
     // Crop before downsampling so wide thumbnails retain a full-resolution
     // square. Keep extra detail for fractional scaling; Image applies buffer scale.
     const int decodeSize = static_cast<int>(std::ceil(size * s * 2.0F));
-    if (!artPath.empty()
-        && image->setSourceFile(renderer, artPath, decodeSize, true, true))
+    if (!artPath.empty() && image->setSourceFile(renderer, artPath, decodeSize, true, true))
       inst.content->addChild(std::move(image));
     else
       glyph("disc", x + 4, y + 4, size - 8);
@@ -901,8 +1310,10 @@ void Island::prepare(Instance& inst) {
 
   if (view == island::View::DownloadActivity || view == island::View::TimerActivity) {
     const bool timerView = view == island::View::TimerActivity;
-    const auto fraction = timerView ? std::optional{timers.front().fraction()} : downloads.size() == 1 && downloads.front().determinate
-        ? std::optional{static_cast<float>(downloads.front().progress)} : std::nullopt;
+    const auto fraction = timerView ? std::optional{timers.front().fraction()}
+        : downloads.size() == 1 && downloads.front().determinate
+        ? std::optional{static_cast<float>(downloads.front().progress)}
+        : std::nullopt;
     DownloadRing* ringPtr = nullptr;
     if (!(outlineTimer || outlineDownload)) {
       auto ring = std::make_unique<DownloadRing>(36 * s, 2.5F * s, fraction);
@@ -910,24 +1321,42 @@ void Island::prepare(Instance& inst) {
       ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
       canvas->addChild(std::move(ring));
     }
-    glyph(timerView ? timers.front().icon : "download", 23, (cfg.height - 18) / 2, 18, colorSpecFromRole(ColorRole::Primary));
+    glyph(
+        timerView ? timers.front().icon : "download", 23, (cfg.height - 18) / 2, 18,
+        colorSpecFromRole(ColorRole::Primary)
+    );
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
     const auto clockText = timerView ? timers.front().time() : time;
-    const auto metrics = renderer.measureText(clockText, cfg.clockSize * s, FontWeight::Normal, 0, 1, TextAlign::Start,
-                                              m_config->config().shell.fontFamily);
+    const auto metrics = renderer.measureText(
+        clockText, cfg.clockSize * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+    );
     const float clockSize = cfg.clockSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
     auto* clockLabel = label(clockText, inset, 0, available, clockSize, foreground, true);
-    if (timerView) inst.timerUi.push_back({timers.front().plugin, clockLabel, [ringPtr](float value) { if (ringPtr) ringPtr->setProgress(value); }});
-    clockLabel->setPosition(inset * s, std::clamp((cfg.height * s - clockLabel->height()) / 2 + cfg.clockOffset * s,
-        0.0F, std::max(0.0F, cfg.height * s - clockLabel->height())));
+    if (timerView)
+      inst.timerUi.push_back({timers.front().plugin, clockLabel, [ringPtr](float value) {
+                                if (ringPtr)
+                                  ringPtr->setProgress(value);
+                              }});
+    clockLabel->setPosition(
+        inset * s,
+        std::clamp(
+            (cfg.height * s - clockLabel->height()) / 2 + cfg.clockOffset * s, 0.0F,
+            std::max(0.0F, cfg.height * s - clockLabel->height())
+        )
+    );
     if (timerView && !showBattery && privacyList.empty()) {
-      glyph(timers.front().running ? "player-pause" : timers.front().finished ? "check" : "player-play",
-            w - (showUnread ? 80 : 46), (cfg.height - 18) / 2, 18, muted);
-    } else if (!timerView && !showBattery && privacyList.empty() && (downloads.size() > 1 || downloads.front().determinate)) {
-      const auto value = downloads.size() == 1
-          ? std::format("{}%", std::lround(downloads.front().progress * 100))
-          : std::to_string(downloads.size());
+      glyph(
+          timers.front().running        ? "player-pause"
+              : timers.front().finished ? "check"
+                                        : "player-play",
+          w - (showUnread ? 80 : 46), (cfg.height - 18) / 2, 18, muted
+      );
+    } else if (
+        !timerView && !showBattery && privacyList.empty() && (downloads.size() > 1 || downloads.front().determinate)
+    ) {
+      const auto value = downloads.size() == 1 ? std::format("{}%", std::lround(downloads.front().progress * 100))
+                                               : std::to_string(downloads.size());
       auto* status = label(value, w - (showUnread ? 91 : 70), 0, 50, 12, muted, true);
       status->setPosition(status->x(), (cfg.height * s - status->height()) / 2);
     }
@@ -938,14 +1367,19 @@ void Island::prepare(Instance& inst) {
     });
   } else if (view == island::View::Downloads) {
     glyph("download", 22, 18, 22, colorSpecFromRole(ColorRole::Primary));
-    label(i18n::tr("island.downloads.title"), 56, 17, w - 78, 16);
+    label(
+        i18n::tr("island.downloads.title"), 56, 17, w - 78, Style::fontSizeTitle, foreground, false, 1,
+        FontWeight::SemiBold
+    );
     const auto rows = std::min(downloads.size(), std::size_t{4});
     for (std::size_t i = 0; i < rows; ++i) {
       const float y = 57 + static_cast<float>(i) * 55;
+      sectionCard(y - 6, y + 49);
       const auto& download = downloads[i];
       label(download.name, 22, y, w - 110, 13, foreground, false, 1, FontWeight::Normal, true);
       if (download.determinate) {
-        auto* percentage = label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
+        auto* percentage =
+            label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
         auto* bar = progress(static_cast<float>(download.progress), 22, y + 26, w - 44, 7);
         inst.downloadUi.push_back({download.desktopId, percentage, bar});
       } else {
@@ -957,22 +1391,24 @@ void Island::prepare(Instance& inst) {
       label(i18n::trp("island.downloads.more", downloads.size() - rows), 22, h, w - 44, 12, muted);
       h += 28;
     }
-    if (player && cfg.hoverShowMedia) {
-      control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true,
-              [panel] { panel("media"); });
+    if (player && cfg.hoverShowMedia && !showSwitcher) {
+      control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true, [panel] { panel("media"); });
       h += 38;
     }
 
   } else if (view == island::View::Rest || view == island::View::Activity || view == island::View::Calendar) {
     float size = view == island::View::Calendar ? cfg.clockSize * 1.4F : cfg.clockSize;
-    const bool announce = view == island::View::Activity && !m_announcement.empty();
+    const bool announce = view == island::View::Activity && !announcement.empty();
     const float inset = (view == island::View::Activity ? (showBattery && showUnread ? 96.0F : 65.0F)
-        : view == island::View::Rest && showBattery ? (showUnread ? 88.0F : 56.0F)
-        : (view == island::View::Rest && showUnread ? badgeWidth + 12.0F : 12.0F)) + (compactView ? privacyWidth : 0);
+                             : view == island::View::Rest && showBattery
+                             ? (showUnread ? 88.0F : 56.0F)
+                             : (view == island::View::Rest && showUnread ? badgeWidth + 12.0F : 12.0F))
+        + (compactView ? privacyWidth : 0);
     if (view == island::View::Rest && (showUnread || showBattery)) {
       // Symmetric space keeps the clock centred, including large-font settings.
-      const auto metrics = renderer.measureText(time, size * s, FontWeight::Normal, 0, 1, TextAlign::Start,
-                                                m_config->config().shell.fontFamily);
+      const auto metrics = renderer.measureText(
+          time, size * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+      );
       const float available = (w - inset * 2) * s;
       if (metrics.width > available)
         size *= available / metrics.width;
@@ -980,19 +1416,26 @@ void Island::prepare(Instance& inst) {
     Label* clockLabel = nullptr;
     if (view != island::View::Calendar || cfg.hoverShowClock) {
       clockLabel = label(
-          announce ? m_announcement : time, inset, 0, w - inset * 2, announce ? 17 : size,
+          announce ? announcement : time, inset, 0, w - inset * 2, announce ? 17 : size,
           recording ? colorSpecFromRole(ColorRole::Error) : foreground, true
       );
       if (recording)
         inst.recordingLabel = clockLabel;
       const float clockY = (cfg.height * s - clockLabel->height()) / 2.0F + cfg.clockOffset * s;
-      clockLabel->setPosition(inset * s, std::clamp(clockY, 0.0F, std::max(0.0F, cfg.height * s - clockLabel->height())));
+      clockLabel->setPosition(
+          inset * s, std::clamp(clockY, 0.0F, std::max(0.0F, cfg.height * s - clockLabel->height()))
+      );
       action(0, 0, w, cfg.height, "controls", [panel, recording] {
-        if (recording) ScreenRecorder::instance().stop(); else panel("control-center");
+        if (recording)
+          ScreenRecorder::instance().stop();
+        else
+          panel("control-center");
       });
     }
     if (view == island::View::Activity) {
       artwork(12, (cfg.height - 38) / 2, 38);
+      if (showMediaStatus && !playing)
+        glyph("player-pause", w - 44, (cfg.height - 24) / 2, 24, muted);
       if (showVisualizer) {
         if (!retainedVisualizer)
           retainedVisualizer = std::make_unique<IslandAudioVisualizer>(m_spectrum, *inst.surface);
@@ -1004,10 +1447,12 @@ void Island::prepare(Instance& inst) {
     }
     if (view == island::View::Calendar) {
       h = (cfg.hoverShowClock ? cfg.height : 0) + (cfg.hoverShowCalendar ? 72 : 8);
-      // Orbit's clock sits in a taller head band above a strip centred on today.
+      // Keep the clock above a grouped week strip with a clear current-day selection.
       if (clockLabel && cfg.hoverShowCalendar) {
         const float expandedY = ((cfg.height + 19.0F) * s - clockLabel->height()) / 2.0F + cfg.expandedClockOffset * s;
-        clockLabel->setPosition(inset * s, std::clamp(expandedY, 0.0F, std::max(0.0F, (cfg.height + 6.0F) * s - clockLabel->height())));
+        clockLabel->setPosition(
+            inset * s, std::clamp(expandedY, 0.0F, std::max(0.0F, (cfg.height + 6.0F) * s - clockLabel->height()))
+        );
       }
       if (cfg.hoverShowCalendar) {
         constexpr float dateSize = 17.0F;
@@ -1018,6 +1463,7 @@ void Island::prepare(Instance& inst) {
         const float stripX = (w - 7.0F * cellWidth) / 2.0F;
         const float calendarTop = cfg.hoverShowClock ? cfg.height : 0;
         const float stripY = calendarTop + 10.0F;
+        sectionCard(calendarTop, h - 2);
         const auto now = std::time(nullptr);
         std::tm tm{};
         localtime_r(&now, &tm);
@@ -1027,26 +1473,33 @@ void Island::prepare(Instance& inst) {
         std::mktime(&tm);
         for (int day = 0; day < 7; ++day) {
           const bool today = day == 3;
-          const int distance = std::abs(day - 3);
-          const float grade = today ? 1.0F : 1.0F - static_cast<float>(distance - 1) * 0.07F;
-          auto color = colorSpecFromRole(today ? ColorRole::Primary : ColorRole::OnSurfaceVariant);
-          color.alpha *= std::max(0.2F, 1.0F - static_cast<float>(distance) * 0.27F);
+          auto color = colorSpecFromRole(today ? ColorRole::OnSurface : ColorRole::OnSurfaceVariant);
           char dayName[64]{};
           std::strftime(dayName, sizeof(dayName), "%a", &tm);
           const bool abbreviated = cfg.calendarLabels == IslandCalendarLabels::Abbreviated
               || (today && cfg.calendarLabels == IslandCalendarLabels::TodayAbbreviated);
           char* shortName = g_utf8_substring(dayName, 0, abbreviated ? 3 : 1);
           const float x = stripX + static_cast<float>(day) * cellWidth;
+          const float dateY = stripY + dayHeight + 2.0F;
+          if (today) {
+            auto selection = std::make_unique<Box>();
+            selection->setFill(colorSpecFromRole(ColorRole::Primary));
+            selection->setSize(28 * s, 28 * s);
+            selection->setRadius(Style::scaledRadius(14, s));
+            selection->setPosition((x + (cellWidth - 28) / 2) * s, (dateY - 3) * s);
+            selection->setHitTestVisible(false);
+            canvas->addChild(std::move(selection));
+          }
           auto* weekday = label(
-              shortName, x, stripY, cellWidth, daySize,
-              color, true, 1, today ? FontWeight::Bold : FontWeight::SemiBold
+              shortName, x, stripY, cellWidth, daySize, color, true, 1,
+              today ? FontWeight::SemiBold : FontWeight::Normal
           );
           weekday->setPosition(x * s, stripY * s + (dayHeight * s - weekday->height()) / 2.0F);
           g_free(shortName);
           label(
-              std::to_string(tm.tm_mday), x, stripY + dayHeight + 2.0F, cellWidth,
-              std::round(dateSize * grade * (today ? 1.25F : 1.0F)), color, true, 1,
-              today ? FontWeight::Bold : FontWeight::Medium
+              std::to_string(tm.tm_mday), x, dateY, cellWidth, dateSize,
+              today ? colorSpecFromRole(ColorRole::OnPrimary) : foreground, true, 1,
+              today ? FontWeight::SemiBold : FontWeight::Normal
           );
           ++tm.tm_mday;
           tm.tm_isdst = -1;
@@ -1059,38 +1512,52 @@ void Island::prepare(Instance& inst) {
     const float mediaOffset = std::max(0.0F, cfg.mediaArtworkSize - 56.0F);
     const float textX = 27.0F + cfg.mediaArtworkSize + 16.0F;
     artwork(27, 22 + (56.0F + mediaOffset - cfg.mediaArtworkSize) / 2.0F, cfg.mediaArtworkSize);
-    label(player->title, textX, 27 + mediaOffset / 2.0F, w - textX - 25, 15,
-          foreground, false, 1, FontWeight::Normal, true);
-    label(joinedArtists(player->artists), textX, 51 + mediaOffset / 2.0F, w - textX - 25, 12, muted);
+    label(
+        player->title, textX, 27 + mediaOffset / 2.0F, w - textX - 25, Style::fontSizeTitle, foreground, false, 1,
+        FontWeight::SemiBold, true
+    );
+    label(
+        joinedArtists(player->artists), textX, 51 + mediaOffset / 2.0F, w - textX - 25, Style::fontSizeCaption, muted
+    );
     const auto& source = player->identity.empty() ? player->desktopEntry : player->identity;
     if (!source.empty()) {
-      label(source, textX, 73 + mediaOffset / 2.0F, w - textX - 42, 10, muted);
+      label(source, textX, 73 + mediaOffset / 2.0F, w - textX - 42, Style::fontSizeMini, muted);
       glyph("chevron-right", w - 37, 73 + mediaOffset / 2.0F, 12, muted);
     }
     const float fraction =
         player->lengthUs > 0 ? static_cast<float>(player->positionUs) / static_cast<float>(player->lengthUs) : 0;
     inst.seekProgress = progress(inst.seeking ? inst.seekFraction : fraction, 27, 106 + mediaOffset, w - 54);
-    inst.mediaPosition = label(std::format("{}:{:02}", displayPosition / 60, displayPosition % 60),
-                              27, 118 + mediaOffset, 65, 10,
-                              inst.seeking ? colorSpecFromRole(ColorRole::Primary) : muted);
+    inst.mediaPosition = label(
+        std::format("{}:{:02}", displayPosition / 60, displayPosition % 60), 27, 118 + mediaOffset, 65,
+        Style::fontSizeMini, inst.seeking ? colorSpecFromRole(ColorRole::Primary) : muted
+    );
     const auto seconds = player->lengthUs / 1000000;
-    label(std::format("{}:{:02}", seconds / 60, seconds % 60), w - 73, 118 + mediaOffset, 46, 10, muted, true);
+    label(
+        std::format("{}:{:02}", seconds / 60, seconds % 60), w - 73, 118 + mediaOffset, 46, Style::fontSizeMini, muted,
+        true
+    );
     const std::string bus = player->busName;
-    const auto button = [&](float x, const std::string& icon, const std::string& tooltip,
-                            bool available, std::function<void()> cb) {
+    const auto button = [&](float x, const std::string& icon, const std::string& tooltip, bool available,
+                            std::function<void()> cb) {
       auto* mediaControl = control(x, 137 + mediaOffset, 44, 48, "", icon, tooltip, 23, available, std::move(cb));
-      if (icon == "player-play" || icon == "player-pause") mediaControl->inputArea()->setTabFocusKey("playback");
+      if (icon == "player-play" || icon == "player-pause") {
+        mediaControl->inputArea()->setTabFocusKey("playback");
+        mediaControl->setVariant(ButtonVariant::Default);
+        mediaControl->setRadius(Style::scaledRadius(22, s));
+      }
     };
-    button(w / 2 - 89, "player-skip-back", i18n::tr("control-center.media.previous"),
-           player->canGoPrevious, [this, bus] { m_mpris->previous(bus); });
+    button(
+        w / 2 - 89, "player-skip-back", i18n::tr("control-center.media.previous"), player->canGoPrevious,
+        [this, bus] { m_mpris->previous(bus); }
+    );
     button(
         w / 2 - 22, playing ? "player-pause" : "player-play",
         i18n::tr(playing ? "control-center.media.pause" : "control-center.media.play"),
-        playing ? player->canPause : player->canPlay,
-        [this, bus] { m_mpris->playPause(bus); }
+        playing ? player->canPause : player->canPlay, [this, bus] { m_mpris->playPause(bus); }
     );
-    button(w / 2 + 45, "player-skip-forward", i18n::tr("control-center.media.next"),
-           player->canGoNext, [this, bus] { m_mpris->next(bus); });
+    button(w / 2 + 45, "player-skip-forward", i18n::tr("control-center.media.next"), player->canGoNext, [this, bus] {
+      m_mpris->next(bus);
+    });
     action(20, 15, w - 40, 81 + mediaOffset, "media-panel", [panel] { panel("media"); });
     if (player->canSeek && player->lengthUs > 0) {
       inst.seekLengthUs = player->lengthUs;
@@ -1105,8 +1572,9 @@ void Island::prepare(Instance& inst) {
     constexpr float iconSize = 26.0F;
     constexpr float gap = 12.0F;
     const float maxTextWidth = std::max(1.0F, w - 40 - iconSize - gap);
-    const auto metrics = renderer.measureText(m_osd->value, 15 * s, FontWeight::Normal, 0, 1, TextAlign::Start,
-                                              m_config->config().shell.fontFamily);
+    const auto metrics = renderer.measureText(
+        m_osd->value, 15 * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+    );
     const float textWidth = std::min(maxTextWidth, metrics.width / s);
     const float x = (w - iconSize - gap - textWidth) / 2;
     glyph(m_osd->icon, x, (h - iconSize) / 2, iconSize);
@@ -1128,9 +1596,8 @@ void Island::prepare(Instance& inst) {
   } else if (view == island::View::Notification && m_notification) {
     const auto n = *m_notification;
     const bool expanded = inst.expandedNotification == n.id;
-    auto* appLabel = label(n.appName, 22, 14, w - 75, 11, muted);
-    control(w - 47, 5, 32, 30, "", "x", i18n::tr("notifications.dismiss"), 18, true,
-            [this] { dismissNotification(); });
+    auto* appLabel = label(n.appName, 22, 14, w - 75, Style::fontSizeCaption, muted);
+    control(w - 47, 5, 32, 30, "", "x", i18n::tr("notifications.dismiss"), 18, true, [this] { dismissNotification(); });
     std::vector<std::pair<std::string, std::string>> visibleActions;
     const bool hasDefault = std::ranges::find(n.actions, "default") != n.actions.end();
     if ((expanded || inst.keyboardMode) && hasDefault)
@@ -1139,14 +1606,16 @@ void Island::prepare(Instance& inst) {
       if (n.actions[index] != "default")
         visibleActions.emplace_back(n.actions[index], n.actions[index + 1]);
     const bool hasActions = !visibleActions.empty();
-    const float maxHeight = std::min(expanded ? 640.0F : 360.0F,
-                                     static_cast<float>(inst.surface->height()) / s - 16.0F
-                                         - (privacyList.empty() ? 0.0F : 32.0F));
+    const float maxHeight = std::min(
+        expanded ? 640.0F : 360.0F,
+        static_cast<float>(inst.surface->height()) / s - 16.0F - (privacyList.empty() ? 0.0F : 32.0F)
+    );
     const float footerHeight = hasActions ? 60.0F : 16.0F;
     const float textBottom = maxHeight - footerHeight;
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
     const float textWidth = w - (expanded ? 64.0F : 44.0F);
-    auto* summary = label(n.summary, 22, 37, textWidth, 16, foreground, false, 0);
+    auto* summary =
+        label(n.summary, 22, 37, textWidth, Style::fontSizeTitle, foreground, false, 0, FontWeight::SemiBold);
     const float fullSummaryHeight = summary->height();
     // Pango's line limit is per paragraph. Flatten hard breaks only in the
     // compact preview so many short paragraphs cannot exceed its height cap.
@@ -1186,7 +1655,8 @@ void Island::prepare(Instance& inst) {
         body->setVisible(body->height() <= bodyHeight);
         truncated |= !body->visible() || fullBodyHeight > body->height() + 0.5F;
       }
-      if (body->visible()) contentBottom = bodyY + body->height() / s;
+      if (body->visible())
+        contentBottom = bodyY + body->height() / s;
     }
     if (expanded) {
       auto scroll = std::make_unique<ScrollView>();
@@ -1195,7 +1665,8 @@ void Island::prepare(Instance& inst) {
       scroll->setViewportPaddingV(0);
       scroll->content()->setGap(8 * s);
       scroll->content()->addChild(inst.content->removeChild(summary));
-      if (body) scroll->content()->addChild(inst.content->removeChild(body));
+      if (body)
+        scroll->content()->addChild(inst.content->removeChild(body));
       const float viewportHeight = std::min(contentBottom - 37.0F, std::max(1.0F, textBottom - 37.0F));
       auto* scrollView = scroll.get();
       inst.content->addChild(std::move(scroll));
@@ -1205,17 +1676,20 @@ void Island::prepare(Instance& inst) {
       contentBottom = 37.0F + viewportHeight;
     }
     const auto toggleExpanded = [this, &inst, id = n.id] {
-      if (inst.expandedNotification == id) inst.expandedNotification.reset();
-      else inst.expandedNotification = id;
+      if (inst.expandedNotification == id)
+        inst.expandedNotification.reset();
+      else
+        inst.expandedNotification = id;
       refresh();
     };
     if (expanded || truncated) {
       appLabel->setMinWidth((w - 112) * s);
       appLabel->setMaxWidth((w - 112) * s);
       appLabel->measure(renderer);
-      auto* expandControl = control(w - 82, 5, 32, 30, "", expanded ? "chevron-up" : "chevron-down",
-              i18n::tr(expanded ? "notifications.collapse" : "notifications.expand"),
-              18, true, toggleExpanded);
+      auto* expandControl = control(
+          w - 82, 5, 32, 30, "", expanded ? "chevron-up" : "chevron-down",
+          i18n::tr(expanded ? "notifications.collapse" : "notifications.expand"), 18, true, toggleExpanded
+      );
       expandControl->inputArea()->setTabFocusKey("notification-expand");
     }
     h = contentBottom + footerHeight;
@@ -1223,15 +1697,17 @@ void Island::prepare(Instance& inst) {
     const float actionWidth = hasActions ? (w - 44) / static_cast<float>(visibleActions.size()) : 0;
     for (std::size_t index = 0; index < visibleActions.size(); ++index) {
       const auto& [key, text] = visibleActions[index];
-      auto* actionControl = control(22 + static_cast<float>(index) * actionWidth, actionsY, actionWidth - 8, 44,
-              text, "", text, 18, true, [this, id = n.id, key] {
-        (void)m_notifications->invokeAction(id, key);
-      });
+      auto* actionControl = control(
+          22 + static_cast<float>(index) * actionWidth, actionsY, actionWidth - 8, 44, text, "", text, 18, true,
+          [this, id = n.id, key] { (void)m_notifications->invokeAction(id, key); }
+      );
+      actionControl->setVariant(ButtonVariant::Default);
       actionControl->inputArea()->setTabFocusKey("notification-action-" + key);
     }
     if (!expanded)
       action(0, 37, w, contentBottom - 37.0F, "notification", [this, n, panel, truncated, toggleExpanded] {
-        if (truncated) toggleExpanded();
+        if (truncated)
+          toggleExpanded();
         else if (std::ranges::find(n.actions, "default") != n.actions.end())
           (void)m_notifications->invokeAction(n.id, "default");
         else {
@@ -1240,16 +1716,53 @@ void Island::prepare(Instance& inst) {
         }
       });
   }
+  if (showSwitcher) {
+    // Translate the main card and its manual hit regions together. Tabs remain
+    // fixed above both the card and the scrolling footer.
+    constexpr float tabHeight = 44;
+    for (const auto& child : inst.content->children())
+      child->setPosition(child->x(), child->y() + tabHeight * s);
+    for (auto& hit : inst.actions)
+      hit.y += tabHeight;
+    if (inst.seek)
+      inst.seekY += tabHeight;
+    h += tabHeight;
+    sectionCard(4, 44);
+    const float tabWidth = (w - 32) / static_cast<float>(availableActivities.count());
+    float x = 16;
+    for (const auto activity : {island::Activity::Media, island::Activity::Downloads, island::Activity::Timers}) {
+      if (!availableActivities.contains(activity))
+        continue;
+      const std::string key = activity == island::Activity::Media ? "media"
+          : activity == island::Activity::Downloads               ? "downloads"
+                                                                  : "timers";
+      auto* tab = control(
+          x, 8, tabWidth - 4, 30, i18n::tr("island.activities." + key), "", "", 0, true, [this, &inst, activity] {
+            inst.activities.selected = activity;
+            refresh();
+          }
+      );
+      tab->inputArea()->setTabFocusKey("activity-" + key);
+      tab->setVariant(activity == inst.activities.selected ? ButtonVariant::TabActive : ButtonVariant::Tab);
+      x += tabWidth;
+    }
+  }
   // Keep the main activity fixed while a busy footer scrolls within the output.
   const float footerTop = h;
   auto footer = std::make_unique<Node>();
-  if (expandedView) canvas = footer.get();
-  if (expandedView && cfg.hoverShowTimers && !timers.empty()) {
+  if (expandedView)
+    canvas = footer.get();
+  if (expandedView
+      && cfg.hoverShowTimers
+      && !timers.empty()
+      && (!inst.activities.switching || view == island::View::Timers)) {
     auto displayTimers = timers;
     // Compact priority can change on pause; keep hover buttons under the same pointer.
     std::ranges::sort(displayTimers, {}, &island::Countdown::plugin);
     for (const auto& timer : displayTimers) {
-      if (!timer.active) continue;
+      if (!timer.active)
+        continue;
+      const float sectionTop = h;
       auto ring = std::make_unique<DownloadRing>(36 * s, 2.5F * s, timer.fraction());
       auto* ringPtr = ring.get();
       ring->setPosition(22 * s, (h + 6) * s);
@@ -1258,21 +1771,33 @@ void Island::prepare(Instance& inst) {
       label(i18n::tr(timer.titleKey), 70, h + 3, w - 165, 13);
       auto* remaining = label(timer.time(), w - 94, h + 3, 72, 16, foreground, true);
       inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
-      label(i18n::tr(timer.finished ? "island.timer.finished" : timer.running ? "island.timer.running" : "island.timer.paused"),
-            70, h + 25, w - 92, 11, muted);
+      label(
+          i18n::tr(
+              timer.finished      ? "island.timer.finished"
+                  : timer.running ? "island.timer.running"
+                                  : "island.timer.paused"
+          ),
+          70, h + 25, w - 92, 11, muted
+      );
       h += 48;
       const float buttonWidth = (w - 60) / 3;
-      auto* toggle = control(22, h, buttonWidth, 30,
-          i18n::tr(timer.running ? "island.timer.pause" : "island.timer.resume"), "", "", 0,
-          !timer.finished && timer.remaining > 0, [this, timer] { timerCommand(timer, timer.toggleCommand()); });
+      auto* toggle = control(
+          22, h, buttonWidth, 30, i18n::tr(timer.running ? "island.timer.pause" : "island.timer.resume"), "", "", 0,
+          !timer.finished && timer.remaining > 0, [this, timer] { timerCommand(timer, timer.toggleCommand()); }
+      );
       toggle->inputArea()->setTabFocusKey(timer.plugin + "-toggle");
-      auto* cancel = control(30 + buttonWidth, h, buttonWidth, 30, i18n::tr("island.timer.cancel"), "", "", 0, true,
-                             [this, timer] { timerCommand(timer, timer.cancelCommand()); });
+      auto* cancel = control(
+          30 + buttonWidth, h, buttonWidth, 30, i18n::tr("island.timer.cancel"), "", "", 0, true,
+          [this, timer] { timerCommand(timer, timer.cancelCommand()); }
+      );
       cancel->inputArea()->setTabFocusKey(timer.plugin + "-cancel");
-      auto* open = control(38 + 2 * buttonWidth, h, buttonWidth, 30, i18n::tr("island.timer.open"), "", "", 0, true,
-                           [panel, timer] { panel(timer.panel); });
+      auto* open = control(
+          38 + 2 * buttonWidth, h, buttonWidth, 30, i18n::tr("island.timer.open"), "", "", 0, true,
+          [panel, timer] { panel(timer.panel); }
+      );
       open->inputArea()->setTabFocusKey(timer.plugin + "-open");
       h += 38;
+      sectionCard(sectionTop, h);
     }
     // A discoverable entry point when idle, without adding a permanent compact badge.
     if (view == island::View::Calendar) {
@@ -1282,9 +1807,12 @@ void Island::prepare(Instance& inst) {
         const float width = (w - 44 - (count - 1) * 8) / count;
         float x = 22;
         for (const auto& timer : timers) {
-          if (timer.active) continue;
-          control(x, h, width, 32, i18n::tr(timer.pomodoro ? "island.timer.pomodoro" : "island.timer.title"),
-                  timer.icon, "", 16, true, [panel, timer] { panel(timer.panel); });
+          if (timer.active)
+            continue;
+          control(
+              x, h, width, 32, i18n::tr(timer.pomodoro ? "island.timer.pomodoro" : "island.timer.title"), timer.icon,
+              "", 16, true, [panel, timer] { panel(timer.panel); }
+          );
           x += width + 8;
         }
         h += 40;
@@ -1292,10 +1820,13 @@ void Island::prepare(Instance& inst) {
     }
   }
   if (expandedView) {
+    const float sectionTop = h;
     for (const auto& activity : privacyList) {
       if (activity.kind == PrivacyCaptureKind::Microphone) {
-        auto* icon = control(18, h + 5, 36, 36, "", activity.icon(), i18n::tr("island.privacy.audio-controls"), 20, true,
-                             [panel] { panel("audio"); });
+        auto* icon = control(
+            18, h + 5, 36, 36, "", activity.icon(), i18n::tr("island.privacy.audio-controls"), 20, true,
+            [panel] { panel("audio"); }
+        );
         auto iconPalette = Button::defaultPalette(ButtonVariant::Ghost);
         iconPalette.normal.label = colorSpecFromRole(ColorRole::Primary);
         icon->setCustomPalette(std::move(iconPalette));
@@ -1305,10 +1836,12 @@ void Island::prepare(Instance& inst) {
       label(activity.appNames(), 66, h + 26, w - 88, 12, muted, false, 1, FontWeight::Normal, true);
       h += 54;
     }
+    sectionCard(sectionTop, h);
   } else if (!privacyList.empty()) {
     // Keep capture indicators visible even while a notification or OSD occupies the island.
-    const float x = compactView ? w - (showUnread ? (view == island::View::Activity ? 48 : 38) : 14)
-        - (showBattery ? 42 : 0) - privacyWidth : (w - privacyWidth + 8) / 2;
+    const float x = compactView
+        ? w - (showUnread ? (view == island::View::Activity ? 48 : 38) : 14) - (showBattery ? 42 : 0) - privacyWidth
+        : (w - privacyWidth + 8) / 2;
     const float y = compactView ? (cfg.height - 24) / 2 : h;
     for (std::size_t i = 0; i < privacyList.size(); ++i) {
       const auto& activity = privacyList[i];
@@ -1316,53 +1849,76 @@ void Island::prepare(Instance& inst) {
         glyph(activity.icon(), x + static_cast<float>(i) * 24 + 4, y + 4, 16, colorSpecFromRole(ColorRole::Primary));
         continue;
       }
-      auto* icon = control(x + static_cast<float>(i) * 24, y, 24, 24, "", activity.icon(),
+      auto* icon = control(
+          x + static_cast<float>(i) * 24, y, 24, 24, "", activity.icon(),
           i18n::tr(activity.labelKey()) + ": " + activity.appNames(), 16, true,
           [this, &inst, panel, kind = activity.kind] {
-            if (kind == PrivacyCaptureKind::Microphone) { panel("audio"); return; }
+            if (kind == PrivacyCaptureKind::Microphone) {
+              panel("audio");
+              return;
+            }
             // Camera and screen access are controlled by the capturing app; expose its name here.
-            inst.suppressHover = false; inst.hovered = true; refresh();
-          }, 10, 0);
+            inst.suppressHover = false;
+            inst.hovered = true;
+            refresh();
+          },
+          10, 0
+      );
       auto iconPalette = Button::defaultPalette(ButtonVariant::Ghost);
       iconPalette.normal.label = colorSpecFromRole(ColorRole::Primary);
       icon->setCustomPalette(std::move(iconPalette));
       if (compactView) {
-        icon->setOnEnter([&inst] { inst.badgeHovered = true; inst.enter.stop(); });
+        icon->setOnEnter([&inst] {
+          inst.badgeHovered = true;
+          inst.enter.stop();
+        });
         icon->setOnLeave([this, &inst] {
           inst.badgeHovered = false;
           if (inst.inside && !inst.hovered && !inst.suppressHover)
-            inst.enter.start(110ms, [this, &inst] {
-              if (inst.inside && !inst.badgeHovered) { inst.hovered = true; refresh(); }
+            inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
+              if (inst.inside && !inst.badgeHovered) {
+                inst.hovered = true;
+                refresh();
+              }
             });
         });
       }
     }
-    if (!compactView) h += 32;
+    if (!compactView)
+      h += 32;
   }
   const auto batteryRing = [&](const island::Battery& battery, float x, float y, float diameter, bool drawRing = true) {
     const auto role = battery.low ? ColorRole::Error : ColorRole::Primary;
     if (drawRing) {
-      auto ring = std::make_unique<DownloadRing>(diameter * s, 2.5F * s,
-          static_cast<float>(battery.percentage / 100.0), role, battery.charging());
+      auto ring = std::make_unique<DownloadRing>(
+          diameter * s, 2.5F * s, static_cast<float>(battery.percentage / 100.0), role, battery.charging()
+      );
       ring->setPosition(x * s, y * s);
       canvas->addChild(std::move(ring));
     }
-    glyph(battery.charging() ? "battery-charging" : battery.icon, x + (diameter - 18) / 2,
-          y + (diameter - 18) / 2, 18, colorSpecFromRole(role));
+    glyph(
+        battery.charging() ? "battery-charging" : battery.icon, x + (diameter - 18) / 2, y + (diameter - 18) / 2, 18,
+        colorSpecFromRole(role)
+    );
   };
   if (showBattery)
     batteryRing(batteryList.front(), w - 50 - (showUnread ? 36 : 0), (cfg.height - 36) / 2, 36, !outlineBattery);
   if (expandedView && cfg.hoverShowBatteries && !batteryList.empty()) {
+    const float sectionTop = h;
     const auto rows = std::min(batteryList.size(), std::size_t{4});
     for (std::size_t i = 0; i < rows; ++i) {
       const auto& battery = batteryList[i];
       batteryRing(battery, 22, h + 7, 36);
       label(battery.name, 70, h + 4, w - 150, 13, foreground, false, 1, FontWeight::Normal, true);
-      label(std::format("{}%", std::lround(battery.percentage)), w - 76, h + 4, 54, 13,
-            colorSpecFromRole(battery.low ? ColorRole::Error : ColorRole::OnSurface), true);
+      label(
+          std::format("{}%", std::lround(battery.percentage)), w - 76, h + 4, 54, 13,
+          colorSpecFromRole(battery.low ? ColorRole::Error : ColorRole::OnSurface), true
+      );
       auto detail = batteryStateLabel(battery.state);
       if (battery.seconds > 0)
-        detail += " · " + formatDuration(std::chrono::seconds(battery.seconds)) + " "
+        detail += " · "
+            + formatDuration(std::chrono::seconds(battery.seconds))
+            + " "
             + i18n::tr(battery.charging() ? "island.battery.until-full" : "island.battery.remaining");
       label(detail, 70, h + 26, w - 92, 11, muted);
       h += 54;
@@ -1372,57 +1928,108 @@ void Island::prepare(Instance& inst) {
       h += 26;
     }
     h += 6;
+    sectionCard(sectionTop, h);
   }
   if (showUnread && expandedView && cfg.hoverShowUnread) {
-    control(22, h, w - 44, 24, i18n::trp("notifications.unread-count", unreadCount), "",
-            i18n::tr("notifications.unread-history"), 0, true, [panel] { panel("notifications"); });
+    const float sectionTop = h;
+    control(
+        22, h, w - 44, 24, i18n::trp("notifications.unread-count", unreadCount), "",
+        i18n::tr("notifications.unread-history"), 0, true, [panel] { panel("notifications"); }
+    );
     h += 32;
+    std::size_t shown = 0;
+    for (const auto& entry : m_notifications->history() | std::views::reverse) {
+      if (entry.seen)
+        continue;
+      if (shown++ == 3)
+        break;
+      const auto& notification = entry.notification;
+      auto title = notification.appName + " · " + notification.summary;
+      std::replace(title.begin(), title.end(), '\n', ' ');
+      std::replace(title.begin(), title.end(), '\r', ' ');
+      control(22, h, w - 44, 30, title, "", notification.body, 0, true, [panel] { panel("notifications"); });
+      h += 34;
+    }
+    sectionCard(sectionTop, h);
   }
-  if (showUnread && (view == island::View::Rest || view == island::View::Activity || view == island::View::DownloadActivity || view == island::View::TimerActivity)) {
+  if (showUnread
+      && (view == island::View::Rest
+          || view == island::View::Activity
+          || view == island::View::DownloadActivity
+          || view == island::View::TimerActivity)) {
     const float badgeX = view == island::View::Activity ? w - 44 : w - badgeWidth - 10;
     const float badgeY = (cfg.height - 24) / 2;
-    auto* badge = control(badgeX, badgeY, badgeWidth, 24, "",
-                          "bell", i18n::tr("notifications.unread-history"), 22, true,
-                          [panel] { panel("notifications"); }, 10, 0);
-    badge->setRadius(12 * s);
+    auto* badge = control(
+        badgeX, badgeY, badgeWidth, 24, "", "bell", i18n::tr("notifications.unread-history"), 22, true,
+        [panel] { panel("notifications"); }, 10, 0
+    );
+    badge->setRadius(Style::scaledRadius(12, s));
     auto badgePalette = Button::defaultPalette(ButtonVariant::Ghost);
     badgePalette.normal.label = colorSpecFromRole(ColorRole::Primary);
     badge->setCustomPalette(std::move(badgePalette));
-    badge->setOnEnter([&inst] { inst.badgeHovered = true; inst.enter.stop(); });
+    badge->setOnEnter([&inst] {
+      inst.badgeHovered = true;
+      inst.enter.stop();
+    });
     badge->setOnLeave([this, &inst] {
       inst.badgeHovered = false;
       if (inst.inside && !inst.hovered && !inst.suppressHover)
-        inst.enter.start(110ms, [this, &inst] {
-          if (inst.inside && !inst.badgeHovered) { inst.hovered = true; refresh(); }
+        inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
+          if (inst.inside && !inst.badgeHovered) {
+            inst.hovered = true;
+            refresh();
+          }
         });
     });
   }
   if (view == island::View::Downloads) {
     control(22, h, w - 44, 32, i18n::tr("island.downloads.close"), "", "", 0, true, [this, &inst] {
-      if (inst.keyboardMode) releaseKeyboard(inst);
-      else { inst.hovered = false; inst.suppressHover = inst.inside; inst.enter.stop(); refresh(); }
+      if (inst.keyboardMode)
+        releaseKeyboard(inst);
+      else {
+        inst.hovered = false;
+        inst.suppressHover = inst.inside;
+        inst.enter.stop();
+        refresh();
+      }
     });
     h += 42;
   }
-  if (expandedView && m_widgetFactory
+  if (expandedView
+      && m_widgetFactory
       && (!cfg.hoverWidgets.empty() || !cfg.hoverWidgetsCenter.empty() || !cfg.hoverWidgetsRight.empty())) {
     if (!retainedWidgets) {
       retainedWidgets = std::make_unique<IslandWidgetHost>(
           *m_widgetFactory, m_config->config(), inst.output, s, &inst.animations, &m_widgetActions,
-          [&inst] { if (!inst.panelHosted) inst.surface->requestUpdate(); },
-          [&inst] { if (!inst.panelHosted) inst.surface->requestRedraw(); },
-          [&inst] { if (!inst.panelHosted) inst.surface->requestFrameTick(); });
+          [&inst] {
+            if (!inst.panelHosted)
+              inst.surface->requestUpdate();
+          },
+          [&inst] {
+            if (!inst.panelHosted)
+              inst.surface->requestRedraw();
+          },
+          [&inst] {
+            if (!inst.panelHosted)
+              inst.surface->requestFrameTick();
+          },
+          cfg, inst.barConfig.name
+      );
     }
     inst.hoverWidgets = static_cast<IslandWidgetHost*>(retainedWidgets.get());
     inst.hoverWidgets->updateWidgets(renderer, std::max(1.0F, (w - 44) * s));
     inst.hoverWidgets->setPosition(22 * s, (h + 8) * s);
     const float widgetHeight = inst.hoverWidgets->height() / s;
     footer->addChild(std::move(retainedWidgets));
-    if (widgetHeight > 0) h += widgetHeight + 16;
+    if (widgetHeight > 0) {
+      sectionCard(h, h + widgetHeight + 16);
+      h += widgetHeight + 16;
+    }
   }
   if (expandedView) {
     const float footerHeight = h - footerTop;
-    for (const auto& child : footer->children()) child->setPosition(child->x(), child->y() - footerTop * s);
+    for (const auto& child : footer->children())
+      child->setPosition(child->x(), child->y() - footerTop * s);
     footer->setSize(w * s, footerHeight * s);
     const float available = std::max(1.0F, static_cast<float>(inst.surface->height()) / s - footerTop - 24);
     if (footerHeight > available) {
@@ -1442,31 +2049,37 @@ void Island::prepare(Instance& inst) {
       inst.content->addChild(std::move(footer));
     }
   }
-  if (expandedView) h = std::max(h, cfg.height);
+  if (expandedView)
+    h = std::max(h, cfg.height);
   inst.content->setSize(w * s, h * s);
   inst.content->layout(renderer);
-  if (inst.activityScroll) inst.activityScroll->setScrollOffset(activityOffset);
+  if (inst.activityScroll)
+    inst.activityScroll->setScrollOffset(activityOffset);
   if (inst.keyboardMode) {
     inst.input.restoreTabFocus(keyboardFocus);
-    if (!inst.input.focusedArea()) (void)inst.input.cycleTabFocus(false);
+    if (!inst.input.focusedArea())
+      (void)inst.input.cycleTabFocus(false);
   }
   if (w != inst.targetWidth || h != inst.targetHeight) {
     inst.animations.cancel(inst.morph);
     const float oldW = inst.width, oldH = inst.height;
     inst.targetWidth = w;
     inst.targetHeight = h;
-    inst.morph = inst.animations.animate(0, 1, 420, Easing::EaseOutCubic, [this, &inst, oldW, oldH, w, h](float value) {
-      inst.width = oldW + (w - oldW) * value;
-      inst.height = oldH + (h - oldH) * value;
-      geometry(inst);
-    });
+    const bool growing = w > oldW || h > oldH;
+    inst.morph = inst.animations.animate(
+        0, 1, growing ? Motion::resizeMs : Motion::dismissMs, growing ? Motion::reveal : Motion::dismiss,
+        [this, &inst, oldW, oldH, w, h](float value) {
+          inst.width = oldW + (w - oldW) * value;
+          inst.height = oldH + (h - oldH) * value;
+          geometry(inst);
+        }
+    );
   }
   geometry(inst);
 }
 
 void Island::releaseKeyboard(Instance& inst) {
   inst.keyboardMode = false;
-  inst.keyboardDownloads = false;
   inst.keyboardNotification.reset();
   inst.hovered = false;
   inst.heldMedia = false;
@@ -1475,7 +2088,9 @@ void Island::releaseKeyboard(Instance& inst) {
   inst.leave.stop();
   inst.input.setFocus(nullptr);
   inst.surface->setKeyboardInteractivity(LayerShellKeyboard::None);
-  if (m_notification && m_notification->timeout > 0
+  if (m_notification
+      && m_notification->urgency != Urgency::Critical
+      && m_notification->timeout > 0
       && std::ranges::none_of(m_instances, [](const auto& other) { return other->inside || other->keyboardMode; }))
     m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
   inst.signature.clear();
@@ -1483,25 +2098,30 @@ void Island::releaseKeyboard(Instance& inst) {
 }
 
 bool Island::focusKeyboard() {
-  if (!enabled() || m_instances.empty() || ScreenRecorder::instance().active()) return false;
-  if (closeHostedPanel) closeHostedPanel();
+  if (!enabled() || m_instances.empty() || ScreenRecorder::instance().active())
+    return false;
+  if (closeHostedPanel)
+    closeHostedPanel();
   for (auto& inst : m_instances)
-    if (inst->keyboardMode) releaseKeyboard(*inst);
+    if (inst->keyboardMode)
+      releaseKeyboard(*inst);
   auto found = std::ranges::find_if(m_instances, [this](const auto& inst) {
     return inst->output == m_wayland->lastPointerOutput();
   });
   auto& inst = **(found == m_instances.end() ? m_instances.begin() : found);
   const auto timers = countdowns();
-  if (!m_notification && (!m_mpris || !m_mpris->activePlayer()) && (!m_downloads || m_downloads->active().empty())
+  if (!m_notification
+      && (!m_mpris || !m_mpris->activePlayer())
+      && (!m_downloads || m_downloads->active().empty())
       && std::ranges::none_of(timers, [](const auto& timer) { return timer.active; })) {
-    if (!openPanel) return false;
+    if (!openPanel)
+      return false;
     openPanel(inst.output, "calendar");
     return true;
   }
   m_osd.reset();
   m_osdTimeout.stop();
   inst.keyboardMode = true;
-  inst.keyboardDownloads = m_downloads && !m_downloads->active().empty();
   inst.keyboardNotification = m_notification ? std::optional{m_notification->id} : std::nullopt;
   inst.enter.stop();
   inst.leave.stop();
@@ -1515,7 +2135,8 @@ bool Island::focusKeyboard() {
 }
 
 bool Island::onKeyboardEvent(const KeyboardEvent& event) {
-  if (!m_wayland) return false;
+  if (!m_wayland)
+    return false;
   for (auto& item : m_instances) {
     auto& inst = *item;
     if (!inst.keyboardMode || inst.panelHosted || m_wayland->lastKeyboardSurface() != inst.surface->wlSurface())
@@ -1523,7 +2144,8 @@ bool Island::onKeyboardEvent(const KeyboardEvent& event) {
     if (event.pressed && KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
       const auto notification = inst.keyboardNotification;
       releaseKeyboard(inst);
-      if (notification && m_notification && m_notification->id == notification) dismissNotification();
+      if (notification && m_notification && m_notification->id == notification)
+        dismissNotification();
       return true;
     }
     if (inst.content && inst.content->opacity() > 0.1F)
@@ -1543,12 +2165,15 @@ bool Island::onPointerEvent(const PointerEvent& event) {
       continue;
     if (event.type == PointerEvent::Type::Enter) {
       inst.inside = true;
+      inst.compactActivity.pause(island::CompactActivity::Clock::now());
+      inst.activityTimeout.stop();
+      updateVisibility(inst);
       inst.input.pointerEnter(static_cast<float>(event.sx), static_cast<float>(event.sy), event.serial);
       inst.leave.stop();
       if (m_notification && m_notification->timeout > 0)
         m_notifications->pauseExpiry(m_notification->id);
       if (!inst.suppressHover)
-        inst.enter.start(110ms, [this, &inst] {
+        inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
           if (inst.inside && !inst.badgeHovered) {
             inst.hovered = true;
             refresh();
@@ -1562,15 +2187,17 @@ bool Island::onPointerEvent(const PointerEvent& event) {
       inst.suppressHover = false;
       inst.enter.stop();
       inst.pressedAction.clear();
-      if (m_notification && m_notification->timeout > 0 && std::ranges::none_of(m_instances, [](const auto& other) {
-            return other->inside || other->keyboardMode;
-          }))
+      if (m_notification
+          && m_notification->urgency != Urgency::Critical
+          && m_notification->timeout > 0
+          && std::ranges::none_of(m_instances, [](const auto& other) { return other->inside || other->keyboardMode; }))
         m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
-      inst.leave.start(180ms, [this, &inst] {
+      inst.leave.start(std::chrono::milliseconds(inst.config.hoverCloseDelayMs), [this, &inst] {
         inst.hovered = false;
         inst.heldMedia = false;
         refresh();
       });
+      refresh();
     } else if (event.type == PointerEvent::Type::Motion) {
       if (!inst.seeking) {
         inst.input.pointerMotion(static_cast<float>(event.sx), static_cast<float>(event.sy), 0);
@@ -1582,9 +2209,10 @@ bool Island::onPointerEvent(const PointerEvent& event) {
         inst.seekProgress->setProgress(inst.seekFraction);
       inst.surface->requestUpdate();
     } else if (event.type == PointerEvent::Type::Axis) {
-      inst.input.pointerAxis(static_cast<float>(event.sx), static_cast<float>(event.sy), event.axis,
-                             event.axisSource, event.axisValue, event.axisDiscrete, event.axisValue120,
-                             event.axisLines, event.axisGestureSerial);
+      inst.input.pointerAxis(
+          static_cast<float>(event.sx), static_cast<float>(event.sy), event.axis, event.axisSource, event.axisValue,
+          event.axisDiscrete, event.axisValue120, event.axisLines, event.axisGestureSerial
+      );
     } else if (event.type == PointerEvent::Type::Button && event.button == BTN_LEFT && inst.content) {
       // A newly rebuilt card may still be concealed during the size transition.
       if (inst.content->opacity() <= 0.1F) {
@@ -1592,8 +2220,11 @@ bool Island::onPointerEvent(const PointerEvent& event) {
         inst.input.cancelPointerCapture();
         return true;
       }
-      if (!inst.seeking && inst.input.pointerButton(static_cast<float>(event.sx), static_cast<float>(event.sy),
-                                                   event.button, event.pressed, event.serial, event.time, event.touch)) {
+      if (!inst.seeking
+          && inst.input.pointerButton(
+              static_cast<float>(event.sx), static_cast<float>(event.sy), event.button, event.pressed, event.serial,
+              event.time, event.touch
+          )) {
         // A click can lend this surface to a panel. Drop any hover restored by
         // the button dispatcher after its callback, including pending tooltips.
         if (inst.panelHosted) {
@@ -1603,7 +2234,7 @@ bool Island::onPointerEvent(const PointerEvent& event) {
         return true;
       }
       const float x = (static_cast<float>(event.sx) - inst.background->x() - inst.content->x()) / inst.scale;
-      const float y = (static_cast<float>(event.sy) - 8 * inst.scale) / inst.scale;
+      const float y = (static_cast<float>(event.sy) - inst.background->y()) / inst.scale;
       if (event.pressed
           && inst.seek
           && y >= inst.seekY
@@ -1648,17 +2279,28 @@ bool Island::onPointerEvent(const PointerEvent& event) {
   return false;
 }
 
-std::optional<IslandPanelSurface> Island::acquirePanelSurface(wl_output* output, bool exactOutput) {
+std::optional<IslandPanelSurface>
+Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_view barName) {
   if (!enabled() || m_instances.empty())
     return std::nullopt;
-  auto it = std::ranges::find_if(m_instances, [output](const auto& inst) { return inst->output == output; });
-  if (exactOutput && it == m_instances.end()) return std::nullopt;
+  const bool legacy = m_instances.front()->barConfig.name == "__legacy_island";
+  auto it = std::ranges::find_if(m_instances, [output, barName, legacy](const auto& inst) {
+    return inst->output == output && (legacy || barName.empty() || inst->barConfig.name == barName);
+  });
+  if ((exactOutput || !legacy) && it == m_instances.end())
+    return std::nullopt;
   // Shell shortcuts on another monitor still open the configured island.
   auto& inst = **(it == m_instances.end() ? m_instances.begin() : it);
   if (inst.panelHosted)
     return std::nullopt;
-  if (inst.keyboardMode) releaseKeyboard(inst);
+  if (inst.keyboardMode)
+    releaseKeyboard(inst);
   inst.panelHosted = true;
+  inst.compactActivity.pause(island::CompactActivity::Clock::now());
+  inst.activityTimeout.stop();
+  inst.animations.cancel(inst.hideAnimation);
+  inst.visibility = 1;
+  inst.wantsVisible = true;
   if (inst.visualizer) {
     inst.content->removeChild(inst.visualizer);
     inst.visualizer = nullptr;
@@ -1675,7 +2317,7 @@ std::optional<IslandPanelSurface> Island::acquirePanelSurface(wl_output* output,
   inst.hovered = false;
   inst.heldMedia = false;
   inst.suppressHover = true;
-  if (m_notification && m_notification->timeout > 0)
+  if (m_notification && m_notification->urgency != Urgency::Critical && m_notification->timeout > 0)
     m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
   return IslandPanelSurface{
       inst.surface.get(), inst.output, inst.width * inst.scale, inst.height * inst.scale, inst.scale
@@ -1683,21 +2325,46 @@ std::optional<IslandPanelSurface> Island::acquirePanelSurface(wl_output* output,
 }
 
 island::Size Island::panelReturnSize() const {
+  const auto hosted = std::ranges::find_if(m_instances, [](const auto& inst) { return inst->panelHosted; });
+  const auto& cfg = hosted != m_instances.end() ? (*hosted)->config
+      : !m_instances.empty()                    ? m_instances.front()->config
+                                                : m_config->config().island;
+  wl_output* output = hosted != m_instances.end() ? (*hosted)->output
+      : !m_instances.empty()                      ? m_instances.front()->output
+                                                  : nullptr;
   const auto player = m_mpris ? m_mpris->activePlayer() : std::nullopt;
-  const bool playing = player && player->playbackStatus == "Playing";
+  const bool mediaActive =
+      player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds);
   const auto timers = countdowns();
-  const auto view = island::view(m_notification.has_value(), m_osd.has_value(), false, playing, false,
-                               m_downloads && !m_downloads->active().empty(),
-                               std::ranges::any_of(timers, [](const auto& timer) { return timer.active; }));
-  const auto& cfg = m_config->config().island;
-  auto size = island::size(view, cfg.height, cfg.clockSize, cfg.clockSeconds,
-                          cfg.calendarLabels != IslandCalendarLabels::Initials, cfg.mediaArtworkSize);
-  const auto batteryList = batteries();
-  const bool unread = m_notifications && std::ranges::any_of(m_notifications->history(), [](const auto& item) { return !item.seen; });
+  const island::Activities available{
+      mediaActive, m_downloads && !m_downloads->active().empty(),
+      std::ranges::any_of(timers, [](const auto& timer) { return timer.active; })
+  };
+  const auto* instance = hosted != m_instances.end() ? hosted->get()
+      : !m_instances.empty()                         ? m_instances.front().get()
+                                                     : nullptr;
+  const auto compact = island::preferredActivity(
+      available, island::activityOrder(cfg.activityPriority),
+      cfg.cycleActivities && instance ? instance->compactActivity.selected() : island::Activity::None
+  );
+  const auto view = island::view(
+      m_notification.has_value(), m_osd.has_value(), false, mediaActive, false, available.downloads, available.timers,
+      true, true, island::Activity::None, compact
+  );
+  auto size = island::size(
+      view, cfg.height, cfg.clockSize, cfg.clockSeconds, cfg.calendarLabels != IslandCalendarLabels::Initials,
+      cfg.mediaArtworkSize, player && !player->title.empty() && trackPreview(cfg, output)
+  );
+  const auto batteryList = batteries(cfg, output);
+  const bool unread =
+      m_notifications && std::ranges::any_of(m_notifications->history(), [](const auto& item) { return !item.seen; });
   size.width = island::batteryWidth(size.width, view, !batteryList.empty() && batteryList.front().compact(), unread);
   const auto privacyList = privacy();
   if (!privacyList.empty()) {
-    if (view == island::View::Rest || view == island::View::Activity || view == island::View::DownloadActivity || view == island::View::TimerActivity)
+    if (view == island::View::Rest
+        || view == island::View::Activity
+        || view == island::View::DownloadActivity
+        || view == island::View::TimerActivity)
       size.width += 2 * (static_cast<float>(privacyList.size()) * 24 + 8);
     else if (view == island::View::Osd || view == island::View::Notification)
       size.height += 32;
@@ -1711,6 +2378,7 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     if (inst.output != output || !inst.panelHosted)
       continue;
     inst.panelHosted = false;
+    inst.inputRegion.reset(); // The hosted panel installed its own input region.
     inst.suppressHover = false;
     inst.width = inst.targetWidth = width / inst.scale;
     inst.height = inst.targetHeight = height / inst.scale;
@@ -1729,8 +2397,9 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     });
     inst.surface->setPrepareFrameCallback([this, p = ptr.get()](bool, bool) { prepare(*p); });
     inst.surface->setKeyboardInteractivity(LayerShellKeyboard::None);
-    inst.surface->setLayer(LayerShellLayer::Top);
+    inst.surface->setLayer(inst.barConfig.layer == "overlay" ? LayerShellLayer::Overlay : LayerShellLayer::Top);
     inst.surface->setBlurRegion({});
+    updateVisibility(inst);
     inst.surface->requestUpdate();
   }
 }

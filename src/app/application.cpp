@@ -263,6 +263,9 @@ void Application::run(std::function<void()> startupReadyCallback) {
   runStartupPhase("initIpc", [this]() { initIpc(); });
   runStartupPhase("buildPollSources", [this]() { (void)buildPollSources(); });
 
+  runStartupPhase("startup apps", [this]() {
+    m_startupApps.start(m_configService.config().shell.session.startupApps);
+  });
   runStartupPhase("startup hooks", [this]() {
     m_hookManager.reload(m_configService.config().hooks);
     m_hookManager.fire(HookKind::Started);

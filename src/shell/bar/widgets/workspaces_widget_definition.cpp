@@ -57,6 +57,14 @@ const noctalia::bar::WidgetDefinition<WorkspacesWidget::Options>& workspacesWidg
                           .group = "workspaces.list",
                       },
               }),
+              field<&Options::scrollWrap>({
+                  .key = "scroll_wrap",
+                  .presentation = settings::WidgetSettingPresentation{
+                      .labelKey = "settings.widgets.settings.workspace-scroll-wrap.label",
+                      .descriptionKey = "settings.widgets.settings.workspace-scroll-wrap.description",
+                      .group = "workspaces.list",
+                  },
+              }),
               field<&Options::showLabels>({
                   .key = "show_labels",
                   .presentation =

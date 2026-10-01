@@ -2,11 +2,13 @@
 #include "config/config_service.h"
 #include "render/render_context.h"
 #include "shell/island/island.h"
+#include "shell/island/island_style.h"
 #include "shell/panel/panel.h"
 #include "shell/panel/panel_manager.h"
 #include "shell/tooltip/tooltip_manager.h"
 #include "ui/controls/box.h"
 #include "ui/controls/select_dropdown_popup.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/wayland_connection.h"
@@ -14,10 +16,10 @@
 #include <algorithm>
 #include <cmath>
 
-bool PanelManager::openIslandPanel(wl_output* output) {
+bool PanelManager::openIslandPanel(wl_output* output, std::string_view sourceBarName) {
   if (!m_islandHost)
     return false;
-  m_islandSurface = m_islandHost->acquirePanelSurface(output);
+  m_islandSurface = m_islandHost->acquirePanelSurface(output, false, sourceBarName);
   if (!m_islandSurface)
     return false;
 
@@ -147,8 +149,8 @@ void PanelManager::resizeIslandPanel(float width, float height, bool first) {
   m_islandResizing = !first;
   m_islandProgress = 0;
   m_islandMorph = m_animations.animate(
-      0.0F, 1.0F, first ? 420 : 320, Easing::EaseOutCubic, [this](float value) { applyIslandReveal(value); },
-      [this] { m_islandResizing = false; }, m_sceneRoot.get()
+      0.0F, 1.0F, first ? Motion::revealMs : Motion::resizeMs, Motion::reveal,
+      [this](float value) { applyIslandReveal(value); }, [this] { m_islandResizing = false; }, m_sceneRoot.get()
   );
 }
 
@@ -165,7 +167,7 @@ void PanelManager::applyIslandReveal(float progress) {
   const float y = 8 * scale;
   m_bgNode->setPosition(x, y);
   m_bgNode->setSize(m_islandWidth, m_islandHeight);
-  static_cast<Box*>(m_bgNode)->setRadius(std::min(m_islandHeight / 2, 30 * scale));
+  static_cast<Box*>(m_bgNode)->setRadius(island::surfaceRadius(m_islandHeight, scale));
   const float padding = Style::panelPadding * m_activePanel->contentScale();
   m_contentNode->setPosition((m_islandWidth - static_cast<float>(m_panelVisualWidth)) / 2 + padding, padding);
   if (!m_closing)

@@ -16,6 +16,16 @@ namespace noctalia::config::schema {
   // Calendar reminder lead time; 0 = notify at event start, 1440 = a full day ahead.
   inline constexpr Range<std::int64_t> kReminderLeadMinutesRange{0, 1440, 5};
 
+  // Hyprland window appearance.
+  inline constexpr Range<float> kHyprlandAnimationSpeedRange{0.25F, 3.0F, 0.05F};
+  inline constexpr Range<std::int64_t> kHyprlandGapsRange{0, 100, 1};
+  inline constexpr Range<std::int64_t> kHyprlandBorderRange{0, 10, 1};
+  inline constexpr Range<std::int64_t> kHyprlandRoundingRange{0, 60, 1};
+  inline constexpr Range<float> kHyprlandOpacityRange{0.2F, 1.0F, 0.01F};
+  inline constexpr Range<std::int64_t> kHyprlandBlurSizeRange{1, 20, 1};
+  inline constexpr Range<std::int64_t> kHyprlandBlurPassesRange{1, 6, 1};
+  inline constexpr Range<std::int64_t> kHyprlandShadowRange{0, 60, 1};
+
   // Shell.
   inline constexpr Range<float> kAnimationSpeedRange{0.1F, 4.0F, 0.05F};
   inline constexpr Range<float> kCornerRadiusScaleRange{0.0F, 2.0F, 0.05F};
@@ -48,6 +58,8 @@ namespace noctalia::config::schema {
   inline constexpr Range<float> kDockBorderWidthRange{0.0F, 20.0F, 0.5F};
   inline constexpr Range<float> kDockActiveScaleRange{0.1F, 1.75F, 0.05F};
   inline constexpr Range<float> kDockInactiveScaleRange{0.1F, 1.0F, 0.05F};
+  inline constexpr Range<std::int64_t> kDockPreviewDelayRange{150, 1500, 50};
+  inline constexpr Range<std::int64_t> kDockHideDelayRange{0, 2000, 25};
   inline constexpr Range<float> kDockMagnificationScaleRange{1.0F, 2.0F, 0.05F};
 
 } // namespace noctalia::config::schema

@@ -324,6 +324,9 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
     if (const auto it = m_idToIndex.find(replacesId); it != m_idToIndex.end()) {
       auto& n = m_notifications[it->second];
 
+      // Presenters must be able to reapply a hover/urgent hold when a client
+      // reschedules the same notification without changing its text.
+      const bool expiryWasPaused = n.timeout > 0 && !n.expiryTime;
       // Check if anything changed to avoid duplicate events
       const bool changed =
           (n.appName != appName
@@ -368,7 +371,7 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
         removeHistoryEntry(n.id);
       }
 
-      if (changed && dispatch.showToast) {
+      if ((changed || expiryWasPaused) && dispatch.showToast) {
         for (auto& [token, cb] : m_eventCallbacks) {
           cb(n, NotificationEvent::Updated);
         }

@@ -33,7 +33,8 @@ namespace compositors::kde {
 
 namespace compositors::hyprland {
   class HyprlandToplevelMapping;
-}
+  class HyprlandRuntime;
+} // namespace compositors::hyprland
 
 namespace compositors {
   class CompositorRuntimeRegistry;
@@ -188,6 +189,7 @@ public:
   [[nodiscard]] bool hasOverviewState() const noexcept;
   [[nodiscard]] bool isOverviewOpen() const noexcept;
 
+  [[nodiscard]] compositors::hyprland::HyprlandRuntime& hyprlandRuntime() noexcept;
   [[nodiscard]] compositors::niri::NiriRuntime& niriRuntime() noexcept;
   [[nodiscard]] const compositors::niri::NiriRuntime& niriRuntime() const noexcept;
 

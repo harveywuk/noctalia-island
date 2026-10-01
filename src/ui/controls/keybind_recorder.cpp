@@ -96,7 +96,10 @@ KeybindRecorder::KeybindRecorder() {
   refreshLabel();
 }
 
-KeybindRecorder::~KeybindRecorder() = default;
+KeybindRecorder::~KeybindRecorder() {
+  if (m_recording && m_recordingState)
+    m_recordingState(false);
+}
 
 void KeybindRecorder::setChord(std::optional<KeyChord> chord) {
   m_chord = chord;
@@ -178,8 +181,13 @@ void KeybindRecorder::handleKeyDown(std::uint32_t sym, std::uint32_t modifiers) 
     return;
   }
 
+  if (m_allowSuper && sym == 0xff1b && modifiers == 0) {
+    exitRecording(false);
+    return;
+  }
+
   // Must run before the modifier-preview branch so a bare Super press is also caught.
-  if ((modifiers & KeyMod::Super) != 0 || KeySymbol::isSuperModifier(sym)) {
+  if (!m_allowSuper && ((modifiers & KeyMod::Super) != 0 || KeySymbol::isSuperModifier(sym))) {
     notify::error(
         i18n::tr("notifications.internal.keybind-app"), i18n::tr("notifications.internal.keybind-invalid-title"),
         i18n::tr("notifications.internal.keybind-invalid-super")
@@ -232,17 +240,32 @@ void KeybindRecorder::handleKeyDown(std::uint32_t sym, std::uint32_t modifiers) 
     return;
   }
 
-  const std::uint32_t cleanModifiers = modifiers & ~KeyMod::Super;
+  const std::uint32_t cleanModifiers = m_allowSuper ? modifiers : modifiers & ~KeyMod::Super;
   KeyChord chord{.sym = sym, .modifiers = cleanModifiers};
-  m_chord = chord;
-  if (m_onCommit) {
-    m_onCommit(chord);
+  if (m_allowSuper) {
+    // Keep inhibition through key release, including native release-triggered bindings.
+    if (!m_pendingChord)
+      m_pendingChord = chord;
+    return;
   }
+  m_chord = chord;
+  const auto commit = m_onCommit;
   exitRecording(true);
+  if (commit)
+    commit(chord);
 }
 
 void KeybindRecorder::handleKeyUp(std::uint32_t sym, std::uint32_t modifiers) {
   if (!m_recording) {
+    return;
+  }
+  if (m_pendingChord && !KeySymbol::isModifier(sym)) {
+    const auto chord = *m_pendingChord;
+    m_chord = chord;
+    const auto commit = m_onCommit;
+    exitRecording(true);
+    if (commit)
+      commit(chord);
     return;
   }
   if (KeySymbol::isModifier(sym)) {
@@ -255,7 +278,10 @@ void KeybindRecorder::enterRecording() {
   if (!m_enabled || m_recording) {
     return;
   }
+  if (m_recordingState && !m_recordingState(true))
+    return;
   m_recording = true;
+  m_pendingChord.reset();
   m_pendingModifiers = 0;
   applyVisualState(VisualState::Recording);
   refreshLabel();
@@ -266,6 +292,9 @@ void KeybindRecorder::exitRecording(bool /*commit*/) {
     return;
   }
   m_recording = false;
+  m_pendingChord.reset();
+  if (m_recordingState)
+    m_recordingState(false);
   m_pendingModifiers = 0;
   applyVisualState(VisualState::Idle);
   refreshLabel();
@@ -289,6 +318,8 @@ void KeybindRecorder::refreshLabel() {
       if ((preview.modifiers & KeyMod::Shift) != 0) {
         text += "Shift + ";
       }
+      if ((preview.modifiers & KeyMod::Super) != 0)
+        text += "Super + ";
       text += "…";
       m_label->setText(text);
     } else {

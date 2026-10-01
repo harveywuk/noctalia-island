@@ -24,6 +24,12 @@ This is an independently maintained fork, not an official Noctalia release.
 The underlying Noctalia shell still provides its bar, dock, settings, wallpaper,
 lock screen, tray, clipboard and plugin support. The Island is optional.
 
+Recent work integrates the Island with normal bar management and monitor overrides,
+adds Cupertino-inspired settings and shell styling with an optional macOS community
+palette, and extends the floating dock with smart hide and live window previews.
+Hyprland appearance, input, displays, workspaces and supported plugin controls are
+available through Settings.
+
 See the [Island guide](docs/ORBIT_ISLAND.md) for configuration and behaviour, and
 [the capture guide](docs/CAPTURE.md) for recording and annotation tools.
 
@@ -52,6 +58,9 @@ Fork-specific options are documented in the Island guide.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the inherited architecture, code style
 and build checks. Keep contributions focused and include relevant validation.
+
+The [development handover](docs/DEVELOPMENT_HANDOVER.md) records the current work,
+validation, key source locations and proposed next priorities.
 
 Report fork-specific problems in
 [this fork's issue tracker](https://github.com/harveywuk/noctalia-island/issues).

@@ -19,7 +19,7 @@ enum class ModifierPolicy : std::uint8_t {
   Forbidden, // Modifiers are rejected; only bare keys are accepted.
 };
 
-// Records a KeyChord from live keyboard input. Rejects any chord involving Super.
+// Records a chord. Super is opt-in for compositor shortcuts only.
 class KeybindRecorder : public Flex {
 public:
   KeybindRecorder();
@@ -33,6 +33,8 @@ public:
   void setRecordingPlaceholder(std::string_view text);
   void setOnCommit(std::function<void(KeyChord)> callback);
   void setModifierPolicy(ModifierPolicy policy);
+  void setAllowSuper(bool value) { m_allowSuper = value; }
+  void setRecordingStateCallback(std::function<bool(bool)> callback) { m_recordingState = std::move(callback); }
   void setTabFocusKey(std::string key);
 
   [[nodiscard]] bool isRecording() const noexcept { return m_recording; }
@@ -57,6 +59,7 @@ private:
   Glyph* m_glyph = nullptr;
   InputArea* m_inputArea = nullptr;
   std::optional<KeyChord> m_chord;
+  std::optional<KeyChord> m_pendingChord;
   std::function<void(KeyChord)> m_onCommit;
   std::string m_unsetPlaceholder;
   std::string m_recordingPlaceholder;
@@ -64,6 +67,8 @@ private:
   float m_scale = 1.0F;
   bool m_recording = false;
   bool m_enabled = true;
+  bool m_allowSuper = false;
+  std::function<bool(bool)> m_recordingState;
   ModifierPolicy m_modifierPolicy = ModifierPolicy::Required;
   VisualState m_visualState = VisualState::Idle;
 };

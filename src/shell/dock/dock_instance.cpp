@@ -11,6 +11,7 @@
 #include "shell/surface/shadow.h"
 #include "shell/tooltip/tooltip_manager.h"
 #include "ui/builders.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/layer_surface.h"
@@ -268,7 +269,7 @@ namespace shell::dock {
         instance.slideRoot->setOpacity(0.0F);
         instance.hideOpacity = 1.0F;
         instance.animations.animate(
-            0.0F, 1.0F, Style::animSlow, Easing::EaseOutCubic,
+            0.0F, 1.0F, Motion::revealMs, Motion::reveal,
             [slide = instance.slideRoot](float v) { slide->setOpacity(v); }, {}, instance.slideRoot
         );
       }
@@ -375,6 +376,7 @@ namespace shell::dock {
   }
 
   void revealAutoHideDock(DockInstance& inst, ConfigService& config) {
+    inst.hideTimer.stop();
     const auto& cfg = config.config().dock;
     if (!dockUsesAnyAutoHide(cfg) || inst.surface == nullptr || inst.slideRoot == nullptr) {
       return;
@@ -394,7 +396,7 @@ namespace shell::dock {
     }
 
     inst.hideAnimId = inst.animations.animate(
-        current, 1.0F, Style::animNormal, Easing::EaseOutCubic,
+        current, 1.0F, Motion::revealMs, Motion::reveal,
         [&inst, &config](float v) {
           inst.hideOpacity = v;
           const auto& dockCfg = config.config().dock;
@@ -408,6 +410,7 @@ namespace shell::dock {
   }
 
   void startHideFadeOut(DockInstance& inst, ConfigService& config) {
+    inst.hideTimer.stop();
     // xdg tooltips are not parent-transformed with the slide; destroy immediately
     // so they cannot remain pinned after auto-hide starts (#4177).
     TooltipManager::instance().forceDestroy();
@@ -417,7 +420,7 @@ namespace shell::dock {
     }
     const float current = inst.hideOpacity;
     inst.hideAnimId = inst.animations.animate(
-        current, 0.0F, Style::animNormal, Easing::EaseInQuad,
+        current, 0.0F, Motion::dismissMs, Motion::dismiss,
         [&inst, &config](float v) {
           inst.hideOpacity = v;
           const auto& cfg = config.config().dock;

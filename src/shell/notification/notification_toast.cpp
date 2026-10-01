@@ -17,6 +17,7 @@
 #include "render/scene/input_area.h"
 #include "shell/surface/edge_inset.h"
 #include "ui/builders.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
@@ -744,7 +745,7 @@ void NotificationToast::onNotificationEvent(const Notification& n, NotificationE
               const float targetY = cardSurfaceY(*inst, i);
               Instance* instPtr = inst.get();
               cs.entryAnimId = inst->animations.animate(
-                  preservedReveal, 1.0F, Style::animNormal, Easing::EaseOutCubic,
+                  preservedReveal, 1.0F, Motion::revealMs, Motion::reveal,
                   [this, viewport = cs.cardNode, content = cs.cardContent, foreground = cs.cardForeground, targetY,
                    cardHeight = cs.clipHeight, scale = notificationUiScale(m_config),
                    edgePad = horizontalInnerPad(notificationUiScale(m_config))](float v) {
@@ -800,7 +801,7 @@ void NotificationToast::onNotificationEvent(const Notification& n, NotificationE
           if (cs.cardForeground != nullptr) {
             cs.cardForeground->setOpacity(0.7F);
             inst->animations.animate(
-                0.7F, 1.0F, Style::animFast, Easing::EaseOutCubic,
+                0.7F, 1.0F, Motion::feedbackMs, Motion::reveal,
                 [content = cs.cardForeground](float v) { content->setOpacity(v); }, {}, cs.cardForeground
             );
           }
@@ -1027,7 +1028,7 @@ void NotificationToast::addCardToInstance(Instance& inst, std::size_t entryIndex
 
   // Entry animation
   cs.entryAnimId = inst.animations.animate(
-      0.0F, 1.0F, Style::animNormal, Easing::EaseOutCubic,
+      0.0F, 1.0F, Motion::revealMs, Motion::reveal,
       [this, viewport = cs.cardNode, content = cs.cardContent, foreground = cs.cardForeground, targetY,
        cardHeight = cs.clipHeight, scale = notificationUiScale(m_config),
        edgePad = horizontalInnerPad(notificationUiScale(m_config))](float v) {
@@ -1230,7 +1231,7 @@ void NotificationToast::dismissCardFromInstance(Instance& inst, std::size_t entr
   const uint32_t removingId = (entryIndex < m_entries.size()) ? m_entries[entryIndex].notificationId : 0;
 
   cs.exitAnimId = inst.animations.animate(
-      startReveal, 0.0F, Style::animNormal, Easing::EaseInOutQuad,
+      startReveal, 0.0F, Motion::dismissMs, Motion::dismiss,
       [this, card, content, foreground, targetY, cardHeight, scale = notificationUiScale(m_config),
        edgePad = horizontalInnerPad(notificationUiScale(m_config))](float v) {
         applyCardRevealNodes(card, content, foreground, v, targetY, revealDirection(), cardHeight, scale, edgePad);
@@ -1876,7 +1877,7 @@ void NotificationToast::collapseStack() {
         Node* content = cs.cardContent;
         Node* foreground = cs.cardForeground;
         cs.entryAnimId = inst->animations.animate(
-            currentReveal, 1.0F, Style::animNormal, Easing::EaseOutCubic,
+            currentReveal, 1.0F, Motion::revealMs, Motion::reveal,
             [this, viewport, content, foreground, newSurfY, cardHeight, scale,
              edgePad = horizontalInnerPad(scale)](float v) {
               applyCardRevealNodes(
@@ -1898,7 +1899,7 @@ void NotificationToast::collapseStack() {
       Node* cardNode = cs.cardNode;
 
       cs.slideAnimId = inst->animations.animate(
-          oldSurfY, newSurfY, Style::animNormal, Easing::EaseInOutQuad,
+          oldSurfY, newSurfY, Motion::dismissMs, Motion::dismiss,
           [cardNode, px](float v) { cardNode->setPosition(px, v); },
           [this, instPtr, entryId]() {
             if (auto* state = findCardState(*instPtr, entryId); state != nullptr) {
@@ -2668,7 +2669,11 @@ InputArea* NotificationToast::buildCard(
             box.setRadius(Style::scaledRadiusXl(scale));
             box.setFill(colorSpecFromRole(ColorRole::Surface, bgAlpha));
             box.setBorder(
-                colorSpecFromRole(urgency == Urgency::Critical ? ColorRole::Error : ColorRole::Outline), borderWidth
+                colorSpecFromRole(
+                    urgency == Urgency::Critical ? ColorRole::Error : ColorRole::Outline,
+                    urgency == Urgency::Critical ? 1.0F : Style::hairlineAlpha
+                ),
+                borderWidth
             );
           },
       })

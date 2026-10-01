@@ -12,6 +12,7 @@
 #include "shell/dock/dock_instance.h"
 #include "shell/dock/dock_items.h"
 #include "shell/dock/dock_model.h"
+#include "shell/dock/dock_preview.h"
 #include "shell/dock/pinned_apps.h"
 #include "shell/panel/panel_manager.h"
 #include "system/desktop_entry.h"
@@ -291,6 +292,12 @@ bool Dock::initialize(CompositorPlatform& platform, ConfigService* config, Rende
         const auto& newCfg = m_config->config().dock;
         const auto& newShadow = m_config->config().shell.shadow;
         const auto newBarLayerStack = barLayerStackSignature(m_config->config());
+        // Magnification follows the global motion preference even if dock settings did not change.
+        for (const auto& instance : m_instances)
+          if (instance->surface) {
+            instance->surface->requestFrameTick();
+            instance->surface->requestRedraw();
+          }
         if (newCfg == m_lastDockConfig && newShadow == m_lastShadow && newBarLayerStack == m_lastBarLayerStack) {
           return;
         }
@@ -373,6 +380,12 @@ void Dock::show() {
 }
 
 void Dock::closeAllInstances() {
+  m_previewTimer.stop();
+  m_previewDismissTimer.stop();
+  m_previewHoverOwner = nullptr;
+  m_previewHoverId.clear();
+  m_preview.reset();
+  m_previewAction.reset();
   m_itemMenu.reset();
   m_lastActiveHandleByAppIdLower.clear();
   m_surfaceMap.clear();
@@ -412,6 +425,13 @@ void Dock::pruneCachedToplevelHandles() {
 }
 
 void Dock::detachInstanceState(shell::dock::DockInstance& inst) {
+  if (m_previewHoverOwner == &inst) {
+    m_previewTimer.stop();
+    m_previewHoverOwner = nullptr;
+    m_previewHoverId.clear();
+  }
+  if (m_popupOwnerInstance == &inst)
+    closePreview();
   if (inst.surface != nullptr) {
     if (wl_surface* const wls = inst.surface->wlSurface()) {
       m_surfaceMap.erase(wls);
@@ -455,6 +475,7 @@ void Dock::refresh() {
   }
 
   tryFulfillPendingLaunchFocus();
+  refreshPreview();
 }
 
 void Dock::toggleVisibility() {
@@ -484,6 +505,25 @@ void Dock::requestLayout() {
 // ── Input ─────────────────────────────────────────────────────────────────────
 
 bool Dock::onPointerEvent(const PointerEvent& event) {
+  if (m_preview) {
+    const bool onPreview = event.surface && event.surface == m_preview->wlSurface;
+    const bool consumed = shell::dock::routePopupEvent(*m_preview, event);
+    if (onPreview) {
+      if (event.type == PointerEvent::Type::Leave)
+        schedulePreviewDismiss();
+      else
+        m_previewDismissTimer.stop();
+      return true;
+    }
+    if (event.type == PointerEvent::Type::Button && event.pressed)
+      closePreview();
+    else if (!m_surfaceMap.contains(event.surface) && event.type == PointerEvent::Type::Enter)
+      schedulePreviewDismiss();
+    if (consumed)
+      return true;
+  }
+  if (event.type == PointerEvent::Type::Button && event.pressed)
+    m_previewTimer.stop();
   // Route open popups first. Unconsumed presses dismiss the menu; only continue to
   // dock hit-testing when the press is on the dock itself.
   if (m_itemMenu != nullptr) {
@@ -507,6 +547,7 @@ bool Dock::onPointerEvent(const PointerEvent& event) {
     }
     m_hoveredInstance = it->second;
     shell::dock::DockInstance* const entered = m_hoveredInstance;
+    entered->hideTimer.stop();
     entered->pointerInside = true;
     entered->inputDispatcher.pointerEnter(static_cast<float>(event.sx), static_cast<float>(event.sy), event.serial);
     // pointerEnter can re-enter the Wayland event loop (tooltip popup creation),
@@ -518,34 +559,12 @@ bool Dock::onPointerEvent(const PointerEvent& event) {
     // Auto-hide: show the dock when the pointer enters.
     if (dockPointerHideAllowed(m_config->config().dock, *m_hoveredInstance)
         && m_hoveredInstance->sceneRoot != nullptr) {
-      if (m_hoveredInstance->hideAnimId != 0) {
-        m_hoveredInstance->animations.cancel(m_hoveredInstance->hideAnimId);
-        m_hoveredInstance->hideAnimId = 0;
-      }
-      const float current = m_hoveredInstance->hideOpacity;
-      m_hoveredInstance->hideAnimId = m_hoveredInstance->animations.animate(
-          current, 1.0F, Style::animNormal, Easing::EaseOutCubic,
-          [inst = m_hoveredInstance, this](float v) {
-            inst->hideOpacity = v;
-            const auto& cfg = m_config->config().dock;
-            shell::dock::syncDockSlideLayerTransform(*inst, cfg);
-            shell::dock::applyDockCompositorBlur(*inst, cfg);
-          },
-          [inst = m_hoveredInstance]() { inst->hideAnimId = 0; }
-      );
-      // Restore full input region (full surface so shadow-margin edges don't
-      // cause an immediate Leave when triggered from the edge of the strip).
-      if (m_hoveredInstance->surface != nullptr) {
-        const int sw = static_cast<int>(m_hoveredInstance->surface->width());
-        const int sh = static_cast<int>(m_hoveredInstance->surface->height());
-        m_hoveredInstance->surface->setInputRegion({InputRect{0, 0, sw, sh}});
-      }
-      m_hoveredInstance->surface->requestRedraw();
+      shell::dock::revealAutoHideDock(*m_hoveredInstance, *m_config);
     }
     break;
   }
   case PointerEvent::Type::Leave: {
-    if (m_hoveredInstance != nullptr) {
+    if (m_hoveredInstance != nullptr && m_hoveredInstance->surface->wlSurface() == event.surface) {
       if (m_hoveredInstance->drag.active || m_hoveredInstance->drag.armed) {
         endDrag(*m_hoveredInstance, false);
       }
@@ -554,15 +573,28 @@ bool Dock::onPointerEvent(const PointerEvent& event) {
       m_hoveredInstance->inputDispatcher.pointerLeave();
 
       if (dockPointerHideAllowed(m_config->config().dock, *m_hoveredInstance) && m_popupOwnerInstance == nullptr) {
-        shell::dock::startHideFadeOut(*m_hoveredInstance, *m_config);
+        scheduleHide(*m_hoveredInstance);
       }
       m_hoveredInstance = nullptr;
     }
     break;
   }
   case PointerEvent::Type::Motion: {
-    if (m_hoveredInstance == nullptr)
+    const auto target = m_surfaceMap.find(event.surface);
+    if (target == m_surfaceMap.end())
       break;
+    if (m_hoveredInstance != target->second) {
+      if (m_hoveredInstance) {
+        clearHoverZoomPointer(*m_hoveredInstance);
+        m_hoveredInstance->pointerInside = false;
+        m_hoveredInstance->inputDispatcher.pointerLeave();
+        scheduleHide(*m_hoveredInstance);
+      }
+      m_hoveredInstance = target->second;
+      m_hoveredInstance->pointerInside = true;
+      m_hoveredInstance->hideTimer.stop();
+      shell::dock::revealAutoHideDock(*m_hoveredInstance, *m_config);
+    }
     shell::dock::DockInstance* const hovered = m_hoveredInstance;
     hovered->inputDispatcher.pointerMotion(static_cast<float>(event.sx), static_cast<float>(event.sy), 0);
     // pointerMotion can re-enter the Wayland event loop (tooltip popup creation),
@@ -623,6 +655,131 @@ bool Dock::onPointerEvent(const PointerEvent& event) {
   }
 
   return m_hoveredInstance != nullptr;
+}
+
+void Dock::hoverPreview(shell::dock::DockInstance& instance, const shell::dock::DockItemAction& action) {
+  m_previewTimer.stop();
+  m_previewHoverOwner = &instance;
+  m_previewHoverId = action.idLower;
+  if (!m_config->config().dock.windowPreviews || m_itemMenu || instance.drag.active || instance.drag.armed)
+    return;
+  if (m_preview && m_popupOwnerInstance == &instance && m_previewAction->idLower == action.idLower) {
+    m_previewDismissTimer.stop();
+    return;
+  }
+  closePreview();
+  m_previewTimer.start(
+      std::chrono::milliseconds(m_config->config().dock.previewDelayMs), [this, owner = &instance, action] {
+        if (m_previewHoverOwner == owner
+            && m_previewHoverId == action.idLower
+            && owner->pointerInside
+            && !owner->drag.active
+            && !owner->drag.armed
+            && !m_itemMenu)
+          openPreview(*owner, action);
+      }
+  );
+}
+
+void Dock::leavePreview(shell::dock::DockInstance& instance, const shell::dock::DockItemAction& action) {
+  if (m_previewHoverOwner == &instance && m_previewHoverId == action.idLower) {
+    m_previewTimer.stop();
+    m_previewHoverOwner = nullptr;
+    m_previewHoverId.clear();
+  }
+  schedulePreviewDismiss();
+}
+
+void Dock::schedulePreviewDismiss() {
+  if (!m_preview || m_previewDismissTimer.active())
+    return;
+  m_previewDismissTimer.start(std::chrono::milliseconds(300), [this] {
+    if (m_preview
+        && !m_preview->pointerInside
+        && !(
+            m_previewHoverOwner == m_popupOwnerInstance
+            && m_previewAction
+            && m_previewHoverId == m_previewAction->idLower
+        ))
+      closePreview();
+  });
+}
+
+void Dock::closePreview() {
+  m_previewDismissTimer.stop();
+  if (!m_preview)
+    return;
+  auto* owner = m_popupOwnerInstance;
+  m_preview.reset();
+  m_previewAction.reset();
+  m_popupOwnerInstance = nullptr;
+  if (owner && !owner->pointerInside)
+    scheduleHide(*owner);
+}
+
+void Dock::openPreview(shell::dock::DockInstance& instance, const shell::dock::DockItemAction& action) {
+  closePreview();
+  if (!m_platform->hasXdgShell() || !instance.surface)
+    return;
+  auto windows = shell::dock::windowsForDockItem(
+      *m_platform, action.windowLookupIdLower, action.windowLookupWmClassLower,
+      shell::dock::dockFilterOutput(m_config->config().dock, instance.output)
+  );
+  kLog.debug("opening {} window previews for {}", windows.size(), action.idLower);
+  if (windows.empty())
+    return;
+  shell::dock::dismissDockTooltip();
+  instance.hideTimer.stop();
+  shell::dock::revealAutoHideDock(instance, *m_config);
+  auto preview = std::make_unique<shell::dock::DockPreview>(*m_platform, *m_config, *m_renderContext);
+  auto act = [this, action, output = instance.output](const ToplevelInfo& requested, bool close) {
+    // Re-resolve on activation: captured handles may have been closed while the popup was open.
+    const auto current = shell::dock::windowsForDockItem(
+        *m_platform, action.windowLookupIdLower, action.windowLookupWmClassLower,
+        shell::dock::dockFilterOutput(m_config->config().dock, output)
+    );
+    for (const auto& window : current) {
+      if (!shell::dock::samePreviewWindow(window, requested))
+        continue;
+      if (close)
+        m_platform->closeToplevelInfo(window);
+      else {
+        m_platform->activateToplevelInfo(window);
+        closePreview();
+      }
+      return;
+    }
+    refreshPreview();
+  };
+  if (!preview->initialize(
+          m_platform->layerSurfaceFor(instance.surface->wlSurface()), instance.output, action.entry, std::move(windows),
+          {
+              .activateWindow = [act](const ToplevelInfo& window) { act(window, false); },
+              .closeWindow = [act](const ToplevelInfo& window) { act(window, true); },
+              .dismiss = [this] { closePreview(); },
+          }
+      ))
+    return;
+  // Popup creation dispatches Wayland events; an output/config change may
+  // have removed the parent dock while that roundtrip was in progress.
+  if (!std::ranges::any_of(m_instances, [&instance](const auto& live) { return live.get() == &instance; }))
+    return;
+  m_popupOwnerInstance = &instance;
+  m_previewAction = std::make_unique<shell::dock::DockItemAction>(action);
+  m_preview = std::move(preview);
+}
+
+void Dock::refreshPreview() {
+  if (!m_preview || !m_popupOwnerInstance || !m_previewAction)
+    return;
+  auto windows = shell::dock::windowsForDockItem(
+      *m_platform, m_previewAction->windowLookupIdLower, m_previewAction->windowLookupWmClassLower,
+      shell::dock::dockFilterOutput(m_config->config().dock, m_popupOwnerInstance->output)
+  );
+  if (windows.empty())
+    closePreview();
+  else
+    m_preview->refreshWindows(std::move(windows));
 }
 
 // ── Private: instance management ─────────────────────────────────────────────
@@ -746,6 +903,9 @@ void Dock::reevaluateSmartAutoHide() {
           m_platform->lastInputSerial()
       );
       m_hoveredInstance = instance;
+      updateHoverZoomPointer(
+          *instance, static_cast<float>(m_platform->lastPointerX()), static_cast<float>(m_platform->lastPointerY())
+      );
     }
 
     const bool wantsPinned = dockSmartAutoHideWantsPinnedVisible(*m_platform, instance->output);
@@ -759,7 +919,7 @@ void Dock::reevaluateSmartAutoHide() {
         needsRedraw = true;
       }
     } else if (!instance->pointerInside && m_popupOwnerInstance == nullptr) {
-      if (instance->hideOpacity > 0.0F || pinnedChanged) {
+      if ((instance->hideOpacity > 0.0F && !instance->hideTimer.active()) || pinnedChanged) {
         shell::dock::startHideFadeOut(*instance, *m_config);
         needsRedraw = true;
       }
@@ -816,8 +976,29 @@ void Dock::createInstance(const WaylandOutput& output) {
     );
   });
   instance->surface->setFrameTickCallback([this, inst](float deltaMs) {
-    if (m_config == nullptr || m_renderContext == nullptr || !m_config->config().dock.magnification) {
+    if (m_config == nullptr || m_renderContext == nullptr) {
       return;
+    }
+    // A revealed icon can move under a stationary pointer without a Wayland
+    // motion event. Update the hit target as well as the magnification target.
+    if (m_platform->hasPointerPosition() && m_platform->lastPointerSurface() == inst->surface->wlSurface()) {
+      const auto x = static_cast<float>(m_platform->lastPointerX());
+      const auto y = static_cast<float>(m_platform->lastPointerY());
+      if (!inst->inputDispatcher.pointerCaptured()
+          && inst->inputDispatcher.inputAreaAt(x, y) != inst->inputDispatcher.hoveredArea()) {
+        inst->inputDispatcher.pointerEnter(x, y, m_platform->lastInputSerial());
+        if (!std::ranges::any_of(m_instances, [inst](const auto& live) { return live.get() == inst; }))
+          return;
+      }
+    }
+    if (!m_config->config().dock.magnification)
+      return;
+    if (m_platform->hasPointerPosition() && m_platform->lastPointerSurface() == inst->surface->wlSurface()) {
+      inst->pointerInside = true;
+      (void)shell::dock::syncHoverPointerFromScene(
+          *inst, m_config->config().dock, static_cast<float>(m_platform->lastPointerX()),
+          static_cast<float>(m_platform->lastPointerY())
+      );
     }
     const shell::dock::DockItemSceneDependencies deps{
         .model = {.config = *m_config},
@@ -913,6 +1094,12 @@ void Dock::rebuildItems(shell::dock::DockInstance& instance) {
           .openItemMenu = [this](
                               shell::dock::DockInstance& inst, const shell::dock::DockItemAction& action
                           ) { openItemMenu(inst, action); },
+          .hoverPreview = [this](
+                              shell::dock::DockInstance& inst, const shell::dock::DockItemAction& action
+                          ) { hoverPreview(inst, action); },
+          .leavePreview = [this](
+                              shell::dock::DockInstance& inst, const shell::dock::DockItemAction& action
+                          ) { leavePreview(inst, action); },
           .beginDrag = [this](
                            shell::dock::DockInstance& inst, std::size_t index, float mainPos
                        ) { beginDrag(inst, index, mainPos); },
@@ -982,6 +1169,8 @@ void Dock::clearHoverZoomPointer(shell::dock::DockInstance& instance) {
 // ── Private: item context menu (right-click) ──────────────────────────────────
 
 void Dock::beginDrag(shell::dock::DockInstance& instance, std::size_t index, float mainPos) {
+  m_previewTimer.stop();
+  closePreview();
   if (m_config == nullptr || instance.drag.active) {
     return;
   }
@@ -1070,6 +1259,8 @@ void Dock::endDrag(shell::dock::DockInstance& instance, bool commit) {
 }
 
 void Dock::closeItemMenu() {
+  m_previewTimer.stop();
+  closePreview();
   shell::dock::DockInstance* owner = m_popupOwnerInstance;
   m_popupOwnerInstance = nullptr;
   m_itemMenu.reset();
@@ -1108,7 +1299,21 @@ void Dock::closeItemMenu() {
       || !dockPointerHideAllowed(m_config->config().dock, *owner)) {
     return;
   }
-  shell::dock::startHideFadeOut(*owner, *m_config);
+  scheduleHide(*owner);
+}
+
+void Dock::scheduleHide(shell::dock::DockInstance& instance) {
+  instance.hideTimer.stop();
+  const auto hide = [this, &instance] {
+    if (!instance.pointerInside
+        && m_popupOwnerInstance != &instance
+        && dockPointerHideAllowed(m_config->config().dock, instance))
+      shell::dock::startHideFadeOut(instance, *m_config);
+  };
+  if (m_config->config().dock.hideDelayMs == 0)
+    hide();
+  else
+    instance.hideTimer.start(std::chrono::milliseconds(m_config->config().dock.hideDelayMs), hide);
 }
 
 void Dock::tryFulfillPendingLaunchFocus() {
@@ -1168,7 +1373,10 @@ void Dock::activateOrLaunchItem(shell::dock::DockInstance& instance, const shell
         .deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8),
     };
     m_platform->prepareAppLaunchOnOutput(instance.output);
-    (void)desktop_entry_launch::launchEntry(action.entry, dockLaunchOptions(*m_platform, *m_config, action.entry));
+    if (desktop_entry_launch::launchEntry(action.entry, dockLaunchOptions(*m_platform, *m_config, action.entry)))
+      shell::dock::animateLaunch(instance, m_config->config().dock, action.idLower);
+    else
+      m_pendingLaunchFocus.reset();
     return;
   }
 

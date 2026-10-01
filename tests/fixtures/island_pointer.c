@@ -28,13 +28,18 @@ int main(void) {
     struct timespec now; clock_gettime(CLOCK_MONOTONIC,&now);
     uint32_t stamp=(uint32_t)(now.tv_sec*1000+now.tv_nsec/1000000);
     unsigned x,y;
+    int dx,dy;
     int steps;
     if(sscanf(line,"move %u %u",&x,&y)==2)
       zwlr_virtual_pointer_v1_motion_absolute(pointer,stamp,x,y,1280,720);
+    else if(sscanf(line,"relative %d %d",&dx,&dy)==2)
+      zwlr_virtual_pointer_v1_motion(pointer,stamp,wl_fixed_from_int(dx),wl_fixed_from_int(dy));
     else if(sscanf(line,"scroll %d",&steps)==1) {
       zwlr_virtual_pointer_v1_axis_source(pointer,WL_POINTER_AXIS_SOURCE_WHEEL);
       zwlr_virtual_pointer_v1_axis_discrete(pointer,stamp,WL_POINTER_AXIS_VERTICAL_SCROLL,wl_fixed_from_int(steps*15),steps);
     }
+    else if(!strncmp(line,"right-press",11)) zwlr_virtual_pointer_v1_button(pointer,stamp,BTN_RIGHT,WL_POINTER_BUTTON_STATE_PRESSED);
+    else if(!strncmp(line,"right-release",13)) zwlr_virtual_pointer_v1_button(pointer,stamp,BTN_RIGHT,WL_POINTER_BUTTON_STATE_RELEASED);
     else if(!strncmp(line,"press",5)) zwlr_virtual_pointer_v1_button(pointer,stamp,BTN_LEFT,WL_POINTER_BUTTON_STATE_PRESSED);
     else if(!strncmp(line,"release",7)) zwlr_virtual_pointer_v1_button(pointer,stamp,BTN_LEFT,WL_POINTER_BUTTON_STATE_RELEASED);
     zwlr_virtual_pointer_v1_frame(pointer);

@@ -489,7 +489,8 @@ namespace noctalia::theme {
         };
       }
     } else if (cfg.source == PaletteSource::Community && !cfg.communityPalette.empty()) {
-      const auto cachePath = communityPaletteCachePath(cfg.communityPalette);
+      const auto bundledPath = bundledCommunityPalettePath(cfg.communityPalette);
+      const auto cachePath = bundledPath.empty() ? communityPaletteCachePath(cfg.communityPalette) : bundledPath;
       bool stale = true;
       if (std::filesystem::exists(cachePath)) {
         if (auto parsed = parseCommunityPaletteJson(cachePath)) {
@@ -497,16 +498,16 @@ namespace noctalia::theme {
           // Re-fetch when the catalog advertises a different checksum than the
           // cached copy. An empty catalog md5 means "freshness unknown": keep
           // the cached palette rather than re-downloading on every resolve.
-          const std::string expectedMd5 = communityPaletteCatalogMd5(cfg.communityPalette);
+          const std::string expectedMd5 = bundledPath.empty() ? communityPaletteCatalogMd5(cfg.communityPalette) : "";
           stale = !expectedMd5.empty() && util::fileMd5Hex(cachePath) != StringUtils::toLower(expectedMd5);
-        } else {
+        } else if (bundledPath.empty()) {
           std::error_code rmEc;
           std::filesystem::remove(cachePath, rmEc);
         }
       }
       // A stale-but-valid cache still resolves above, so the fresh copy fades in
       // via the download callback instead of flashing the builtin palette.
-      if (stale) {
+      if (stale && bundledPath.empty()) {
         startCommunityDownload(cfg.communityPalette);
       }
     }

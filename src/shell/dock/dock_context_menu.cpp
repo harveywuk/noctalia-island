@@ -14,6 +14,7 @@
 #include "system/desktop_entry.h"
 #include "ui/builders.h"
 #include "ui/controls/context_menu.h"
+#include "ui/motion.h"
 #include "ui/popup_chrome.h"
 #include "ui/style.h"
 #include "wayland/popup_surface.h"
@@ -336,6 +337,7 @@ namespace shell::dock {
 
     menu->surface = std::make_unique<PopupSurface>(platform.wayland());
     menu->surface->setRenderContext(&renderContext);
+    menu->surface->setAnimationManager(&menu->animations);
     menu->chrome = menuChrome;
 
     auto* menuPtr = menu.get();
@@ -373,7 +375,16 @@ namespace shell::dock {
       const auto fw = static_cast<float>(width);
       const auto fh = static_cast<float>(height);
 
+      const bool firstReveal = menuPtr->sceneRoot == nullptr;
       menuPtr->sceneRoot = ui::node({});
+      menuPtr->sceneRoot->setAnimationManager(&menuPtr->animations);
+      if (firstReveal) {
+        auto* root = menuPtr->sceneRoot.get();
+        root->setOpacity(0);
+        menuPtr->animations.animate(
+            0, 1, Motion::feedbackMs, Motion::reveal, [root](float value) { root->setOpacity(value); }, {}, root
+        );
+      }
       menuPtr->sceneRoot->setSize(fw, fh);
       if (Style::popupShadowsEnabled()) {
         (void)popup_chrome::addShadow(

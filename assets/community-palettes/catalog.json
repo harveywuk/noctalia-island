@@ -1,0 +1,19 @@
+[
+  {
+    "name": "macOS",
+    "dark": {
+      "surface": "#242426",
+      "primary": "#0072E3",
+      "secondary": "#30D158",
+      "tertiary": "#BF8AF5",
+      "error": "#FF453A"
+    },
+    "light": {
+      "surface": "#F2F2F7",
+      "primary": "#0067D9",
+      "secondary": "#247D38",
+      "tertiary": "#8540B8",
+      "error": "#C9342B"
+    }
+  }
+]

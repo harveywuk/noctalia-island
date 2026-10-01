@@ -134,14 +134,14 @@ namespace {
     button.setEnabled(enabled);
   }
 
-  // The whole home cards are clickable; on hover swap the card outline to the hover colour. No fill
+  // The whole home cards are clickable; on hover strengthen the card outline. No fill
   // change: the user card's fill sits behind the wallpaper, so a thin hover border is the one hover
   // signal that reads consistently across all three cards.
   void applyHomeCardHover(Flex& card, bool hovered) {
     if (hovered) {
-      card.setBorder(colorSpecFromRole(ColorRole::Hover), Style::borderWidth);
-    } else if (Style::cardBordersEnabled()) {
       card.setBorder(colorSpecFromRole(ColorRole::Outline), Style::borderWidth);
+    } else if (Style::cardBordersEnabled()) {
+      card.setBorder(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), Style::borderWidth);
     } else {
       card.clearBorder();
     }
@@ -1172,13 +1172,15 @@ void HomeTab::layoutWallpaperBackground(Renderer& renderer) {
   const float radius = std::max(0.0F, Style::scaledRadiusXl(contentScale()) - bw);
 
   const Color surface = colorForRole(ColorRole::Surface);
-  const Color translucentSurface = rgba(surface.r, surface.g, surface.b, surface.a * 0.9F);
-  const Color transparentSurface = rgba(surface.r, surface.g, surface.b, 0.0F);
+  // Long profile labels reach across the card. Keep a surface tint under all
+  // text, including in light mode over a dark wallpaper.
+  const Color leadingSurface = withAlpha(surface, surface.a * 0.97F);
+  const Color trailingSurface = withAlpha(surface, surface.a * (isLightPalette() ? 0.94F : 0.88F));
   const ImageScrim scrim{
       .direction = GradientDirection::Horizontal,
       .stops =
-          {GradientStop{0.0F, translucentSurface}, GradientStop{0.25F, translucentSurface},
-           GradientStop{0.9F, transparentSurface}, GradientStop{1.0F, transparentSurface}},
+          {GradientStop{0.0F, leadingSurface}, GradientStop{0.25F, leadingSurface},
+           GradientStop{1.0F, trailingSurface}},
       .enabled = true,
   };
 

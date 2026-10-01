@@ -49,6 +49,7 @@ public:
     bool labelsOnlyWhenOccupied = false;
     bool hideWhenEmpty = false;
     bool showAllOutputs = false;
+    bool scrollWrap = false;
     float pillScale = 1.0F;
     float activePillSize = 2.2F;
     float inactivePillSize = 1.0F;

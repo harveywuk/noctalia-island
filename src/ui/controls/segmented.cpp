@@ -187,7 +187,7 @@ std::unique_ptr<Separator> Segmented::makeSegmentSeparator() {
   auto sep = std::make_unique<Separator>();
   sep->setOrientation(SeparatorOrientation::VerticalRule);
   sep->setThickness(std::max(1.0F, Style::borderWidth * m_scale));
-  sep->setColor(colorSpecFromRole(ColorRole::Outline));
+  sep->setColor(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha));
   sep->setFlexGrow(0.0F);
   return sep;
 }
@@ -244,22 +244,16 @@ void Segmented::refreshVariants() {
       continue;
     }
     m_buttons[i]->setVariant(i == m_selected ? ButtonVariant::TabActive : ButtonVariant::Tab);
-    Radii radii;
-    if (n == 1) {
-      radii = Radii{r, r, r, r};
-    } else if (i == 0) {
-      radii = Radii{r, 0.0F, 0.0F, r};
-    } else if (i == n - 1) {
-      radii = Radii{0.0F, r, r, 0.0F};
-    } else {
-      radii = Radii{0.0F};
-    }
-    m_buttons[i]->setRadii(radii);
+    m_buttons[i]->setRadii(Radii{std::max(0.0F, r - 2.0F * m_scale)});
+  }
+  for (std::size_t i = 0; i < m_separators.size(); ++i) {
+    // Opacity keeps the divider's layout width stable while selection moves.
+    m_separators[i]->setOpacity(i == m_selected || i + 1 == m_selected ? 0.0F : 1.0F);
   }
 }
 
 void Segmented::applyOuterStyle() {
-  Flex::setPadding(m_outerPadding);
+  Flex::setPadding(m_outerPadding + 2.0F * m_scale);
   setFill(colorSpecFromRole(m_surfaceRole, m_surfaceOpacity));
   clearBorder();
   setRadius(Style::scaledRadiusMd(m_scale));

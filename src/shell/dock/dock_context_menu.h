@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/animation/animation_manager.h"
 #include "render/scene/input_dispatcher.h"
 #include "ui/popup_chrome.h"
 
@@ -29,6 +30,7 @@ namespace shell::dock {
     ~DockPopup();
 
     std::unique_ptr<PopupSurface> surface;
+    AnimationManager animations;
     std::unique_ptr<Node> sceneRoot;
     popup_chrome::Geometry chrome;
     InputDispatcher inputDispatcher;

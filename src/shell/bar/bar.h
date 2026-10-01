@@ -203,6 +203,7 @@ private:
   std::vector<BarConfig> m_lastBars;
   std::unordered_map<std::string, WidgetConfig> m_lastWidgets;
   ShellConfig::ShadowConfig m_lastShadow;
+  std::vector<HyprlandWorkspaceConfig> m_lastWorkspacePreferences;
   // Plugin enable/disable changes which widget types resolve, so a plugins-only
   // config change must also rebuild widgets.
   PluginsConfig m_lastPlugins;

@@ -12,6 +12,7 @@
 #include "render/scene/node.h"
 #include "shell/surface/edge_inset.h"
 #include "ui/builders.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/surface.h"
@@ -632,7 +633,7 @@ void OsdOverlay::buildScene(Instance& inst, std::uint32_t width, std::uint32_t h
           .configure = [cardX, cardY, cw, ch, s, border, backgroundOpacity](Box& box) {
             box.setCardStyle();
             box.setFill(colorSpecFromRole(ColorRole::Surface, backgroundOpacity));
-            box.setBorder(colorSpecFromRole(ColorRole::Outline), border);
+            box.setBorder(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), border);
             box.setRadius(osdCardRadius(cw, ch, s));
             box.setPosition(cardX, cardY);
             box.setZIndex(0);
@@ -862,7 +863,7 @@ void OsdOverlay::animateInstance(Instance& inst) {
       inst.sceneRoot->setOpacity(1.0F);
       applyReveal(inst, 0.0F);
       inst.showAnimId = inst.animations.animate(
-          0.0F, 1.0F, Style::animNormal, Easing::EaseOutCubic, [this, &inst](float v) { applyReveal(inst, v); },
+          0.0F, 1.0F, Motion::revealMs, Motion::reveal, [this, &inst](float v) { applyReveal(inst, v); },
           [&inst]() {
             inst.showAnimId = 0;
             inst.visible = true;
@@ -877,7 +878,7 @@ void OsdOverlay::animateInstance(Instance& inst) {
       1.0F, 0.0F, kHideDelayMs, Easing::Linear, [](float /*v*/) {},
       [this, &inst]() {
         inst.hideAnimId = inst.animations.animate(
-            1.0F, 0.0F, Style::animNormal, Easing::EaseInQuad, [this, &inst](float v) { applyReveal(inst, v); },
+            1.0F, 0.0F, Motion::dismissMs, Motion::dismiss, [this, &inst](float v) { applyReveal(inst, v); },
             [this, &inst]() {
               inst.hideAnimId = 0;
               inst.visible = false;

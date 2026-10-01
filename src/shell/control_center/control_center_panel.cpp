@@ -233,7 +233,7 @@ void ControlCenterPanel::create() {
               .onClick = onClick,
               .configure = [this, scale](Button& button) {
                 if (button.label() != nullptr) {
-                  button.label()->setFontWeight(FontWeight::Bold);
+                  button.label()->setFontWeight(FontWeight::Normal);
                   button.label()->setFontSize(Style::fontSizeBody * scale);
                 }
                 wireSidebarScroll(button.inputArea());

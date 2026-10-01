@@ -1,5 +1,6 @@
 #include "shell/settings/settings_window.h"
 
+#include "compositors/hyprland/hyprland_displays.h"
 #include "config/config_service.h"
 #include "config/config_types.h"
 #include "core/deferred_call.h"
@@ -11,6 +12,7 @@
 #include "core/ui_phase.h"
 #include "i18n/i18n.h"
 #include "idle/idle_manager.h"
+#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
 #include "render/core/async_texture_cache.h"
 #include "render/render_context.h"
 #include "render/text/font_weight_catalog.h"
@@ -386,7 +388,12 @@ std::optional<LayerPopupParentContext> SettingsWindow::popupParentContextForSurf
 void SettingsWindow::open(std::string context) {
   TooltipManager::instance().forceDestroy();
 
-  if (!context.empty()) {
+  const bool navigate = !context.empty();
+  if (navigate) {
+    clearTransientSettingsState();
+    m_selectedGroup.clear();
+    m_searchQuery.clear();
+    m_contentScrollState.offset = 0.0F;
     m_selectedSection = std::move(context);
   }
 
@@ -399,6 +406,8 @@ void SettingsWindow::open(std::string context) {
   }
 
   if (isOpen()) {
+    if (navigate)
+      requestSceneRebuild();
     const auto refocus = [this]() {
       if (m_wayland != nullptr && m_surface != nullptr) {
         focusExistingSettingsWindow(*m_wayland, m_surface->wlSurface());
@@ -494,6 +503,7 @@ void SettingsWindow::openToBarWidget(std::string barName, std::string widgetName
   m_searchQuery.clear();
   m_pluginSearchQuery.clear();
   m_selectedSection = "bar";
+  m_selectedGroup = "widget-list";
   m_selectedBarName = std::move(barName);
   m_selectedMonitorOverride.clear();
   m_pendingOpenWidgetInspectorName = std::move(widgetName);
@@ -518,6 +528,7 @@ bool SettingsWindow::openToPlugin(std::string pluginId) {
   m_searchQuery.clear();
   m_pluginSearchQuery.clear();
   m_selectedSection = "plugins";
+  m_selectedGroup.clear();
   m_pendingOpenPluginSettingsId = std::move(pluginId);
   m_contentScrollState.offset = 0.0F;
   m_sidebarScrollState.offset = 0.0F;
@@ -530,7 +541,27 @@ bool SettingsWindow::openToPlugin(std::string pluginId) {
   return true;
 }
 
+bool SettingsWindow::setShortcutRecording(bool recording) {
+  if (m_shortcutInhibitor) {
+    zwp_keyboard_shortcuts_inhibitor_v1_destroy(m_shortcutInhibitor);
+    m_shortcutInhibitor = nullptr;
+  }
+  if (!recording)
+    return true;
+  if (!m_wayland || !m_wayland->shortcutsInhibitManager() || !wlSurface() || !m_wayland->seat())
+    return false;
+  m_shortcutInhibitor = zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(
+      m_wayland->shortcutsInhibitManager(), wlSurface(), m_wayland->seat()
+  );
+  static const zwp_keyboard_shortcuts_inhibitor_v1_listener listener{
+      [](void*, zwp_keyboard_shortcuts_inhibitor_v1*) {}, [](void*, zwp_keyboard_shortcuts_inhibitor_v1*) {}
+  };
+  zwp_keyboard_shortcuts_inhibitor_v1_add_listener(m_shortcutInhibitor, &listener, nullptr);
+  return true;
+}
+
 void SettingsWindow::close() {
+  setShortcutRecording(false);
   if (!isOpen()) {
     return;
   }
@@ -559,6 +590,15 @@ void SettingsWindow::dismissOpenSelectDropdown() {
 }
 
 void SettingsWindow::destroyWindow() {
+  setShortcutRecording(false);
+  if (m_displays) {
+    m_displays->changed = {};
+    m_displays->revert();
+  }
+  m_displayEditor.reset();
+  m_backupEditor.reset();
+  m_defaultAppsEditor.reset();
+  m_displayIdentifier.reset();
   m_modalHost.closeAll();
   m_configExportDialogModal.reset();
   m_editorSheetModal.reset();
@@ -627,6 +667,7 @@ void SettingsWindow::destroyWindow() {
   m_pluginSearchQuery.clear();
   m_pluginSearchDebounceTimer.stop();
   m_selectedSection.clear();
+  m_selectedGroup.clear();
   m_selectedBarName.clear();
   m_selectedMonitorOverride.clear();
   m_pendingOpenWidgetInspectorName.clear();
@@ -1007,10 +1048,12 @@ bool SettingsWindow::onPointerEvent(const PointerEvent& event) {
         consumed = true;
         break;
       }
+      m_pointerFocusChange = true;
       m_inputDispatcher.pointerButton(
           static_cast<float>(event.sx), static_cast<float>(event.sy), event.button, pressed, event.serial, event.time,
           event.touch
       );
+      m_pointerFocusChange = false;
       consumed = m_pointerInside;
     }
     break;
@@ -1108,6 +1151,24 @@ void SettingsWindow::onKeyboardEvent(const KeyboardEvent& event) {
       return;
     }
   }
+  if (m_shortcutInhibitor) {
+    if (auto* area = m_inputDispatcher.focusedArea())
+      area->dispatchKey(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
+    requestSceneInvalidation(m_sceneRoot.get(), m_surface.get());
+    return;
+  }
+  if (event.pressed
+      && !event.preedit
+      && (event.modifiers & KeyMod::Alt) != 0
+      && event.sym == XKB_KEY_Left
+      && m_searchQuery.empty()
+      && !m_selectedGroup.empty()) {
+    clearTransientSettingsState();
+    m_selectedGroup.clear();
+    m_contentScrollState.offset = 0.0F;
+    requestSceneRebuild();
+    return;
+  }
   if (event.pressed
       && !event.preedit
       && (event.modifiers & KeyMod::Ctrl) != 0
@@ -1169,7 +1230,13 @@ void SettingsWindow::onKeyboardEvent(const KeyboardEvent& event) {
   }
 }
 
-void SettingsWindow::onThemeChanged() { requestRedraw(); }
+void SettingsWindow::onThemeChanged() {
+  const bool modeChanged = m_hyprlandProfileLightMode != isResolvedLightTheme();
+  m_hyprlandProfileLightMode = isResolvedLightTheme();
+  if (modeChanged && m_config && m_config->config().shell.hyprlandProfileSwitching.enabled)
+    requestContentRebuild(/*refreshRegistry=*/true, /*refreshFilterRow=*/true);
+  requestRedraw();
+}
 
 void SettingsWindow::requestRedraw() {
   if (isOpen()) {

@@ -37,7 +37,14 @@ namespace settings {
     Osd,
     Screenshot,
     Shell,
+    Session,
     Keybinds,
+    InputMotion,
+    Displays,
+    WindowBehaviour,
+    Workspaces,
+    WorkspaceTiling,
+    AppPlacement,
     Security,
     System,
     Services,
@@ -300,6 +307,7 @@ namespace settings {
 
   // Runtime conditions that gate optional sections (e.g. compositor-specific features).
   struct RegistryEnvironment {
+    bool hyprlandAppearanceSupported = false;
     bool niriBackdropSupported = false;             // hide niri backdrop entries when false
     bool niriOverviewTypeToLaunchSupported = false; // show niri-only type-to-launch integration
     bool umbrielOverviewTypeToLaunchSupported = false;

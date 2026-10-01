@@ -76,7 +76,7 @@ namespace island {
       );
     }
     void applyPalette() {
-      m_track->setColor(resolveColorSpec(colorSpecFromRole(ColorRole::SurfaceVariant)));
+      m_track->setColor(resolveColorSpec(colorSpecFromRole(ColorRole::OnSurface, 0.16F)));
       m_fill->setColor(resolveColorSpec(colorSpecFromRole(m_role)));
     }
     CountdownRingNode* m_track = nullptr;

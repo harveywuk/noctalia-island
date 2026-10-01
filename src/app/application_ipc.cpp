@@ -62,6 +62,8 @@
 #include "scripting/plugin_panel_shell.h"
 #include "scripting/plugin_registry.h"
 #include "scripting/plugin_runtime_context.h"
+#include "shell/bar/widgets/workspace_preferences.h"
+#include "shell/bar/widgets/workspaces_widget_definition.h"
 #include "shell/clipboard/clipboard_panel.h"
 #include "shell/clipboard/clipboard_paste.h"
 #include "shell/control_center/control_center_panel.h"
@@ -446,26 +448,23 @@ void Application::initIpc() {
       return "error: no workspaces on the target monitor\n";
     }
 
+    bool wrap = false;
+    if (const auto& context = m_ipcService.invocationContext(); context && context->widgetType == "workspaces") {
+      const auto& widgets = m_configService.config().widgets;
+      const auto it = widgets.find(context->widgetName);
+      wrap = workspacesWidgetDefinition()
+                 .resolve(it == widgets.end() ? nullptr : &it->second, "workspace-switch")
+                 .scrollWrap;
+    }
     const bool forward = parts[0] == "next";
     const auto active = std::ranges::find(workspaces, true, &Workspace::active);
-    std::size_t target = 0;
-    if (active == workspaces.end()) {
-      target = forward ? 0 : workspaces.size() - 1;
-    } else {
-      const auto current = static_cast<std::size_t>(std::ranges::distance(workspaces.begin(), active));
-      if (forward) {
-        if (current + 1 >= workspaces.size()) {
-          return "ok\n";
-        }
-        target = current + 1;
-      } else {
-        if (current == 0) {
-          return "ok\n";
-        }
-        target = current - 1;
-      }
-    }
-    m_compositorPlatform.activateWorkspace(output, workspaces[target]);
+    const auto target = workspace_preferences::step(
+        workspaces.size(),
+        active == workspaces.end() ? std::nullopt : std::optional<std::size_t>(active - workspaces.begin()), forward,
+        wrap
+    );
+    if (target)
+      m_compositorPlatform.activateWorkspace(output, workspaces[*target]);
     return "ok\n";
   });
 
@@ -753,7 +752,8 @@ void Application::initIpc() {
   );
   m_bar.registerIpc(m_ipcService);
   m_ipcService.bind(noctalia::cli::msg::islandFocus, [this](const std::string&) -> std::string {
-    if (m_lockScreen.isActive()) return "error: session is locked\n";
+    if (m_lockScreen.isActive())
+      return "error: session is locked\n";
     return m_island.focusKeyboard() ? "ok\n" : "error: island is unavailable\n";
   });
   m_desktopWidgetsController.registerIpc(m_ipcService);

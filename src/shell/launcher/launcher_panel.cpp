@@ -416,7 +416,7 @@ namespace {
       if (m_selected) {
         m_row->setFill(colorSpecFromRole(ColorRole::Primary));
       } else if (m_hovered) {
-        m_row->setFill(colorSpecFromRole(ColorRole::Hover));
+        m_row->setFill(colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha));
       } else {
         m_row->setFill(m_style.listItemBackground.value_or(clearColorSpec()));
       }
@@ -426,7 +426,7 @@ namespace {
         m_row->clearBorder();
       }
 
-      const auto activeRole = m_selected ? ColorRole::OnPrimary : ColorRole::OnHover;
+      const auto activeRole = m_selected ? ColorRole::OnPrimary : ColorRole::OnSurface;
       const bool active = m_selected || m_hovered;
       const ColorSpec foreground = colorSpecFromRole(active ? activeRole : ColorRole::OnSurface);
       const ColorSpec mutedForeground =
@@ -640,7 +640,7 @@ namespace {
       if (m_selected) {
         m_col->setFill(colorSpecFromRole(ColorRole::Primary));
       } else if (m_hovered) {
-        m_col->setFill(colorSpecFromRole(ColorRole::Hover));
+        m_col->setFill(colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha));
       } else {
         m_col->setFill(m_style.listItemBackground.value_or(clearColorSpec()));
       }
@@ -650,7 +650,7 @@ namespace {
         m_col->clearBorder();
       }
 
-      const auto activeRole = m_selected ? ColorRole::OnPrimary : ColorRole::OnHover;
+      const auto activeRole = m_selected ? ColorRole::OnPrimary : ColorRole::OnSurface;
       const bool active = m_selected || m_hovered;
       const ColorSpec foreground = colorSpecFromRole(active ? activeRole : ColorRole::OnSurface);
       m_glyph->setColor(foreground);
@@ -1067,8 +1067,8 @@ void LauncherPanel::create() {
       ui::input({
           .out = &m_input,
           .placeholder = m_scopedPlaceholder.empty() ? i18n::tr("launcher.search-placeholder") : m_scopedPlaceholder,
-          .fontSize = Style::fontSizeBody * scale,
-          .controlHeight = Style::controlHeight * scale,
+          .fontSize = Style::fontSizeHeader * scale,
+          .controlHeight = (Style::controlHeightLg + Style::spaceSm) * scale,
           .horizontalPadding = Style::spaceMd * scale,
           .clearButtonEnabled = true,
           .lineEditing = true,

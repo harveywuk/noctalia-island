@@ -274,7 +274,7 @@ void Flex::setSoftness(float softness) {
 void Flex::setCardStyle(float scale, float fillOpacity, bool showBorder) {
   setFill(colorSpecFromRole(ColorRole::SurfaceVariant, fillOpacity));
   if (showBorder) {
-    setBorder(colorSpecFromRole(ColorRole::Outline), Style::borderWidth);
+    setBorder(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), Style::borderWidth);
   } else {
     clearBorder();
   }

@@ -33,6 +33,7 @@ struct wp_cursor_shape_manager_v1;
 struct ext_idle_notifier_v1;
 struct ext_idle_notification_v1;
 struct zwp_idle_inhibit_manager_v1;
+struct zwp_keyboard_shortcuts_inhibit_manager_v1;
 struct ext_background_effect_manager_v1;
 struct xdg_activation_v1;
 struct ext_session_lock_manager_v1;
@@ -212,6 +213,9 @@ public:
   /// Inhibitor-aware idle notification (`get_idle_notification`); honors `zwp_idle_inhibitor_v1`.
   [[nodiscard]] ext_idle_notification_v1* createIdleNotification(std::uint32_t timeoutMs) const;
   [[nodiscard]] zwp_idle_inhibit_manager_v1* idleInhibitManager() const noexcept;
+  [[nodiscard]] zwp_keyboard_shortcuts_inhibit_manager_v1* shortcutsInhibitManager() const noexcept {
+    return m_shortcutsInhibitManager;
+  }
   [[nodiscard]] const std::vector<WaylandOutput>& outputs() const noexcept;
   [[nodiscard]] WaylandOutput* findOutputByWl(wl_output* wlOutput);
   [[nodiscard]] const WaylandOutput* findOutputByWl(wl_output* wlOutput) const;
@@ -317,6 +321,7 @@ private:
   ext_session_lock_manager_v1* m_sessionLockManager = nullptr;
   ext_idle_notifier_v1* m_idleNotifier = nullptr;
   zwp_idle_inhibit_manager_v1* m_idleInhibitManager = nullptr;
+  zwp_keyboard_shortcuts_inhibit_manager_v1* m_shortcutsInhibitManager = nullptr;
   ext_background_effect_manager_v1* m_backgroundEffectManager = nullptr;
   wp_fractional_scale_manager_v1* m_fractionalScaleManager = nullptr;
   hyprland_focus_grab_manager_v1* m_hyprlandFocusGrabManager = nullptr;

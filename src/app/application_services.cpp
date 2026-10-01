@@ -86,6 +86,7 @@
 #include "system/easyeffects_service.h"
 #include "system/keyboard_backlight_service.h"
 #include "system/system_monitor_service.h"
+#include "system/terminal_launch.h"
 #include "ui/app_icon_colorization.h"
 #include "ui/controls/input.h"
 #include "ui/dialogs/color_picker_dialog.h"
@@ -588,6 +589,11 @@ void Application::initStyleThemeAndWayland() {
   applyMotionConfig();
   applyStyleConfig();
   applyPasswordMaskStyle();
+  const auto applyTerminalPreference = [this] {
+    terminal_launch::setPreferredDesktopId(m_configService.config().shell.preferredTerminal);
+  };
+  applyTerminalPreference();
+  m_configService.addReloadCallback(applyTerminalPreference, "preferred-terminal");
   m_httpClient.setOfflineMode(m_configService.config().shell.offlineMode);
   m_scriptApi.setConfigSnapshot(
       std::make_shared<const toml::table>(config_export::serialize(m_configService.config()))
@@ -745,6 +751,17 @@ void Application::initStyleThemeAndWayland() {
     const bool colorsChanged = !lastGeneratedPalette.has_value() || *lastGeneratedPalette != generated;
     lastGeneratedPalette = generated;
     m_templateApplyService.apply(generated, mode, /*force=*/false, /*paletteChanged=*/colorsChanged);
+    if (m_hyprlandAppearance) {
+      m_hyprlandAppearance->sync(
+          compositors::hyprland::resolveAppearanceProfile(m_configService.config().shell, m_themeService.isLightMode())
+              .appearance,
+          palette.primary, palette.surface, m_configService.config().shell.hyprlandAppRules,
+          m_configService.config().shell.hyprlandInput, m_configService.config().shell.hyprlandWindowBehaviour,
+          m_configService.config().shell.hyprlandTiling, m_configService.config().shell.hyprlandPlacementRules,
+          m_configService.config().shell.hyprlandWorkspaces, m_configService.config().shell.hyprlandKeybinds
+      );
+      m_settingsWindow.onThemeChanged();
+    }
     if (previousMode.has_value() && *previousMode != resolvedMode) {
       m_hookManager.fire(
           HookKind::ThemeModeChanged,
@@ -781,6 +798,28 @@ void Application::initStyleThemeAndWayland() {
     throw std::runtime_error("failed to connect to Wayland display");
   }
   m_compositorPlatform.initialize();
+  if (compositors::isHyprland()) {
+    m_hyprlandAppearance =
+        std::make_unique<compositors::hyprland::HyprlandAppearance>(m_compositorPlatform.hyprlandRuntime());
+    auto syncAppearance = [this]() {
+      m_hyprlandAppearance->sync(
+          compositors::hyprland::resolveAppearanceProfile(m_configService.config().shell, m_themeService.isLightMode())
+              .appearance,
+          palette.primary, palette.surface, m_configService.config().shell.hyprlandAppRules,
+          m_configService.config().shell.hyprlandInput, m_configService.config().shell.hyprlandWindowBehaviour,
+          m_configService.config().shell.hyprlandTiling, m_configService.config().shell.hyprlandPlacementRules,
+          m_configService.config().shell.hyprlandWorkspaces, m_configService.config().shell.hyprlandKeybinds
+      );
+    };
+    syncAppearance();
+    m_configService.addReloadCallback(syncAppearance, "hyprland-appearance");
+    m_hyprlandDisplays =
+        std::make_unique<compositors::hyprland::HyprlandDisplays>(m_compositorPlatform.hyprlandRuntime());
+    m_settingsWindow.setHyprlandDisplays(m_hyprlandDisplays.get());
+    const auto syncDisplays = [this] { m_hyprlandDisplays->sync(m_configService.config().shell.hyprlandDisplays); };
+    syncDisplays();
+    m_configService.addReloadCallback(syncDisplays, "hyprland-displays");
+  }
   m_screenTimeService.initialize(&m_wayland);
   syncScreenTimeService();
   m_screenTimeService.setChangeCallback([this]() {
@@ -878,6 +917,7 @@ void Application::initWaylandCallbacks() {
       (void)m_compositorPlatform.clearActiveWorkspaceAlerts();
     }
     m_bar.onWorkspaceChanged();
+    m_island.onWorkspaceChanged();
     m_dock.onWorkspaceChanged();
     m_bar.refresh();
     m_windowSwitcher.onToplevelChange();
@@ -897,6 +937,7 @@ void Application::initWaylandCallbacks() {
     m_dock.scheduleSmartAutoHideReevaluation();
     m_bar.refresh();
     m_dock.refresh();
+    m_island.refresh();
     m_windowSwitcher.onToplevelChange();
   });
   if constexpr (kLockKeysEnabled) {

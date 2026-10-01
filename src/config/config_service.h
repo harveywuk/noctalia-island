@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/config_backup.h"
 #include "config/config_migrations.h"
 #include "config/config_types.h"
 #include "config/schema/diagnostics.h"
@@ -59,6 +60,12 @@ public:
   [[nodiscard]] std::string buildSupportReport() const;
   [[nodiscard]] std::string buildMergedUserConfig() const;
   [[nodiscard]] std::string buildEffectiveConfig() const;
+  [[nodiscard]] std::vector<config_backup::Info> listBackups(std::string& error) const;
+  [[nodiscard]] std::optional<config_backup::Info>
+  createBackup(std::string name, std::string& error, bool automatic = false);
+  [[nodiscard]] std::optional<config_backup::Plan>
+  previewBackup(const std::string& id, const std::vector<std::string>& sections, std::string& error);
+  bool restoreBackup(const config_backup::Plan&, std::string& undoId, std::string& error);
   [[nodiscard]] static std::string buildMergedUserConfigFromSources(
       std::string_view configDir, std::string_view settingsPath, std::string* error = nullptr
   );
@@ -181,6 +188,7 @@ public:
   static void deepMerge(toml::table& base, const toml::table& overlay);
 
 private:
+  [[nodiscard]] toml::table backupBase() const;
   void loadAll();
   [[nodiscard]] static Config makeDefaultConfig();
   static void

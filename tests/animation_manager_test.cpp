@@ -1,5 +1,6 @@
 #include "render/animation/animation_manager.h"
 #include "render/animation/motion_service.h"
+#include "ui/motion.h"
 
 #include <cmath>
 #include <iostream>
@@ -26,6 +27,29 @@ namespace {
 int main() {
   bool ok = true;
   resetMotion();
+
+  {
+    const float half = Motion::followFactor(8.0F, true, 1.0F);
+    const float full = Motion::followFactor(16.0F, true, 1.0F);
+    ok &= check(
+        nearlyEqual(full, 1.0F - (1.0F - half) * (1.0F - half)), "pointer tracking changes speed with refresh rate"
+    );
+    ok &= check(
+        nearlyEqual(full, Motion::followFactor(8.0F, true, 2.0F)), "pointer tracking ignores the shell animation speed"
+    );
+    ok &= check(
+        nearlyEqual(Motion::followFactor(8.0F, false, 0.5F), 1.0F),
+        "reduced-motion pointer tracking must settle immediately"
+    );
+    ok &= check(
+        nearlyEqual(Motion::launchLift(0), 0) && nearlyEqual(Motion::launchLift(1), 0),
+        "launch feedback must start and finish at rest"
+    );
+    for (int i = 0; i <= 100; ++i) {
+      const float lift = Motion::launchLift(static_cast<float>(i) / 100.0F);
+      ok &= check(lift >= 0 && lift <= 1, "launch feedback escaped its reserved space");
+    }
+  }
 
   {
     AnimationManager manager;

@@ -8,6 +8,7 @@
 #include "render/core/renderer.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
+#include "shell/bar/widgets/workspace_preferences.h"
 #include "system/app_identity.h"
 #include "system/desktop_entry.h"
 #include "system/icon_resolver.h"
@@ -105,7 +106,8 @@ bool WorkspacesWidget::shouldShowWorkspaceLabel(const Workspace& workspace, std:
 }
 
 bool WorkspacesWidget::isWorkspaceHidden(const Workspace& workspace) const noexcept {
-  return m_hideWhenEmpty && isEmptyWorkspace(workspace);
+  const auto* preference = workspace_preferences::find(m_configService.config().shell.hyprlandWorkspaces, workspace);
+  return m_hideWhenEmpty && isEmptyWorkspace(workspace) && !(preference && preference->persistent);
 }
 
 void WorkspacesWidget::create() {
@@ -1428,6 +1430,11 @@ std::string WorkspacesWidget::workspaceLabel(const Workspace& workspace, std::si
     label = !workspace.name.empty() ? workspace.name : workspace.id;
   }
 
+  if (const auto* preference =
+          workspace_preferences::find(m_configService.config().shell.hyprlandWorkspaces, workspace))
+    if (const auto custom = workspace_preferences::label(*preference); !custom.empty())
+      return custom;
+
   // Only truncate non-numeric labels (words like "VESKTOP" → "VE").
   // Numeric labels (workspace IDs like "10", "11") stay as-is.
   if (!isNumericLabel(label) && m_maxLabelChars > 0) {
@@ -1451,7 +1458,12 @@ void WorkspacesWidget::syncItemTooltip(Item& item, const Workspace& workspace) {
   }
 
   // retarget() runs on every workspace update; only touch the tooltip when its text changes.
-  std::string tooltip = workspaceTooltipText(workspace, item.label, item.showLabel);
+  auto named = workspace;
+  if (const auto* preference =
+          workspace_preferences::find(m_configService.config().shell.hyprlandWorkspaces, workspace))
+    if (!preference->label.empty())
+      named.name = preference->label;
+  std::string tooltip = workspaceTooltipText(named, item.label, item.showLabel);
   if (tooltip == item.tooltip) {
     return;
   }

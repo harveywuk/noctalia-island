@@ -929,6 +929,10 @@ BarConfig ConfigService::resolveForOutput(const BarConfig& base, const WaylandOu
 
     kLog.debug("monitor override \"{}\" matched output {} ({})", ovr.match, output.connectorName, output.description);
 
+    if (ovr.presentation)
+      resolved.presentation = *ovr.presentation;
+    resolved.island = applyIslandOverride(resolved.island, ovr.island);
+
     if (ovr.position)
       resolved.position = *ovr.position;
     if (ovr.enabled)

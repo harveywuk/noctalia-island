@@ -63,7 +63,7 @@ namespace {
   }
 } // namespace
 
-std::optional<KeyChord> parseKeyChordSpec(std::string_view rawSpec) {
+std::optional<KeyChord> parseKeyChordSpec(std::string_view rawSpec, bool allowSuper) {
   const std::string spec = StringUtils::trim(rawSpec);
   if (spec.empty()) {
     return std::nullopt;
@@ -99,7 +99,9 @@ std::optional<KeyChord> parseKeyChordSpec(std::string_view rawSpec) {
     } else if (mod == "alt" || mod == "option") {
       modifiers |= KeyMod::Alt;
     } else if (mod == "super" || mod == "meta" || mod == "logo" || mod == "win" || mod == "mod4") {
-      throw std::runtime_error("modifier \"super/windows\" is not allowed");
+      if (!allowSuper)
+        throw std::runtime_error("modifier \"super/windows\" is not allowed");
+      modifiers |= KeyMod::Super;
     } else {
       return std::nullopt;
     }
@@ -120,6 +122,8 @@ std::string keyChordToString(const KeyChord& chord) {
     return {};
   }
   std::string out;
+  if ((chord.modifiers & KeyMod::Super) != 0)
+    out += "Super+";
   if ((chord.modifiers & KeyMod::Ctrl) != 0) {
     out += "Ctrl+";
   }
@@ -187,6 +191,8 @@ std::string keyChordDisplayLabel(const KeyChord& chord) {
   if ((chord.modifiers & KeyMod::Shift) != 0) {
     appendPart("Shift");
   }
+  if ((chord.modifiers & KeyMod::Super) != 0)
+    appendPart("Super");
   appendPart(keyName);
   return out;
 }

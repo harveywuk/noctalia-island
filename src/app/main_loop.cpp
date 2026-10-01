@@ -4,6 +4,7 @@
 #include "app/poll_source.h"
 #include "core/deferred_call.h"
 #include "core/log.h"
+#include "core/poll_timeout.h"
 #include "shell/bar/bar.h"
 #include "wayland/surface.h"
 #include "wayland/wayland_connection.h"
@@ -445,9 +446,7 @@ void MainLoop::run() {
         it->second = std::min(it->second, requested);
       }
 
-      const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(it->second - nowBeforePoll).count();
-      const int remainingMs =
-          remaining < 0 ? 0 : static_cast<int>(std::min<std::int64_t>(remaining, std::numeric_limits<int>::max()));
+      const int remainingMs = pollTimeoutUntil(it->second, nowBeforePoll);
       if (pollTimeout < 0 || remainingMs < pollTimeout) {
         pollTimeout = remainingMs;
       }

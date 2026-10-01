@@ -1,5 +1,7 @@
 #include "time/time_service.h"
 
+#include "core/poll_timeout.h"
+
 #include <chrono>
 #include <utility>
 
@@ -15,8 +17,7 @@ int TimeService::pollTimeoutMs() const {
   using namespace std::chrono;
   const auto now = system_clock::now();
   const auto nextSecond = floor<seconds>(now) + seconds{1};
-  const auto remaining = duration_cast<milliseconds>(nextSecond - now).count();
-  return static_cast<int>(std::max<std::int64_t>(1, remaining));
+  return pollTimeoutUntil(time_point_cast<system_clock::duration>(nextSecond), now);
 }
 
 void TimeService::tick() {

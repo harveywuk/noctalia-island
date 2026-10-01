@@ -9,6 +9,7 @@
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
 #include "ui/builders.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/popup_surface.h"
@@ -474,7 +475,7 @@ void TooltipManager::dismissPopup() {
       m_animations.cancel(m_fadeAnimId);
     }
     m_fadeAnimId = m_animations.animate(
-        m_sceneRoot->opacity(), 0.0F, Style::animFast, Easing::EaseOutQuad,
+        m_sceneRoot->opacity(), 0.0F, Motion::feedbackMs, Motion::reveal,
         [this](float v) {
           if (m_sceneRoot != nullptr) {
             m_sceneRoot->setOpacity(v);
@@ -697,7 +698,9 @@ void TooltipManager::buildScene(const TooltipContent& content, float w, float h,
           .radius = Style::scaledRadiusMd(),
           .width = w,
           .height = h,
-          .configure = [](Box& box) { box.setBorder(colorSpecFromRole(ColorRole::Outline), kBorder); },
+          .configure = [](Box& box) {
+            box.setBorder(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), kBorder);
+          },
       })
   );
 
@@ -806,7 +809,7 @@ void TooltipManager::prepareFrame(bool /*needsUpdate*/, bool /*needsLayout*/) {
       m_animations.cancel(m_fadeAnimId);
     }
     m_fadeAnimId = m_animations.animate(
-        0.0F, 1.0F, Style::animFast, Easing::EaseOutQuad,
+        0.0F, 1.0F, Motion::feedbackMs, Motion::reveal,
         [this](float v) {
           if (m_sceneRoot != nullptr) {
             m_sceneRoot->setOpacity(v);

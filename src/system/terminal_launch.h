@@ -7,6 +7,13 @@
 
 namespace terminal_launch {
 
+  struct TerminalApp {
+    std::string id, name;
+  };
+  std::vector<TerminalApp> availableTerminals();
+  void setPreferredDesktopId(std::string id);
+  [[nodiscard]] std::optional<std::vector<std::string>> prepareOpen();
+
   struct Options {
     std::vector<std::string> terminalCandidates;
     bool useSystemTerminalDiscovery = true;

@@ -102,7 +102,7 @@ void Box::applyPalette() {
 
 void Box::setFlatStyle() {
   m_fill = colorSpecFromRole(ColorRole::Surface);
-  m_border = colorSpecFromRole(ColorRole::Outline);
+  m_border = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha);
   m_borderWidth = 0.0F;
   m_resolveFill = true;
   m_resolveBorder = true;
@@ -120,7 +120,7 @@ void Box::setFlatStyle() {
 void Box::setPanelStyle(bool showBorder) {
   m_fill = colorSpecFromRole(ColorRole::Surface);
   if (showBorder) {
-    m_border = colorSpecFromRole(ColorRole::Outline);
+    m_border = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha);
     m_borderWidth = Style::borderWidth;
   } else {
     m_border = clearColorSpec();
@@ -144,7 +144,7 @@ void Box::setDialogStyle() { setPanelStyle(true); }
 void Box::setCardStyle(float scale, float fillOpacity, bool showBorder) {
   setFill(colorSpecFromRole(ColorRole::SurfaceVariant, fillOpacity));
   if (showBorder) {
-    setBorder(colorSpecFromRole(ColorRole::Outline), Style::borderWidth);
+    setBorder(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), Style::borderWidth);
   } else {
     clearBorder();
   }

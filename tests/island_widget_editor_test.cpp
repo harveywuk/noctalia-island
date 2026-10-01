@@ -26,6 +26,29 @@ int main() {
   assert(!hoverWidgetGroup({"bar", "hover_widgets"}));
   assert(!hoverWidgetGroup({"island", "hover_widgets", "extra"}));
   assert(hoverWidgetGroup({"island", "hover_widgets_right"}) == 2);
+  assert(hoverWidgetGroup({"bar", "top", "island", "hover_widgets"}) == 0);
+  assert(hoverWidgetGroup({"bar", "top", "monitor", "DP-1", "island", "hover_widgets_center"}) == 1);
+  assert(!hoverWidgetGroup({"bar", "top", "monitor", "DP-1", "hover_widgets"}));
+  Config scoped;
+  BarConfig bar;
+  bar.name = "top";
+  bar.island.hoverWidgets = {"volume"};
+  bar.island.hoverWidgetsCenter = {"clock"};
+  BarMonitorOverride monitor;
+  monitor.match = "DP-1";
+  monitor.island.hoverWidgets = std::vector<std::string>{};
+  monitor.island.hoverShowClock = false;
+  bar.monitorOverrides.push_back(monitor);
+  scoped.bars = {bar};
+  const std::vector<std::string> monitorRoot{"bar", "top", "monitor", "DP-1", "island"};
+  const auto effective = islandConfigForPath(scoped, monitorRoot);
+  assert(effective.hoverWidgets.empty() && effective.hoverWidgetsCenter == bar.island.hoverWidgetsCenter);
+  assert(!effective.hoverShowClock && effective.hoverShowCalendar);
+  assert(islandConfigForPath(scoped, {"bar", "top", "island"}).hoverWidgets == bar.island.hoverWidgets);
+  for (const auto& [path, value] : hoverLayoutOverrides(hoverLayoutPreset(1), monitorRoot)) {
+    assert(std::equal(monitorRoot.begin(), monitorRoot.end(), path.begin()));
+    assert(path.size() == 6 && noctalia::config::schema::isKnownConfigPath(path));
+  }
   // Presets only write hover layout choices and reference real built-in widgets.
   for (std::size_t preset = 0; preset < 3; ++preset) {
     auto layout = hoverLayoutPreset(preset);

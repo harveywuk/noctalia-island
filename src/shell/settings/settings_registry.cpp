@@ -1,5 +1,4 @@
 #include "shell/settings/settings_registry.h"
-#include "shell/settings/widget_settings_registry.h"
 
 #include "config/config_types.h"
 #include "config/schema/config_schema.h"
@@ -16,6 +15,9 @@
 #include "shell/control_center/shortcut_registry.h"
 #include "shell/settings/color_spec_picker.h"
 #include "shell/settings/font_weight_catalog.h"
+#include "shell/settings/hyprland_editor.h"
+#include "shell/settings/island_widget_editor.h"
+#include "shell/settings/widget_settings_registry.h"
 #include "shell/wallpaper/wallpaper_paths.h"
 #include "system/sysmon_threshold_profile.h"
 #include "theme/builtin_palettes.h"
@@ -87,7 +89,7 @@ namespace settings {
       return defaultKeybindSet(action);
     }
 
-    constexpr std::array<SettingsSectionDescriptor, 25> kSettingsSections{{
+    constexpr std::array<SettingsSectionDescriptor, 32> kSettingsSections{{
         {SettingsSection::Appearance, "appearance", "adjustments-horizontal"},
         {SettingsSection::Wallpaper, "wallpaper", "paint"},
         {SettingsSection::Templates, "templates", "color-swatch"},
@@ -101,7 +103,14 @@ namespace settings {
         {SettingsSection::Osd, "osd", "message-circle"},
         {SettingsSection::Screenshot, "screenshot", "screenshot"},
         {SettingsSection::Shell, "shell", "app-window"},
+        {SettingsSection::Session, "session", "login"},
         {SettingsSection::Keybinds, "keybinds", "keyboard"},
+        {SettingsSection::InputMotion, "input-motion", "mouse"},
+        {SettingsSection::Displays, "displays", "device-desktop"},
+        {SettingsSection::WindowBehaviour, "window-behaviour", "app-window"},
+        {SettingsSection::Workspaces, "workspaces", "layout-grid"},
+        {SettingsSection::WorkspaceTiling, "workspace-tiling", "layout-board"},
+        {SettingsSection::AppPlacement, "app-placement", "app-window"},
         {SettingsSection::Security, "security", "shield-lock"},
         {SettingsSection::System, "system", "activity-heartbeat"},
         {SettingsSection::Services, "services", "stack-2"},
@@ -469,6 +478,260 @@ namespace settings {
     std::vector<SettingEntry> entries;
 
     // Appearance
+    // Hyprland window appearance is distinct from the shell styling below.
+    if (env.hyprlandAppearanceSupported) {
+      const auto& appearance = cfg.shell.hyprlandAppearance;
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows", tr("settings.schema.hyprland-appearance.enabled.label"),
+            tr("settings.schema.hyprland-appearance.enabled.description"), {"shell", "hyprland_appearance", "enabled"},
+            ToggleSetting{appearance.enabled}, "hyprland windows appearance compositor"
+        );
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.follow_theme.label"),
+            tr("settings.schema.hyprland-appearance.follow_theme.description"),
+            {"shell", "hyprland_appearance", "follow_theme"}, ToggleSetting{appearance.followTheme},
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows", tr("settings.schema.hyprland-appearance.gaps_in.label"),
+            tr("settings.schema.hyprland-appearance.gaps_in.description"), {"shell", "hyprland_appearance", "gaps_in"},
+            sliderFor(appearance.gapsIn, noctalia::config::schema::kHyprlandGapsRange, true),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows", tr("settings.schema.hyprland-appearance.gaps_out.label"),
+            tr("settings.schema.hyprland-appearance.gaps_out.description"),
+            {"shell", "hyprland_appearance", "gaps_out"},
+            sliderFor(appearance.gapsOut, noctalia::config::schema::kHyprlandGapsRange, true),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.border_size.label"),
+            tr("settings.schema.hyprland-appearance.border_size.description"),
+            {"shell", "hyprland_appearance", "border_size"},
+            sliderFor(appearance.borderSize, noctalia::config::schema::kHyprlandBorderRange, true),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows", tr("settings.schema.hyprland-appearance.rounding.label"),
+            tr("settings.schema.hyprland-appearance.rounding.description"),
+            {"shell", "hyprland_appearance", "rounding"},
+            sliderFor(appearance.rounding, noctalia::config::schema::kHyprlandRoundingRange, true),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.active_opacity.label"),
+            tr("settings.schema.hyprland-appearance.active_opacity.description"),
+            {"shell", "hyprland_appearance", "active_opacity"},
+            sliderFor(appearance.activeOpacity, noctalia::config::schema::kHyprlandOpacityRange, false),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.inactive_opacity.label"),
+            tr("settings.schema.hyprland-appearance.inactive_opacity.description"),
+            {"shell", "hyprland_appearance", "inactive_opacity"},
+            sliderFor(appearance.inactiveOpacity, noctalia::config::schema::kHyprlandOpacityRange, false),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.blur_enabled.label"),
+            tr("settings.schema.hyprland-appearance.blur_enabled.description"),
+            {"shell", "hyprland_appearance", "blur_enabled"}, ToggleSetting{appearance.blurEnabled},
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows", tr("settings.schema.hyprland-appearance.blur_size.label"),
+            tr("settings.schema.hyprland-appearance.blur_size.description"),
+            {"shell", "hyprland_appearance", "blur_size"},
+            sliderFor(appearance.blurSize, noctalia::config::schema::kHyprlandBlurSizeRange, true),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled && c.shell.hyprlandAppearance.blurEnabled;
+        };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.blur_passes.label"),
+            tr("settings.schema.hyprland-appearance.blur_passes.description"),
+            {"shell", "hyprland_appearance", "blur_passes"},
+            sliderFor(appearance.blurPasses, noctalia::config::schema::kHyprlandBlurPassesRange, true),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled && c.shell.hyprlandAppearance.blurEnabled;
+        };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.shadow_enabled.label"),
+            tr("settings.schema.hyprland-appearance.shadow_enabled.description"),
+            {"shell", "hyprland_appearance", "shadow_enabled"}, ToggleSetting{appearance.shadowEnabled},
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-windows",
+            tr("settings.schema.hyprland-appearance.shadow_range.label"),
+            tr("settings.schema.hyprland-appearance.shadow_range.description"),
+            {"shell", "hyprland_appearance", "shadow_range"},
+            sliderFor(appearance.shadowRange, noctalia::config::schema::kHyprlandShadowRange, true),
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled && c.shell.hyprlandAppearance.shadowEnabled;
+        };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-animations",
+            tr("settings.schema.hyprland-appearance.animations_enabled.label"),
+            tr("settings.schema.hyprland-appearance.animations_enabled.description"),
+            {"shell", "hyprland_appearance", "animations_enabled"}, ToggleSetting{appearance.animationsEnabled},
+            "hyprland windows appearance compositor"
+        );
+        entry.visibleWhen = [](const Config& c) { return c.shell.hyprlandAppearance.enabled; };
+        entries.push_back(std::move(entry));
+      }
+    }
+    if (env.hyprlandAppearanceSupported) {
+      const auto& appearance = cfg.shell.hyprlandAppearance;
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-animations",
+            tr("settings.schema.hyprland-appearance.custom_animations.label"),
+            tr("settings.schema.hyprland-appearance.custom_animations.description"),
+            {"shell", "hyprland_appearance", "custom_animations"}, ToggleSetting{appearance.customAnimations},
+            "hyprland animation motion speed easing windows workspaces transitions"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled && c.shell.hyprlandAppearance.animationsEnabled;
+        };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto control =
+            sliderFor(appearance.animationSpeed, noctalia::config::schema::kHyprlandAnimationSpeedRange, false);
+        control.valueSuffix = "×";
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-animations",
+            tr("settings.schema.hyprland-appearance.animation_speed.label"),
+            tr("settings.schema.hyprland-appearance.animation_speed.description"),
+            {"shell", "hyprland_appearance", "animation_speed"}, std::move(control),
+            "hyprland animation motion speed easing windows workspaces transitions"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled
+              && c.shell.hyprlandAppearance.animationsEnabled
+              && c.shell.hyprlandAppearance.customAnimations;
+        };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-animations",
+            tr("settings.schema.hyprland-appearance.animation_easing.label"),
+            tr("settings.schema.hyprland-appearance.animation_easing.description"),
+            {"shell", "hyprland_appearance", "animation_easing"},
+            enumSelect(kHyprlandAnimationEasings, appearance.animationEasing),
+            "hyprland animation motion speed easing windows workspaces transitions"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled
+              && c.shell.hyprlandAppearance.animationsEnabled
+              && c.shell.hyprlandAppearance.customAnimations;
+        };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-animations",
+            tr("settings.schema.hyprland-appearance.window_animation.label"),
+            tr("settings.schema.hyprland-appearance.window_animation.description"),
+            {"shell", "hyprland_appearance", "window_animation"},
+            enumSelect(kHyprlandWindowAnimations, appearance.windowAnimation),
+            "hyprland animation motion speed easing windows workspaces transitions"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled
+              && c.shell.hyprlandAppearance.animationsEnabled
+              && c.shell.hyprlandAppearance.customAnimations;
+        };
+        entries.push_back(std::move(entry));
+      }
+      {
+        auto entry = makeEntry(
+            SettingsSection::Appearance, "hyprland-animations",
+            tr("settings.schema.hyprland-appearance.workspace_animation.label"),
+            tr("settings.schema.hyprland-appearance.workspace_animation.description"),
+            {"shell", "hyprland_appearance", "workspace_animation"},
+            enumSelect(kHyprlandWorkspaceAnimations, appearance.workspaceAnimation),
+            "hyprland animation motion speed easing windows workspaces transitions"
+        );
+        entry.visibleWhen = [](const Config& c) {
+          return c.shell.hyprlandAppearance.enabled
+              && c.shell.hyprlandAppearance.animationsEnabled
+              && c.shell.hyprlandAppearance.customAnimations;
+        };
+        entries.push_back(std::move(entry));
+      }
+    }
+    if (env.hyprlandAppearanceSupported) {
+      addHyprlandEditorEntries(entries, cfg);
+      entries.push_back(makeEntry(
+          SettingsSection::Displays, "display", tr("settings.displays.title"), tr("settings.displays.description"), {},
+          ButtonSetting{}, "display monitor resolution refresh rate vrr color management hdr transform rotation"
+      ));
+    }
     entries.push_back(makeEntry(
         SettingsSection::Appearance, "theme", tr("settings.schema.appearance.theme-mode.label"),
         tr("settings.schema.appearance.theme-mode.description"), {"theme", "mode"},
@@ -895,47 +1158,91 @@ namespace settings {
       entries.push_back(std::move(e));
     }
 
-    // Dynamic island
-    const auto islandSetting = [&](std::string group, std::string key, SettingControl control) {
-      const std::string prefix = "settings.schema.island." + key;
-      entries.push_back(makeEntry(
-          SettingsSection::Island, std::move(group), tr(prefix + ".label"), tr(prefix + ".description"),
-          {"island", key}, std::move(control), "dynamic island capsule hover"
-      ));
+    const auto appendIslandSettings = [&](const IslandConfig& island, const std::vector<std::string>& root,
+                                          SettingsSection section, bool legacy) {
+      const auto islandSetting = [&](std::string group, std::string key, SettingControl control) {
+        const std::string prefix = "settings.schema.island." + key;
+        entries.push_back(makeEntry(
+            section, std::move(group), tr(prefix + ".label"), tr(prefix + ".description"), islandPath(root, key),
+            std::move(control), "dynamic island capsule hover"
+        ));
+      };
+      if (legacy)
+        islandSetting("general", "enabled", ToggleSetting{island.enabled});
+      if (legacy)
+        islandSetting("general", "reserve_space", ToggleSetting{island.reserveSpace});
+      islandSetting("layout", "outer_progress_ring", ToggleSetting{island.outerProgressRing});
+      islandSetting("layout", "height", SliderSetting{island.height, 44, 72, 1, true});
+      if (legacy)
+        islandSetting("layout", "scale", sliderFor(island.scale, noctalia::config::schema::kScaleRange, false));
+      auto priority = enumSelect(kIslandActivityPriority, island.activityPriority);
+      priority.preferredWidth = 280;
+      islandSetting("activities", "activity_priority", std::move(priority));
+      islandSetting("activities", "cycle_activities", ToggleSetting{island.cycleActivities});
+      islandSetting("activities", "activity_cycle_seconds", SliderSetting{island.activityCycleSeconds, 1, 30, 1, true});
+      islandSetting("hover-timing", "hover_open_delay_ms", SliderSetting{island.hoverOpenDelayMs, 0, 2000, 10, true});
+      islandSetting("hover-timing", "hover_close_delay_ms", SliderSetting{island.hoverCloseDelayMs, 0, 2000, 10, true});
+      islandSetting("clock", "clock_size", SliderSetting{island.clockSize, 16, 36, 1, true});
+      islandSetting("clock", "clock_seconds", ToggleSetting{island.clockSeconds});
+      islandSetting("clock", "clock_offset", SliderSetting{island.clockOffset, -12, 12, 1, true});
+      islandSetting("clock", "expanded_clock_offset", SliderSetting{island.expandedClockOffset, -12, 12, 1, true});
+      islandSetting("calendar", "calendar_labels", enumSelect(kIslandCalendarLabels, island.calendarLabels));
+      islandSetting("media", "media_artwork_size", SliderSetting{island.mediaArtworkSize, 40, 80, 1, true});
+      islandSetting("media", "track_preview_seconds", SliderSetting{island.trackPreviewSeconds, 0, 30, 1, true});
+      islandSetting("media", "paused_media_seconds", SliderSetting{island.pausedMediaSeconds, 0, 30, 1, true});
+      islandSetting(
+          "media", "bluetooth_preview_seconds", SliderSetting{island.bluetoothPreviewSeconds, 0, 30, 1, true}
+      );
+      islandSetting("media", "reveal_on_track_change", ToggleSetting{island.revealOnTrackChange});
+      const auto previewMonitor = [&](const std::string& selected) {
+        SelectSetting control;
+        control.options = {
+            {"all", tr("settings.schema.island.preview-monitors.all")},
+            {"focused", tr("settings.schema.island.preview-monitors.focused")}
+        };
+        for (const auto& output : env.availableOutputs)
+          if (output.value != "all" && output.value != "focused")
+            control.options.push_back(output);
+        if (!selected.empty()
+            && std::ranges::none_of(control.options, [&](const auto& option) { return option.value == selected; }))
+          control.options.push_back({selected, selected});
+        control.selectedValue = selected;
+        return control;
+      };
+      islandSetting("monitors", "track_preview_monitor", previewMonitor(island.trackPreviewMonitor));
+      islandSetting("monitors", "bluetooth_preview_monitor", previewMonitor(island.bluetoothPreviewMonitor));
+      islandSetting("osd", "volume_bar_height", SliderSetting{island.volumeBarHeight, 5, 24, 1, true});
+      islandSetting("osd", "volume_show_percentage", ToggleSetting{island.volumeShowPercentage});
+      const auto hoverWidgets = [&](std::string key, const std::vector<std::string>& items) {
+        ListSetting list{.items = items};
+        for (const auto& widget : widgetPickerEntries(cfg)) {
+          if (widget.kind == WidgetReferenceKind::BuiltIn
+              && widgetTypeRequiresNamedConfig(widget.value)
+              && !cfg.widgets.contains(widget.value))
+            continue;
+          list.suggestedOptions.push_back({widget.value, widget.label});
+        }
+        islandSetting("widgets", std::move(key), std::move(list));
+      };
+      hoverWidgets("hover_widgets", island.hoverWidgets);
+      hoverWidgets("hover_widgets_center", island.hoverWidgetsCenter);
+      hoverWidgets("hover_widgets_right", island.hoverWidgetsRight);
+      islandSetting("hover-sections", "hover_show_clock", ToggleSetting{island.hoverShowClock});
+      islandSetting("hover-sections", "hover_show_calendar", ToggleSetting{island.hoverShowCalendar});
+      islandSetting("hover-sections", "hover_show_media", ToggleSetting{island.hoverShowMedia});
+      islandSetting("hover-sections", "hover_show_downloads", ToggleSetting{island.hoverShowDownloads});
+      islandSetting("hover-sections", "hover_show_timers", ToggleSetting{island.hoverShowTimers});
+      islandSetting("hover-sections", "hover_show_batteries", ToggleSetting{island.hoverShowBatteries});
+      islandSetting("hover-sections", "hover_show_unread", ToggleSetting{island.hoverShowUnread});
     };
-    islandSetting("general", "enabled", ToggleSetting{cfg.island.enabled});
-    islandSetting("general", "reserve_space", ToggleSetting{cfg.island.reserveSpace});
-    islandSetting("layout", "outer_progress_ring", ToggleSetting{cfg.island.outerProgressRing});
-    islandSetting("layout", "height", SliderSetting{cfg.island.height, 44, 72, 1, true});
-    islandSetting("layout", "scale", sliderFor(cfg.island.scale, noctalia::config::schema::kScaleRange, false));
-    islandSetting("clock", "clock_size", SliderSetting{cfg.island.clockSize, 16, 36, 1, true});
-    islandSetting("clock", "clock_seconds", ToggleSetting{cfg.island.clockSeconds});
-    islandSetting("clock", "clock_offset", SliderSetting{cfg.island.clockOffset, -12, 12, 1, true});
-    islandSetting("clock", "expanded_clock_offset", SliderSetting{cfg.island.expandedClockOffset, -12, 12, 1, true});
-    islandSetting("calendar", "calendar_labels", enumSelect(kIslandCalendarLabels, cfg.island.calendarLabels));
-    islandSetting("media", "media_artwork_size", SliderSetting{cfg.island.mediaArtworkSize, 40, 80, 1, true});
-    islandSetting("osd", "volume_bar_height", SliderSetting{cfg.island.volumeBarHeight, 5, 24, 1, true});
-    islandSetting("osd", "volume_show_percentage", ToggleSetting{cfg.island.volumeShowPercentage});
-    const auto hoverWidgets = [&](std::string key, const std::vector<std::string>& items) {
-      ListSetting list{.items = items};
-      for (const auto& widget : widgetPickerEntries(cfg)) {
-        if (widget.kind == WidgetReferenceKind::BuiltIn && widgetTypeRequiresNamedConfig(widget.value)
-            && !cfg.widgets.contains(widget.value))
-          continue;
-        list.suggestedOptions.push_back({widget.value, widget.label});
-      }
-      islandSetting("widgets", std::move(key), std::move(list));
-    };
-    hoverWidgets("hover_widgets", cfg.island.hoverWidgets);
-    hoverWidgets("hover_widgets_center", cfg.island.hoverWidgetsCenter);
-    hoverWidgets("hover_widgets_right", cfg.island.hoverWidgetsRight);
-    islandSetting("hover-sections", "hover_show_clock", ToggleSetting{cfg.island.hoverShowClock});
-    islandSetting("hover-sections", "hover_show_calendar", ToggleSetting{cfg.island.hoverShowCalendar});
-    islandSetting("hover-sections", "hover_show_media", ToggleSetting{cfg.island.hoverShowMedia});
-    islandSetting("hover-sections", "hover_show_downloads", ToggleSetting{cfg.island.hoverShowDownloads});
-    islandSetting("hover-sections", "hover_show_timers", ToggleSetting{cfg.island.hoverShowTimers});
-    islandSetting("hover-sections", "hover_show_batteries", ToggleSetting{cfg.island.hoverShowBatteries});
-    islandSetting("hover-sections", "hover_show_unread", ToggleSetting{cfg.island.hoverShowUnread});
+    const bool managedIsland = std::ranges::any_of(cfg.bars, [](const auto& bar) {
+      return bar.presentation == BarPresentation::Island
+          || std::ranges::any_of(bar.monitorOverrides, [](const auto& monitor) {
+               return monitor.presentation == BarPresentation::Island;
+             });
+    });
+    if (!managedIsland)
+      appendIslandSettings(cfg.island, {"island"}, SettingsSection::Island, true);
 
     // Dock
     entries.push_back(makeEntry(
@@ -1128,6 +1435,31 @@ namespace settings {
         SettingsSection::Dock, "focus-styling", tr("settings.schema.dock.magnification.label"),
         tr("settings.schema.dock.magnification.description"), {"dock", "magnification"},
         ToggleSetting{cfg.dock.magnification}, "magnify zoom mac"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Dock, "focus-styling", tr("settings.schema.dock.animate-launch.label"),
+        tr("settings.schema.dock.animate-launch.description"), {"dock", "animate_launch"},
+        ToggleSetting{cfg.dock.animateLaunch}, "bounce launch motion mac"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Dock, "behavior", tr("settings.schema.dock.window-previews.label"),
+        tr("settings.schema.dock.window-previews.description"), {"dock", "window_previews"},
+        ToggleSetting{cfg.dock.windowPreviews}, "window thumbnail preview hover"
+    ));
+    {
+      auto e = makeEntry(
+          SettingsSection::Dock, "behavior", tr("settings.schema.dock.preview-delay.label"),
+          tr("settings.schema.dock.preview-delay.description"), {"dock", "preview_delay_ms"},
+          sliderFor(cfg.dock.previewDelayMs, noctalia::config::schema::kDockPreviewDelayRange, true),
+          "window thumbnail preview hover delay"
+      );
+      e.visibleWhen = [](const Config& c) { return c.dock.windowPreviews; };
+      entries.push_back(std::move(e));
+    }
+    entries.push_back(makeEntry(
+        SettingsSection::Dock, "behavior", tr("settings.schema.dock.hide-delay.label"),
+        tr("settings.schema.dock.hide-delay.description"), {"dock", "hide_delay_ms"},
+        sliderFor(cfg.dock.hideDelayMs, noctalia::config::schema::kDockHideDelayRange, true), "hide delay motion"
     ));
     entries.push_back(makeEntry(
         SettingsSection::Dock, "focus-styling", tr("settings.schema.dock.magnification-scale.label"),
@@ -1837,11 +2169,6 @@ namespace settings {
         ToggleSetting{cfg.shell.settingsWindowTranslucent}, "settings window background transparency translucent"
     ));
     entries.push_back(makeEntry(
-        SettingsSection::Shell, "general", tr("settings.schema.shell.settings-expand-all-groups.label"),
-        tr("settings.schema.shell.settings-expand-all-groups.description"), {"shell", "settings_expand_all_groups"},
-        ToggleSetting{cfg.shell.settingsExpandAllGroups}, "settings window groups expand collapse expanded"
-    ));
-    entries.push_back(makeEntry(
         SettingsSection::Shell, "general", tr("settings.schema.shell.time-format.label"),
         tr("settings.schema.shell.time-format.description"), {"shell", "time_format"},
         TextSetting{.value = cfg.shell.timeFormat, .placeholder = "{:%H:%M}", .browseFileExtensions = {}},
@@ -2399,6 +2726,11 @@ namespace settings {
     }
 
     // System
+    entries.push_back(makeEntry(
+        SettingsSection::System, "default-apps", tr("settings.default-apps.title"), tr("settings.default-apps.hint"),
+        {}, ButtonSetting{},
+        "default applications apps browser email file manager text editor pdf terminal associations undo"
+    ));
     if (env.batteryAvailable) {
       if (env.systemBatteryAvailable) {
         entries.push_back(makeEntry(
@@ -3006,6 +3338,16 @@ namespace settings {
         "idle behavior timeout command resume screen lock dpms suspend lock_and_suspend caffeine"
     ));
 
+    entries.push_back(makeEntry(
+        SettingsSection::Session, "startup-apps", tr("settings.startup-apps.title"), tr("settings.startup-apps.hint"),
+        {"shell", "session", "startup_apps"}, ButtonSetting{}, "startup apps autostart login launch command delay"
+    ));
+
+    entries.push_back(makeEntry(
+        SettingsSection::System, "backups", tr("settings.backups.title"), tr("settings.backups.hint"), {},
+        ButtonSetting{}, "backup restore snapshot undo settings configuration appearance island displays shortcuts"
+    ));
+
     // Hooks
     auto hookGroup = [](HookKind kind) -> std::string {
       switch (kind) {
@@ -3202,8 +3544,30 @@ namespace settings {
         "urgency"
     ));
 
+    const auto finishIslandBar = [&](std::size_t first, const std::vector<std::string>& root,
+                                     BarPresentation presentation, const IslandConfig& island) {
+      if (presentation != BarPresentation::Island)
+        return;
+      const std::array<std::string_view, 8> supported{"presentation",  "enabled",
+                                                      "auto_hide",     "show_on_workspace_switch",
+                                                      "reserve_space", "layer",
+                                                      "scale",         "smart_auto_hide"};
+      entries.erase(
+          std::remove_if(
+              entries.begin() + static_cast<std::ptrdiff_t>(first), entries.end(),
+              [&](const auto& entry) {
+                return entry.path.size() != root.size() + 1
+                    || std::ranges::find(supported, entry.path.back()) == supported.end();
+              }
+          ),
+          entries.end()
+      );
+      appendIslandSettings(island, islandPath(root, "island"), SettingsSection::Bar, false);
+    };
+
     // Bar: register every configured bar so global search can surface settings from all of them.
     for (const auto& bar : cfg.bars) {
+      const auto firstEntry = entries.size();
       constexpr SettingsSection section = SettingsSection::Bar;
       const std::vector<std::string> root = {"bar", bar.name};
       auto path = [&](std::string key) {
@@ -3211,6 +3575,11 @@ namespace settings {
         p.push_back(std::move(key));
         return p;
       };
+      entries.push_back(makeEntry(
+          section, "general", tr("settings.schema.bar.presentation.label"),
+          tr("settings.schema.bar.presentation.description"), path("presentation"),
+          enumSelect(kBarPresentations, bar.presentation), "dynamic island type capsule"
+      ));
       entries.push_back(makeEntry(
           section, "general", tr("settings.schema.shared.enabled.label"), tr("settings.schema.bar.enabled.description"),
           path("enabled"), ToggleSetting{bar.enabled}, "visible"
@@ -3511,11 +3880,13 @@ namespace settings {
             "bar empty margin dead zone action command gesture " + key
         ));
       }
+      finishIslandBar(firstEntry, root, bar.presentation, bar.island);
     }
 
     // Bar monitor overrides (all bars).
     for (const auto& bar : cfg.bars) {
       for (const auto& ovr : bar.monitorOverrides) {
+        const auto firstEntry = entries.size();
         constexpr SettingsSection section = SettingsSection::Bar;
         const std::vector<std::string> root = {"bar", bar.name, "monitor", ovr.match};
         auto monitorPath = [&](std::string key) {
@@ -3524,6 +3895,12 @@ namespace settings {
           return p;
         };
 
+        const auto presentation = ovr.presentation.value_or(bar.presentation);
+        entries.push_back(makeEntry(
+            section, "general", tr("settings.schema.bar.presentation.label"),
+            tr("settings.schema.bar.presentation.description"), monitorPath("presentation"),
+            enumSelect(kBarPresentations, presentation), "dynamic island type capsule"
+        ));
         entries.push_back(makeEntry(
             section, "general", tr("settings.schema.shared.enabled.label"),
             tr("settings.schema.bar.enabled.description"), monitorPath("enabled"),
@@ -3844,6 +4221,7 @@ namespace settings {
               "bar empty margin dead zone action command gesture " + key
           ));
         }
+        finishIslandBar(firstEntry, root, presentation, applyIslandOverride(bar.island, ovr.island));
       }
     }
 

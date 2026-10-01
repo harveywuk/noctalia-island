@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/config_types.h"
+#include "render/animation/animation_manager.h"
 #include "render/scene/input_dispatcher.h"
 #include "ui/controls/context_menu.h"
 #include "ui/controls/scroll_view.h"
@@ -86,6 +87,7 @@ private:
   WaylandConnection& m_wayland;
   RenderContext& m_renderContext;
   std::unique_ptr<PopupSurface> m_surface;
+  AnimationManager m_animations;
   std::unique_ptr<Node> m_sceneRoot;
   InputDispatcher m_inputDispatcher;
   ScrollViewState m_scrollState{};

@@ -7,6 +7,8 @@
 #include "calendar/calendar_service.h"
 #include "capture/screenshot_service.h"
 #include "compositors/compositor_platform.h"
+#include "compositors/hyprland/hyprland_appearance.h"
+#include "compositors/hyprland/hyprland_displays.h"
 #include "compositors/workspace_alert_service.h"
 #include "config/config_poll_source.h"
 #include "config/config_service.h"
@@ -71,6 +73,7 @@
 #include "system/lock_keys_poll_source.h"
 #include "system/lock_keys_service.h"
 #include "system/screen_time_service.h"
+#include "system/startup_apps.h"
 #include "system/telemetry_service.h"
 #include "system/weather_poll_source.h"
 #include "system/weather_service.h"
@@ -235,6 +238,8 @@ private:
   WaylandConnection m_wayland;
   WorkspaceAlertService m_workspaceAlertService;
   CompositorPlatform m_compositorPlatform{m_wayland};
+  std::unique_ptr<compositors::hyprland::HyprlandAppearance> m_hyprlandAppearance;
+  std::unique_ptr<compositors::hyprland::HyprlandDisplays> m_hyprlandDisplays;
   security::SecretStore m_secretStore;
   security::StorageKeyProvider m_storageKeyProvider{m_secretStore};
   ClipboardService m_clipboardService{m_storageKeyProvider};
@@ -276,6 +281,7 @@ private:
   IdleGraceOverlay m_idleGraceOverlay;
   std::uint64_t m_idleGraceOverlayGeneration = 0;
   HookManager m_hookManager;
+  StartupApps m_startupApps;
   DependencyService m_dependencyService;
   GammaService m_gammaService;
   ScreenshotService m_screenshotService{

@@ -9,6 +9,7 @@
 #include "render/render_target.h"
 #include "render/scene/node.h"
 #include "ui/controls/scroll_view.h"
+#include "ui/motion.h"
 #include "ui/popup_chrome.h"
 #include "ui/style.h"
 #include "wayland/layer_surface.h"
@@ -106,6 +107,7 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
 
   m_surface = std::make_unique<PopupSurface>(m_wayland);
   m_surface->setRenderContext(&m_renderContext);
+  m_surface->setAnimationManager(&m_animations);
 
   auto* self = this;
 
@@ -143,7 +145,16 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
     const auto fw = static_cast<float>(width);
     const auto fh = static_cast<float>(height);
 
+    const bool firstReveal = self->m_sceneRoot == nullptr;
     self->m_sceneRoot = std::make_unique<Node>();
+    self->m_sceneRoot->setAnimationManager(&self->m_animations);
+    if (firstReveal) {
+      auto* root = self->m_sceneRoot.get();
+      root->setOpacity(0);
+      self->m_animations.animate(
+          0, 1, Motion::feedbackMs, Motion::reveal, [root](float value) { root->setOpacity(value); }, {}, root
+      );
+    }
     self->m_sceneRoot->setSize(fw, fh);
     if (Style::popupShadowsEnabled()) {
       (void)popup_chrome::addShadow(

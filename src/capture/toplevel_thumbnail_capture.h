@@ -20,7 +20,7 @@ namespace capture {
   );
 }
 
-// One-shot, bounded-size snapshots sourced directly from an ext-foreign-toplevel handle.
+// Bounded-size snapshots or a throttled stream from an ext-foreign-toplevel handle.
 class ToplevelThumbnailCapture {
 public:
   using CompletionCallback = std::function<void(std::optional<ScreencopyImage>, std::string error)>;
@@ -31,15 +31,28 @@ public:
   [[nodiscard]] bool available() const noexcept;
   [[nodiscard]] bool busy() const noexcept { return m_pending != nullptr; }
   void capture(ext_foreign_toplevel_handle_v1* handle, int maxWidth, int maxHeight, CompletionCallback onComplete);
+  // Reuses the session/buffer until cancellation. After the first frame, an
+  // unchanged source may wait indefinitely without waking the client.
+  void stream(
+      ext_foreign_toplevel_handle_v1* handle, int maxWidth, int maxHeight, std::chrono::milliseconds interval,
+      CompletionCallback onFrame
+  );
   void cancelInFlight();
 
 private:
   friend struct ToplevelThumbnailCapturePending;
   void fail(std::string message);
   void finish(ScreencopyImage image);
+  void startCapture(
+      ext_foreign_toplevel_handle_v1* handle, int maxWidth, int maxHeight, std::chrono::milliseconds interval,
+      CompletionCallback onComplete
+  );
+  void scheduleFrame();
 
   WaylandConnection& m_wayland;
   std::unique_ptr<ToplevelThumbnailCapturePending> m_pending;
   CompletionCallback m_onComplete;
   Timer m_timeout;
+  Timer m_refresh;
+  std::chrono::milliseconds m_interval{0};
 };

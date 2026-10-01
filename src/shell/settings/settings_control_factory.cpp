@@ -265,7 +265,7 @@ namespace settings {
         .fillWidth = true,
     });
     titleRow->addChild(
-        makeLabel(entry.title, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Bold)
+        makeLabel(entry.title, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Normal)
     );
     if (entry.advanced) {
       titleRow->addChild(makeAdvancedBadge());
@@ -316,12 +316,14 @@ namespace settings {
         {.align = FlexAlign::Center,
          .justify = FlexJustify::SpaceBetween,
          .gap = Style::spaceXs * scale,
-         .paddingV = 2.0F * scale,
+         .paddingV = 8.0F * scale,
          .paddingH = 0.0F,
          .minHeight = Style::controlHeight * scale},
         std::move(copy), std::move(actions)
     );
 
+    if (!section.children().empty())
+      section.addChild(ui::separator());
     section.addChild(std::move(row));
   }
 

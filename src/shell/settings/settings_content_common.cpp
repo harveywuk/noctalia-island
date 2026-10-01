@@ -329,7 +329,14 @@ namespace settings {
     case SettingsSection::Osd:
     case SettingsSection::Screenshot:
     case SettingsSection::Shell:
+    case SettingsSection::Session:
     case SettingsSection::Keybinds:
+    case SettingsSection::InputMotion:
+    case SettingsSection::Displays:
+    case SettingsSection::WindowBehaviour:
+    case SettingsSection::Workspaces:
+    case SettingsSection::WorkspaceTiling:
+    case SettingsSection::AppPlacement:
     case SettingsSection::System:
     case SettingsSection::Power:
     case SettingsSection::Hooks:
@@ -367,7 +374,14 @@ namespace settings {
     case SettingsSection::Osd:
     case SettingsSection::Screenshot:
     case SettingsSection::Shell:
+    case SettingsSection::Session:
     case SettingsSection::Keybinds:
+    case SettingsSection::InputMotion:
+    case SettingsSection::Displays:
+    case SettingsSection::WindowBehaviour:
+    case SettingsSection::Workspaces:
+    case SettingsSection::WorkspaceTiling:
+    case SettingsSection::AppPlacement:
     case SettingsSection::System:
     case SettingsSection::Power:
     case SettingsSection::Hooks:

@@ -92,12 +92,36 @@ namespace noctalia::config::schema {
         enumField(&IslandConfig::calendarLabels, "calendar_labels", kIslandCalendarLabels),
         field(&IslandConfig::outerProgressRing, "outer_progress_ring"),
         field(&IslandConfig::mediaArtworkSize, "media_artwork_size", Range<float>{40.0F, 80.0F}),
+        enumField(&IslandConfig::activityPriority, "activity_priority", kIslandActivityPriority),
+        field(&IslandConfig::cycleActivities, "cycle_activities"),
+        field(&IslandConfig::activityCycleSeconds, "activity_cycle_seconds", Range<std::int64_t>{1, 30}),
+        field(&IslandConfig::hoverOpenDelayMs, "hover_open_delay_ms", Range<std::int64_t>{0, 2000}),
+        field(&IslandConfig::hoverCloseDelayMs, "hover_close_delay_ms", Range<std::int64_t>{0, 2000}),
+        field(&IslandConfig::trackPreviewSeconds, "track_preview_seconds", Range<std::int64_t>{0, 30}),
+        field(&IslandConfig::pausedMediaSeconds, "paused_media_seconds", Range<std::int64_t>{0, 30}),
+        field(&IslandConfig::bluetoothPreviewSeconds, "bluetooth_preview_seconds", Range<std::int64_t>{0, 30}),
+        field(&IslandConfig::revealOnTrackChange, "reveal_on_track_change"),
+        field(&IslandConfig::trackPreviewMonitor, "track_preview_monitor"),
+        field(&IslandConfig::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
         field(&IslandConfig::volumeBarHeight, "volume_bar_height", Range<float>{5.0F, 24.0F}),
         field(&IslandConfig::volumeShowPercentage, "volume_show_percentage"),
     };
     return s;
   }
 
+  const Schema<IslandConfig>& islandBarSchema() {
+    static const auto s = [] {
+      auto fields = islandSchema();
+      std::erase_if(fields, [](const auto& field) {
+        return field.key == "enabled"
+            || field.key == "monitors"
+            || field.key == "reserve_space"
+            || field.key == "scale";
+      });
+      return fields;
+    }();
+    return s;
+  }
   const Schema<OsdConfig>& osdSchema() {
     static const Schema<OsdConfig> s = {
         field(&OsdConfig::enabled, "enabled"),
@@ -1317,6 +1341,370 @@ namespace noctalia::config::schema {
       );
     }
 
+    const Schema<HyprlandMotionCurve>& hyprlandMotionCurveSchema() {
+      static const Schema<HyprlandMotionCurve> s = {
+          enumField(&HyprlandMotionCurve::easing, "easing", kHyprlandAnimationEasings),
+          field(&HyprlandMotionCurve::x1, "x1", Range<float>{0, 1}),
+          field(&HyprlandMotionCurve::y1, "y1", Range<float>{-1, 2}),
+          field(&HyprlandMotionCurve::x2, "x2", Range<float>{0, 1}),
+          field(&HyprlandMotionCurve::y2, "y2", Range<float>{-1, 2}),
+          field(&HyprlandMotionCurve::stiffness, "stiffness", Range<float>{1, 1000}),
+          field(&HyprlandMotionCurve::damping, "damping", Range<float>{1, 100}),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandKeybindConfig>& hyprlandKeybindSchema() {
+      static const Schema<HyprlandKeybindConfig> s = {
+          field(&HyprlandKeybindConfig::enabled, "enabled"),
+          field(&HyprlandKeybindConfig::chord, "chord"),
+          field(&HyprlandKeybindConfig::action, "action"),
+          field(&HyprlandKeybindConfig::target, "target"),
+          field(&HyprlandKeybindConfig::replaceExisting, "replace_existing"),
+          field(&HyprlandKeybindConfig::repeating, "repeating"),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandWorkspaceConfig>& hyprlandWorkspaceSchema() {
+      static const Schema<HyprlandWorkspaceConfig> s = {
+          field(&HyprlandWorkspaceConfig::enabled, "enabled"),
+          field(&HyprlandWorkspaceConfig::label, "label"),
+          field(&HyprlandWorkspaceConfig::icon, "icon"),
+          field(&HyprlandWorkspaceConfig::monitor, "monitor"),
+          field(&HyprlandWorkspaceConfig::persistent, "persistent"),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandPlacementRule>& hyprlandPlacementRuleSchema() {
+      static const Schema<HyprlandPlacementRule> s = {
+          field(&HyprlandPlacementRule::appClass, "app_class"),
+          field(&HyprlandPlacementRule::enabled, "enabled"),
+          enumField(&HyprlandPlacementRule::mode, "mode", kHyprlandPlacementModes),
+          enumField(&HyprlandPlacementRule::workspace, "workspace", kHyprlandPlacementWorkspaces),
+          field(&HyprlandPlacementRule::workspaceNumber, "workspace_number", Range<std::int64_t>{1, 1000}),
+          field(&HyprlandPlacementRule::workspaceName, "workspace_name"),
+          field(&HyprlandPlacementRule::workspaceSilent, "workspace_silent"),
+          field(&HyprlandPlacementRule::sizeManaged, "size_managed"),
+          field(&HyprlandPlacementRule::width, "width", Range<std::int64_t>{100, 8192}),
+          field(&HyprlandPlacementRule::height, "height", Range<std::int64_t>{100, 8192}),
+          enumField(&HyprlandPlacementRule::position, "position", kHyprlandPlacementPositions),
+          field(&HyprlandPlacementRule::x, "x", Range<std::int64_t>{0, 16384}),
+          field(&HyprlandPlacementRule::y, "y", Range<std::int64_t>{0, 16384}),
+          enumField(&HyprlandPlacementRule::pin, "pin", kHyprlandRuleSwitches),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandAppRule>& hyprlandAppRuleSchema() {
+      static const Schema<HyprlandAppRule> s = {
+          field(&HyprlandAppRule::appClass, "app_class"),
+          field(&HyprlandAppRule::enabled, "enabled"),
+          enumField(&HyprlandAppRule::scope, "scope", kHyprlandRuleScopes),
+          field(&HyprlandAppRule::opacityManaged, "opacity_managed"),
+          field(&HyprlandAppRule::activeOpacity, "active_opacity", Range<float>{.2F, 1}),
+          field(&HyprlandAppRule::inactiveOpacity, "inactive_opacity", Range<float>{.2F, 1}),
+          field(&HyprlandAppRule::fullscreenOpacity, "fullscreen_opacity", Range<float>{.2F, 1}),
+          field(&HyprlandAppRule::roundingManaged, "rounding_managed"),
+          field(&HyprlandAppRule::rounding, "rounding", Range<std::int64_t>{0, 20}),
+          enumField(&HyprlandAppRule::blur, "blur", kHyprlandRuleSwitches),
+          enumField(&HyprlandAppRule::shadow, "shadow", kHyprlandRuleSwitches),
+          enumField(&HyprlandAppRule::dim, "dim", kHyprlandRuleSwitches),
+          enumField(&HyprlandAppRule::animations, "animations", kHyprlandRuleSwitches),
+          enumField(&HyprlandAppRule::glass, "glass", kHyprlandRuleSwitches),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandTilingConfig>& hyprlandTilingSchema() {
+      static const Schema<HyprlandTilingConfig> s = {
+          field(&HyprlandTilingConfig::layoutManaged, "layout_managed"),
+          enumField(&HyprlandTilingConfig::layout, "layout", kHyprlandTilingLayouts),
+          field(&HyprlandTilingConfig::dwindleManaged, "dwindle_managed"),
+          field(&HyprlandTilingConfig::preserveSplit, "preserve_split"),
+          field(&HyprlandTilingConfig::smartSplit, "smart_split"),
+          field(&HyprlandTilingConfig::forceSplit, "force_split", Range<std::int64_t>{0, 2}),
+          field(&HyprlandTilingConfig::useActiveForSplits, "use_active_for_splits"),
+          field(&HyprlandTilingConfig::defaultSplitRatio, "default_split_ratio", Range<float>{0.1, 1.9}),
+          field(&HyprlandTilingConfig::splitWidthMultiplier, "split_width_multiplier", Range<float>{0.1, 3}),
+          field(&HyprlandTilingConfig::splitBias, "split_bias", Range<std::int64_t>{0, 1}),
+          field(&HyprlandTilingConfig::masterManaged, "master_managed"),
+          field(&HyprlandTilingConfig::masterFactor, "master_factor", Range<float>{0, 1}),
+          enumField(&HyprlandTilingConfig::masterOrientation, "master_orientation", kHyprlandMasterOrientations),
+          enumField(&HyprlandTilingConfig::newStatus, "new_status", kHyprlandMasterStatuses),
+          enumField(&HyprlandTilingConfig::newOnActive, "new_on_active", kHyprlandMasterPositions),
+          field(&HyprlandTilingConfig::newOnTop, "new_on_top"),
+          field(&HyprlandTilingConfig::specialManaged, "special_managed"),
+          field(&HyprlandTilingConfig::closeSpecialOnEmpty, "close_special_on_empty"),
+          field(&HyprlandTilingConfig::hideSpecialOnWorkspaceChange, "hide_special_on_workspace_change"),
+          field(&HyprlandTilingConfig::specialFallthrough, "special_fallthrough"),
+          field(&HyprlandTilingConfig::warpOnSpecial, "warp_on_special", Range<std::int64_t>{0, 2}),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandWindowBehaviourConfig>& hyprlandWindowBehaviourSchema() {
+      static const Schema<HyprlandWindowBehaviourConfig> s = {
+          field(&HyprlandWindowBehaviourConfig::focusManaged, "focus_managed"),
+          field(&HyprlandWindowBehaviourConfig::focusMode, "focus_mode", Range<std::int64_t>{0, 3}),
+          field(&HyprlandWindowBehaviourConfig::focusThreshold, "focus_threshold", Range<float>{0, 100}),
+          field(&HyprlandWindowBehaviourConfig::mouseRefocus, "mouse_refocus"),
+          field(&HyprlandWindowBehaviourConfig::resizeManaged, "resize_managed"),
+          field(&HyprlandWindowBehaviourConfig::resizeOnBorder, "resize_on_border"),
+          field(&HyprlandWindowBehaviourConfig::borderGrab, "border_grab", Range<std::int64_t>{0, 100}),
+          field(&HyprlandWindowBehaviourConfig::borderCursor, "border_cursor"),
+          field(&HyprlandWindowBehaviourConfig::snapManaged, "snap_managed"),
+          field(&HyprlandWindowBehaviourConfig::snapEnabled, "snap_enabled"),
+          field(
+              &HyprlandWindowBehaviourConfig::snapWindowDistance, "snap_window_distance", Range<std::int64_t>{0, 100}
+          ),
+          field(
+              &HyprlandWindowBehaviourConfig::snapMonitorDistance, "snap_monitor_distance", Range<std::int64_t>{0, 100}
+          ),
+          field(&HyprlandWindowBehaviourConfig::snapBorderOverlap, "snap_border_overlap"),
+          field(&HyprlandWindowBehaviourConfig::snapRespectGaps, "snap_respect_gaps"),
+          field(&HyprlandWindowBehaviourConfig::activationManaged, "activation_managed"),
+          field(&HyprlandWindowBehaviourConfig::focusOnActivate, "focus_on_activate"),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandDisplayConfig>& hyprlandDisplaySchema() {
+      static const Schema<HyprlandDisplayConfig> s = {
+          field(&HyprlandDisplayConfig::managed, "managed"),
+          field(&HyprlandDisplayConfig::mode, "mode"),
+          field(&HyprlandDisplayConfig::transform, "transform", Range<std::int64_t>{-1, 7}),
+          field(&HyprlandDisplayConfig::scale, "scale", Range<float>{0, 4}),
+          field(&HyprlandDisplayConfig::positionManaged, "position_managed"),
+          field(&HyprlandDisplayConfig::x, "x", Range<std::int64_t>{-32768, 32768}),
+          field(&HyprlandDisplayConfig::y, "y", Range<std::int64_t>{-32768, 32768}),
+          field(&HyprlandDisplayConfig::vrr, "vrr", Range<std::int64_t>{-2, 3}),
+          field(&HyprlandDisplayConfig::colorMode, "color_mode"),
+          field(&HyprlandDisplayConfig::bitDepth, "bit_depth", Range<std::int64_t>{0, 10}),
+          field(&HyprlandDisplayConfig::sdrBrightness, "sdr_brightness", Range<float>{0, 2}),
+          field(&HyprlandDisplayConfig::sdrSaturation, "sdr_saturation", Range<float>{0, 2}),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandInputConfig>& hyprlandInputSchema() {
+      static const Schema<HyprlandInputConfig> s = {
+          field(&HyprlandInputConfig::gesturesManaged, "gestures_managed"),
+          field(&HyprlandInputConfig::workspaceGestureEnabled, "workspace_gesture_enabled"),
+          enumField(
+              &HyprlandInputConfig::workspaceGestureFingers, "workspace_gesture_fingers", kHyprlandGestureFingers
+          ),
+          field(
+              &HyprlandInputConfig::workspaceGestureSensitivity, "workspace_gesture_sensitivity", Range<float>{.25F, 3}
+          ),
+          field(
+              &HyprlandInputConfig::workspaceGestureDistance, "workspace_gesture_distance",
+              Range<std::int64_t>{100, 1000}
+          ),
+          field(&HyprlandInputConfig::workspaceGestureInvert, "workspace_gesture_invert"),
+          field(&HyprlandInputConfig::overviewGestureEnabled, "overview_gesture_enabled"),
+          enumField(&HyprlandInputConfig::overviewGestureFingers, "overview_gesture_fingers", kHyprlandGestureFingers),
+          enumField(
+              &HyprlandInputConfig::overviewGestureDirection, "overview_gesture_direction", kHyprlandGestureDirection
+          ),
+          field(
+              &HyprlandInputConfig::overviewGestureDistance, "overview_gesture_distance", Range<std::int64_t>{30, 500}
+          ),
+          field(&HyprlandInputConfig::keyboardManaged, "keyboard_managed"),
+          field(&HyprlandInputConfig::keyboardLayout, "keyboard_layout"),
+          field(&HyprlandInputConfig::keyboardLayout2, "keyboard_layout_2"),
+          field(&HyprlandInputConfig::keyboardLayout3, "keyboard_layout_3"),
+          field(&HyprlandInputConfig::keyboardLayout4, "keyboard_layout_4"),
+          enumField(&HyprlandInputConfig::keyboardLayoutSwitch, "keyboard_layout_switch", kHyprlandLayoutSwitch),
+          enumField(&HyprlandInputConfig::keyboardCapsLock, "keyboard_caps_lock", kHyprlandCapsLock),
+          field(&HyprlandInputConfig::keyboardRepeatRate, "keyboard_repeat_rate", Range<std::int64_t>{0, 200}),
+          field(&HyprlandInputConfig::keyboardRepeatDelay, "keyboard_repeat_delay", Range<std::int64_t>{0, 2000}),
+          field(&HyprlandInputConfig::keyboardNumLock, "keyboard_num_lock"),
+          field(&HyprlandInputConfig::mouseManaged, "mouse_managed"),
+          field(&HyprlandInputConfig::pointerSensitivity, "pointer_sensitivity", Range<float>{-1, 1}),
+          enumField(&HyprlandInputConfig::pointerAcceleration, "pointer_acceleration", kHyprlandPointerAcceleration),
+          field(&HyprlandInputConfig::mouseLeftHanded, "mouse_left_handed"),
+          field(&HyprlandInputConfig::mouseNaturalScroll, "mouse_natural_scroll"),
+          field(&HyprlandInputConfig::mouseScrollFactor, "mouse_scroll_factor", Range<float>{.1F, 5}),
+          field(&HyprlandInputConfig::touchpadManaged, "touchpad_managed"),
+          field(&HyprlandInputConfig::touchpadNaturalScroll, "touchpad_natural_scroll"),
+          field(&HyprlandInputConfig::touchpadScrollFactor, "touchpad_scroll_factor", Range<float>{.1F, 5}),
+          field(&HyprlandInputConfig::touchpadTapToClick, "touchpad_tap_to_click"),
+          field(&HyprlandInputConfig::touchpadTapAndDrag, "touchpad_tap_and_drag"),
+          enumField(&HyprlandInputConfig::touchpadDragLock, "touchpad_drag_lock", kHyprlandDragLock),
+          enumField(&HyprlandInputConfig::touchpadTapMap, "touchpad_tap_map", kHyprlandTapMap),
+          field(&HyprlandInputConfig::touchpadClickfinger, "touchpad_clickfinger"),
+          field(&HyprlandInputConfig::touchpadMiddleEmulation, "touchpad_middle_emulation"),
+          field(&HyprlandInputConfig::touchpadDisableWhileTyping, "touchpad_disable_while_typing"),
+          enumField(&HyprlandInputConfig::touchpadDragFingers, "touchpad_drag_fingers", kHyprlandDragFingers),
+          field(&HyprlandInputConfig::cursorManaged, "cursor_managed"),
+          field(&HyprlandInputConfig::cursorEnabled, "cursor_enabled"),
+          enumField(&HyprlandInputConfig::cursorMode, "cursor_mode", kHyprlandCursorModes),
+          field(&HyprlandInputConfig::tiltLimit, "tilt_limit", Range<std::int64_t>{500, 15000}),
+          field(&HyprlandInputConfig::tiltAngle, "tilt_angle", Range<std::int64_t>{0, 90}),
+          field(&HyprlandInputConfig::cursorWindow, "cursor_window", Range<std::int64_t>{10, 300}),
+          field(&HyprlandInputConfig::stretchLimit, "stretch_limit", Range<std::int64_t>{500, 15000}),
+          field(&HyprlandInputConfig::rotateLength, "rotate_length", Range<std::int64_t>{8, 100}),
+          field(&HyprlandInputConfig::shakeEnabled, "shake_enabled"),
+          field(&HyprlandInputConfig::shakeThreshold, "shake_threshold", Range<float>{1, 20}),
+          field(&HyprlandInputConfig::shakeLimit, "shake_limit", Range<float>{1, 12}),
+          field(&HyprlandInputConfig::shakeTimeout, "shake_timeout", Range<std::int64_t>{100, 5000}),
+          field(&HyprlandInputConfig::scrollManaged, "scroll_managed"),
+          field(&HyprlandInputConfig::scrollEnabled, "scroll_enabled"),
+          field(&HyprlandInputConfig::scrollDecay, "scroll_decay", Range<float>{0.5, 0.98}),
+          field(&HyprlandInputConfig::scrollMultiplier, "scroll_multiplier", Range<float>{0.25, 3}),
+          field(&HyprlandInputConfig::scrollCutoff, "scroll_cutoff", Range<float>{0.1, 5}),
+          field(&HyprlandInputConfig::scrollInterval, "scroll_interval", Range<std::int64_t>{8, 32}),
+          field(&HyprlandInputConfig::scrollBrowser, "scroll_browser"),
+          field(&HyprlandInputConfig::scrollStopClick, "scroll_stop_click"),
+          field(&HyprlandInputConfig::scrollStopFocus, "scroll_stop_focus"),
+          field(&HyprlandInputConfig::scrollStopTarget, "scroll_stop_target"),
+          field(&HyprlandInputConfig::scrollExcluded, "scroll_excluded"),
+          field(&HyprlandInputConfig::edgeManaged, "edge_managed"),
+          field(&HyprlandInputConfig::edgeEnabled, "edge_enabled"),
+          field(&HyprlandInputConfig::edgeLeft, "edge_left"),
+          field(&HyprlandInputConfig::edgeRight, "edge_right"),
+          field(&HyprlandInputConfig::edgeTop, "edge_top"),
+          field(&HyprlandInputConfig::edgeBottom, "edge_bottom"),
+          field(&HyprlandInputConfig::edgeDistance, "edge_distance", Range<std::int64_t>{0, 100}),
+          field(&HyprlandInputConfig::edgeFocus, "edge_focus", Range<std::int64_t>{-1, 1}),
+          field(&HyprlandInputConfig::edgeClick, "edge_click"),
+          field(&HyprlandInputConfig::edgeScroll, "edge_scroll"),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandProfileSwitchingConfig>& hyprlandProfileSwitchingSchema() {
+      static const Schema<HyprlandProfileSwitchingConfig> s = {
+          field(&HyprlandProfileSwitchingConfig::enabled, "enabled"),
+          field(&HyprlandProfileSwitchingConfig::lightProfile, "light_profile"),
+          field(&HyprlandProfileSwitchingConfig::darkProfile, "dark_profile"),
+      };
+      return s;
+    }
+
+    const Schema<HyprlandAppearanceConfig>& hyprlandAppearanceSchema() {
+      static const Schema<HyprlandAppearanceConfig> s = {
+          subTable(&HyprlandAppearanceConfig::curve, "curve", hyprlandMotionCurveSchema()),
+          subTable(&HyprlandAppearanceConfig::openingCurve, "opening_curve", hyprlandMotionCurveSchema()),
+          subTable(&HyprlandAppearanceConfig::closingCurve, "closing_curve", hyprlandMotionCurveSchema()),
+          subTable(&HyprlandAppearanceConfig::movingCurve, "moving_curve", hyprlandMotionCurveSchema()),
+          subTable(&HyprlandAppearanceConfig::workspaceCurve, "workspace_curve", hyprlandMotionCurveSchema()),
+          field(&HyprlandAppearanceConfig::openingDuration, "opening_duration", Range<float>{50, 2000}),
+          field(&HyprlandAppearanceConfig::closingDuration, "closing_duration", Range<float>{50, 2000}),
+          field(&HyprlandAppearanceConfig::movingDuration, "moving_duration", Range<float>{50, 2000}),
+          field(&HyprlandAppearanceConfig::workspaceDuration, "workspace_duration", Range<float>{50, 2000}),
+          field(&HyprlandAppearanceConfig::glassManaged, "glass_managed"),
+          field(&HyprlandAppearanceConfig::glassEnabled, "glass_enabled"),
+          field(&HyprlandAppearanceConfig::glassLight, "glass_light"),
+          field(&HyprlandAppearanceConfig::glassLayers, "glass_layers"),
+          field(&HyprlandAppearanceConfig::cursorManaged, "cursor_managed"),
+          field(&HyprlandAppearanceConfig::cursorEnabled, "cursor_enabled"),
+          field(&HyprlandAppearanceConfig::cursorStretch, "cursor_stretch"),
+          field(&HyprlandAppearanceConfig::cursorShake, "cursor_shake"),
+          field(&HyprlandAppearanceConfig::overviewManaged, "overview_managed"),
+          field(&HyprlandAppearanceConfig::overviewBottom, "overview_bottom"),
+          field(&HyprlandAppearanceConfig::overviewHideLayers, "overview_hide_layers"),
+          field(&HyprlandAppearanceConfig::overviewStyleManaged, "overview_style_managed"),
+          field(&HyprlandAppearanceConfig::overviewCentered, "overview_centered"),
+          field(&HyprlandAppearanceConfig::overviewBlur, "overview_blur"),
+          field(&HyprlandAppearanceConfig::overviewMargin, "overview_margin", Range<std::int64_t>{0, 36}),
+          field(&HyprlandAppearanceConfig::overviewPanelBorder, "overview_panel_border", Range<std::int64_t>{0, 10}),
+          field(
+              &HyprlandAppearanceConfig::overviewWorkspaceBorder, "overview_workspace_border",
+              Range<std::int64_t>{0, 10}
+          ),
+          field(&HyprlandAppearanceConfig::overviewDragOpacity, "overview_drag_opacity", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::overviewDuration, "overview_duration", Range<float>{0, 2000}),
+          colorSpecField(&HyprlandAppearanceConfig::overviewPanelColor, "overview_panel_color", true),
+          colorSpecField(&HyprlandAppearanceConfig::overviewPanelBorderColor, "overview_panel_border_color", true),
+          colorSpecField(&HyprlandAppearanceConfig::overviewActiveBackground, "overview_active_background", true),
+          colorSpecField(&HyprlandAppearanceConfig::overviewInactiveBackground, "overview_inactive_background", true),
+          colorSpecField(&HyprlandAppearanceConfig::overviewActiveBorder, "overview_active_border", true),
+          colorSpecField(&HyprlandAppearanceConfig::overviewInactiveBorder, "overview_inactive_border", true),
+          field(&HyprlandAppearanceConfig::overviewPanelOpacity, "overview_panel_opacity", Range<float>{0, 1}),
+          field(
+              &HyprlandAppearanceConfig::overviewPanelBorderOpacity, "overview_panel_border_opacity", Range<float>{0, 1}
+          ),
+          field(
+              &HyprlandAppearanceConfig::overviewActiveBackgroundOpacity, "overview_active_background_opacity",
+              Range<float>{0, 1}
+          ),
+          field(
+              &HyprlandAppearanceConfig::overviewInactiveBackgroundOpacity, "overview_inactive_background_opacity",
+              Range<float>{0, 1}
+          ),
+          field(
+              &HyprlandAppearanceConfig::overviewActiveBorderOpacity, "overview_active_border_opacity",
+              Range<float>{0, 1}
+          ),
+          field(
+              &HyprlandAppearanceConfig::overviewInactiveBorderOpacity, "overview_inactive_border_opacity",
+              Range<float>{0, 1}
+          ),
+          field(&HyprlandAppearanceConfig::glassBlur, "glass_blur", Range<float>{0, 10}),
+          field(&HyprlandAppearanceConfig::glassRefraction, "glass_refraction", Range<float>{0, 2}),
+          field(&HyprlandAppearanceConfig::glassChromatic, "glass_chromatic", Range<float>{0, 2}),
+          field(&HyprlandAppearanceConfig::glassLens, "glass_lens", Range<float>{0, 2}),
+          field(&HyprlandAppearanceConfig::glassOpacity, "glass_opacity", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::glassFresnel, "glass_fresnel", Range<float>{0, 2}),
+          field(&HyprlandAppearanceConfig::glassSpecular, "glass_specular", Range<float>{0, 2}),
+          field(&HyprlandAppearanceConfig::cursorShakeLimit, "cursor_shake_limit", Range<float>{1, 20}),
+          field(&HyprlandAppearanceConfig::overviewHeight, "overview_height", Range<std::int64_t>{80, 600}),
+          field(&HyprlandAppearanceConfig::enabled, "enabled"),
+          field(&HyprlandAppearanceConfig::followTheme, "follow_theme"),
+          field(&HyprlandAppearanceConfig::gapsIn, "gaps_in", kHyprlandGapsRange),
+          field(&HyprlandAppearanceConfig::gapsOut, "gaps_out", kHyprlandGapsRange),
+          field(&HyprlandAppearanceConfig::borderSize, "border_size", kHyprlandBorderRange),
+          field(&HyprlandAppearanceConfig::rounding, "rounding", kHyprlandRoundingRange),
+          field(&HyprlandAppearanceConfig::activeOpacity, "active_opacity", kHyprlandOpacityRange),
+          field(&HyprlandAppearanceConfig::inactiveOpacity, "inactive_opacity", kHyprlandOpacityRange),
+          field(&HyprlandAppearanceConfig::blurEnabled, "blur_enabled"),
+          field(&HyprlandAppearanceConfig::blurSize, "blur_size", kHyprlandBlurSizeRange),
+          field(&HyprlandAppearanceConfig::blurPasses, "blur_passes", kHyprlandBlurPassesRange),
+          field(&HyprlandAppearanceConfig::blurFocusManaged, "blur_focus_managed"),
+          field(&HyprlandAppearanceConfig::blurBrightness, "blur_brightness", Range<float>{0, 2}),
+          field(&HyprlandAppearanceConfig::blurContrast, "blur_contrast", Range<float>{0, 2}),
+          field(&HyprlandAppearanceConfig::blurVibrancy, "blur_vibrancy", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::blurNoise, "blur_noise", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::blurPopups, "blur_popups"),
+          field(&HyprlandAppearanceConfig::blurSpecial, "blur_special"),
+          field(&HyprlandAppearanceConfig::blurPopupsIgnorealpha, "blur_popups_ignorealpha", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::dimInactive, "dim_inactive"),
+          field(&HyprlandAppearanceConfig::dimStrength, "dim_strength", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::dimSpecial, "dim_special", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::fullscreenOpacity, "fullscreen_opacity", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::roundingPower, "rounding_power", Range<float>{2, 10}),
+          field(&HyprlandAppearanceConfig::shadowEnabled, "shadow_enabled"),
+          field(&HyprlandAppearanceConfig::shadowRange, "shadow_range", kHyprlandShadowRange),
+          field(&HyprlandAppearanceConfig::decorationEffectsManaged, "decoration_effects_managed"),
+          field(&HyprlandAppearanceConfig::shadowPower, "shadow_power", Range<std::int64_t>{1, 4}),
+          field(&HyprlandAppearanceConfig::shadowSharp, "shadow_sharp"),
+          field(&HyprlandAppearanceConfig::shadowOffsetX, "shadow_offset_x", Range<std::int64_t>{-250, 250}),
+          field(&HyprlandAppearanceConfig::shadowOffsetY, "shadow_offset_y", Range<std::int64_t>{-250, 250}),
+          field(&HyprlandAppearanceConfig::shadowScale, "shadow_scale", Range<float>{0, 1}),
+          colorSpecField(&HyprlandAppearanceConfig::shadowColor, "shadow_color", true),
+          colorSpecField(&HyprlandAppearanceConfig::shadowInactiveColor, "shadow_inactive_color", true),
+          field(&HyprlandAppearanceConfig::shadowOpacity, "shadow_opacity", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::shadowInactiveOpacity, "shadow_inactive_opacity", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::glowEnabled, "glow_enabled"),
+          field(&HyprlandAppearanceConfig::glowRange, "glow_range", Range<std::int64_t>{0, 100}),
+          field(&HyprlandAppearanceConfig::glowPower, "glow_power", Range<std::int64_t>{1, 4}),
+          colorSpecField(&HyprlandAppearanceConfig::glowColor, "glow_color", true),
+          colorSpecField(&HyprlandAppearanceConfig::glowInactiveColor, "glow_inactive_color", true),
+          field(&HyprlandAppearanceConfig::glowOpacity, "glow_opacity", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::glowInactiveOpacity, "glow_inactive_opacity", Range<float>{0, 1}),
+          field(&HyprlandAppearanceConfig::animationsEnabled, "animations_enabled"),
+          field(&HyprlandAppearanceConfig::customAnimations, "custom_animations"),
+          field(&HyprlandAppearanceConfig::animationSpeed, "animation_speed", kHyprlandAnimationSpeedRange),
+          enumField(&HyprlandAppearanceConfig::animationEasing, "animation_easing", kHyprlandAnimationEasings),
+          enumField(&HyprlandAppearanceConfig::windowAnimation, "window_animation", kHyprlandWindowAnimations),
+          enumField(&HyprlandAppearanceConfig::workspaceAnimation, "workspace_animation", kHyprlandWorkspaceAnimations),
+      };
+      return s;
+    }
+
     const Schema<ShellConfig::AnimationConfig>& shellAnimationSchema() {
       static const Schema<ShellConfig::AnimationConfig> s = {
           field(&ShellConfig::AnimationConfig::enabled, "enabled"),
@@ -1601,8 +1989,25 @@ namespace noctalia::config::schema {
       return s;
     }
 
+    const Schema<StartupAppConfig>& startupAppSchema() {
+      static const Schema<StartupAppConfig> s = {
+          field(&StartupAppConfig::label, "label"),
+          field(&StartupAppConfig::enabled, "enabled"),
+          field(&StartupAppConfig::kind, "kind"),
+          field(&StartupAppConfig::desktopId, "desktop_id"),
+          field(&StartupAppConfig::command, "command"),
+          field(&StartupAppConfig::delaySeconds, "delay_seconds", Range<std::int64_t>{0, 300}),
+      };
+      return s;
+    }
+
     const Schema<ShellSessionConfig>& shellSessionSchema() {
       static const Schema<ShellSessionConfig> s = {
+          namedMap<ShellSessionConfig, StartupAppConfig>(
+              &ShellSessionConfig::startupApps, "startup_apps", startupAppSchema(),
+              [](StartupAppConfig& row, std::string_view id) { row.id = id; },
+              [](const StartupAppConfig& row) { return row.id; }, true
+          ),
           arrayOf<ShellSessionConfig, SessionPanelActionConfig>(
               &ShellSessionConfig::actions, "actions", sessionActionSchema(),
               [](const SessionPanelActionConfig& a) { return !a.action.empty(); }
@@ -1657,6 +2062,7 @@ namespace noctalia::config::schema {
         colorSpecField(&ShellConfig::appIconColor, "app_icon_color", /*alwaysEmit=*/false),
         field(&ShellConfig::launchAppsAsSystemdServices, "launch_apps_as_systemd_services"),
         field(&ShellConfig::launchAppsCustomCommand, "launch_apps_custom_command"),
+        stringIfNonEmptyField(&ShellConfig::preferredTerminal, "preferred_terminal"),
         field(&ShellConfig::clipboardEnabled, "clipboard_enabled"),
         field(&ShellConfig::clipboardKeepFromClosedApps, "clipboard_keep_from_closed_apps"),
         field(
@@ -1669,6 +2075,39 @@ namespace noctalia::config::schema {
         enumField(&ShellConfig::clipboardAutoPaste, "clipboard_auto_paste", kClipboardAutoPasteModes),
         field(&ShellConfig::clipboardImageActionCommand, "clipboard_image_action_command"),
         pathStringField(&ShellConfig::avatarPath, "avatar_path"),
+        subTable(&ShellConfig::hyprlandAppearance, "hyprland_appearance", hyprlandAppearanceSchema()),
+        subTable(&ShellConfig::hyprlandTiling, "hyprland_tiling", hyprlandTilingSchema()),
+        subTable(&ShellConfig::hyprlandWindowBehaviour, "hyprland_window_behaviour", hyprlandWindowBehaviourSchema()),
+        subTable(&ShellConfig::hyprlandInput, "hyprland_input", hyprlandInputSchema()),
+        namedMap<ShellConfig, HyprlandKeybindConfig>(
+            &ShellConfig::hyprlandKeybinds, "hyprland_keybinds", hyprlandKeybindSchema(),
+            [](HyprlandKeybindConfig& row, std::string_view name) { row.name = name; },
+            [](const HyprlandKeybindConfig& row) { return row.name; }, true
+        ),
+        namedMap<ShellConfig, HyprlandWorkspaceConfig>(
+            &ShellConfig::hyprlandWorkspaces, "hyprland_workspaces", hyprlandWorkspaceSchema(),
+            [](HyprlandWorkspaceConfig& row, std::string_view name) { row.workspace = name; },
+            [](const HyprlandWorkspaceConfig& row) { return row.workspace; }, true
+        ),
+        namedMap<ShellConfig, HyprlandDisplayConfig>(
+            &ShellConfig::hyprlandDisplays, "hyprland_displays", hyprlandDisplaySchema(),
+            [](HyprlandDisplayConfig& row, std::string_view name) { row.output = name; },
+            [](const HyprlandDisplayConfig& row) { return row.output; }, true
+        ),
+        subTable(
+            &ShellConfig::hyprlandProfileSwitching, "hyprland_profile_switching", hyprlandProfileSwitchingSchema()
+        ),
+        namedMap<ShellConfig, HyprlandAppRule>(
+            &ShellConfig::hyprlandAppRules, "hyprland_app_rules", hyprlandAppRuleSchema(),
+            [](HyprlandAppRule& rule, std::string_view name) { rule.name = name; },
+            [](const HyprlandAppRule& rule) { return rule.name; }, true
+        ),
+        field(&ShellConfig::hyprlandAppearanceProfiles, "hyprland_appearance_profiles"),
+        namedMap<ShellConfig, HyprlandPlacementRule>(
+            &ShellConfig::hyprlandPlacementRules, "hyprland_placement_rules", hyprlandPlacementRuleSchema(),
+            [](HyprlandPlacementRule& rule, std::string_view name) { rule.name = name; },
+            [](const HyprlandPlacementRule& rule) { return rule.name; }, true
+        ),
         subTable(&ShellConfig::animation, "animation", shellAnimationSchema()),
         subTable(&ShellConfig::shadow, "shadow", shellShadowSchema()),
         subTable(&ShellConfig::panel, "panel", shellPanelSchema()),
@@ -2023,6 +2462,10 @@ namespace noctalia::config::schema {
         field(&DockConfig::inactiveScale, "inactive_scale", kDockInactiveScaleRange),
         field(&DockConfig::magnification, "magnification"),
         field(&DockConfig::magnificationScale, "magnification_scale", kDockMagnificationScaleRange),
+        field(&DockConfig::animateLaunch, "animate_launch"),
+        field(&DockConfig::windowPreviews, "window_previews"),
+        field(&DockConfig::previewDelayMs, "preview_delay_ms", kDockPreviewDelayRange),
+        field(&DockConfig::hideDelayMs, "hide_delay_ms", kDockHideDelayRange),
         field(&DockConfig::activeOpacity, "active_opacity", kUnitRange),
         field(&DockConfig::inactiveOpacity, "inactive_opacity", kUnitRange),
         field(&DockConfig::showDots, "show_dots"),
@@ -2302,6 +2745,8 @@ namespace noctalia::config::schema {
 
   const Schema<BarConfig>& barFieldsSchema() {
     static const Schema<BarConfig> s = {
+        enumField(&BarConfig::presentation, "presentation", kBarPresentations),
+        subTable(&BarConfig::island, "island", islandBarSchema()),
         field(&BarConfig::enabled, "enabled"),
         field(&BarConfig::autoHide, "auto_hide"),
         field(&BarConfig::smartAutoHide, "smart_auto_hide"),
@@ -2354,8 +2799,57 @@ namespace noctalia::config::schema {
     return s;
   }
 
+  const Schema<IslandMonitorOverride>& islandMonitorSchema() {
+    static const Schema<IslandMonitorOverride> s = {
+        optionalStringVectorField(&IslandMonitorOverride::hoverWidgets, "hover_widgets"),
+        optionalStringVectorField(&IslandMonitorOverride::hoverWidgetsCenter, "hover_widgets_center"),
+        optionalStringVectorField(&IslandMonitorOverride::hoverWidgetsRight, "hover_widgets_right"),
+        optionalBoolField(&IslandMonitorOverride::hoverShowClock, "hover_show_clock"),
+        optionalBoolField(&IslandMonitorOverride::hoverShowCalendar, "hover_show_calendar"),
+        optionalBoolField(&IslandMonitorOverride::hoverShowMedia, "hover_show_media"),
+        optionalBoolField(&IslandMonitorOverride::hoverShowDownloads, "hover_show_downloads"),
+        optionalBoolField(&IslandMonitorOverride::hoverShowTimers, "hover_show_timers"),
+        optionalBoolField(&IslandMonitorOverride::hoverShowBatteries, "hover_show_batteries"),
+        optionalBoolField(&IslandMonitorOverride::hoverShowUnread, "hover_show_unread"),
+        optionalFloatField(&IslandMonitorOverride::height, "height", Range<float>{44, 72}),
+        optionalFloatField(&IslandMonitorOverride::clockSize, "clock_size", Range<float>{16, 36}),
+        optionalBoolField(&IslandMonitorOverride::clockSeconds, "clock_seconds"),
+        optionalFloatField(&IslandMonitorOverride::clockOffset, "clock_offset", Range<float>{-12, 12}),
+        optionalFloatField(&IslandMonitorOverride::expandedClockOffset, "expanded_clock_offset", Range<float>{-12, 12}),
+        optionalEnumField(&IslandMonitorOverride::calendarLabels, "calendar_labels", kIslandCalendarLabels),
+        optionalBoolField(&IslandMonitorOverride::outerProgressRing, "outer_progress_ring"),
+        optionalFloatField(&IslandMonitorOverride::mediaArtworkSize, "media_artwork_size", Range<float>{40, 80}),
+        optionalEnumField(&IslandMonitorOverride::activityPriority, "activity_priority", kIslandActivityPriority),
+        optionalBoolField(&IslandMonitorOverride::cycleActivities, "cycle_activities"),
+        optionalIntField(
+            &IslandMonitorOverride::activityCycleSeconds, "activity_cycle_seconds", Range<std::int64_t>{1, 30}
+        ),
+        optionalIntField(&IslandMonitorOverride::hoverOpenDelayMs, "hover_open_delay_ms", Range<std::int64_t>{0, 2000}),
+        optionalIntField(
+            &IslandMonitorOverride::hoverCloseDelayMs, "hover_close_delay_ms", Range<std::int64_t>{0, 2000}
+        ),
+        optionalIntField(
+            &IslandMonitorOverride::trackPreviewSeconds, "track_preview_seconds", Range<std::int64_t>{0, 30}
+        ),
+        optionalIntField(
+            &IslandMonitorOverride::pausedMediaSeconds, "paused_media_seconds", Range<std::int64_t>{0, 30}
+        ),
+        optionalIntField(
+            &IslandMonitorOverride::bluetoothPreviewSeconds, "bluetooth_preview_seconds", Range<std::int64_t>{0, 30}
+        ),
+        optionalBoolField(&IslandMonitorOverride::revealOnTrackChange, "reveal_on_track_change"),
+        field(&IslandMonitorOverride::trackPreviewMonitor, "track_preview_monitor"),
+        field(&IslandMonitorOverride::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
+        optionalFloatField(&IslandMonitorOverride::volumeBarHeight, "volume_bar_height", Range<float>{5, 24}),
+        optionalBoolField(&IslandMonitorOverride::volumeShowPercentage, "volume_show_percentage"),
+    };
+    return s;
+  }
+
   const Schema<BarMonitorOverride>& barMonitorOverrideSchema() {
     static const Schema<BarMonitorOverride> s = {
+        optionalEnumField(&BarMonitorOverride::presentation, "presentation", kBarPresentations),
+        subTable(&BarMonitorOverride::island, "island", islandMonitorSchema()),
         field(&BarMonitorOverride::match, "match"),
         field(&BarMonitorOverride::position, "position"),
         optionalBoolField(&BarMonitorOverride::enabled, "enabled"),

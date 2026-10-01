@@ -192,7 +192,7 @@ def worker(args):
                     assert ImageChops.difference(rest.crop((300,250,980,590)),collapsed.crop((300,250,980,590))).getbbox() is None, name+' left panel content visible'
             cursor(1000,600)
             start([sys.executable,str(REPO/'tests/fixtures/island_player.py')],'player.log')
-            time.sleep(2)
+            time.sleep(6)  # Let the five-second track preview return to compact playback.
             shot('03-activity')
             msg('panel-open','control-center')
             time.sleep(.6)

@@ -183,7 +183,7 @@ public:
 private:
   static PanelManager* s_instance;
 
-  bool openIslandPanel(wl_output* output);
+  bool openIslandPanel(wl_output* output, std::string_view sourceBarName);
   void buildIslandScene(std::uint32_t width, std::uint32_t height);
   void applyIslandReveal(float progress);
   void resizeIslandPanel(float width, float height, bool first);

@@ -1,6 +1,7 @@
 #include "theme/community_palettes.h"
 
 #include "core/deferred_call.h"
+#include "core/files/resource_paths.h"
 #include "core/log.h"
 #include "net/http_client.h"
 #include "util/file_utils.h"
@@ -144,7 +145,23 @@ namespace noctalia::theme {
     });
   }
 
-  std::vector<AvailablePalette> availableCommunityPalettes() { return parseCatalogFile(catalogCachePath()); }
+  std::vector<AvailablePalette> availableCommunityPalettes() {
+    auto catalog = parseCatalogFile(catalogCachePath());
+    for (auto& bundled : parseCatalogFile(paths::assetPath("community-palettes/catalog.json"))) {
+      std::erase_if(catalog, [&](const AvailablePalette& entry) { return entry.name == bundled.name; });
+      catalog.push_back(std::move(bundled));
+    }
+    std::ranges::sort(catalog, {}, &AvailablePalette::name);
+    return catalog;
+  }
+
+  std::filesystem::path bundledCommunityPalettePath(std::string_view name) {
+    const auto bundled = parseCatalogFile(paths::assetPath("community-palettes/catalog.json"));
+    if (std::ranges::find(bundled, name, &AvailablePalette::name) == bundled.end()) {
+      return {};
+    }
+    return paths::assetPath("community-palettes") / (StringUtils::urlEncode(name) + ".json");
+  }
 
   std::string communityPaletteCatalogMd5(std::string_view name) {
     const auto catalog = parseCatalogFile(catalogCachePath());

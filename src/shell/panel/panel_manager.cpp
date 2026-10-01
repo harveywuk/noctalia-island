@@ -24,6 +24,7 @@
 #include "ui/controls/box.h"
 #include "ui/controls/context_menu_popup.h"
 #include "ui/controls/select_dropdown_popup.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
@@ -601,7 +602,10 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
   m_activePanel->setContentScale(shell::panel_surface::contentScale(m_config));
   m_pendingOpenContext = std::string(request.context);
   m_activePanel->setPendingOpenContext(request.context);
-  if (openIslandPanel(request.output))
+  const std::string_view islandAnchor = m_config != nullptr && !m_config->config().shell.panelAnchorBar.empty()
+      ? std::string_view(m_config->config().shell.panelAnchorBar)
+      : request.sourceBarName;
+  if (openIslandPanel(request.output, islandAnchor))
     return;
 
   auto barConfigOpt =
@@ -1467,7 +1471,7 @@ void PanelManager::closePanel(bool animateClose) {
       m_islandSurface->height = m_islandHeight;
       const float contentOpacity = m_contentNode ? m_contentNode->opacity() : 0;
       m_animations.animate(
-          1.0F, 0.0F, 420, Easing::EaseOutCubic,
+          1.0F, 0.0F, Motion::dismissMs, Motion::dismiss,
           [this, contentOpacity](float v) {
             const auto target = m_islandHost->panelReturnSize();
             m_islandCollapsedWidth = target.width * m_islandSurface->scale;
@@ -1488,7 +1492,7 @@ void PanelManager::closePanel(bool animateClose) {
     } else if (m_attachedToBar && m_attachedRevealClipNode != nullptr) {
       m_animations.cancelForOwner(m_attachedRevealClipNode);
       m_animations.animate(
-          m_attachedRevealProgress, 0.0F, Style::animNormal, Easing::EaseInOutQuad,
+          m_attachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
           [this](float v) { applyAttachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
@@ -1502,7 +1506,7 @@ void PanelManager::closePanel(bool animateClose) {
     } else {
       m_animations.cancelForOwner(m_sceneRoot.get());
       m_animations.animate(
-          m_detachedRevealProgress, 0.0F, Style::animNormal, Easing::EaseInQuad,
+          m_detachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
           [this](float v) { applyDetachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
@@ -2290,8 +2294,8 @@ void PanelManager::startAttachedOpenAnimation() {
 
   m_attachedOpenAnimationPending = false;
   m_animations.animate(
-      m_attachedRevealProgress, 1.0F, Style::animNormal, Easing::EaseOutCubic,
-      [this](float v) { applyAttachedReveal(v); }, {}, m_attachedRevealClipNode
+      m_attachedRevealProgress, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyAttachedReveal(v); }, {},
+      m_attachedRevealClipNode
   );
 }
 
@@ -2536,7 +2540,9 @@ void PanelManager::onConfigReloaded() {
     bg->setPanelStyle(m_config->config().shell.panel.borders);
     bg->setFill(colorSpecFromRole(ColorRole::Surface, panelBackgroundOpacity));
     if (m_config->config().shell.panel.borders) {
-      bg->setBorder(colorSpecFromRole(ColorRole::Outline, panelBackgroundOpacity), Style::borderWidth);
+      bg->setBorder(
+          colorSpecFromRole(ColorRole::Outline, panelBackgroundOpacity * Style::hairlineAlpha), Style::borderWidth
+      );
     }
   }
   if (m_panelShadowNode != nullptr) {
@@ -2656,7 +2662,9 @@ void PanelManager::buildScene(std::uint32_t width, std::uint32_t height) {
         const float backgroundOpacity = shell::panel_surface::backgroundOpacity(m_config);
         bg->setFill(colorSpecFromRole(ColorRole::Surface, backgroundOpacity));
         if (panelBorders) {
-          bg->setBorder(colorSpecFromRole(ColorRole::Outline, backgroundOpacity), Style::borderWidth);
+          bg->setBorder(
+              colorSpecFromRole(ColorRole::Outline, backgroundOpacity * Style::hairlineAlpha), Style::borderWidth
+          );
         }
       }
       m_bgNode = sceneParent->addChild(std::move(bg));
@@ -2705,7 +2713,7 @@ void PanelManager::buildScene(std::uint32_t width, std::uint32_t height) {
     } else {
       applyDetachedReveal(0.0F);
       m_animations.animate(
-          0.0F, 1.0F, Style::animNormal, Easing::EaseOutCubic, [this](float v) { applyDetachedReveal(v); }, {},
+          0.0F, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyDetachedReveal(v); }, {},
           m_sceneRoot.get()
       );
     }

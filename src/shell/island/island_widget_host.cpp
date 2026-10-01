@@ -13,17 +13,15 @@
 IslandWidgetHost::IslandWidgetHost(
     WidgetFactory& factory, const Config& config, wl_output* output, float scale, AnimationManager* animations,
     const noctalia::bar::WidgetActionDispatcher* dispatcher, std::function<void()> update, std::function<void()> redraw,
-    std::function<void()> frame
+    std::function<void()> frame, const IslandConfig& island, const std::string& barName
 )
     : m_scale(scale), m_frame(std::move(frame)) {
   setClipChildren(true);
   BarConfig bar;
-  bar.name = "island";
+  bar.name = barName;
   bar.position = "top";
   bar.scale = scale;
-  const std::array lists{
-      &config.island.hoverWidgets, &config.island.hoverWidgetsCenter, &config.island.hoverWidgetsRight
-  };
+  const std::array lists{&island.hoverWidgets, &island.hoverWidgetsCenter, &island.hoverWidgetsRight};
   for (std::size_t group = 0; group < lists.size(); ++group) {
     for (const auto& name : *lists[group]) {
       const auto found = config.widgets.find(name);
@@ -32,8 +30,7 @@ IslandWidgetHost::IslandWidgetHost(
       const auto options = resolveCommonWidgetOptions(bar, wc, type, scale);
       if (!options.enabled)
         continue;
-      auto widget =
-          factory.create(name, output, options.contentScale, "top", "island", 8 * scale, options.enableScroll);
+      auto widget = factory.create(name, output, options.contentScale, "top", barName, 8 * scale, options.enableScroll);
       if (!widget)
         continue;
       widget->setConfigName(name);
@@ -41,9 +38,9 @@ IslandWidgetHost::IslandWidgetHost(
       widget->setWidgetIconColor(options.iconColor);
       widget->applyCommonOptions(options, FontWeight::Medium, config.shell.fontFamily, "island.hover_widgets");
       widget->setActionContext(
-          IpcInvocationContext{.widgetName = name, .widgetType = type, .barName = "island", .output = output}
+          IpcInvocationContext{.widgetName = name, .widgetType = type, .barName = barName, .output = output}
       );
-      widget->resolveGestureBindings(type, wc, nullptr, "island", dispatcher);
+      widget->resolveGestureBindings(type, wc, nullptr, barName, dispatcher);
       widget->setAnimationManager(animations);
       widget->setUpdateCallback([this, update] {
         m_dirty = true;
@@ -51,11 +48,11 @@ IslandWidgetHost::IslandWidgetHost(
       });
       widget->setRedrawCallback(redraw);
       widget->setFrameTickRequestCallback(m_frame);
-      widget->setPanelToggleCallback([output](
+      widget->setPanelToggleCallback([output, barName](
                                          std::string_view panel, std::string_view context, std::optional<float>,
                                          std::optional<float>, Widget::PanelActivation activation
                                      ) {
-        PanelOpenRequest request{.output = output, .context = context};
+        PanelOpenRequest request{.output = output, .context = context, .sourceBarName = barName};
         if (activation == Widget::PanelActivation::Open)
           PanelManager::instance().openPanel(std::string(panel), request);
         else

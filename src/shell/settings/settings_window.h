@@ -1,4 +1,9 @@
 #pragma once
+namespace settings {
+  class DisplayIdentifier;
+  struct BackupEditorState;
+  struct DefaultAppsEditorState;
+} // namespace settings
 
 #include "core/timer_manager.h"
 #include "render/animation/animation_manager.h"
@@ -55,6 +60,7 @@ struct KeyboardEvent;
 struct PointerEvent;
 struct wl_output;
 struct wl_surface;
+struct zwp_keyboard_shortcuts_inhibitor_v1;
 
 namespace settings {
   class SettingsDialogPresenter;
@@ -62,6 +68,13 @@ namespace settings {
 } // namespace settings
 
 // Standalone xdg-toplevel settings UI (same binary as the shell; shares RenderContext).
+namespace compositors::hyprland {
+  class HyprlandDisplays;
+}
+namespace settings {
+  struct DisplayEditorState;
+}
+
 class SettingsWindow {
 public:
   SettingsWindow();
@@ -72,6 +85,8 @@ public:
       UPowerService* upower, IdleManager* idleManager, CompositorPlatform* platform, AccountsService* accounts = nullptr
   );
 
+  bool setShortcutRecording(bool recording);
+  void setHyprlandDisplays(compositors::hyprland::HyprlandDisplays* manager) { m_displays = manager; }
   void open(std::string context = "");
   void openToBarWidget(std::string barName, std::string widgetName);
   // Opens the window on the plugins section with the plugin's settings editor.
@@ -145,6 +160,7 @@ private:
   void refreshSettingsRegistry(const Config& cfg);
   void syncSelectedBarState(const Config& cfg, const std::vector<std::string>& availableBars);
   [[nodiscard]] std::unique_ptr<Flex> buildHeaderRow(float scale);
+  [[nodiscard]] std::unique_ptr<Node> buildSearchInput(float scale);
   [[nodiscard]] std::unique_ptr<Flex>
   buildFilterRow(float scale, const std::string& resetPageScope, std::vector<std::vector<std::string>> resetPagePaths);
   [[nodiscard]] std::unique_ptr<Flex> buildStatusRow(float scale);
@@ -232,7 +248,13 @@ private:
   void dismissOpenSelectDropdown();
 
   WaylandConnection* m_wayland = nullptr;
+  zwp_keyboard_shortcuts_inhibitor_v1* m_shortcutInhibitor = nullptr;
   CompositorPlatform* m_platform = nullptr;
+  compositors::hyprland::HyprlandDisplays* m_displays = nullptr;
+  std::shared_ptr<settings::DisplayEditorState> m_displayEditor;
+  std::shared_ptr<settings::BackupEditorState> m_backupEditor;
+  std::shared_ptr<settings::DefaultAppsEditorState> m_defaultAppsEditor;
+  std::shared_ptr<settings::DisplayIdentifier> m_displayIdentifier;
   IdleManager* m_idleManager = nullptr;
   ConfigService* m_config = nullptr;
   scripting::PluginManager* m_pluginManager = nullptr;
@@ -286,6 +308,7 @@ private:
   std::vector<std::string> m_editorSheetListPath;
   std::unique_ptr<SelectDropdownPopup> m_selectPopup;
   bool m_pointerInside = false;
+  bool m_pointerFocusChange = false;
   wl_output* m_output = nullptr;
   std::uint32_t m_minWidthHint = 0;
   std::uint32_t m_minHeightHint = 0;
@@ -323,6 +346,8 @@ private:
   std::string m_editingCapsuleGroupId;
   std::vector<std::string> m_selectedLaneWidgets;
   std::shared_ptr<settings::HoverLayout> m_hoverLayoutUndo;
+  std::optional<HyprlandAppearanceConfig> m_hyprlandUndo;
+  std::optional<bool> m_hyprlandProfileLightMode;
   std::string m_pendingDeleteWidgetName;
   std::string m_pendingDeleteWidgetSettingPath;
   std::string m_renamingWidgetName;
@@ -349,6 +374,7 @@ private:
   std::string m_selectedBarName;
   std::string m_selectedMonitorOverride;
   std::string m_selectedSection;
+  std::string m_selectedGroup;
   std::string m_reopenAfterWidgetEditorSection;
   std::string m_statusMessage;
   std::string m_pendingResetPageScope;

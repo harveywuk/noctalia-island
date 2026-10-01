@@ -138,7 +138,7 @@ SearchPicker::SearchPicker() {
   setGap(Style::spaceSm);
   setPadding(Style::spaceSm);
   setFill(colorSpecFromRole(ColorRole::Surface));
-  setBorder(colorSpecFromRole(ColorRole::Outline), Style::borderWidth);
+  setBorder(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), Style::borderWidth);
   setRadius(Style::scaledRadiusMd());
   setSize(kDefaultWidth, kDefaultHeight);
 

@@ -59,3 +59,15 @@ urgent_color = "error"
 change_color_on_hover = true  # false = keep configured workspace colors while hovering
 focused_output_only = false  # true = only the focused monitor highlights its active workspace
 ```
+
+On Hyprland, **Settings → Workspaces** adds per-workspace display names, symbols,
+preferred monitors and persistence. Names and symbols label Noctalia's pills;
+compositor IDs and keybindings remain unchanged. Custom labels take precedence over
+`label_source` and use up to 32 characters plus a four-character symbol. They still
+respect `show_labels` and the selected pill style. Persistent managed workspaces
+remain visible even with `hide_when_empty = true`.
+
+Set `scroll_wrap = true` in a workspace widget's settings to wrap between the first
+and last workspace on that widget's monitor. It defaults to `false`. This applies
+to the widget's `workspace-switch` actions; keybindings and external IPC retain
+bounded navigation. Custom scroll actions keep their own behavior.

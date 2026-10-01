@@ -17,6 +17,7 @@
 #include "hyprland-focus-grab-v1-client-protocol.h"
 #include "hyprland-toplevel-mapping-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
+#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
 #include "org-kde-plasma-virtual-desktop-client-protocol.h"
 #include "text-input-unstable-v3-client-protocol.h"
 #include "util/string_utils.h"
@@ -1149,6 +1150,12 @@ void WaylandConnection::bindGlobal(
     return;
   }
 
+  if (interfaceName == zwp_keyboard_shortcuts_inhibit_manager_v1_interface.name) {
+    m_shortcutsInhibitManager = static_cast<zwp_keyboard_shortcuts_inhibit_manager_v1*>(
+        wl_registry_bind(registry, name, &zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1)
+    );
+    return;
+  }
   if (interfaceName == zwp_idle_inhibit_manager_v1_interface.name) {
     const auto bindVersion = std::min(version, kIdleInhibitManagerVersion);
     m_idleInhibitManager = static_cast<zwp_idle_inhibit_manager_v1*>(
@@ -1400,6 +1407,10 @@ void WaylandConnection::cleanup() {
   if (m_idleNotifier != nullptr) {
     ext_idle_notifier_v1_destroy(m_idleNotifier);
     m_idleNotifier = nullptr;
+  }
+  if (m_shortcutsInhibitManager != nullptr) {
+    zwp_keyboard_shortcuts_inhibit_manager_v1_destroy(m_shortcutsInhibitManager);
+    m_shortcutsInhibitManager = nullptr;
   }
   if (m_idleInhibitManager != nullptr) {
     zwp_idle_inhibit_manager_v1_destroy(m_idleInhibitManager);

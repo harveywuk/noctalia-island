@@ -22,6 +22,446 @@ end)
 
 ## Compositor Settings
 
+### Dynamic Island bars
+
+Use the normal **Bars** settings to add or select a bar, then choose
+**General → Presentation → Dynamic Island**. Rename, delete and monitor overrides
+work the same way as for a standard bar. The Island stays at the top centre.
+
+**Auto Hide** supports **Off**, **On** and **Smart**. Smart keeps the Island visible
+on an empty workspace and hides it when that monitor's active workspace contains
+windows. Move the pointer to the top edge above the Island to reveal it. Popups,
+keyboard interaction and recording keep it visible while in use. **Show on Workspace
+Switch** briefly reveals a hidden Island when switching workspaces. **Reserve Space**
+reserves its resting height even when hidden; turn it off to let windows use that space.
+
+Each monitor override can change visibility, presentation, scale, clock, calendar,
+media and hover widgets. Unset choices inherit from the bar; resetting one choice
+restores inheritance. Widget presets and their Undo action apply to the selected
+bar or monitor only. For different Islands on different monitors, use monitor
+overrides to enable each bar on its intended output.
+
+In **Hover Timing**, adjust **Open delay** and **Close delay** from 0 to 2000 ms.
+Defaults are 110 ms and 180 ms; zero removes the delay. Moving away before the
+open delay cancels expansion, and returning before the close delay keeps the
+Island open. Both settings support monitor overrides and Reset. Changes apply
+to the next pointer entry or exit; keyboard interaction remains immediate.
+
+Bluetooth battery rings appear for five seconds after connection, then remain in
+the hover details. Low batteries stay visible in the compact Island, using the
+battery warning threshold or a matching per-device threshold. Battery updates and
+settings reloads do not restart the preview; reconnecting does.
+
+New tracks reveal their title for five seconds, then return to a compact artwork
+and playback indicator. Track previews briefly reveal an auto-hidden Island.
+Pausing keeps the compact indicator for three seconds before hiding it. Hover to
+see artwork, playback controls and seeking, including when playback is paused;
+controls remain open while you interact. Position updates and settings reloads
+do not restart either timeout.
+
+In the Island bar's **Media** settings, adjust **Track preview**, **Hide paused
+media after**, and **Bluetooth battery preview** from 0 to 30 seconds. Defaults
+are 5, 3, and 5 seconds. Zero disables a preview or hides paused media immediately;
+hover controls and low-battery rings remain available. **Reveal on track changes**
+controls whether a track preview reveals an auto-hidden Island.
+
+These choices also appear in each monitor override. Reset removes the saved
+override, restoring the base configuration or, when no base value is set, the
+parent bar's value for a monitor and the default for a bar.
+Timing changes apply from the original event time,
+without restarting a connection or playback preview.
+
+In **Activities**, choose an **Activity order** for the compact Island. The first
+active item wins; the default is **Timers → Downloads → Media**. Enable **Cycle
+activities** to rotate through active items in that order, skipping inactive ones.
+The **Cycle interval** is 1–30 seconds (default 5); cycling is off by default.
+Rotation pauses while interacting, showing notifications or OSDs, recording,
+hosting a panel, or hidden. It resumes with the remaining time. If the current
+activity ends, the next available priority is shown immediately. Changing the
+order or interval starts a new cycle; normal progress updates do not.
+Each monitor has independent timing and supports overrides and Reset.
+
+When several activities are available, hovering shows **Media**, **Downloads**
+and **Timers** tabs. The selected activity stays open while you interact, including
+paused media and timers. If it ends, another available activity is selected.
+Notifications and OSDs take priority; leaving restores the compact Island.
+Tabs respect each bar or monitor's enabled hover sections and support keyboard focus.
+
+The Island bar's **Monitors** settings separately target track-title and Bluetooth
+connection previews: **All monitors** (the default), **Focused monitor**, or a
+specific display. Focused previews stay on the display selected when the event
+occurs. If it loses its Island or disconnects, the remaining preview moves to an
+available Island without restarting its timer. A specific-display preview waits
+for that display and is shown only if its original preview time has not expired.
+Disconnected display choices remain saved and available in the selector.
+
+Routing affects brief previews only: compact playback, low-battery warnings and
+hover details remain available on every Island. Each monitor keeps its own
+activity selection while you interact, and each can override the routing choices.
+
+Ordinary notification previews collapse after at most five seconds, keeping unread
+notifications in history. Hovering or using the keyboard keeps the current preview
+open while you interact. Urgent alerts remain until dismissed; additional urgent
+alerts wait their turn. Do Not Disturb still applies. The hover view lists the three
+latest unread summaries; select one to open notification history.
+
+In **Settings → Notifications → Filtering**, add or edit an application filter and
+choose **Delivery**: **Normal**, **Silent** (preview without sound), **History only**
+(save without a preview), or **Hidden** (suppress preview and history). Existing
+individual filter switches remain available for custom combinations.
+
+```toml
+[bar.island]
+presentation = "island"
+smart_auto_hide = true
+reserve_space = false
+
+[bar.island.island]
+clock_seconds = false
+hover_widgets_center = ["clock"]
+
+[bar.island.monitor.DP-2]
+scale = 1.25
+
+[bar.island.monitor.DP-2.island]
+clock_seconds = true
+```
+
+The older standalone `[island]` configuration remains available when no bar uses
+the Island presentation. Disable its `enabled` setting when migrating to bar
+management so deleting the last Island bar does not restore the legacy Island.
+
+### Live appearance controls
+
+With a Lua-configured Hyprland session, open **Settings → Appearance → Hyprland windows**
+and enable **Manage window appearance**. Noctalia can adjust window gaps, borders,
+corner radius, active and inactive opacity, compositor blur, shadows, and animations.
+**Use Noctalia border colours** follows the current theme accent and surface colours.
+
+Values are saved through Noctalia's normal settings overrides and reapplied after
+Hyprland reloads or Noctalia restarts. Your Hyprland configuration file is not edited.
+Turning management off reloads your original Hyprland settings. Turning border colour
+matching off restores your configured colours while retaining the other appearance controls.
+HyprGlass manages its own blur; the compositor blur controls apply to windows using
+Hyprland's standard blur.
+
+The corresponding configuration table is `[shell.hyprland_appearance]`, with
+`enabled`, `follow_theme`, `gaps_in`, `gaps_out`, `border_size`, `rounding`,
+`active_opacity`, `inactive_opacity`, `blur_enabled`, `blur_size`, `blur_passes`,
+`shadow_enabled`, `shadow_range`, and `animations_enabled`. Management is off by default.
+
+### Blur and focus
+
+Open **Appearance → Blur & focus** and enable **Customise blur and focus** to
+adjust standard blur brightness, contrast, vibrancy and grain, blur behind
+application popups and special workspaces, and the popup transparency cutoff.
+The basic blur switch, size and passes remain in **Hyprland windows**.
+Hyprglass continues to use its own blur controls.
+
+This group also controls fullscreen opacity, inactive-window dimming and its
+strength, special-workspace dimming, and corner shape. Corner shape 2 gives
+circular corners; higher values make them more square while retaining rounded
+edges. A nonzero corner radius is needed to see this effect.
+
+The keys in `[shell.hyprland_appearance]` are `blur_focus_managed`,
+`blur_brightness`, `blur_contrast`, `blur_vibrancy`, `blur_noise`, `blur_popups`,
+`blur_popups_ignorealpha`, `blur_special`, `dim_inactive`, `dim_strength`,
+`dim_special`, `fullscreen_opacity` and `rounding_power`. Management is off by
+default. Turning it off restores these details from your Lua configuration.
+Presets, undo and the **Reset blur and focus** action include these settings.
+
+**Hyprland presets → Soft Glass** combines 16-pixel squircle corners, subtle
+blur colour and grain, 8% inactive dimming, opaque fullscreen windows, soft
+18-pixel shadows, a faint theme-accent glow, smooth motion and Hyprglass.
+Popup blur is enabled; special-workspace blur stays off. The preset enables
+Hyprglass controls when the plugin is loaded and preserves cursor and overview
+preferences. Use **Undo last change** to return to your previous look.
+
+### Displays
+
+**Settings → Displays** includes a draggable layout preview. Drag a numbered monitor
+to match its position on your desk; nearby edges snap together and overlapping
+drops are cancelled. **Identify displays** shows matching numbers and connector
+names on each screen for five seconds.
+
+Each display has a **Scale** selector, including fractional scaling. The layout
+preview accounts for resolution, scale, and rotation. Edits on multiple monitors
+remain staged together when switching the selected display; **Apply and test**
+previews the complete arrangement, and **Discard edits** clears all staged edits.
+
+The panel lists connected Hyprland displays and their reported
+modes. Select a display, resolution and refresh rate, rotation/flip transform,
+VRR policy and color-management preset. Bit depth and SDR brightness/saturation
+in HDR are also available. **Keep current** leaves that choice under the existing
+configuration; the VRR status describes current activity rather than its policy.
+
+Changes stay in the editor until **Apply and test**. Choose **Keep changes** within
+15 seconds to save them, or **Revert now** to restore the previous configuration.
+Timeout, closing Settings, or disconnecting the previewed display also reverts.
+**Discard edits** reloads the saved choices. **Use Hyprland configuration** previews
+removing Noctalia's control of this display and uses the same confirmation flow.
+Position and scale are retained unless you edit them.
+
+Confirmed choices are stored per connector in `[shell.hyprland_displays]` and
+reapplied on compositor reload or reconnect. Disconnected displays retain their
+saved choices. Refresh the display list after connecting new hardware. The panel
+supports Lua-configured Hyprland. Hardware/driver support determines whether VRR,
+HDR and 10-bit output can be used; HDR presets are experimental.
+
+### Input and motion
+
+**Settings → Input & motion** controls dynamic-cursors, hypr-kinetic-scroll and
+hypr-edgehover on Lua-configured Hyprland. Each group has its own management switch;
+these settings work even when window appearance management is off and remain
+independent of saved appearance profiles and light/dark switching.
+
+**Keyboard** provides searchable language and variant pickers for up to four
+layouts, in switching order. It also exposes the layout-switch shortcut,
+repeat speed (0 disables repeat), repeat delay, Caps Lock remapping and Num Lock
+on startup. Management starts disabled. Turning it off restores your Lua settings;
+per-device keyboard rules can still override these global preferences.
+
+While enabled, Noctalia owns the layout, variants and XKB options for switching and
+Caps Lock, and clears a global custom keymap file so the selected layouts can take
+effect. Other XKB options should be configured through your Lua settings with
+keyboard management disabled. The layout pickers use the installed XKB catalogue.
+
+**Gestures** adds independently switchable workspace and Hyprspace gestures.
+Choose three or four fingers, workspace swipe sensitivity, transition distance
+and reversed direction. The overview gesture can use an upward or downward swipe
+with its own minimum distance; cancelled and short swipes are ignored.
+
+Gesture management starts disabled. Enabling it uses native Hyprland bindings
+and disables Hyprspace's older gesture interception. Turning management off
+restores the Lua configuration. Noctalia removes only its own bindings when a
+trigger changes and reapplies them after reload. Existing Lua gestures must not
+use the same finger count and direction without modifiers. Hyprspace must be
+loaded for the overview binding; workspace swipes work independently.
+
+**Mouse & pointer** exposes pointer speed and acceleration, left-handed buttons,
+natural wheel scrolling and wheel speed. Pointer speed and acceleration also
+apply to touchpads unless overridden for a device in Hyprland.
+
+**Touchpad** exposes natural scrolling and its speed, tap-to-click, tap-and-drag,
+drag lock, tap button mapping, click-by-finger-count, middle-button emulation,
+disable-while-typing and three- or four-finger dragging on supported hardware.
+These controls use [Hyprland's native input options](https://wiki.hypr.land/0.56.0/Configuring/Basics/Variables/#input).
+
+The two groups have separate **Manage** switches, off by default. Enabling one
+applies its displayed settings; disabling it restores the Lua configuration.
+Changes apply immediately and survive compositor reloads. Reset restores the
+base Noctalia configuration or defaults. Existing device-specific Hyprland rules
+continue to take precedence. Input motion presets preserve these device preferences.
+
+Cursor controls include tilt, rotate, stretch and stationary modes, response strength,
+smoothing, shake sensitivity, maximum magnification and its hold time. Kinetic
+scrolling exposes momentum retention, impulse strength, stopping threshold, update
+interval, browser handling, stop-on-click/focus/target change and comma-separated
+exact app-class exclusions. Existing Lua kinetic app rules continue to apply.
+These momentum controls affect touchpad scrolling, not ordinary mouse-wheel input.
+
+Edge hover controls which physical edges forward input from outer gaps, the maximum
+activation distance (zero uses the full gap), keyboard focus, clicks and scrolling.
+It is pointer forwarding, not a hot-corner action. Bar and panel forwarding settings
+remain under your existing Lua configuration, preserving Noctalia's hover interactions.
+
+**Subtle** uses gentle tilt and shorter momentum; **Playful** uses stretching and
+longer momentum; **Reduced motion** disables cursor deformation, shake magnification
+and plugin momentum. Presets preserve app exclusions, browser handling, focus-stop
+behaviour and edge-hover preferences. They do not change compositor window animations.
+
+Configuration lives in `[shell.hyprland_input]`. Management switches are
+`mouse_managed`, `touchpad_managed`, `cursor_managed`, `scroll_managed` and
+`edge_managed`, all off by default. Turning
+management off restores the existing configuration; the new cursor controls take
+precedence over legacy cursor values in appearance presets while enabled. Settings
+are reapplied after compositor reloads and shell restarts. Missing plugins are skipped.
+
+### Window behaviour
+
+**Settings → Window behaviour** provides four independent groups on Lua-configured
+Hyprland: focus, resizing, snapping and app activation. Each has a management switch
+that restores your existing Hyprland configuration when turned off. These settings
+work with appearance management disabled and remain independent of appearance
+profiles, light/dark switching and input presets.
+
+Focus includes click-to-focus, focus-follows-mouse, detached pointer focus with
+click-to-focus, and fully separate pointer/keyboard focus (clicking does not move
+keyboard focus). Existing floating-window focus rules still apply. In follow mode,
+the movement threshold controls sensitivity and refocusing can be limited to crossing
+window boundaries. Resizing exposes border dragging, extra grab area and cursor hints.
+
+Snapping applies to floating windows while moving or resizing. Window and screen-edge
+distances are activation thresholds in logical pixels; zero disables that snap target.
+Optional gap preservation uses your existing inner/outer gaps, while border overlap
+controls how adjacent borders meet. App activation determines whether an app's
+activation request may take keyboard focus.
+
+Configuration lives in `[shell.hyprland_window_behaviour]`. `focus_managed`,
+`resize_managed`, `snap_managed` and `activation_managed` default to false. Managed
+values are reapplied after compositor reloads and shell restarts.
+
+### Workspace and tiling
+
+**Settings → Workspace & tiling** manages the default layout, dwindle splitting,
+master placement and special-workspace behaviour on Lua-configured Hyprland.
+Each group has an independent management switch. Turning one off restores that
+group from your Hyprland configuration while retaining other managed groups.
+The settings remain independent of appearance profiles and light/dark switching.
+
+The default layout can be **Dwindle**, **Master**, **Scrolling** or **Monocle**.
+Changing it rearranges tiled windows on workspaces without their own layout rule;
+workspace-specific rules still take precedence. Custom Lua layouts can remain
+under your existing configuration with default-layout management disabled.
+
+Dwindle controls include preserving split directions, pointer-directed splits,
+new-window side, focused-window versus pointer split targets, default split ratio,
+orientation threshold and ratio bias. A ratio of 1 gives equal halves; ratios apply
+to new splits. Smart splitting overrides the forced side and also preserves splits.
+Master controls set the master area's proportion and position, new-window role,
+placement before/after the focused window, or insertion at the start/end of the stack.
+These layout-specific controls can be configured before switching to that layout.
+
+Special-workspace controls cover closing when empty, hiding on workspace changes,
+focusing through floating-only special workspaces and moving the pointer when
+toggling them. “Always” pointer movement overrides Hyprland's no-warps preference.
+
+Configuration lives in `[shell.hyprland_tiling]`. `layout_managed`,
+`dwindle_managed`, `master_managed` and `special_managed` default to false. Managed
+settings are reapplied after compositor reloads and shell restarts.
+
+### App placement
+
+**Settings → App placement** uses the same running/installed app picker as appearance
+rules. You can also enter an exact app class. New rules start disabled: configure
+them, then enable them. Rules apply when a window opens; editing, disabling or
+removing a rule does not move or resize windows already on screen.
+
+Placement controls cover floating/tiled state, numbered/named/special workspaces,
+whether to keep the current workspace focused, initial floating-window size,
+centring or monitor-relative offsets, and pinning floating windows across the
+regular workspaces on their monitor. Sizes and offsets are logical pixels. Geometry
+and pinning are ignored for a rule set to Tiled; with Unchanged mode they apply only
+when the app otherwise opens floating. App size constraints can limit requested sizes.
+
+Workspace names accept letters, digits, dots, dashes and underscores (up to 128
+characters). Invalid rules show an explanation and are skipped. Matching is by
+exact class, including punctuation. If multiple rules match, later rules override
+earlier effects. Reset disables the rule and returns its placement fields to Unchanged;
+Remove clears its settings override, exposing a file-defined rule again if one exists.
+
+Rules live under `[shell.hyprland_placement_rules.<name>]` and work independently of
+appearance management, appearance profiles and tiling preferences. They are restored
+after compositor reloads and shell restarts. Existing Lua rules remain in place;
+enabled Noctalia rules override their matching placement effects for new windows.
+
+### Hyprspace overview
+
+Open **Appearance → Cursor & overview** to manage Hyprspace. Alongside panel height,
+position and layer visibility, **Customise overview appearance** exposes preview
+spacing, centred alignment, panel and workspace borders, background blur, dragged
+window opacity, colours and animation duration. Colour pickers accept theme roles
+or fixed colours, with separate opacity sliders. Zero animation duration inherits window timing;
+spring curves retain their physics-based timing. Timing changes apply on the next open.
+
+**Soft Glass overview** applies translucent surface colours, primary-colour active
+workspace highlights, centred previews and a 350 ms animation. It preserves panel
+height, position, layer visibility and other desktop appearance settings. Theme
+roles track Noctalia's light/dark palette, including while automatic appearance
+profiles are enabled. When automatic profiles are on, use **Theme profiles → Keep
+current look & edit** to expose the controls, then resume automatic switching.
+Saved full appearance presets include the overview settings.
+
+The keys in `[shell.hyprland_appearance]` are `overview_style_managed`,
+`overview_centered`, `overview_blur`, `overview_margin`, `overview_panel_border`,
+`overview_workspace_border`, `overview_drag_opacity`, `overview_duration`,
+`overview_panel_color`, `overview_panel_border_color`, `overview_active_background`,
+`overview_inactive_background`, `overview_active_border` and `overview_inactive_border`,
+with corresponding `overview_panel_opacity`, `overview_panel_border_opacity`,
+`overview_active_background_opacity`, `overview_inactive_background_opacity`,
+`overview_active_border_opacity` and `overview_inactive_border_opacity` values.
+Styling management is off by default. Turning it off restores your configured
+Hyprspace style while retaining the basic managed panel layout.
+
+### Theme-linked appearance profiles
+
+**Appearance → Theme profiles → Follow light/dark mode** selects a look from
+Noctalia's resolved shell mode, including its existing automatic schedule. The
+light and dark selectors accept the built-in Soft Glass variants or any saved
+appearance preset. They follow the shell's light/dark override when it differs
+from the mode used for application templates.
+
+The built-in dark variant uses the current Soft Glass effect strengths. The
+light variant uses light Hyprglass, brighter blur, softer shadows and reduced
+glow and dimming. Both preserve your underlying layout, motion, cursor and
+overview settings. Saved presets instead provide a full appearance snapshot.
+The main **Manage window appearance** switch remains authoritative.
+
+While automatic switching is on, individual appearance controls are hidden.
+**Keep current look & edit** copies the active look into your manual settings
+and pauses switching. Choosing a preset or using appearance undo also pauses
+switching. This manual choice persists through theme changes, compositor
+reloads and shell restarts until you choose **Follow light/dark mode** again.
+Theme colour roles still follow Noctalia's palette. **Save current look** captures
+the active profile; it does not change the automatic selection.
+
+App rules stay separate from these profiles. Missing or malformed saved profiles
+fall back to the manual appearance settings, with a message in Theme profiles.
+Names beginning with `@` are reserved for built-in profiles.
+
+Configuration uses `[shell.hyprland_profile_switching]` with `enabled`,
+`light_profile` and `dark_profile`. Defaults are disabled,
+`"@soft-glass-light"` and `"@soft-glass-dark"`. Setting `enabled=false` directly
+uses the underlying `[shell.hyprland_appearance]` values; the Keep current look
+button also copies the resolved profile there before disabling switching.
+
+### App appearance rules
+
+**Appearance → App rules** offers a searchable picker for running and installed
+apps, or an exact app-class field. Running apps supply their current compositor
+identity; installed-app suggestions use StartupWMClass or the desktop ID and may
+need correcting after the app starts. Matching is literal and case-sensitive.
+
+Each rule can target all windows, floating windows only, or fullscreen windows
+only. Override active/inactive/fullscreen opacity and corner radius, and choose
+Inherit, On or Off for standard blur, shadows, dimming, animations and Hyprglass.
+Opacity overrides replace the compositor opacity multiplier; they cannot remove
+transparency drawn by the app itself. On allows standard effects but does not
+enable an effect that is disabled globally. Hyprglass uses its per-window tags;
+an Off tag takes precedence over an On tag, including across matching rules.
+
+Starting points are **Terminal** (95% active, 90% inactive opacity, standard blur),
+**Readable** (opaque with blur and glass disabled), **Fullscreen** (fullscreen-only,
+opaque, square corners, blur/glass/shadows/dimming/animations disabled), and
+**Dialog** (floating-only, opaque, 16-pixel corners and shadows allowed).
+
+**Reset app appearance** returns every effect to inheritance while preserving
+the app and scope. **Remove rule overrides** removes that rule from Noctalia's
+settings overrides; if the rule exists in your base TOML it becomes visible again.
+Use its enable switch to disable a base rule. Rules are stored as named tables
+under `[shell.hyprland_app_rules.<name>]` and remain separate from whole-desktop
+appearance presets and their undo history.
+
+Rules follow **Manage window appearance**. Changes reload the Lua configuration
+and reapply Noctalia's managed settings, so removing an effect restores your
+existing rules. The Lua file is not edited. All-window rules apply first, then
+floating and fullscreen rules; within each scope, rule names determine order.
+
+### Animation controls
+
+Open **Appearance → Hyprland animations** and enable **Customise window animations**.
+Choose an easing curve (smooth, snappy, gentle, or linear), a window opening/closing
+style (pop, slide, fade, or instant), and a workspace transition (horizontal slide,
+vertical slide, fade, or instant). The speed multiplier ranges from 0.25× to 3×;
+higher values are faster. These controls leave Noctalia's own surface animations alone.
+
+The additional keys in `[shell.hyprland_appearance]` are `custom_animations`,
+`animation_speed`, `animation_easing`, `window_animation`, and `workspace_animation`.
+Custom animations are off by default. Turning them off restores the styles from
+your Hyprland file while keeping the other appearance controls active.
+
+### Manual configuration
+
 Add the following to your existing `hl.config({})` block. These settings are for general window appearance and functionality.
 
 ```lua
@@ -65,6 +505,67 @@ hl.workspace_rule({ workspace = "3", monitor = "DP-1", persistent = true, defaul
 hl.workspace_rule({ workspace = "4", monitor = "DP-1", persistent = true, default_name = "game" })
 hl.workspace_rule({ workspace = "5", monitor = "DP-1", persistent = true, default_name = "design" })
 ```
+
+## Curves, presets and plugin appearance
+
+**Shadows & glow** adds control over shadow falloff, sharp edges, horizontal and
+vertical offsets, scale, and active/inactive colours and opacity. The basic
+shadow enable and size controls remain in **Hyprland windows**. Enable
+**Customise shadows and glow** to manage these additional details.
+
+Inner glow has its own enable switch, size, falloff and active/inactive colours
+and opacity. Choose a colour role such as **Primary** to follow Noctalia's theme,
+or pick a fixed colour. An inactive colour set to **Match active colour** uses
+the active colour with its own opacity. Colour alpha and the opacity slider
+are multiplied.
+
+These controls use Hyprland's native shadow and glow effects. Their TOML keys
+include `decoration_effects_managed`, `shadow_color`, `shadow_inactive_color`,
+`shadow_opacity`, `shadow_inactive_opacity`, `shadow_power`, `shadow_sharp`,
+`shadow_offset_x`, `shadow_offset_y`, `shadow_scale`, `glow_enabled`, `glow_range`,
+`glow_power`, `glow_color`, `glow_inactive_color`, `glow_opacity` and
+`glow_inactive_opacity`, under `[shell.hyprland_appearance]`.
+
+Turning off this management restores the additional shadow settings and glow
+from your Lua configuration. Saved appearance presets include these settings;
+**Reset shadows and glow** removes their Noctalia overrides.
+
+The animation page includes a Bézier graph with draggable handles and numeric
+coordinates. Dragging a preset curve creates a custom curve. X coordinates stay
+between 0 and 1; Y coordinates allow overshoot from -1 to 2. Use **Play / pause
+preview** to replay an illustrative motion preview. Spring easing exposes
+stiffness and damping, with unit mass.
+
+**Opening windows**, **Closing windows**, **Moving windows** and **Workspace
+motion** each have a duration and their own curve. They inherit the shared easing
+until changed. Durations are in milliseconds at 1× speed; the overall animation
+speed still applies. Spring previews illustrate the response; actual settling
+also depends on Hyprland's spring integration.
+
+**Hyprland presets** provides Minimal, Soft, Expressive and Soft Glass starting points,
+named saved looks, undo of the last appearance adjustment, and resets for each
+group. Saved looks include plugin appearance settings and persist across restarts.
+They are stored in `[shell.hyprland_appearance_profiles]`. Reset actions remove
+Noctalia overrides and reveal values in your Noctalia configuration. Turning off
+management restores your Hyprland Lua configuration. Undo lasts for the settings
+window's lifetime; undoing again swaps back to the subsequent look.
+
+**Hyprglass** controls its enablement, dark/light theme, blur, refraction, colour
+separation, lens distortion, opacity, edge reflections, highlights and layer
+surface enablement. Layer namespace rules remain in the plugin configuration.
+**Cursor & overview** controls Dynamic Cursors' tilt/stretch mode and shake
+behaviour, plus Hyprspace's panel position, height and layer visibility.
+
+Plugin management is opt-in and applies only when the corresponding plugin is
+loaded. It does not install or load plugins. Turning off a plugin's management
+restores the plugin settings from your Lua configuration.
+
+The new keys under `[shell.hyprland_appearance]` include `opening_duration`,
+`closing_duration`, `moving_duration`, `workspace_duration`, `glass_managed`,
+`cursor_managed` and `overview_managed`. Curve subtables are `curve`,
+`opening_curve`, `closing_curve`, `moving_curve` and `workspace_curve`, with
+`x1`, `y1`, `x2`, `y2`, `stiffness` and `damping`. Per-transition curves also
+have `easing`; the shared curve uses the existing `animation_easing` key.
 
 ## IPC Keybinds
 
@@ -113,4 +614,80 @@ hl.layer_rule({
   blur = true,
   blur_popups = true,
 })
+```
+
+## Workspace preferences
+
+**Settings → Workspaces** manages numbered workspaces (1–1000) and concrete named
+workspaces such as `name:work`. Add an entry, configure it, then enable **Manage
+this workspace**. Names and symbols are Noctalia display labels; they do not rename
+Hyprland workspaces or change shortcuts, app-placement targets or Hyprspace IDs.
+
+**Preferred monitor** uses a native workspace rule. It applies when the workspace
+is created; persistent workspaces also move to their assigned monitor. Disconnected
+monitor choices remain saved. **Use Hyprland configuration** inherits any Lua
+assignment. **Keep visible when empty** keeps the workspace alive in Hyprland,
+including its overview, and visible in Noctalia despite the widget's empty filter.
+
+Disabling an entry restores its Lua rules. Removing overrides restores any base
+Noctalia configuration for that entry. These operations do not move populated
+workspaces back to a previous position unless the restored rules require it.
+Existing unrelated rule properties, such as gaps, remain intact.
+
+```toml
+[shell.hyprland_workspaces."3"]
+enabled = true
+label = "Writing"
+icon = "★"
+monitor = "DP-1"
+persistent = true
+```
+
+Workspace widget settings also provide **Wrap workspace scrolling**, independently
+for each widget instance. It defaults off.
+
+## Hyprland shortcuts
+
+**Settings → Keybinds → Hyprland shortcuts** records or accepts typed keyboard
+combinations, including Super. Add a shortcut, select its action and target, then
+turn on **Enable shortcut**. Supported actions include workspace switching,
+moving windows to workspaces or in a direction, directional focus, fullscreen,
+floating, closing a window, toggling Hyprspace and launching a command.
+
+Recording uses Wayland shortcut inhibition on the settings window until the key
+is released. Escape cancels; leaving the recorder or closing the window releases
+the inhibitor. Bindings explicitly configured to bypass shortcut inhibition in
+Hyprland retain that behavior. If the protocol is unavailable, enter the
+combination in the text field. Noctalia's existing internal UI bindings retain
+their original modifier policy.
+
+Conflicts with live compositor bindings are shown in the editor and block
+application by default. **Replace the existing Lua shortcut** explicitly replaces
+ordinary matching bindings in the default submap. Disable the Noctalia shortcut
+to restore the bindings from Lua. **Remove overrides / restore config** removes
+that entry's settings overrides; any base Noctalia configuration remains in force.
+The Lua file itself is never edited.
+
+Two enabled Noctalia entries for the same combination are both blocked.
+Submap conflicts cannot be replaced here. Physical-key bindings sharing the
+same modifiers are conservatively treated as potential conflicts because the
+binding query does not expose their current keyboard mapping. Use the Lua
+configuration for those cases. **Refresh conflicts** updates the displayed
+check after external changes; compositor reloads recheck and apply the saved
+shortcuts. This editor is intended for ordinary single-key chords; advanced
+multi-key or modifier-ignoring bindings should remain in Lua.
+
+Workspace targets accept numbers (1–1000), `name:work`, `e+1`, `e-1`, or
+`previous`. Command launchers execute only when the shortcut is pressed.
+**Repeat while held** is optional. Existing Hyprland actions remain unchanged
+until you enable an entry.
+
+```toml
+[shell.hyprland_keybinds.my-shortcut]
+enabled = true
+chord = "SUPER+CTRL+8"
+action = "workspace"
+target = "8"
+replace_existing = false
+repeating = false
 ```

@@ -6,7 +6,7 @@
 namespace panel_button_style {
 
   inline void configureHeaderIconButton(Button& button, float scale) {
-    button.setVariant(ButtonVariant::Default);
+    button.setVariant(ButtonVariant::Ghost);
     button.setGlyphSize(Style::fontSizeBody * scale);
     button.setMinWidth(Style::controlHeightSm * scale);
     button.setMinHeight(Style::controlHeightSm * scale);

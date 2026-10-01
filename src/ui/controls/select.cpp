@@ -341,7 +341,7 @@ void Select::applyVisualState() {
   const bool triggerFocused = m_triggerArea != nullptr && m_triggerArea->focused();
 
   Color triggerBg = resolved(ColorRole::SurfaceVariant, m_surfaceOpacity);
-  Color triggerBorder = resolved(ColorRole::Outline);
+  Color triggerBorder = resolved(ColorRole::Outline, Style::controlBorderAlpha);
   ColorSpec triggerText = selectedText().empty() ? colorSpecFromRole(ColorRole::OnSurfaceVariant, kPlaceholderAlpha)
                                                  : colorSpecFromRole(ColorRole::OnSurface);
 
@@ -351,7 +351,7 @@ void Select::applyVisualState() {
     triggerText = colorSpecFromRole(ColorRole::OnSurface, 0.55F);
   } else if (triggerHovered || triggerPressed) {
     triggerBg = resolved(ColorRole::SurfaceVariant, m_surfaceOpacity);
-    triggerBorder = resolved(ColorRole::Hover);
+    triggerBorder = triggerFocused ? resolveColorSpec(focusRingColorSpec()) : resolved(ColorRole::Outline);
   } else if (triggerFocused) {
     triggerBorder = resolveColorSpec(focusRingColorSpec());
   }

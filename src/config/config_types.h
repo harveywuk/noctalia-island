@@ -55,6 +55,156 @@ inline constexpr std::string_view kCapsuleGroupTokenPrefix = "group:";
 [[nodiscard]] std::string capsuleGroupTokenId(std::string_view laneEntry);
 [[nodiscard]] std::string makeCapsuleGroupToken(std::string_view groupId);
 
+enum class IslandCalendarLabels : std::uint8_t { Initials, TodayAbbreviated, Abbreviated };
+
+enum class IslandActivityPriority : std::uint8_t {
+  TimersDownloadsMedia,
+  TimersMediaDownloads,
+  DownloadsTimersMedia,
+  DownloadsMediaTimers,
+  MediaTimersDownloads,
+  MediaDownloadsTimers
+};
+struct IslandConfig {
+  // Keep the original key as the left group for existing configurations.
+  std::vector<std::string> hoverWidgets;
+  std::vector<std::string> hoverWidgetsCenter;
+  std::vector<std::string> hoverWidgetsRight;
+  bool hoverShowClock = true;
+  bool hoverShowCalendar = true;
+  bool hoverShowMedia = true;
+  bool hoverShowDownloads = true;
+  bool hoverShowTimers = true;
+  bool hoverShowBatteries = true;
+  bool hoverShowUnread = true;
+  bool enabled = false;
+  std::vector<std::string> monitors;
+  float height = 64.0F;
+  float clockSize = 24.0F;
+  float scale = 1.0F;
+  bool reserveSpace = true;
+  bool clockSeconds = false;
+  float clockOffset = 0.0F;
+  float expandedClockOffset = 0.0F;
+  IslandCalendarLabels calendarLabels = IslandCalendarLabels::Abbreviated;
+  bool outerProgressRing = false;
+  float mediaArtworkSize = 56.0F;
+  IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
+  bool cycleActivities = false;
+  int activityCycleSeconds = 5;
+  int hoverOpenDelayMs = 110;
+  int hoverCloseDelayMs = 180;
+  int trackPreviewSeconds = 5;
+  int pausedMediaSeconds = 3;
+  int bluetoothPreviewSeconds = 5;
+  bool revealOnTrackChange = true;
+  std::string trackPreviewMonitor = "all";
+  std::string bluetoothPreviewMonitor = "all";
+  float volumeBarHeight = 18.0F;
+  bool volumeShowPercentage = false;
+  bool operator==(const IslandConfig&) const = default;
+};
+enum class BarPresentation : std::uint8_t { Standard, Island };
+struct IslandMonitorOverride {
+  std::optional<std::vector<std::string>> hoverWidgets;
+  std::optional<std::vector<std::string>> hoverWidgetsCenter;
+  std::optional<std::vector<std::string>> hoverWidgetsRight;
+  std::optional<bool> hoverShowClock;
+  std::optional<bool> hoverShowCalendar;
+  std::optional<bool> hoverShowMedia;
+  std::optional<bool> hoverShowDownloads;
+  std::optional<bool> hoverShowTimers;
+  std::optional<bool> hoverShowBatteries;
+  std::optional<bool> hoverShowUnread;
+  std::optional<float> height;
+  std::optional<float> clockSize;
+  std::optional<bool> clockSeconds;
+  std::optional<float> clockOffset;
+  std::optional<float> expandedClockOffset;
+  std::optional<IslandCalendarLabels> calendarLabels;
+  std::optional<bool> outerProgressRing;
+  std::optional<float> mediaArtworkSize;
+  std::optional<IslandActivityPriority> activityPriority;
+  std::optional<bool> cycleActivities;
+  std::optional<int> activityCycleSeconds;
+  std::optional<int> hoverOpenDelayMs;
+  std::optional<int> hoverCloseDelayMs;
+  std::optional<int> trackPreviewSeconds;
+  std::optional<int> pausedMediaSeconds;
+  std::optional<int> bluetoothPreviewSeconds;
+  std::optional<bool> revealOnTrackChange;
+  std::optional<std::string> trackPreviewMonitor;
+  std::optional<std::string> bluetoothPreviewMonitor;
+  std::optional<float> volumeBarHeight;
+  std::optional<bool> volumeShowPercentage;
+  bool operator==(const IslandMonitorOverride&) const = default;
+};
+inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOverride& override) {
+  if (override.hoverWidgets)
+    base.hoverWidgets = *override.hoverWidgets;
+  if (override.hoverWidgetsCenter)
+    base.hoverWidgetsCenter = *override.hoverWidgetsCenter;
+  if (override.hoverWidgetsRight)
+    base.hoverWidgetsRight = *override.hoverWidgetsRight;
+  if (override.hoverShowClock)
+    base.hoverShowClock = *override.hoverShowClock;
+  if (override.hoverShowCalendar)
+    base.hoverShowCalendar = *override.hoverShowCalendar;
+  if (override.hoverShowMedia)
+    base.hoverShowMedia = *override.hoverShowMedia;
+  if (override.hoverShowDownloads)
+    base.hoverShowDownloads = *override.hoverShowDownloads;
+  if (override.hoverShowTimers)
+    base.hoverShowTimers = *override.hoverShowTimers;
+  if (override.hoverShowBatteries)
+    base.hoverShowBatteries = *override.hoverShowBatteries;
+  if (override.hoverShowUnread)
+    base.hoverShowUnread = *override.hoverShowUnread;
+  if (override.height)
+    base.height = *override.height;
+  if (override.clockSize)
+    base.clockSize = *override.clockSize;
+  if (override.clockSeconds)
+    base.clockSeconds = *override.clockSeconds;
+  if (override.clockOffset)
+    base.clockOffset = *override.clockOffset;
+  if (override.expandedClockOffset)
+    base.expandedClockOffset = *override.expandedClockOffset;
+  if (override.calendarLabels)
+    base.calendarLabels = *override.calendarLabels;
+  if (override.outerProgressRing)
+    base.outerProgressRing = *override.outerProgressRing;
+  if (override.mediaArtworkSize)
+    base.mediaArtworkSize = *override.mediaArtworkSize;
+  if (override.activityPriority)
+    base.activityPriority = *override.activityPriority;
+  if (override.cycleActivities)
+    base.cycleActivities = *override.cycleActivities;
+  if (override.activityCycleSeconds)
+    base.activityCycleSeconds = *override.activityCycleSeconds;
+  if (override.hoverOpenDelayMs)
+    base.hoverOpenDelayMs = *override.hoverOpenDelayMs;
+  if (override.hoverCloseDelayMs)
+    base.hoverCloseDelayMs = *override.hoverCloseDelayMs;
+  if (override.trackPreviewSeconds)
+    base.trackPreviewSeconds = *override.trackPreviewSeconds;
+  if (override.pausedMediaSeconds)
+    base.pausedMediaSeconds = *override.pausedMediaSeconds;
+  if (override.bluetoothPreviewSeconds)
+    base.bluetoothPreviewSeconds = *override.bluetoothPreviewSeconds;
+  if (override.revealOnTrackChange)
+    base.revealOnTrackChange = *override.revealOnTrackChange;
+  if (override.trackPreviewMonitor)
+    base.trackPreviewMonitor = *override.trackPreviewMonitor;
+  if (override.bluetoothPreviewMonitor)
+    base.bluetoothPreviewMonitor = *override.bluetoothPreviewMonitor;
+  if (override.volumeBarHeight)
+    base.volumeBarHeight = *override.volumeBarHeight;
+  if (override.volumeShowPercentage)
+    base.volumeShowPercentage = *override.volumeShowPercentage;
+  return base;
+}
+
 struct BarDeadZoneOverride {
   std::optional<std::unordered_map<std::string, std::string>> actions;
 
@@ -62,6 +212,8 @@ struct BarDeadZoneOverride {
 };
 
 struct BarMonitorOverride {
+  std::optional<BarPresentation> presentation;
+  IslandMonitorOverride island;
   std::string match;
   std::optional<std::string> position;
   std::optional<bool> enabled;
@@ -125,6 +277,8 @@ struct BarDeadZoneConfig {
 };
 
 struct BarConfig {
+  BarPresentation presentation = BarPresentation::Standard;
+  IslandConfig island;
   // Gesture -> action bindings applied to every widget on this bar, overriding widget-type
   // defaults and overridden in turn by `[widget.<name>.actions]`. See widget_action.h.
   std::unordered_map<std::string, std::string> actions;
@@ -230,7 +384,19 @@ struct SessionPanelActionConfig {
   bool operator==(const SessionPanelActionConfig&) const = default;
 };
 
+struct StartupAppConfig {
+  std::string id;
+  std::string label;
+  bool enabled = false;
+  std::string kind = "app";
+  std::string desktopId;
+  std::string command;
+  std::int32_t delaySeconds = 0;
+  bool operator==(const StartupAppConfig&) const = default;
+};
+
 struct ShellSessionConfig {
+  std::vector<StartupAppConfig> startupApps;
   std::vector<SessionPanelActionConfig> actions;
   // Lay the session panel actions out over multiple rows of `gridColumns` instead of
   // fitting them on a single row.
@@ -596,6 +762,29 @@ template <typename T, std::size_t N> constexpr std::string_view enumToKey(const 
   return {};
 }
 
+constexpr EnumOption<IslandActivityPriority> kIslandActivityPriority[] = {
+    {IslandActivityPriority::TimersDownloadsMedia, "timers-downloads-media",
+     "settings.options.island.timers-downloads-media"},
+    {IslandActivityPriority::TimersMediaDownloads, "timers-media-downloads",
+     "settings.options.island.timers-media-downloads"},
+    {IslandActivityPriority::DownloadsTimersMedia, "downloads-timers-media",
+     "settings.options.island.downloads-timers-media"},
+    {IslandActivityPriority::DownloadsMediaTimers, "downloads-media-timers",
+     "settings.options.island.downloads-media-timers"},
+    {IslandActivityPriority::MediaTimersDownloads, "media-timers-downloads",
+     "settings.options.island.media-timers-downloads"},
+    {IslandActivityPriority::MediaDownloadsTimers, "media-downloads-timers",
+     "settings.options.island.media-downloads-timers"},
+};
+constexpr EnumOption<IslandCalendarLabels> kIslandCalendarLabels[] = {
+    {IslandCalendarLabels::Initials, "initials", "settings.options.island.calendar-initials"},
+    {IslandCalendarLabels::TodayAbbreviated, "today", "settings.options.island.calendar-today"},
+    {IslandCalendarLabels::Abbreviated, "abbreviated", "settings.options.island.calendar-abbreviated"},
+};
+constexpr EnumOption<BarPresentation> kBarPresentations[] = {
+    {BarPresentation::Standard, "bar", "settings.options.bar.standard"},
+    {BarPresentation::Island, "island", "settings.options.bar.island"},
+};
 constexpr EnumOption<BarAccordionDirection> kBarAccordionDirections[] = {
     {BarAccordionDirection::End, "end", "settings.options.accordion-direction.end"},
     {BarAccordionDirection::Start, "start", "settings.options.accordion-direction.start"},
@@ -654,15 +843,19 @@ struct DockConfig {
   std::string layer = "top";           // top | overlay
 
   [[nodiscard]] constexpr bool isAutoHideEnabled() const noexcept { return autoHide || smartAutoHide; }
-  bool reserveSpace = true;         // reserve compositor exclusive zone; applies with or without auto_hide
-  float activeScale = 1.0F;         // focused app icon scale
-  float inactiveScale = 0.85F;      // non-focused app icon scale
-  bool magnification = true;        // magnify icons near the pointer (macOS-style)
-  float magnificationScale = 1.45F; // max icon scale multiplier at the pointer center
-  float activeOpacity = 1.0F;       // focused app icon opacity
-  float inactiveOpacity = 0.85F;    // non-focused app icon opacity
-  bool showDots = false;            // show optional running window dots below app icons
-  bool showInstanceCount = true;    // show a badge with count when app has >1 window
+  bool reserveSpace = true;          // reserve compositor exclusive zone; applies with or without auto_hide
+  float activeScale = 1.0F;          // focused app icon scale
+  float inactiveScale = 0.85F;       // non-focused app icon scale
+  bool magnification = true;         // magnify icons near the pointer (macOS-style)
+  float magnificationScale = 1.45F;  // max icon scale multiplier at the pointer center
+  bool animateLaunch = true;         // brief icon bounce when launching an app
+  bool windowPreviews = false;       // optional on-demand window picker on hover
+  std::int32_t previewDelayMs = 450; // delay before opening window previews
+  std::int32_t hideDelayMs = 200;    // grace period after leaving the dock
+  float activeOpacity = 1.0F;        // focused app icon opacity
+  float inactiveOpacity = 0.85F;     // non-focused app icon opacity
+  bool showDots = false;             // show optional running window dots below app icons
+  bool showInstanceCount = true;     // show a badge with count when app has >1 window
   DockLauncherPosition launcherPosition = DockLauncherPosition::None;
   std::string launcherIcon = "grid-dots";   // Tabler glyph name
   std::string launcherCustomImage = "";     // image path; overrides launcherIcon glyph when set
@@ -970,7 +1163,425 @@ struct LauncherProviderConfig {
   bool operator==(const LauncherProviderConfig&) const = default;
 };
 
+enum class HyprlandAnimationEasing : std::uint8_t { Smooth, Snappy, Gentle, Linear, Custom, Spring, Inherit };
+enum class HyprlandWindowAnimation : std::uint8_t { Pop, Slide, Fade, Instant };
+enum class HyprlandWorkspaceAnimation : std::uint8_t { Slide, Vertical, Fade, Instant };
+
+constexpr EnumOption<HyprlandAnimationEasing> kHyprlandAnimationEasings[] = {
+    {HyprlandAnimationEasing::Custom, "custom", "settings.schema.hyprland-appearance.easing-custom"},
+    {HyprlandAnimationEasing::Spring, "spring", "settings.schema.hyprland-appearance.easing-spring"},
+    {HyprlandAnimationEasing::Inherit, "inherit", "settings.schema.hyprland-appearance.easing-inherit"},
+    {HyprlandAnimationEasing::Smooth, "smooth", "settings.schema.hyprland-appearance.easing-smooth"},
+    {HyprlandAnimationEasing::Snappy, "snappy", "settings.schema.hyprland-appearance.easing-snappy"},
+    {HyprlandAnimationEasing::Gentle, "gentle", "settings.schema.hyprland-appearance.easing-gentle"},
+    {HyprlandAnimationEasing::Linear, "linear", "settings.schema.hyprland-appearance.easing-linear"},
+};
+constexpr EnumOption<HyprlandWindowAnimation> kHyprlandWindowAnimations[] = {
+    {HyprlandWindowAnimation::Pop, "pop", "settings.schema.hyprland-appearance.style-pop"},
+    {HyprlandWindowAnimation::Slide, "slide", "settings.schema.hyprland-appearance.style-slide"},
+    {HyprlandWindowAnimation::Fade, "fade", "settings.schema.hyprland-appearance.style-fade"},
+    {HyprlandWindowAnimation::Instant, "instant", "settings.schema.hyprland-appearance.style-instant"},
+};
+constexpr EnumOption<HyprlandWorkspaceAnimation> kHyprlandWorkspaceAnimations[] = {
+    {HyprlandWorkspaceAnimation::Slide, "slide", "settings.schema.hyprland-appearance.style-horizontal"},
+    {HyprlandWorkspaceAnimation::Vertical, "vertical", "settings.schema.hyprland-appearance.style-vertical"},
+    {HyprlandWorkspaceAnimation::Fade, "fade", "settings.schema.hyprland-appearance.style-fade"},
+    {HyprlandWorkspaceAnimation::Instant, "instant", "settings.schema.hyprland-appearance.style-instant"},
+};
+
+struct HyprlandMotionCurve {
+  HyprlandAnimationEasing easing = HyprlandAnimationEasing::Inherit;
+  float x1 = 0.22F, y1 = 1.0F, x2 = 0.36F, y2 = 1.0F;
+  float stiffness = 200.0F, damping = 20.0F;
+  bool operator==(const HyprlandMotionCurve&) const = default;
+};
+
+struct HyprlandAppearanceConfig {
+  bool enabled = false;
+  bool followTheme = false;
+  int gapsIn = 6;
+  int gapsOut = 12;
+  int borderSize = 2;
+  int rounding = 12;
+  float activeOpacity = 1.0F;
+  float inactiveOpacity = 1.0F;
+  bool blurEnabled = true;
+  int blurSize = 3;
+  int blurPasses = 2;
+  bool blurFocusManaged = false;
+  float blurBrightness = 1.0F, blurContrast = 0.8916F, blurVibrancy = 0.1696F, blurNoise = 0.0117F;
+  bool blurPopups = false, blurSpecial = false;
+  float blurPopupsIgnorealpha = 0.2F;
+  bool dimInactive = false;
+  float dimStrength = 0.5F, dimSpecial = 0.2F;
+  float fullscreenOpacity = 1.0F, roundingPower = 2.0F;
+  bool shadowEnabled = true;
+  int shadowRange = 4;
+  bool decorationEffectsManaged = false;
+  int shadowPower = 3;
+  bool shadowSharp = false;
+  int shadowOffsetX = 0, shadowOffsetY = 0;
+  float shadowScale = 1.0F;
+  std::optional<ColorSpec> shadowColor = fixedColorSpec(hex("#1a1a1a"));
+  std::optional<ColorSpec> shadowInactiveColor;
+  float shadowOpacity = 0.93F, shadowInactiveOpacity = 0.93F;
+  bool glowEnabled = false;
+  int glowRange = 10, glowPower = 3;
+  std::optional<ColorSpec> glowColor = colorSpecFromRole(ColorRole::Primary);
+  std::optional<ColorSpec> glowInactiveColor;
+  float glowOpacity = 0.35F, glowInactiveOpacity = 0.12F;
+  bool animationsEnabled = true;
+  bool customAnimations = false;
+  float animationSpeed = 1.0F;
+  HyprlandAnimationEasing animationEasing = HyprlandAnimationEasing::Smooth;
+  HyprlandWindowAnimation windowAnimation = HyprlandWindowAnimation::Pop;
+  HyprlandWorkspaceAnimation workspaceAnimation = HyprlandWorkspaceAnimation::Slide;
+
+  HyprlandMotionCurve curve, openingCurve, closingCurve, movingCurve, workspaceCurve;
+  float openingDuration = 400.0F, closingDuration = 250.0F, movingDuration = 300.0F, workspaceDuration = 400.0F;
+  bool glassManaged = false, glassEnabled = true, glassLight = false, glassLayers = false;
+  float glassBlur = 1.5F, glassRefraction = 0.35F, glassChromatic = 0.15F, glassLens = 0.2F;
+  float glassOpacity = 1.0F, glassFresnel = 0.6F, glassSpecular = 0.8F;
+  bool cursorManaged = false, cursorEnabled = true, cursorStretch = false, cursorShake = true;
+  float cursorShakeLimit = 6.0F;
+  bool overviewManaged = false, overviewBottom = true, overviewHideLayers = false;
+  int overviewHeight = 220;
+  bool overviewStyleManaged = false, overviewCentered = true, overviewBlur = true;
+  int overviewMargin = 12, overviewPanelBorder = 1, overviewWorkspaceBorder = 2;
+  float overviewDragOpacity = 0.85F, overviewDuration = 350;
+  std::optional<ColorSpec> overviewPanelColor = colorSpecFromRole(ColorRole::Surface);
+  std::optional<ColorSpec> overviewPanelBorderColor = colorSpecFromRole(ColorRole::Primary);
+  std::optional<ColorSpec> overviewActiveBackground = colorSpecFromRole(ColorRole::Primary);
+  std::optional<ColorSpec> overviewInactiveBackground = colorSpecFromRole(ColorRole::Surface);
+  std::optional<ColorSpec> overviewActiveBorder = colorSpecFromRole(ColorRole::Primary);
+  std::optional<ColorSpec> overviewInactiveBorder = colorSpecFromRole(ColorRole::Primary);
+  float overviewPanelOpacity = .82F, overviewPanelBorderOpacity = .25F;
+  float overviewActiveBackgroundOpacity = .12F, overviewInactiveBackgroundOpacity = .45F;
+  float overviewActiveBorderOpacity = .85F, overviewInactiveBorderOpacity = .12F;
+  bool operator==(const HyprlandAppearanceConfig&) const = default;
+};
+
+enum class HyprlandRuleSwitch : std::uint8_t { Inherit, On, Off };
+constexpr EnumOption<HyprlandRuleSwitch> kHyprlandRuleSwitches[] = {
+    {HyprlandRuleSwitch::Inherit, "inherit", "settings.hyprland-editor.rule-inherit"},
+    {HyprlandRuleSwitch::On, "on", "settings.hyprland-editor.rule-on"},
+    {HyprlandRuleSwitch::Off, "off", "settings.hyprland-editor.rule-off"},
+};
+enum class HyprlandRuleScope : std::uint8_t { All, Floating, Fullscreen };
+constexpr EnumOption<HyprlandRuleScope> kHyprlandRuleScopes[] = {
+    {HyprlandRuleScope::All, "all", "settings.hyprland-editor.rule-all"},
+    {HyprlandRuleScope::Floating, "floating", "settings.hyprland-editor.rule-floating"},
+    {HyprlandRuleScope::Fullscreen, "fullscreen", "settings.hyprland-editor.rule-fullscreen"},
+};
+struct HyprlandAppRule {
+  std::string name, appClass;
+  bool enabled = true, opacityManaged = false, roundingManaged = false;
+  HyprlandRuleScope scope = HyprlandRuleScope::All;
+  float activeOpacity = 1, inactiveOpacity = 1, fullscreenOpacity = 1;
+  int rounding = 16;
+  HyprlandRuleSwitch blur = HyprlandRuleSwitch::Inherit, shadow = HyprlandRuleSwitch::Inherit;
+  HyprlandRuleSwitch dim = HyprlandRuleSwitch::Inherit, animations = HyprlandRuleSwitch::Inherit;
+  HyprlandRuleSwitch glass = HyprlandRuleSwitch::Inherit;
+  bool operator==(const HyprlandAppRule&) const = default;
+};
+
+enum class HyprlandPlacementMode : std::uint8_t { Inherit, Floating, Tiled };
+constexpr EnumOption<HyprlandPlacementMode> kHyprlandPlacementModes[] = {
+    {HyprlandPlacementMode::Inherit, "inherit", "settings.hyprland-placement.kHyprlandPlacementModes-inherit"},
+    {HyprlandPlacementMode::Floating, "floating", "settings.hyprland-placement.kHyprlandPlacementModes-floating"},
+    {HyprlandPlacementMode::Tiled, "tiled", "settings.hyprland-placement.kHyprlandPlacementModes-tiled"},
+};
+enum class HyprlandPlacementWorkspace : std::uint8_t { Inherit, Number, Named, Special };
+constexpr EnumOption<HyprlandPlacementWorkspace> kHyprlandPlacementWorkspaces[] = {
+    {HyprlandPlacementWorkspace::Inherit, "inherit",
+     "settings.hyprland-placement.kHyprlandPlacementWorkspaces-inherit"},
+    {HyprlandPlacementWorkspace::Number, "number", "settings.hyprland-placement.kHyprlandPlacementWorkspaces-number"},
+    {HyprlandPlacementWorkspace::Named, "named", "settings.hyprland-placement.kHyprlandPlacementWorkspaces-named"},
+    {HyprlandPlacementWorkspace::Special, "special",
+     "settings.hyprland-placement.kHyprlandPlacementWorkspaces-special"},
+};
+enum class HyprlandPlacementPosition : std::uint8_t { Inherit, Center, Offset };
+constexpr EnumOption<HyprlandPlacementPosition> kHyprlandPlacementPositions[] = {
+    {HyprlandPlacementPosition::Inherit, "inherit", "settings.hyprland-placement.kHyprlandPlacementPositions-inherit"},
+    {HyprlandPlacementPosition::Center, "center", "settings.hyprland-placement.kHyprlandPlacementPositions-center"},
+    {HyprlandPlacementPosition::Offset, "offset", "settings.hyprland-placement.kHyprlandPlacementPositions-offset"},
+};
+struct HyprlandPlacementRule {
+  std::string name, appClass;
+  bool enabled = false;
+  HyprlandPlacementMode mode = HyprlandPlacementMode::Inherit;
+  HyprlandPlacementWorkspace workspace = HyprlandPlacementWorkspace::Inherit;
+  int workspaceNumber = 1;
+  std::string workspaceName;
+  bool workspaceSilent = true;
+  bool sizeManaged = false;
+  int width = 960, height = 640;
+  HyprlandPlacementPosition position = HyprlandPlacementPosition::Inherit;
+  int x = 0, y = 0;
+  HyprlandRuleSwitch pin = HyprlandRuleSwitch::Inherit;
+  bool operator==(const HyprlandPlacementRule&) const = default;
+};
+
+struct HyprlandProfileSwitchingConfig {
+  bool enabled = false;
+  std::string lightProfile = "@soft-glass-light", darkProfile = "@soft-glass-dark";
+  bool operator==(const HyprlandProfileSwitchingConfig&) const = default;
+};
+
+enum class HyprlandCursorMode : std::uint8_t { Tilt, Rotate, Stretch, None };
+constexpr EnumOption<HyprlandCursorMode> kHyprlandCursorModes[] = {
+    {HyprlandCursorMode::Tilt, "tilt", "settings.hyprland-input.tilt"},
+    {HyprlandCursorMode::Rotate, "rotate", "settings.hyprland-input.rotate"},
+    {HyprlandCursorMode::Stretch, "stretch", "settings.hyprland-input.stretch"},
+    {HyprlandCursorMode::None, "none", "settings.hyprland-input.none"},
+};
+
+enum class HyprlandPointerAcceleration : std::uint8_t { Default, Adaptive, Flat };
+enum class HyprlandDragLock : std::uint8_t { Disabled, Timeout, Sticky };
+enum class HyprlandTapMap : std::uint8_t { Default, Lrm, Lmr };
+enum class HyprlandDragFingers : std::uint8_t { Disabled, Three, Four };
+constexpr EnumOption<HyprlandPointerAcceleration> kHyprlandPointerAcceleration[] = {
+    {HyprlandPointerAcceleration::Default, "default", "settings.hyprland-input.HyprlandPointerAcceleration-default"},
+    {HyprlandPointerAcceleration::Adaptive, "adaptive", "settings.hyprland-input.HyprlandPointerAcceleration-adaptive"},
+    {HyprlandPointerAcceleration::Flat, "flat", "settings.hyprland-input.HyprlandPointerAcceleration-flat"},
+};
+constexpr EnumOption<HyprlandDragLock> kHyprlandDragLock[] = {
+    {HyprlandDragLock::Disabled, "off", "settings.hyprland-input.HyprlandDragLock-off"},
+    {HyprlandDragLock::Timeout, "timeout", "settings.hyprland-input.HyprlandDragLock-timeout"},
+    {HyprlandDragLock::Sticky, "sticky", "settings.hyprland-input.HyprlandDragLock-sticky"},
+};
+constexpr EnumOption<HyprlandTapMap> kHyprlandTapMap[] = {
+    {HyprlandTapMap::Default, "default", "settings.hyprland-input.HyprlandTapMap-default"},
+    {HyprlandTapMap::Lrm, "lrm", "settings.hyprland-input.HyprlandTapMap-lrm"},
+    {HyprlandTapMap::Lmr, "lmr", "settings.hyprland-input.HyprlandTapMap-lmr"},
+};
+constexpr EnumOption<HyprlandDragFingers> kHyprlandDragFingers[] = {
+    {HyprlandDragFingers::Disabled, "off", "settings.hyprland-input.HyprlandDragFingers-off"},
+    {HyprlandDragFingers::Three, "three", "settings.hyprland-input.HyprlandDragFingers-three"},
+    {HyprlandDragFingers::Four, "four", "settings.hyprland-input.HyprlandDragFingers-four"},
+};
+enum class HyprlandLayoutSwitch : std::uint8_t { None, AltShift, CtrlShift, SuperSpace, AltSpace, BothShifts };
+enum class HyprlandCapsLock : std::uint8_t { Normal, Escape, Control, SwapEscape, SwapControl, Disabled };
+constexpr EnumOption<HyprlandLayoutSwitch> kHyprlandLayoutSwitch[] = {
+    {HyprlandLayoutSwitch::None, "none", "settings.hyprland-input.LayoutSwitch-none"},
+    {HyprlandLayoutSwitch::AltShift, "alt-shift", "settings.hyprland-input.LayoutSwitch-alt-shift"},
+    {HyprlandLayoutSwitch::CtrlShift, "ctrl-shift", "settings.hyprland-input.LayoutSwitch-ctrl-shift"},
+    {HyprlandLayoutSwitch::SuperSpace, "super-space", "settings.hyprland-input.LayoutSwitch-super-space"},
+    {HyprlandLayoutSwitch::AltSpace, "alt-space", "settings.hyprland-input.LayoutSwitch-alt-space"},
+    {HyprlandLayoutSwitch::BothShifts, "both-shifts", "settings.hyprland-input.LayoutSwitch-both-shifts"},
+};
+constexpr EnumOption<HyprlandCapsLock> kHyprlandCapsLock[] = {
+    {HyprlandCapsLock::Normal, "normal", "settings.hyprland-input.CapsLock-normal"},
+    {HyprlandCapsLock::Escape, "escape", "settings.hyprland-input.CapsLock-escape"},
+    {HyprlandCapsLock::Control, "control", "settings.hyprland-input.CapsLock-control"},
+    {HyprlandCapsLock::SwapEscape, "swap-escape", "settings.hyprland-input.CapsLock-swap-escape"},
+    {HyprlandCapsLock::SwapControl, "swap-control", "settings.hyprland-input.CapsLock-swap-control"},
+    {HyprlandCapsLock::Disabled, "disabled", "settings.hyprland-input.CapsLock-disabled"},
+};
+struct HyprlandDisplayConfig {
+  std::string output;
+  bool managed = false;
+  std::string mode; // Empty means retain the compositor's configured mode.
+  int transform = -1;
+  float scale = 0; // Zero retains the compositor scale.
+  bool positionManaged = false;
+  int x = 0, y = 0;
+  int vrr = -2; // -2 retains the rule; -1 follows Hyprland's global VRR setting.
+  std::string colorMode;
+  int bitDepth = 0;
+  float sdrBrightness = 0, sdrSaturation = 0; // Zero retains the configured value.
+  bool operator==(const HyprlandDisplayConfig&) const = default;
+};
+
+enum class HyprlandGestureFingers : std::uint8_t { Three = 3, Four = 4 };
+constexpr EnumOption<HyprlandGestureFingers> kHyprlandGestureFingers[] = {
+    {HyprlandGestureFingers::Three, "three", "settings.hyprland-input.gesture-three"},
+    {HyprlandGestureFingers::Four, "four", "settings.hyprland-input.gesture-four"},
+};
+enum class HyprlandGestureDirection : std::uint8_t { Up, Down };
+constexpr EnumOption<HyprlandGestureDirection> kHyprlandGestureDirection[] = {
+    {HyprlandGestureDirection::Up, "up", "settings.hyprland-input.gesture-up"},
+    {HyprlandGestureDirection::Down, "down", "settings.hyprland-input.gesture-down"},
+};
+struct HyprlandInputConfig {
+  bool gesturesManaged = false;
+  bool workspaceGestureEnabled = true;
+  HyprlandGestureFingers workspaceGestureFingers = HyprlandGestureFingers::Three;
+  float workspaceGestureSensitivity = 1;
+  int workspaceGestureDistance = 300;
+  bool workspaceGestureInvert = true;
+  bool overviewGestureEnabled = true;
+  HyprlandGestureFingers overviewGestureFingers = HyprlandGestureFingers::Four;
+  HyprlandGestureDirection overviewGestureDirection = HyprlandGestureDirection::Up;
+  int overviewGestureDistance = 100;
+
+  bool keyboardManaged = false;
+  std::string keyboardLayout = "us", keyboardLayout2 = "none", keyboardLayout3 = "none", keyboardLayout4 = "none";
+  HyprlandLayoutSwitch keyboardLayoutSwitch = HyprlandLayoutSwitch::None;
+  HyprlandCapsLock keyboardCapsLock = HyprlandCapsLock::Normal;
+  int keyboardRepeatRate = 25, keyboardRepeatDelay = 600;
+  bool keyboardNumLock = false;
+
+  bool mouseManaged = false;
+  float pointerSensitivity = 0;
+  HyprlandPointerAcceleration pointerAcceleration = HyprlandPointerAcceleration::Default;
+  bool mouseLeftHanded = false;
+  bool mouseNaturalScroll = false;
+  float mouseScrollFactor = 1;
+  bool touchpadManaged = false;
+  bool touchpadNaturalScroll = false;
+  float touchpadScrollFactor = 1;
+  bool touchpadTapToClick = true;
+  bool touchpadTapAndDrag = true;
+  HyprlandDragLock touchpadDragLock = HyprlandDragLock::Disabled;
+  HyprlandTapMap touchpadTapMap = HyprlandTapMap::Default;
+  bool touchpadClickfinger = false;
+  bool touchpadMiddleEmulation = false;
+  bool touchpadDisableWhileTyping = true;
+  HyprlandDragFingers touchpadDragFingers = HyprlandDragFingers::Disabled;
+
+  bool cursorManaged = false;
+  bool cursorEnabled = true;
+  HyprlandCursorMode cursorMode = HyprlandCursorMode::Tilt;
+  int tiltLimit = 5000;
+  int tiltAngle = 60;
+  int cursorWindow = 100;
+  int stretchLimit = 3000;
+  int rotateLength = 32;
+  bool shakeEnabled = true;
+  float shakeThreshold = 6;
+  float shakeLimit = 6;
+  int shakeTimeout = 2000;
+  bool scrollManaged = false;
+  bool scrollEnabled = true;
+  float scrollDecay = .92F;
+  float scrollMultiplier = 1.25F;
+  float scrollCutoff = .5F;
+  int scrollInterval = 16;
+  bool scrollBrowser = true;
+  bool scrollStopClick = true;
+  bool scrollStopFocus = false;
+  bool scrollStopTarget = true;
+  std::string scrollExcluded = "";
+  bool edgeManaged = false;
+  bool edgeEnabled = true;
+  bool edgeLeft = true;
+  bool edgeRight = true;
+  bool edgeTop = true;
+  bool edgeBottom = true;
+  int edgeDistance = 0;
+  int edgeFocus = -1;
+  bool edgeClick = true;
+  bool edgeScroll = true;
+  bool operator==(const HyprlandInputConfig&) const = default;
+};
+
+struct HyprlandWindowBehaviourConfig {
+  bool focusManaged = false;
+  int focusMode = 1;
+  float focusThreshold = 0;
+  bool mouseRefocus = true;
+  bool resizeManaged = false;
+  bool resizeOnBorder = false;
+  int borderGrab = 15;
+  bool borderCursor = true;
+  bool snapManaged = false;
+  bool snapEnabled = false;
+  int snapWindowDistance = 10;
+  int snapMonitorDistance = 10;
+  bool snapBorderOverlap = false;
+  bool snapRespectGaps = false;
+  bool activationManaged = false;
+  bool focusOnActivate = false;
+  bool operator==(const HyprlandWindowBehaviourConfig&) const = default;
+};
+
+enum class HyprlandTilingLayout : std::uint8_t { Dwindle, Master, Scrolling, Monocle };
+constexpr EnumOption<HyprlandTilingLayout> kHyprlandTilingLayouts[] = {
+    {HyprlandTilingLayout::Dwindle, "dwindle", "settings.hyprland-tiling.kHyprlandTilingLayouts-dwindle"},
+    {HyprlandTilingLayout::Master, "master", "settings.hyprland-tiling.kHyprlandTilingLayouts-master"},
+    {HyprlandTilingLayout::Scrolling, "scrolling", "settings.hyprland-tiling.kHyprlandTilingLayouts-scrolling"},
+    {HyprlandTilingLayout::Monocle, "monocle", "settings.hyprland-tiling.kHyprlandTilingLayouts-monocle"},
+};
+
+enum class HyprlandMasterOrientation : std::uint8_t { Left, Right, Top, Bottom, Center };
+constexpr EnumOption<HyprlandMasterOrientation> kHyprlandMasterOrientations[] = {
+    {HyprlandMasterOrientation::Left, "left", "settings.hyprland-tiling.kHyprlandMasterOrientations-left"},
+    {HyprlandMasterOrientation::Right, "right", "settings.hyprland-tiling.kHyprlandMasterOrientations-right"},
+    {HyprlandMasterOrientation::Top, "top", "settings.hyprland-tiling.kHyprlandMasterOrientations-top"},
+    {HyprlandMasterOrientation::Bottom, "bottom", "settings.hyprland-tiling.kHyprlandMasterOrientations-bottom"},
+    {HyprlandMasterOrientation::Center, "center", "settings.hyprland-tiling.kHyprlandMasterOrientations-center"},
+};
+
+enum class HyprlandMasterStatus : std::uint8_t { Master, Slave, Inherit };
+constexpr EnumOption<HyprlandMasterStatus> kHyprlandMasterStatuses[] = {
+    {HyprlandMasterStatus::Master, "master", "settings.hyprland-tiling.kHyprlandMasterStatuses-master"},
+    {HyprlandMasterStatus::Slave, "slave", "settings.hyprland-tiling.kHyprlandMasterStatuses-slave"},
+    {HyprlandMasterStatus::Inherit, "inherit", "settings.hyprland-tiling.kHyprlandMasterStatuses-inherit"},
+};
+
+enum class HyprlandMasterPosition : std::uint8_t { None, Before, After };
+constexpr EnumOption<HyprlandMasterPosition> kHyprlandMasterPositions[] = {
+    {HyprlandMasterPosition::None, "none", "settings.hyprland-tiling.kHyprlandMasterPositions-none"},
+    {HyprlandMasterPosition::Before, "before", "settings.hyprland-tiling.kHyprlandMasterPositions-before"},
+    {HyprlandMasterPosition::After, "after", "settings.hyprland-tiling.kHyprlandMasterPositions-after"},
+};
+
+struct HyprlandTilingConfig {
+  bool layoutManaged = false;
+  HyprlandTilingLayout layout = HyprlandTilingLayout::Dwindle;
+  bool dwindleManaged = false;
+  bool preserveSplit = false;
+  bool smartSplit = false;
+  int forceSplit = 0;
+  bool useActiveForSplits = true;
+  float defaultSplitRatio = 1;
+  float splitWidthMultiplier = 1;
+  int splitBias = 0;
+  bool masterManaged = false;
+  float masterFactor = .55F;
+  HyprlandMasterOrientation masterOrientation = HyprlandMasterOrientation::Left;
+  HyprlandMasterStatus newStatus = HyprlandMasterStatus::Slave;
+  HyprlandMasterPosition newOnActive = HyprlandMasterPosition::None;
+  bool newOnTop = false;
+  bool specialManaged = false;
+  bool closeSpecialOnEmpty = true;
+  bool hideSpecialOnWorkspaceChange = false;
+  bool specialFallthrough = false;
+  int warpOnSpecial = 0;
+  bool operator==(const HyprlandTilingConfig&) const = default;
+};
+
+struct HyprlandKeybindConfig {
+  std::string name;
+  bool enabled = false;
+  std::string chord;
+  std::string action = "workspace", target = "1";
+  bool replaceExisting = false;
+  bool repeating = false;
+  bool operator==(const HyprlandKeybindConfig&) const = default;
+};
+
+struct HyprlandWorkspaceConfig {
+  std::string workspace; // Concrete positive number or name:<name>, never a selector.
+  bool enabled = false;
+  std::string label, icon, monitor;
+  bool persistent = false;
+  bool operator==(const HyprlandWorkspaceConfig&) const = default;
+};
+
 struct ShellConfig {
+  std::vector<HyprlandWorkspaceConfig> hyprlandWorkspaces;
+  std::vector<HyprlandKeybindConfig> hyprlandKeybinds;
+  HyprlandTilingConfig hyprlandTiling;
+  HyprlandWindowBehaviourConfig hyprlandWindowBehaviour;
+  HyprlandInputConfig hyprlandInput;
+  std::vector<HyprlandDisplayConfig> hyprlandDisplays;
+  HyprlandProfileSwitchingConfig hyprlandProfileSwitching;
+  std::vector<HyprlandAppRule> hyprlandAppRules;
+  std::vector<HyprlandPlacementRule> hyprlandPlacementRules;
+  HyprlandAppearanceConfig hyprlandAppearance;
+  std::unordered_map<std::string, std::string> hyprlandAppearanceProfiles;
   struct AnimationConfig {
     bool enabled = true;
     float speed = 1.0F;
@@ -1153,6 +1764,7 @@ struct ShellConfig {
   std::optional<ColorSpec> appIconColor;
   bool launchAppsAsSystemdServices = false;
   std::string launchAppsCustomCommand;
+  std::string preferredTerminal; // Installed terminal desktop ID; empty uses system discovery.
   /// When false, disables Wayland clipboard integration (history panel, data-control binding, Input paste/copy hooks).
   bool clipboardEnabled = true;
   /// When true, the shell takes over the selection once the application that copied it exits, so the last copied item
@@ -1748,42 +2360,6 @@ struct HotCornersConfig {
   Corner bottomRight;
 
   bool operator==(const HotCornersConfig&) const = default;
-};
-
-enum class IslandCalendarLabels : std::uint8_t { Initials, TodayAbbreviated, Abbreviated };
-constexpr EnumOption<IslandCalendarLabels> kIslandCalendarLabels[] = {
-    {IslandCalendarLabels::Initials, "initials", "settings.options.island.calendar-initials"},
-    {IslandCalendarLabels::TodayAbbreviated, "today", "settings.options.island.calendar-today"},
-    {IslandCalendarLabels::Abbreviated, "abbreviated", "settings.options.island.calendar-abbreviated"},
-};
-
-struct IslandConfig {
-  // Keep the original key as the left group for existing configurations.
-  std::vector<std::string> hoverWidgets;
-  std::vector<std::string> hoverWidgetsCenter;
-  std::vector<std::string> hoverWidgetsRight;
-  bool hoverShowClock = true;
-  bool hoverShowCalendar = true;
-  bool hoverShowMedia = true;
-  bool hoverShowDownloads = true;
-  bool hoverShowTimers = true;
-  bool hoverShowBatteries = true;
-  bool hoverShowUnread = true;
-  bool enabled = false;
-  std::vector<std::string> monitors;
-  float height = 64.0F;
-  float clockSize = 24.0F;
-  float scale = 1.0F;
-  bool reserveSpace = true;
-  bool clockSeconds = false;
-  float clockOffset = 0.0F;
-  float expandedClockOffset = 0.0F;
-  IslandCalendarLabels calendarLabels = IslandCalendarLabels::Abbreviated;
-  bool outerProgressRing = false;
-  float mediaArtworkSize = 56.0F;
-  float volumeBarHeight = 18.0F;
-  bool volumeShowPercentage = false;
-  bool operator==(const IslandConfig&) const = default;
 };
 
 struct Config {

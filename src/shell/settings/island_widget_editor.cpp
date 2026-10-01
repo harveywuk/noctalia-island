@@ -45,10 +45,11 @@ namespace settings {
     }
   } // namespace
 
-  void addIslandWidgetEditor(Flex& section, SettingsControlFactory& factory) {
+  void addIslandWidgetEditor(Flex& section, SettingsControlFactory& factory, const std::vector<std::string>& root) {
     const auto& ctx = factory.context();
     const float scale = ctx.scale;
-    const auto layout = hoverLayout(ctx.config.island);
+    auto layout = hoverLayout(islandConfigForPath(ctx.config, root));
+    layout.scope = root;
     auto block = ui::column({.align = FlexAlign::Stretch, .gap = 8 * scale});
     block->addChild(makeSettingSubtitleLabel(i18n::tr("settings.island-editor.description"), scale));
     auto presets = ui::row({.align = FlexAlign::Center, .gap = 6 * scale});
@@ -60,15 +61,15 @@ namespace settings {
               .fontSize = Style::fontSizeCaption * scale,
               .variant = ButtonVariant::Default,
               .minHeight = 30 * scale,
-              .onClick = [i, layout, undo = ctx.hoverLayoutUndo, commit = ctx.setOverrides] {
+              .onClick = [i, layout, root, undo = ctx.hoverLayoutUndo, commit = ctx.setOverrides] {
                 if (undo)
                   *undo = std::make_shared<HoverLayout>(layout);
-                commit(hoverLayoutOverrides(hoverLayoutPreset(i)));
+                commit(hoverLayoutOverrides(hoverLayoutPreset(i), root));
               },
           })
       );
     }
-    if (ctx.hoverLayoutUndo && *ctx.hoverLayoutUndo) {
+    if (ctx.hoverLayoutUndo && *ctx.hoverLayoutUndo && (*ctx.hoverLayoutUndo)->scope == root) {
       presets->addChild(
           ui::button({
               .text = i18n::tr("settings.island-editor.undo"),
@@ -79,7 +80,7 @@ namespace settings {
               .onClick = [undo = ctx.hoverLayoutUndo, commit = ctx.setOverrides] {
                 auto previous = std::exchange(*undo, {});
                 if (previous)
-                  commit(hoverLayoutOverrides(*previous));
+                  commit(hoverLayoutOverrides(*previous, previous->scope));
               },
           })
       );
@@ -87,22 +88,22 @@ namespace settings {
     block->addChild(std::move(presets));
     block->addChild(makeSettingSubtitleLabel(i18n::tr("settings.island-editor.preset-hint"), scale));
 
-    const auto move = [groups = layout.groups, commit = ctx.setOverrides](
+    const auto move = [groups = layout.groups, root, commit = ctx.setOverrides](
                           std::size_t from, std::size_t index, std::size_t to, std::size_t insertion
                       ) {
       auto changed = groups;
       if (!moveHoverWidget(changed, from, index, to, insertion))
         return;
       std::vector<std::pair<std::vector<std::string>, ConfigOverrideValue>> updates;
-      updates.push_back({{"island", std::string(kHoverWidgetKeys[from])}, changed[from]});
+      updates.push_back({islandPath(root, kHoverWidgetKeys[from]), changed[from]});
       if (from != to)
-        updates.push_back({{"island", std::string(kHoverWidgetKeys[to])}, changed[to]});
+        updates.push_back({islandPath(root, kHoverWidgetKeys[to]), changed[to]});
       commit(std::move(updates));
     };
     auto lanes = std::make_shared<std::array<Lane, 3>>();
     auto columns = ui::row({.align = FlexAlign::Stretch, .gap = 8 * scale, .fillWidth = true});
     for (std::size_t group = 0; group < lanes->size(); ++group) {
-      const std::vector<std::string> path{"island", std::string(kHoverWidgetKeys[group])};
+      const auto path = islandPath(root, kHoverWidgetKeys[group]);
       auto lane = ui::column({
           .align = FlexAlign::Stretch,
           .gap = 6 * scale,
@@ -116,7 +117,7 @@ namespace settings {
       auto header = ui::row({.align = FlexAlign::Center, .gap = 4 * scale});
       header->addChild(
           ui::label({
-              .text = i18n::tr("settings.schema.island." + path[1] + ".label"),
+              .text = i18n::tr("settings.schema.island." + path.back() + ".label"),
               .fontSize = Style::fontSizeCaption * scale,
               .fontWeight = FontWeight::Bold,
               .flexGrow = 1.0F,

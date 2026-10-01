@@ -433,24 +433,24 @@ void ContextMenuControl::rebuildRows(Renderer& renderer) {
     if (rowBgPtr != nullptr && labelPtr != nullptr) {
       visual.apply = [rowBgPtr, labelPtr, togglePtr, chevronPtr, interactive, separator,
                       header = entry.header](bool highlighted) {
-        rowBgPtr->setFill(highlighted ? colorSpecFromRole(ColorRole::Hover) : clearColorSpec());
+        rowBgPtr->setFill(highlighted ? colorSpecFromRole(ColorRole::Primary) : clearColorSpec());
         if (separator || header) {
           labelPtr->setColor(colorSpecFromRole(ColorRole::OnSurfaceVariant));
         } else {
           labelPtr->setColor(
-              highlighted ? colorSpecFromRole(ColorRole::OnHover)
+              highlighted ? colorSpecFromRole(ColorRole::OnPrimary)
                           : (interactive ? enabledItemColor() : disabledItemColor())
           );
         }
         if (togglePtr != nullptr) {
           togglePtr->setColor(
-              highlighted ? colorSpecFromRole(ColorRole::OnHover)
+              highlighted ? colorSpecFromRole(ColorRole::OnPrimary)
                           : (interactive ? enabledItemColor() : disabledItemColor())
           );
         }
         if (chevronPtr != nullptr) {
           chevronPtr->setColor(
-              highlighted ? colorSpecFromRole(ColorRole::OnHover)
+              highlighted ? colorSpecFromRole(ColorRole::OnPrimary)
                           : (interactive ? enabledItemColor() : disabledItemColor())
           );
         }

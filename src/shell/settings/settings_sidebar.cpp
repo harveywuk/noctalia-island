@@ -20,7 +20,7 @@
 namespace settings {
   namespace {
 
-    constexpr float kSidebarWidth = 200.0F;
+    constexpr float kSidebarWidth = 224.0F;
     constexpr float kSidebarPadding = 6.0F;
     constexpr float kSidebarGap = 2.0F;
     constexpr float kPrimaryNavGlyphSize = 18.0F;
@@ -58,7 +58,7 @@ namespace settings {
 
     void makeButtonLabelBold(Button& button) {
       if (button.label() != nullptr) {
-        button.label()->setFontWeight(FontWeight::Bold);
+        button.label()->setFontWeight(FontWeight::Normal);
       }
     }
 
@@ -184,28 +184,78 @@ namespace settings {
     sidebarNav->setPadding(kSidebarPadding * scale);
     RovingListNavHost* nav = sidebarNav.get();
 
-    for (const auto& section : ctx.sections) {
-      const std::string sectionId(settingsSectionId(section));
-      const bool selected = showActiveTab && sectionId == *selectedSection;
-      const auto onClick = [selectedSection, scroll, sectionId, searchActive, clearTransientState, clearSearchQuery,
-                            requestRebuild]() {
-        if (searchActive || *selectedSection != sectionId) {
-          scroll->offset = 0.0F;
-        }
-        *selectedSection = sectionId;
-        clearSearchQuery();
-        clearTransientState();
-        requestRebuild();
-      };
-      addNavButton(
-          *nav,
-          makePrimaryNavButton(
-              sectionGlyph(section), i18n::tr(settingsSectionLabelKey(section)), scale, selected, onClick
-          ),
-          onClick
+    const auto category = [](SettingsSection section) -> std::string_view {
+      switch (section) {
+      case SettingsSection::Appearance:
+      case SettingsSection::Wallpaper:
+      case SettingsSection::Templates:
+      case SettingsSection::Desktop:
+      case SettingsSection::Dock:
+      case SettingsSection::Island:
+        return "personalise";
+      case SettingsSection::InputMotion:
+      case SettingsSection::Displays:
+      case SettingsSection::Power:
+        return "devices";
+      case SettingsSection::WindowBehaviour:
+      case SettingsSection::Workspaces:
+      case SettingsSection::WorkspaceTiling:
+      case SettingsSection::AppPlacement:
+      case SettingsSection::Keybinds:
+      case SettingsSection::Niri:
+      case SettingsSection::Umbriel:
+        return "windows";
+      case SettingsSection::Plugins:
+      case SettingsSection::Hooks:
+        return "extensions";
+      default:
+        return "general";
+      }
+    };
+    const auto heading = [&](std::string_view id) {
+      nav->addChild(
+          ui::column(
+              {.align = FlexAlign::Start, .paddingV = Style::spaceMd * scale, .paddingH = Style::spaceSm * scale},
+              ui::label(
+                  {.text = i18n::tr("settings.navigation.categories." + std::string(id)),
+                   .fontSize = Style::fontSizeCaption * scale,
+                   .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+                   .textAlign = TextAlign::Start}
+              )
+          )
       );
+    };
+    for (const auto group : {"personalise", "devices", "windows", "general", "extensions"}) {
+      bool hasHeading = false;
+      for (const auto& section : ctx.sections) {
+        if (category(section) != group)
+          continue;
+        if (!hasHeading) {
+          heading(group);
+          hasHeading = true;
+        }
+        const std::string sectionId(settingsSectionId(section));
+        const bool selected = showActiveTab && sectionId == *selectedSection;
+        const auto onClick = [selectedSection, scroll, sectionId, searchActive, clearTransientState, clearSearchQuery,
+                              requestRebuild]() {
+          if (searchActive || *selectedSection != sectionId) {
+            scroll->offset = 0.0F;
+          }
+          *selectedSection = sectionId;
+          clearSearchQuery();
+          clearTransientState();
+          requestRebuild();
+        };
+        addNavButton(
+            *nav,
+            makePrimaryNavButton(
+                sectionGlyph(section), i18n::tr(settingsSectionLabelKey(section)), scale, selected, onClick
+            ),
+            onClick
+        );
+      }
     }
-
+    heading("bars");
     for (const auto& barName : ctx.availableBars) {
       const bool barSelected =
           showActiveTab && *selectedSection == "bar" && *selectedBarName == barName && selectedMonitorOverride->empty();
