@@ -1373,10 +1373,10 @@
       },
       "sections": {
         "accessibility": "Trợ năng",
-        "input-motion": "Nhập liệu và chuyển động",
+        "input-motion": "Nhập và chuyển động",
         "displays": "Màn hình",
         "window-behaviour": "Hành vi cửa sổ",
-        "workspace-tiling": "Không gian làm việc và xếp ô",
+        "workspace-tiling": "Không gian & xếp ô",
         "app-placement": "Vị trí ứng dụng",
         "appearance": "Giao diện",
         "backdrop": "Nền",
