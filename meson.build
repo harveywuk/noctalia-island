@@ -1240,6 +1240,7 @@ if build_tests
     'google_client_reminders',
     'greeter_appearance_sync',
     'grid_item_cursor',
+    'grid_view_columns',
     'hook_manager',
     'startup_apps',
     'poll_timeout',

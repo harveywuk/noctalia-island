@@ -16,6 +16,7 @@
 #include "ui/builders.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
+#include "ui/controls/grid_view.h"
 #include "ui/controls/input.h"
 #include "ui/controls/keybind_recorder.h"
 #include "ui/controls/label.h"
@@ -387,6 +388,8 @@ namespace settings {
       }
 
       constexpr std::size_t kTemplateCardsPerRow = 5;
+      // Below this, names such as "Alacritty" no longer fit beside the checkbox.
+      constexpr float kTemplateCardMinWidth = 150.0F;
       auto selected = std::make_shared<std::vector<std::string>>(setting.selectedValues);
       const auto options = std::make_shared<std::vector<SelectOption>>(setting.options);
       const auto path = entry.path;
@@ -402,31 +405,15 @@ namespace settings {
         setOverride(path, std::move(ordered));
       };
 
-      auto grid =
-          ui::column({.align = FlexAlign::Stretch, .gap = Style::spaceSm * scale, .configure = [scale](Flex& flex) {
-                        flex.setPadding(Style::spaceMd * scale, 0.0F, 0.0F, 0.0F);
-                      }});
-      std::unique_ptr<Flex> row;
-      std::size_t countInRow = 0;
-
-      auto flushRow = [&]() {
-        if (row == nullptr) {
-          return;
-        }
-        while (countInRow > 0 && countInRow < kTemplateCardsPerRow) {
-          row->addChild(ui::row({.fillWidth = true, .flexGrow = 1.0F}));
-          ++countInRow;
-        }
-        grid->addChild(std::move(row));
-        countInRow = 0;
-      };
+      auto grid = std::make_unique<GridView>();
+      grid->setColumns(kTemplateCardsPerRow);
+      grid->setAutoColumnMinWidth(kTemplateCardMinWidth * scale);
+      grid->setColumnGap(Style::spaceSm * scale);
+      grid->setRowGap(Style::spaceSm * scale);
+      grid->setPadding(Style::spaceMd * scale, 0.0F, 0.0F, 0.0F);
+      grid->setStretchItems(true);
 
       for (const auto& option : *options) {
-        if (row == nullptr || countInRow == kTemplateCardsPerRow) {
-          flushRow();
-          row = ui::row({.align = FlexAlign::Stretch, .gap = Style::spaceSm * scale, .fillWidth = true});
-        }
-
         const bool checked = std::ranges::contains(*selected, option.value);
         const std::string value = option.value;
         Button* card = nullptr;
@@ -589,10 +576,8 @@ namespace settings {
           card->setTooltip(option.tooltip);
         }
 
-        row->addChild(std::move(cardNode));
-        ++countInRow;
+        grid->addChild(std::move(cardNode));
       }
-      flushRow();
 
       block->addChild(std::move(grid));
       section.addChild(std::move(block));

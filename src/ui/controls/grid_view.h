@@ -23,6 +23,9 @@ public:
   void setMinCellHeight(float height);
   // When true, the last child in an incomplete row stretches across remaining columns.
   void setSpanLastItem(bool span);
+  // When > 0 and the grid has a fixed width, uses fewer than columns() columns so no
+  // column is narrower than this. Lets a grid reflow for UI scale and window width.
+  void setAutoColumnMinWidth(float width);
 
   [[nodiscard]] std::size_t columns() const noexcept { return m_columns; }
   [[nodiscard]] float columnGap() const noexcept { return m_columnGap; }
@@ -38,6 +41,9 @@ public:
   [[nodiscard]] bool spanLastItem() const noexcept { return m_spanLastItem; }
   [[nodiscard]] float minCellWidth() const noexcept { return m_minCellWidth; }
   [[nodiscard]] float minCellHeight() const noexcept { return m_minCellHeight; }
+  [[nodiscard]] float autoColumnMinWidth() const noexcept { return m_autoColumnMinWidth; }
+  // Columns actually used for `availableWidth` (padding included) and `itemCount` children.
+  [[nodiscard]] std::size_t effectiveColumns(float availableWidth, std::size_t itemCount) const noexcept;
 
 private:
   LayoutSize doMeasure(Renderer& renderer, const LayoutConstraints& constraints) override;
@@ -56,4 +62,5 @@ private:
   bool m_spanLastItem = false;
   float m_minCellWidth = 0.0F;
   float m_minCellHeight = 0.0F;
+  float m_autoColumnMinWidth = 0.0F;
 };

@@ -1,6 +1,7 @@
 #include "ui/controls/grid_view.h"
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <vector>
 
@@ -97,6 +98,25 @@ void GridView::setSpanLastItem(bool span) {
   markLayoutDirty();
 }
 
+void GridView::setAutoColumnMinWidth(float width) {
+  const float normalized = std::max(0.0F, width);
+  if (m_autoColumnMinWidth == normalized) {
+    return;
+  }
+  m_autoColumnMinWidth = normalized;
+  markLayoutDirty();
+}
+
+std::size_t GridView::effectiveColumns(float availableWidth, std::size_t itemCount) const noexcept {
+  std::size_t columns = m_columns;
+  if (m_autoColumnMinWidth > 0.0F && availableWidth > 0.0F) {
+    const float inner = std::max(0.0F, availableWidth - m_paddingLeft - m_paddingRight);
+    const auto fit = static_cast<std::size_t>(std::floor((inner + m_columnGap) / (m_autoColumnMinWidth + m_columnGap)));
+    columns = std::clamp<std::size_t>(fit, 1, m_columns);
+  }
+  return std::min(columns, std::max<std::size_t>(1, itemCount));
+}
+
 LayoutSize GridView::doMeasure(Renderer& renderer, const LayoutConstraints& constraints) {
   float useW = width();
   if (constraints.hasExactWidth()) {
@@ -136,7 +156,7 @@ void GridView::doLayout(Renderer& renderer) {
     return;
   }
 
-  const std::size_t columns = std::min(m_columns, std::max<std::size_t>(1, visibleChildren.size()));
+  const std::size_t columns = effectiveColumns(width(), visibleChildren.size());
   const std::size_t rows = (visibleChildren.size() + columns - 1) / columns;
 
   const bool hasFixedWidth = width() > 0.0F;
