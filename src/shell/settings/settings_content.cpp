@@ -709,6 +709,8 @@ namespace settings {
                 [configureGridRecorder, focusKey = keybindTabFocusKey(".add")](KeybindRecorder& recorder) {
                   configureGridRecorder(recorder);
                   recorder.setTabFocusKey(focusKey);
+                  // The grid cell is narrow; the tooltip keeps a truncated placeholder readable.
+                  recorder.setTooltip(i18n::tr("settings.controls.keybind.add"));
                 },
         });
         addRow->addChild(std::move(addRecorder));

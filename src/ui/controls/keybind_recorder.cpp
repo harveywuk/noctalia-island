@@ -156,6 +156,12 @@ void KeybindRecorder::setTabFocusKey(std::string key) {
   }
 }
 
+void KeybindRecorder::setTooltip(std::string text) {
+  if (m_inputArea != nullptr) {
+    m_inputArea->setTooltip(std::move(text));
+  }
+}
+
 void KeybindRecorder::doLayout(Renderer& renderer) {
   if (m_label != nullptr) {
     m_label->measure(renderer);

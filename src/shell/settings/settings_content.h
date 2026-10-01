@@ -29,7 +29,7 @@ namespace settings {
   struct DefaultAppsEditorState;
 
   // Pango line budget for setting descriptions: wrap up to this many lines, then ellipsize.
-  inline constexpr int kSettingDescriptionMaxLines = 5;
+  inline constexpr int kSettingDescriptionMaxLines = 8;
 
   [[nodiscard]] std::unique_ptr<Label> makeSettingSubtitleLabel(std::string_view text, float scale);
 

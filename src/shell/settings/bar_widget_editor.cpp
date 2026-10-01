@@ -3453,6 +3453,8 @@ namespace settings {
                 .fontSize = Style::fontSizeCaption * ctx.scale,
                 .glyphSize = Style::fontSizeCaption * ctx.scale,
                 .variant = ButtonVariant::Ghost,
+                // Lanes are narrow; the tooltip keeps a truncated label readable.
+                .tooltip = i18n::tr("settings.entities.widget.add"),
                 .minHeight = Style::controlHeightSm * ctx.scale,
                 .paddingV = Style::spaceXs * ctx.scale,
                 .paddingH = Style::spaceSm * ctx.scale,

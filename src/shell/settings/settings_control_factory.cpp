@@ -245,6 +245,38 @@ namespace settings {
     );
   }
 
+  namespace {
+    // Rows whose control is wide get the full width for their description, with the control
+    // beneath it. Segmented controls are judged by their (translated) label length.
+    // Code points: every byte that is not a UTF-8 continuation byte.
+    [[nodiscard]] std::size_t codePoints(std::string_view text) {
+      return static_cast<std::size_t>(std::ranges::count_if(text, [](char c) {
+        return (static_cast<unsigned char>(c) & 0xC0U) != 0x80U;
+      }));
+    }
+
+    // Rows whose control is wide, or whose description is long, give the description the
+    // full width with the control beneath it. Lengths are measured in the active language.
+    [[nodiscard]] bool stacksUnderDescription(const SettingEntry& entry) {
+      if (entry.subtitle.empty()) {
+        return false;
+      }
+      constexpr std::size_t kLongDescriptionChars = 150;
+      if (std::holds_alternative<TextSetting>(entry.control) || codePoints(entry.subtitle) >= kLongDescriptionChars) {
+        return true;
+      }
+      if (const auto* select = std::get_if<SelectSetting>(&entry.control); select != nullptr && select->segmented) {
+        constexpr std::size_t kWideSegmentedChars = 30;
+        std::size_t chars = 0;
+        for (const auto& option : select->options) {
+          chars += codePoints(option.label);
+        }
+        return chars >= kWideSegmentedChars;
+      }
+      return false;
+    }
+  } // namespace
+
   void SettingsControlFactory::makeRow(Flex& section, const SettingEntry& entry, std::unique_ptr<Node> control) {
     auto& ctx = m_ctx;
     const float scale = m_scale;
@@ -318,7 +350,7 @@ namespace settings {
     // Text and path fields are wide, so beside them a description is squeezed into a
     // narrow column and cut short once translations or UI scaling lengthen it. Stack
     // these rows: the description takes the full width and the field sits beneath it.
-    if (std::holds_alternative<TextSetting>(entry.control) && !entry.subtitle.empty()) {
+    if (stacksUnderDescription(entry)) {
       auto controlRow = ui::row({.justify = FlexJustify::End, .fillWidth = true});
       controlRow->addChild(std::move(actions));
       section.addChild(

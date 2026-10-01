@@ -36,6 +36,7 @@ public:
   void setAllowSuper(bool value) { m_allowSuper = value; }
   void setRecordingStateCallback(std::function<bool(bool)> callback) { m_recordingState = std::move(callback); }
   void setTabFocusKey(std::string key);
+  void setTooltip(std::string text);
 
   [[nodiscard]] bool isRecording() const noexcept { return m_recording; }
 
