@@ -175,21 +175,126 @@ struct Island::Instance {
 };
 
 namespace {
+  // Cupertino appearance: an always-black Island with white content and Apple's system
+  // tints for activities, independent of the shell palette and light/dark mode. Set at
+  // the start of each scene build from the instance config.
+  bool gCupertino = true;
+
+  constexpr Color kAppleRed = rgba(1.0F, 0.271F, 0.227F);
+  constexpr Color kAppleOrange = rgba(1.0F, 0.624F, 0.039F);
+  constexpr Color kAppleGreen = rgba(0.188F, 0.82F, 0.345F);
+  constexpr Color kAppleBlue = rgba(0.039F, 0.518F, 1.0F);
+  constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
+
+  [[nodiscard]] ColorSpec islandFixed(Color color, float alpha) {
+    ColorSpec spec = fixedColorSpec(color);
+    spec.alpha = alpha;
+    return spec;
+  }
+
+  [[nodiscard]] ColorSpec islandRole(ColorRole role, float alpha = 1.0F) {
+    if (!gCupertino) {
+      return colorSpecFromRole(role, alpha);
+    }
+    const Color white = rgba(1.0F, 1.0F, 1.0F);
+    const Color black = rgba(0.0F, 0.0F, 0.0F);
+    switch (role) {
+    case ColorRole::Surface:
+    case ColorRole::Shadow:
+      return islandFixed(black, alpha);
+    case ColorRole::SurfaceVariant:
+      return islandFixed(white, 0.12F * alpha);
+    case ColorRole::OnSurfaceVariant:
+      return islandFixed(white, 0.62F * alpha);
+    case ColorRole::Outline:
+      return islandFixed(white, 0.2F * alpha);
+    case ColorRole::Hover:
+      return islandFixed(white, 0.16F * alpha);
+    case ColorRole::OnPrimary:
+    case ColorRole::OnSecondary:
+    case ColorRole::OnTertiary:
+    case ColorRole::OnError:
+      return islandFixed(black, alpha);
+    case ColorRole::Error:
+      return islandFixed(kAppleRed, alpha);
+    case ColorRole::Secondary:
+      return islandFixed(kAppleGreen, alpha);
+    case ColorRole::Tertiary:
+      return islandFixed(kApplePurple, alpha);
+    case ColorRole::Primary:
+    case ColorRole::OnSurface:
+    case ColorRole::OnHover:
+      break;
+    }
+    return islandFixed(white, alpha);
+  }
+
+  // An activity colour in Cupertino (orange timers, green charge...), else a theme role.
+  [[nodiscard]] ColorSpec islandTint(Color apple, ColorRole theme, float alpha = 1.0F) {
+    return gCupertino ? islandFixed(apple, alpha) : colorSpecFromRole(theme, alpha);
+  }
+
+  [[nodiscard]] Button::ButtonPalette islandButtonPalette(ButtonVariant variant) {
+    const auto state = [](float bg, float label, float border = 0.0F) {
+      return Button::ButtonStateColors{
+          .bg = islandFixed(rgba(1.0F, 1.0F, 1.0F), bg),
+          .border = islandFixed(rgba(1.0F, 1.0F, 1.0F), border),
+          .label = islandFixed(rgba(1.0F, 1.0F, 1.0F), label),
+      };
+    };
+    switch (variant) {
+    case ButtonVariant::Default:
+    case ButtonVariant::Secondary:
+      // Grey capsules, as in Apple's notification and alert buttons.
+      return {
+          .normal = state(0.14F, 1.0F),
+          .hover = state(0.22F, 1.0F),
+          .pressed = state(0.3F, 1.0F),
+          .disabled = state(0.08F, 0.35F),
+          .selected = std::nullopt
+      };
+    case ButtonVariant::TabActive:
+      return {
+          .normal = state(0.2F, 1.0F),
+          .hover = state(0.24F, 1.0F),
+          .pressed = state(0.3F, 1.0F),
+          .disabled = state(0.1F, 0.35F),
+          .selected = std::nullopt
+      };
+    default:
+      // Bare symbols: transport controls, tabs and icon buttons show no chrome until hovered.
+      return {
+          .normal = state(0.0F, variant == ButtonVariant::Tab ? 0.62F : 1.0F),
+          .hover = state(0.12F, 1.0F),
+          .pressed = state(0.2F, 1.0F),
+          .disabled = state(0.0F, 0.3F),
+          .selected = std::nullopt
+      };
+    }
+  }
+
+  void setIslandVariant(Button* button, ButtonVariant variant) {
+    button->setVariant(variant);
+    if (gCupertino) {
+      button->setCustomPalette(islandButtonPalette(variant));
+    }
+  }
+
   // Reuse the shell's native ring and spinner renderers at the same size.
   class DownloadRing final : public Node {
   public:
     DownloadRing(
-        float diameter, float thickness, std::optional<float> progress, ColorRole role = ColorRole::Primary,
-        bool charging = false
+        float diameter, float thickness, std::optional<float> progress,
+        ColorSpec fillColor = islandRole(ColorRole::Primary), bool charging = false
     )
-        : m_role(role), m_charging(charging) {
+        : m_fillSpec(fillColor), m_trackSpec(islandRole(ColorRole::OnSurface, 0.16F)), m_charging(charging) {
       setSize(diameter, diameter);
       setHitTestVisible(false);
       if (!progress) {
         auto spinner = std::make_unique<Spinner>();
         spinner->setSpinnerSize(diameter);
         spinner->setThickness(thickness);
-        spinner->setColor(colorSpecFromRole(ColorRole::Primary));
+        spinner->setColor(m_fillSpec);
         spinner->start();
         addChild(std::move(spinner));
         return;
@@ -242,10 +347,11 @@ namespace {
       );
     }
     void applyPalette() {
-      m_track->setColor(resolveColorSpec(colorSpecFromRole(ColorRole::OnSurface, 0.16F)));
-      m_fill->setColor(resolveColorSpec(colorSpecFromRole(m_role)));
+      m_track->setColor(resolveColorSpec(m_trackSpec));
+      m_fill->setColor(resolveColorSpec(m_fillSpec));
     }
-    ColorRole m_role;
+    ColorSpec m_fillSpec;
+    ColorSpec m_trackSpec;
     bool m_charging = false;
     AnimationManager::Id m_pulse = 0;
     CountdownRingNode* m_track = nullptr;
@@ -261,8 +367,6 @@ namespace {
     std::strftime(buffer, sizeof(buffer), format, &local);
     return buffer;
   }
-  const ColorSpec foreground = colorSpecFromRole(ColorRole::OnSurface);
-  const ColorSpec muted = colorSpecFromRole(ColorRole::OnSurfaceVariant);
 } // namespace
 
 Island::Island() : m_batteryConnections(std::make_unique<island::BatteryConnections>()) {}
@@ -832,7 +936,7 @@ void Island::geometry(Instance& inst) {
   const float y = (8 - (inst.height + 12) * (1 - inst.visibility)) * s;
   inst.background->setPosition(x, y);
   inst.background->setSize(inst.width * s, inst.height * s);
-  const float radius = island::surfaceRadius(inst.height * s, s);
+  const float radius = island::surfaceRadius(inst.height * s, s, gCupertino);
   inst.background->setRadius(radius);
   if (inst.progressOutline) {
     inst.progressOutline->setPosition(x, y);
@@ -869,6 +973,9 @@ void Island::prepare(Instance& inst) {
   // monitors, even unchanged title notifications otherwise switch EGL targets.
   auto& renderer = inst.surface->renderTarget().renderer();
   const auto& cfg = inst.config;
+  gCupertino = cfg.appearance == IslandAppearance::Cupertino;
+  const ColorSpec foreground = islandRole(ColorRole::OnSurface);
+  const ColorSpec muted = islandRole(ColorRole::OnSurfaceVariant);
   const auto player = m_mpris ? m_mpris->activePlayer() : std::nullopt;
   const bool playing = player && player->playbackStatus == "Playing";
   const std::string announcement = player && trackPreview(cfg, inst.output) ? player->title : "";
@@ -1058,11 +1165,13 @@ void Island::prepare(Instance& inst) {
     if (!inst.progressOutline)
       return;
     std::optional<float> fraction;
-    ColorRole role = ColorRole::Primary;
+    ColorSpec fill = islandRole(ColorRole::Primary);
     bool charging = false;
-    if (outlineTimer)
+    if (outlineTimer) {
       fraction = timers.front().fraction();
-    else if (outlineDownload) {
+      fill = islandTint(kAppleOrange, ColorRole::Primary);
+    } else if (outlineDownload) {
+      fill = islandTint(kAppleBlue, ColorRole::Primary);
       // Each download gets equal weight; one unknown total makes the group indeterminate.
       if (std::ranges::all_of(downloads, [](const auto& d) { return d.determinate; })) {
         float total = 0;
@@ -1072,10 +1181,13 @@ void Island::prepare(Instance& inst) {
       }
     } else if (outlineBattery) {
       fraction = static_cast<float>(batteryList.front().percentage / 100.0);
-      role = batteryList.front().low ? ColorRole::Error : ColorRole::Primary;
+      fill = batteryList.front().low ? islandRole(ColorRole::Error) : islandTint(kAppleGreen, ColorRole::Primary);
       charging = batteryList.front().charging();
     }
-    inst.progressOutline->update(outlineTimer || outlineDownload || outlineBattery, fraction, role, charging);
+    inst.progressOutline->update(
+        outlineTimer || outlineDownload || outlineBattery, fraction, fill, charging,
+        islandRole(ColorRole::OnSurface, 0.16F)
+    );
   };
   updateOutline();
   if (signature == inst.signature && inst.root) {
@@ -1123,7 +1235,7 @@ void Island::prepare(Instance& inst) {
         );
       if (inst.mediaPosition) {
         inst.mediaPosition->setText(std::format("{}:{:02}", displayPosition / 60, displayPosition % 60));
-        inst.mediaPosition->setColor(inst.seeking ? colorSpecFromRole(ColorRole::Primary) : muted);
+        inst.mediaPosition->setColor(inst.seeking ? islandRole(ColorRole::Primary) : muted);
         inst.mediaPosition->measure(renderer);
       }
     }
@@ -1148,7 +1260,7 @@ void Island::prepare(Instance& inst) {
     inst.root = std::make_unique<Node>();
     inst.root->setAnimationManager(&inst.animations);
     auto box = std::make_unique<Box>();
-    box->setFill(colorSpecFromRole(ColorRole::Surface));
+    box->setFill(islandRole(ColorRole::Surface));
     box->setClipChildren(true);
     inst.background = box.get();
     inst.root->addChild(std::move(box));
@@ -1160,8 +1272,9 @@ void Island::prepare(Instance& inst) {
     inst.width = w;
     inst.height = h;
   }
+  // Critical notifications: a full red outline in the theme look; a quieter one on black.
   if (view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical)
-    inst.background->setBorder(colorSpecFromRole(ColorRole::Error), Style::borderWidth);
+    inst.background->setBorder(islandRole(ColorRole::Error, gCupertino ? 0.55F : 1.0F), Style::borderWidth);
   else
     inst.background->clearBorder();
   inst.root->setSize(static_cast<float>(inst.surface->width()), static_cast<float>(inst.surface->height()));
@@ -1197,9 +1310,9 @@ void Island::prepare(Instance& inst) {
   inst.downloadUi.clear();
   Node* canvas = inst.content;
 
-  const auto label = [&](std::string text, float x, float y, float width, float size, ColorSpec color = foreground,
-                         bool center = false, int lines = 1, FontWeight weight = FontWeight::Normal,
-                         bool scroll = false) {
+  const auto label = [&](std::string text, float x, float y, float width, float size,
+                         ColorSpec color = islandRole(ColorRole::OnSurface), bool center = false, int lines = 1,
+                         FontWeight weight = FontWeight::Normal, bool scroll = false) {
     auto node = std::make_unique<Label>();
     node->setText(text);
     node->setFontSize(size * s);
@@ -1219,7 +1332,8 @@ void Island::prepare(Instance& inst) {
     canvas->addChild(std::move(node));
     return result;
   };
-  const auto glyph = [&](const std::string& name, float x, float y, float size, ColorSpec color = foreground) {
+  const auto glyph = [&](const std::string& name, float x, float y, float size,
+                         ColorSpec color = islandRole(ColorRole::OnSurface)) {
     auto node = std::make_unique<Glyph>();
     node->setGlyph(name);
     node->setGlyphSize(size * s);
@@ -1233,6 +1347,11 @@ void Island::prepare(Instance& inst) {
       return;
     auto card = std::make_unique<Box>();
     card->setCardStyle(s, 1.0F, Style::cardBordersEnabled());
+    if (gCupertino) {
+      // Grouped content on black: a faint lift rather than the palette's card surface.
+      card->setFill(islandRole(ColorRole::SurfaceVariant));
+      card->setBorder(islandRole(ColorRole::Outline, 0.5F), Style::borderWidth);
+    }
     card->setPosition(12 * s, (top + 2) * s);
     card->setSize((w - 24) * s, (bottom - top - 6) * s);
     card->setHitTestVisible(false);
@@ -1241,8 +1360,8 @@ void Island::prepare(Instance& inst) {
   };
   const auto progress = [&](float value, float x, float y, float width, float height = Style::sliderTrackHeight) {
     auto node = std::make_unique<ProgressBar>();
-    node->setTrack(colorSpecFromRole(ColorRole::OnSurface, 0.16F));
-    node->setFill(colorSpecFromRole(ColorRole::Primary));
+    node->setTrack(islandRole(ColorRole::OnSurface, 0.16F));
+    node->setFill(islandRole(ColorRole::Primary));
     node->setSize(width * s, height * s);
     node->setRadius(height * s / 2.0F);
     node->setProgress(std::clamp(value, 0.0F, 1.0F));
@@ -1258,7 +1377,7 @@ void Island::prepare(Instance& inst) {
                            const std::string& icon, const std::string& tooltip, float iconSize, bool available,
                            std::function<void()> cb, float fontSize = Style::fontSizeCaption, float padding = -1) {
     auto node = std::make_unique<Button>();
-    node->setVariant(ButtonVariant::Ghost);
+    setIslandVariant(node.get(), ButtonVariant::Ghost);
     if (!text.empty())
       node->setText(text);
     if (!icon.empty())
@@ -1316,15 +1435,13 @@ void Island::prepare(Instance& inst) {
         : std::nullopt;
     DownloadRing* ringPtr = nullptr;
     if (!(outlineTimer || outlineDownload)) {
-      auto ring = std::make_unique<DownloadRing>(36 * s, 2.5F * s, fraction);
+      auto ring =
+          std::make_unique<DownloadRing>(36 * s, 2.5F * s, fraction, islandTint(kAppleBlue, ColorRole::Primary));
       ringPtr = ring.get();
       ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
       canvas->addChild(std::move(ring));
     }
-    glyph(
-        timerView ? timers.front().icon : "download", 23, (cfg.height - 18) / 2, 18,
-        colorSpecFromRole(ColorRole::Primary)
-    );
+    glyph(timerView ? timers.front().icon : "download", 23, (cfg.height - 18) / 2, 18, islandRole(ColorRole::Primary));
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
     const auto clockText = timerView ? timers.front().time() : time;
@@ -1366,7 +1483,7 @@ void Island::prepare(Instance& inst) {
       refresh();
     });
   } else if (view == island::View::Downloads) {
-    glyph("download", 22, 18, 22, colorSpecFromRole(ColorRole::Primary));
+    glyph("download", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
     label(
         i18n::tr("island.downloads.title"), 56, 17, w - 78, Style::fontSizeTitle, foreground, false, 1,
         FontWeight::SemiBold
@@ -1417,7 +1534,7 @@ void Island::prepare(Instance& inst) {
     if (view != island::View::Calendar || cfg.hoverShowClock) {
       clockLabel = label(
           announce ? announcement : time, inset, 0, w - inset * 2, announce ? 17 : size,
-          recording ? colorSpecFromRole(ColorRole::Error) : foreground, true
+          recording ? islandRole(ColorRole::Error) : foreground, true
       );
       if (recording)
         inst.recordingLabel = clockLabel;
@@ -1473,7 +1590,7 @@ void Island::prepare(Instance& inst) {
         std::mktime(&tm);
         for (int day = 0; day < 7; ++day) {
           const bool today = day == 3;
-          auto color = colorSpecFromRole(today ? ColorRole::OnSurface : ColorRole::OnSurfaceVariant);
+          auto color = islandRole(today ? ColorRole::OnSurface : ColorRole::OnSurfaceVariant);
           char dayName[64]{};
           std::strftime(dayName, sizeof(dayName), "%a", &tm);
           const bool abbreviated = cfg.calendarLabels == IslandCalendarLabels::Abbreviated
@@ -1483,7 +1600,8 @@ void Island::prepare(Instance& inst) {
           const float dateY = stripY + dayHeight + 2.0F;
           if (today) {
             auto selection = std::make_unique<Box>();
-            selection->setFill(colorSpecFromRole(ColorRole::Primary));
+            // Apple marks today in red.
+            selection->setFill(islandTint(kAppleRed, ColorRole::Primary));
             selection->setSize(28 * s, 28 * s);
             selection->setRadius(Style::scaledRadius(14, s));
             selection->setPosition((x + (cellWidth - 28) / 2) * s, (dateY - 3) * s);
@@ -1498,8 +1616,8 @@ void Island::prepare(Instance& inst) {
           g_free(shortName);
           label(
               std::to_string(tm.tm_mday), x, dateY, cellWidth, dateSize,
-              today ? colorSpecFromRole(ColorRole::OnPrimary) : foreground, true, 1,
-              today ? FontWeight::SemiBold : FontWeight::Normal
+              today ? (gCupertino ? islandRole(ColorRole::OnSurface) : islandRole(ColorRole::OnPrimary)) : foreground,
+              true, 1, today ? FontWeight::SemiBold : FontWeight::Normal
           );
           ++tm.tm_mday;
           tm.tm_isdst = -1;
@@ -1529,7 +1647,7 @@ void Island::prepare(Instance& inst) {
     inst.seekProgress = progress(inst.seeking ? inst.seekFraction : fraction, 27, 106 + mediaOffset, w - 54);
     inst.mediaPosition = label(
         std::format("{}:{:02}", displayPosition / 60, displayPosition % 60), 27, 118 + mediaOffset, 65,
-        Style::fontSizeMini, inst.seeking ? colorSpecFromRole(ColorRole::Primary) : muted
+        Style::fontSizeMini, inst.seeking ? islandRole(ColorRole::Primary) : muted
     );
     const auto seconds = player->lengthUs / 1000000;
     label(
@@ -1542,7 +1660,8 @@ void Island::prepare(Instance& inst) {
       auto* mediaControl = control(x, 137 + mediaOffset, 44, 48, "", icon, tooltip, 23, available, std::move(cb));
       if (icon == "player-play" || icon == "player-pause") {
         mediaControl->inputArea()->setTabFocusKey("playback");
-        mediaControl->setVariant(ButtonVariant::Default);
+        // Apple's transport controls are bare symbols; the theme look keeps a filled play button.
+        setIslandVariant(mediaControl, gCupertino ? ButtonVariant::Ghost : ButtonVariant::Default);
         mediaControl->setRadius(Style::scaledRadius(22, s));
       }
     };
@@ -1701,7 +1820,7 @@ void Island::prepare(Instance& inst) {
           22 + static_cast<float>(index) * actionWidth, actionsY, actionWidth - 8, 44, text, "", text, 18, true,
           [this, id = n.id, key] { (void)m_notifications->invokeAction(id, key); }
       );
-      actionControl->setVariant(ButtonVariant::Default);
+      setIslandVariant(actionControl, ButtonVariant::Default);
       actionControl->inputArea()->setTabFocusKey("notification-action-" + key);
     }
     if (!expanded)
@@ -1743,7 +1862,7 @@ void Island::prepare(Instance& inst) {
           }
       );
       tab->inputArea()->setTabFocusKey("activity-" + key);
-      tab->setVariant(activity == inst.activities.selected ? ButtonVariant::TabActive : ButtonVariant::Tab);
+      setIslandVariant(tab, activity == inst.activities.selected ? ButtonVariant::TabActive : ButtonVariant::Tab);
       x += tabWidth;
     }
   }
@@ -1763,11 +1882,13 @@ void Island::prepare(Instance& inst) {
       if (!timer.active)
         continue;
       const float sectionTop = h;
-      auto ring = std::make_unique<DownloadRing>(36 * s, 2.5F * s, timer.fraction());
+      auto ring = std::make_unique<DownloadRing>(
+          36 * s, 2.5F * s, timer.fraction(), islandTint(kAppleOrange, ColorRole::Primary)
+      );
       auto* ringPtr = ring.get();
       ring->setPosition(22 * s, (h + 6) * s);
       canvas->addChild(std::move(ring));
-      glyph(timer.icon, 31, h + 15, 18, colorSpecFromRole(ColorRole::Primary));
+      glyph(timer.icon, 31, h + 15, 18, islandTint(kAppleOrange, ColorRole::Primary));
       label(i18n::tr(timer.titleKey), 70, h + 3, w - 165, 13);
       auto* remaining = label(timer.time(), w - 94, h + 3, 72, 16, foreground, true);
       inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
@@ -1827,11 +1948,12 @@ void Island::prepare(Instance& inst) {
             18, h + 5, 36, 36, "", activity.icon(), i18n::tr("island.privacy.audio-controls"), 20, true,
             [panel] { panel("audio"); }
         );
-        auto iconPalette = Button::defaultPalette(ButtonVariant::Ghost);
-        iconPalette.normal.label = colorSpecFromRole(ColorRole::Primary);
+        auto iconPalette =
+            (gCupertino ? islandButtonPalette(ButtonVariant::Ghost) : Button::defaultPalette(ButtonVariant::Ghost));
+        iconPalette.normal.label = islandRole(ColorRole::Primary);
         icon->setCustomPalette(std::move(iconPalette));
       } else
-        glyph(activity.icon(), 26, h + 13, 20, colorSpecFromRole(ColorRole::Primary));
+        glyph(activity.icon(), 26, h + 13, 20, islandRole(ColorRole::Primary));
       label(i18n::tr(activity.labelKey()), 66, h + 4, w - 88, 13);
       label(activity.appNames(), 66, h + 26, w - 88, 12, muted, false, 1, FontWeight::Normal, true);
       h += 54;
@@ -1846,7 +1968,7 @@ void Island::prepare(Instance& inst) {
     for (std::size_t i = 0; i < privacyList.size(); ++i) {
       const auto& activity = privacyList[i];
       if (!compactView && activity.kind != PrivacyCaptureKind::Microphone) {
-        glyph(activity.icon(), x + static_cast<float>(i) * 24 + 4, y + 4, 16, colorSpecFromRole(ColorRole::Primary));
+        glyph(activity.icon(), x + static_cast<float>(i) * 24 + 4, y + 4, 16, islandRole(ColorRole::Primary));
         continue;
       }
       auto* icon = control(
@@ -1864,8 +1986,9 @@ void Island::prepare(Instance& inst) {
           },
           10, 0
       );
-      auto iconPalette = Button::defaultPalette(ButtonVariant::Ghost);
-      iconPalette.normal.label = colorSpecFromRole(ColorRole::Primary);
+      auto iconPalette =
+          (gCupertino ? islandButtonPalette(ButtonVariant::Ghost) : Button::defaultPalette(ButtonVariant::Ghost));
+      iconPalette.normal.label = islandRole(ColorRole::Primary);
       icon->setCustomPalette(std::move(iconPalette));
       if (compactView) {
         icon->setOnEnter([&inst] {
@@ -1889,16 +2012,17 @@ void Island::prepare(Instance& inst) {
   }
   const auto batteryRing = [&](const island::Battery& battery, float x, float y, float diameter, bool drawRing = true) {
     const auto role = battery.low ? ColorRole::Error : ColorRole::Primary;
+    const ColorSpec ringFill = battery.low ? islandRole(ColorRole::Error) : islandTint(kAppleGreen, ColorRole::Primary);
     if (drawRing) {
       auto ring = std::make_unique<DownloadRing>(
-          diameter * s, 2.5F * s, static_cast<float>(battery.percentage / 100.0), role, battery.charging()
+          diameter * s, 2.5F * s, static_cast<float>(battery.percentage / 100.0), ringFill, battery.charging()
       );
       ring->setPosition(x * s, y * s);
       canvas->addChild(std::move(ring));
     }
     glyph(
         battery.charging() ? "battery-charging" : battery.icon, x + (diameter - 18) / 2, y + (diameter - 18) / 2, 18,
-        colorSpecFromRole(role)
+        islandRole(role)
     );
   };
   if (showBattery)
@@ -1912,7 +2036,7 @@ void Island::prepare(Instance& inst) {
       label(battery.name, 70, h + 4, w - 150, 13, foreground, false, 1, FontWeight::Normal, true);
       label(
           std::format("{}%", std::lround(battery.percentage)), w - 76, h + 4, 54, 13,
-          colorSpecFromRole(battery.low ? ColorRole::Error : ColorRole::OnSurface), true
+          islandRole(battery.low ? ColorRole::Error : ColorRole::OnSurface), true
       );
       auto detail = batteryStateLabel(battery.state);
       if (battery.seconds > 0)
@@ -1964,8 +2088,9 @@ void Island::prepare(Instance& inst) {
         [panel] { panel("notifications"); }, 10, 0
     );
     badge->setRadius(Style::scaledRadius(12, s));
-    auto badgePalette = Button::defaultPalette(ButtonVariant::Ghost);
-    badgePalette.normal.label = colorSpecFromRole(ColorRole::Primary);
+    auto badgePalette =
+        (gCupertino ? islandButtonPalette(ButtonVariant::Ghost) : Button::defaultPalette(ButtonVariant::Ghost));
+    badgePalette.normal.label = islandRole(ColorRole::Primary);
     badge->setCustomPalette(std::move(badgePalette));
     badge->setOnEnter([&inst] {
       inst.badgeHovered = true;

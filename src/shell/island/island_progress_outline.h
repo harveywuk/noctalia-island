@@ -33,12 +33,17 @@ namespace island {
       }
     }
 
-    void update(bool active, std::optional<float> progress, ColorRole role, bool charging = false) {
+    // fill/track are colour specs so the Cupertino appearance can pass fixed activity tints.
+    void update(
+        bool active, std::optional<float> progress, ColorSpec fill, bool charging = false,
+        ColorSpec track = colorSpecFromRole(ColorRole::OnSurface, 0.16F)
+    ) {
       setVisible(active);
       m_indeterminate = !progress;
       m_charging = charging;
-      if (role != m_role) {
-        m_role = role;
+      if (!(fill == m_fillSpec) || !(track == m_trackSpec)) {
+        m_fillSpec = fill;
+        m_trackSpec = track;
         applyPalette();
       }
       m_fill->setProgress(progress.value_or(0.22F));
@@ -76,12 +81,13 @@ namespace island {
       );
     }
     void applyPalette() {
-      m_track->setColor(resolveColorSpec(colorSpecFromRole(ColorRole::OnSurface, 0.16F)));
-      m_fill->setColor(resolveColorSpec(colorSpecFromRole(m_role)));
+      m_track->setColor(resolveColorSpec(m_trackSpec));
+      m_fill->setColor(resolveColorSpec(m_fillSpec));
     }
     CountdownRingNode* m_track = nullptr;
     CountdownRingNode* m_fill = nullptr;
-    ColorRole m_role = ColorRole::Primary;
+    ColorSpec m_fillSpec = colorSpecFromRole(ColorRole::Primary);
+    ColorSpec m_trackSpec = colorSpecFromRole(ColorRole::OnSurface, 0.16F);
     bool m_indeterminate = false;
     bool m_charging = false;
     AnimationManager::Id m_animation = 0;

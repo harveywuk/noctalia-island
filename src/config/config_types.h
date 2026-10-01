@@ -56,6 +56,9 @@ inline constexpr std::string_view kCapsuleGroupTokenPrefix = "group:";
 [[nodiscard]] std::string makeCapsuleGroupToken(std::string_view groupId);
 
 enum class IslandCalendarLabels : std::uint8_t { Initials, TodayAbbreviated, Abbreviated };
+// Cupertino: always black with white content and per-activity tints, like Apple's
+// Dynamic Island. Theme: follows the shell palette.
+enum class IslandAppearance : std::uint8_t { Cupertino, Theme };
 
 enum class IslandActivityPriority : std::uint8_t {
   TimersDownloadsMedia,
@@ -87,6 +90,7 @@ struct IslandConfig {
   float clockOffset = 0.0F;
   float expandedClockOffset = 0.0F;
   IslandCalendarLabels calendarLabels = IslandCalendarLabels::Abbreviated;
+  IslandAppearance appearance = IslandAppearance::Cupertino;
   bool outerProgressRing = false;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
@@ -775,6 +779,10 @@ constexpr EnumOption<IslandActivityPriority> kIslandActivityPriority[] = {
      "settings.options.island.media-timers-downloads"},
     {IslandActivityPriority::MediaDownloadsTimers, "media-downloads-timers",
      "settings.options.island.media-downloads-timers"},
+};
+constexpr EnumOption<IslandAppearance> kIslandAppearances[] = {
+    {IslandAppearance::Cupertino, "cupertino", "settings.options.island.appearance-cupertino"},
+    {IslandAppearance::Theme, "theme", "settings.options.island.appearance-theme"},
 };
 constexpr EnumOption<IslandCalendarLabels> kIslandCalendarLabels[] = {
     {IslandCalendarLabels::Initials, "initials", "settings.options.island.calendar-initials"},

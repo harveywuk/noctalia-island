@@ -1770,6 +1770,8 @@
         "downloads-media-timers": "Downloads → Media → Timers",
         "media-timers-downloads": "Media → Timers → Downloads",
         "media-downloads-timers": "Media → Downloads → Timers",
+        "appearance-cupertino": "macOS",
+        "appearance-theme": "Theme",
         "calendar-initials": "Single letters",
         "calendar-today": "Abbreviate today only",
         "calendar-abbreviated": "Abbreviate every day"
@@ -3705,6 +3707,10 @@
         }
       },
       "island": {
+        "appearance": {
+          "label": "Appearance",
+          "description": "macOS keeps the Island black with white content and colours each activity, like Apple’s Dynamic Island. Theme follows the shell palette."
+        },
         "outer_progress_ring": {
           "label": "Outer progress ring",
           "description": "Show timer, download or battery progress around the Island’s edge. Timers take priority, followed by downloads, then battery status."

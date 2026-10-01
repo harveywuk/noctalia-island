@@ -34,8 +34,11 @@ IslandWidgetHost::IslandWidgetHost(
       if (!widget)
         continue;
       widget->setConfigName(name);
-      widget->setWidgetForeground(options.color);
-      widget->setWidgetIconColor(options.iconColor);
+      // The Cupertino Island is black in both themes; unstyled widgets draw white on it.
+      const bool cupertino = island.appearance == IslandAppearance::Cupertino;
+      const auto white = fixedColorSpec(rgba(1.0F, 1.0F, 1.0F));
+      widget->setWidgetForeground(options.color || !cupertino ? options.color : std::optional<ColorSpec>(white));
+      widget->setWidgetIconColor(options.iconColor || !cupertino ? options.iconColor : std::optional<ColorSpec>(white));
       widget->applyCommonOptions(options, FontWeight::Medium, config.shell.fontFamily, "island.hover_widgets");
       widget->setActionContext(
           IpcInvocationContext{.widgetName = name, .widgetType = type, .barName = barName, .output = output}

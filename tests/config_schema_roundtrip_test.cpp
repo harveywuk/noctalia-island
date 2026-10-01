@@ -1178,6 +1178,7 @@ widget_spacing = 8
     [default.island]
     activity_cycle_seconds = 5
     activity_priority = "timers-downloads-media"
+    appearance = "cupertino"
     bluetooth_preview_monitor = "all"
     bluetooth_preview_seconds = 5
     calendar_labels = "abbreviated"
@@ -1266,6 +1267,7 @@ widget_spacing = 8
         [default.monitor.DP-1.island]
         activity_cycle_seconds = 5
         activity_priority = "timers-downloads-media"
+        appearance = "cupertino"
         bluetooth_preview_monitor = "all"
         bluetooth_preview_seconds = 5
         calendar_labels = "abbreviated"
