@@ -253,7 +253,8 @@ namespace settings {
             ui::label({
                 .text = info.title,
                 .fontSize = Style::fontSizeCaption * scale,
-                .maxLines = 1,
+                // Lanes are narrow; wrap long (translated) names rather than cut them.
+                .maxLines = 2,
                 .flexGrow = 1.0F,
             })
         );
