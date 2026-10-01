@@ -185,6 +185,8 @@ namespace {
   constexpr Color kAppleGreen = rgba(0.188F, 0.82F, 0.345F);
   constexpr Color kAppleBlue = rgba(0.039F, 0.518F, 1.0F);
   constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
+  // Extra space below expanded content; see the layout tail in Island::prepare.
+  constexpr float kExpandedBottomInset = 8.0F;
 
   [[nodiscard]] ColorSpec islandFixed(Color color, float alpha) {
     ColorSpec spec = fixedColorSpec(color);
@@ -2162,7 +2164,8 @@ void Island::prepare(Instance& inst) {
     for (const auto& child : footer->children())
       child->setPosition(child->x(), child->y() - footerTop * s);
     footer->setSize(w * s, footerHeight * s);
-    const float available = std::max(1.0F, static_cast<float>(inst.surface->height()) / s - footerTop - 24);
+    const float available =
+        std::max(1.0F, static_cast<float>(inst.surface->height()) / s - footerTop - 24 - kExpandedBottomInset);
     if (footerHeight > available) {
       auto scroll = std::make_unique<ScrollView>();
       scroll->setContentScale(s);
@@ -2180,8 +2183,10 @@ void Island::prepare(Instance& inst) {
       inst.content->addChild(std::move(footer));
     }
   }
+  // Cards keep their 4 px trailing gap; the inset brings the bottom margin up to the 12 px side
+  // margin so a card ending the content stays inside the Island's large lower corners.
   if (expandedView)
-    h = std::max(h, cfg.height);
+    h = std::max(h + kExpandedBottomInset, cfg.height);
   inst.content->setSize(w * s, h * s);
   inst.content->layout(renderer);
   if (inst.activityScroll)

@@ -111,6 +111,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--text-fit-only' in sys.argv:
             from text_fit_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-privacy-only' in sys.argv:
+            from island_privacy_smoke import prepare
+            prepare(base,cfg,env)
         binary=str(REPO/'build-rishot/noctalia')
         if '--performance-only' in sys.argv:
             import shutil
@@ -158,6 +161,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--dock-motion-only' in sys.argv:
             from dock_motion_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-privacy-only' in sys.argv:
+            from island_privacy_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--text-fit-only' in sys.argv:
