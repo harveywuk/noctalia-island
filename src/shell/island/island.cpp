@@ -1963,12 +1963,15 @@ void Island::prepare(Instance& inst) {
       auto* icon = control(
           x + static_cast<float>(i) * 24, y, 24, 24, "", activity.icon(),
           i18n::tr(activity.labelKey()) + ": " + activity.appNames(), 16, true,
-          [this, &inst, panel, kind = activity.kind] {
+          [this, &inst, panel, kind = activity.kind, binaries = activity.binaries] {
             if (kind == PrivacyCaptureKind::Microphone) {
               panel("audio");
               return;
             }
-            // Camera and screen access are controlled by the capturing app; expose its name here.
+            // Camera and screen access are controlled by the capturing app: bring it forward,
+            // or, when it has no window, expand the Island to name it.
+            if (focusApp && focusApp(binaries))
+              return;
             inst.suppressHover = false;
             inst.hovered = true;
             refresh();
@@ -1982,6 +1985,14 @@ void Island::prepare(Instance& inst) {
         icon->inputArea()->setAcceptedButtons(0);
         if (activity.kind == PrivacyCaptureKind::Microphone)
           action(x + static_cast<float>(i) * 24, y, 24, 24, "privacy-microphone", [panel] { panel("audio"); });
+        else
+          action(
+              x + static_cast<float>(i) * 24, y, 24, 24, std::string("privacy-") + activity.icon(),
+              [this, binaries = activity.binaries] {
+                if (focusApp)
+                  (void)focusApp(binaries);
+              }
+          );
       }
       auto iconPalette =
           (gCupertino ? islandButtonPalette(ButtonVariant::Ghost) : Button::defaultPalette(ButtonVariant::Ghost));

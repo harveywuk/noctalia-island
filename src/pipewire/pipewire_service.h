@@ -68,8 +68,10 @@ enum class PrivacyCaptureKind : std::uint8_t {
 
 struct PrivacyCapture {
   PrivacyCaptureKind kind = PrivacyCaptureKind::Microphone;
-  std::uint32_t nodeId = 0;
+  std::uint32_t nodeId = 0; // 0 for camera use found on a V4L2 device rather than in PipeWire.
   std::string appName;
+  // Lower-case executable name of the capturing app, for finding its windows (may be empty).
+  std::string binary;
 
   bool operator==(const PrivacyCapture&) const = default;
 };
@@ -109,6 +111,9 @@ public:
   // State
   [[nodiscard]] const AudioState& state() const noexcept { return m_state; }
   [[nodiscard]] const PrivacyState& privacyState() const noexcept { return m_privacyState; }
+  // Camera users found holding a V4L2 device open (see camera_device_scanner.h). Merged into
+  // privacyState() alongside camera use PipeWire reports; apps it already reports are not repeated.
+  void setDeviceCameraCaptures(std::vector<PrivacyCapture> captures);
   [[nodiscard]] const AudioNode* defaultSink() const noexcept;
   [[nodiscard]] const AudioNode* defaultSource() const noexcept;
 
@@ -306,6 +311,7 @@ private:
   std::string m_defaultSourceName;
   AudioState m_state;
   PrivacyState m_privacyState;
+  std::vector<PrivacyCapture> m_deviceCameraCaptures;
   ChangeCallback m_changeCallback;
   VolumePreviewCallback m_volumePreviewCallback;
   WirePlumberMixer* m_wpMixer = nullptr;

@@ -1858,7 +1858,9 @@ void PipeWireService::rebuildState() {
     return it->second.get();
   };
 
-  auto addCapture = [&nextPrivacy](PrivacyCaptureKind kind, std::uint32_t nodeId, std::string appName) {
+  auto addCapture = [&nextPrivacy](
+                        PrivacyCaptureKind kind, std::uint32_t nodeId, std::string appName, std::string binary = {}
+                    ) {
     if (appName.empty()) {
       return false;
     }
@@ -1873,6 +1875,7 @@ void PipeWireService::rebuildState() {
             .kind = kind,
             .nodeId = nodeId,
             .appName = std::move(appName),
+            .binary = std::move(binary),
         }
     );
     return true;
@@ -1960,7 +1963,19 @@ void PipeWireService::rebuildState() {
       continue;
     }
 
-    addCapture(*kind, consumer->id, privacyAppName(*consumer));
+    addCapture(*kind, consumer->id, privacyAppName(*consumer), lowercaseAscii(consumer->applicationBinary));
+  }
+
+  // Apps that open the webcam directly never appear in the graph. Skip ones PipeWire already
+  // reports (the same app reached through both paths), matched by name or binary.
+  for (const PrivacyCapture& device : m_deviceCameraCaptures) {
+    const bool reported = std::ranges::any_of(nextPrivacy.captures, [&](const PrivacyCapture& capture) {
+      return capture.kind == PrivacyCaptureKind::Camera
+          && (lowercaseAscii(capture.appName) == lowercaseAscii(device.appName)
+              || (!capture.binary.empty() && capture.binary == device.binary));
+    });
+    if (!reported)
+      addCapture(PrivacyCaptureKind::Camera, 0, device.appName, device.binary);
   }
 
   // Sort by id for stable ordering
@@ -1979,6 +1994,14 @@ void PipeWireService::rebuildState() {
   m_privacyState = std::move(nextPrivacy);
   ++m_changeSerial;
   emitChanged();
+}
+
+void PipeWireService::setDeviceCameraCaptures(std::vector<PrivacyCapture> captures) {
+  if (captures == m_deviceCameraCaptures) {
+    return;
+  }
+  m_deviceCameraCaptures = std::move(captures);
+  rebuildState();
 }
 
 std::uint32_t PipeWireService::resolveTargetObjectSink(const std::string& target) const {

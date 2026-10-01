@@ -60,6 +60,8 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         assert (monitors['TEST-2']['scale'],monitors['TEST-2']['transform'],monitors['TEST-2']['y'])==(1.5,2,720)
         env['WAYLAND_DISPLAY']=next(p.name.removesuffix('.lock') for p in runtime.glob('wayland-*.lock') if p not in sockets)
         cfg=base/'config/noctalia';cfg.mkdir()
+        # Keep the host's webcam users out of privacy indicators; camera tests supply a fake /proc.
+        (base/'emptyproc').mkdir();env['NOCTALIA_PRIVACY_PROC_ROOT']=str(base/'emptyproc')
         (cfg/'config.toml').write_text('[island]\nenabled=true\nhover_widgets=["workspaces","taskbar"]\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n[osd.kinds]\nlock_keys=false\n[plugins]\nauto_update="none"\n[[plugins.source]]\nname="test"\nkind="path"\nlocation="/nonexistent"\nenabled=false\n')
         (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
         wp=base/'config/wireplumber/wireplumber.conf.d';wp.mkdir(parents=True)
@@ -114,6 +116,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-privacy-only' in sys.argv:
             from island_privacy_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-camera-only' in sys.argv:
+            from island_camera_smoke import prepare
+            prepare(base,cfg,env)
         binary=str(REPO/'build-rishot/noctalia')
         if '--performance-only' in sys.argv:
             import shutil
@@ -161,6 +166,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--dock-motion-only' in sys.argv:
             from dock_motion_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-camera-only' in sys.argv:
+            from island_camera_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-privacy-only' in sys.argv:

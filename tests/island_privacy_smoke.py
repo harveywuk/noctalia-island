@@ -90,7 +90,12 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert island_bottom - rows[-1] >= 10, f'Microphone icon clips the Island ({island_bottom - rows[-1]}px)'
         move(expanded.width//2, (rows[0]+rows[-1])//2); time.sleep(1.2)
         tessdata = os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata'))
-        words = run(['tesseract', str(shot('privacy-icon-hover')), 'stdout', '--tessdata-dir', tessdata, '--psm', '11'])
+        # The tooltip sits just below the pointer; enlarge that strip so OCR reads small text.
+        hover = Image.open(shot('privacy-icon-hover')).convert('RGB')
+        hx, hy = expanded.width//2, (rows[0]+rows[-1])//2
+        strip = hover.crop((max(0, hx-180), hy+8, min(hover.width, hx+180), hy+70))
+        strip.resize((strip.width*3, strip.height*3), Image.LANCZOS).save(out/'privacy-icon-tooltip.png')
+        words = run(['tesseract', str(out/'privacy-icon-tooltip.png'), 'stdout', '--tessdata-dir', tessdata, '--psm', '6'])
         assert 'Microphone' in words and 'Privacy' in words, 'Microphone tooltip missing: '+words
         for step in ('press', 'release'):
             pointer.stdin.write(step+'\n'); pointer.stdin.flush()

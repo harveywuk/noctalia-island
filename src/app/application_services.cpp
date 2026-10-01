@@ -50,6 +50,7 @@
 #include "launcher/window_provider.h"
 #include "notification/notifications.h"
 #include "pipewire/pipewire_poll_source.h"
+#include "pipewire/camera_device_scanner.h"
 #include "pipewire/pipewire_service.h"
 #include "pipewire/pipewire_spectrum.h"
 #include "pipewire/pipewire_spectrum_poll_source.h"
@@ -104,11 +105,14 @@
 #include <filesystem>
 #include <limits>
 #include <malloc.h>
+#include <cstdlib>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+
+#include <unistd.h>
 
 namespace {
   constexpr Logger kLog("app");
@@ -1514,6 +1518,25 @@ void Application::initBrightnessAndPipewire() {
     m_easyEffectsService->refreshProfiles();
     m_easyEffectsService->refreshActiveEffectsProfiles();
     m_pipewireSpectrum = std::make_unique<PipeWireSpectrum>(*m_pipewireService);
+    // NOCTALIA_PRIVACY_PROC_ROOT points the scan at a fake /proc for integration tests.
+    const char* procRootOverride = std::getenv("NOCTALIA_PRIVACY_PROC_ROOT");
+    m_cameraDeviceScanTimer.startRepeating(
+        std::chrono::seconds(2),
+        [svc = m_pipewireService.get(),
+         procRoot = std::string(procRootOverride != nullptr ? procRootOverride : "/proc")]() {
+      std::vector<PrivacyCapture> captures;
+      for (auto& user : privacy::scanCameraDeviceUsers(procRoot, ::getpid())) {
+        captures.push_back(
+            PrivacyCapture{
+                .kind = PrivacyCaptureKind::Camera,
+                .appName = std::move(user.appName),
+                .binary = std::move(user.binary),
+            }
+        );
+      }
+      svc->setDeviceCameraCaptures(std::move(captures));
+    }
+    );
     m_soundPlayer = std::make_shared<SoundPlayer>(m_pipewireService->loop());
 
     auto applySoundConfig = [this]() {
@@ -1536,6 +1559,7 @@ void Application::initBrightnessAndPipewire() {
     );
   } catch (const std::exception& e) {
     kLog.warn("pipewire disabled: {}", e.what());
+    m_cameraDeviceScanTimer.stop();
     m_soundPlayer.reset();
     m_pipewireSpectrum.reset();
     m_easyEffectsService.reset();

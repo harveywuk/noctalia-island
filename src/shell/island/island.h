@@ -61,6 +61,8 @@ public:
   [[nodiscard]] bool enabled() const;
   [[nodiscard]] bool osdVisible() const;
   std::function<void(wl_output*, const std::string&)> openPanel;
+  // Raises a window of the first app found among lower-case executable names; false if none.
+  std::function<bool(const std::vector<std::string>&)> focusApp;
   std::function<void()> closeHostedPanel;
   std::optional<IslandPanelSurface>
   acquirePanelSurface(wl_output* output, bool exactOutput = false, std::string_view barName = {});

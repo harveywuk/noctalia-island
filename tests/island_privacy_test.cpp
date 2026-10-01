@@ -26,6 +26,14 @@ int main() {
   config = {};
   state.captures.erase(state.captures.begin()); // A second stream from Zen remains.
   TEST_CHECK(summary.snapshot(state, config)[0].appNames() == "Call, Zen");
+  // Binaries ride along for focusing the capturing app's window.
+  state.captures = {{PrivacyCaptureKind::Camera, 0, "Discord", "discord"},
+                    {PrivacyCaptureKind::Camera, 7, "Firefox", "firefox"},
+                    {PrivacyCaptureKind::Camera, 8, "Firefox", "firefox"},
+                    {PrivacyCaptureKind::Camera, 9, "Portal app"}};
+  snapshot = summary.snapshot(state, config);
+  TEST_CHECK(snapshot.size() == 1 && snapshot[0].apps.size() == 3);
+  TEST_CHECK((snapshot[0].binaries == std::vector<std::string>{"discord", "firefox"}));
   state.captures.clear();
   TEST_CHECK(summary.snapshot(state, config).empty());
   return 0;

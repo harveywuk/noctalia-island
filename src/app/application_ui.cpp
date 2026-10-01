@@ -750,6 +750,16 @@ void Application::initNotificationAndOsd() {
     if (m_panelManager.isIslandOpen())
       m_panelManager.closePanel(false);
   };
+  m_island.focusApp = [this](const std::vector<std::string>& binaries) {
+    for (const auto& binary : binaries) {
+      const auto windows = m_compositorPlatform.windowsForApp(binary, binary);
+      if (!windows.empty()) {
+        m_compositorPlatform.activateToplevelInfo(windows.front());
+        return true;
+      }
+    }
+    return false;
+  };
   m_island.openPanel = [this](wl_output* output, const std::string& name) {
     if (name == "noctalia/timer:panel" || name == "thepunkoff/pomodoro:panel") {
       m_panelManager.openPanel(name, PanelOpenRequest{.output = output});

@@ -299,6 +299,8 @@ private:
   std::unique_ptr<BluetoothAgent> m_bluetoothAgent;
   std::unique_ptr<ModemManagerService> m_modemManagerService;
   Timer m_bluetoothResumeTimer;
+  // Polls /proc for apps holding a webcam open outside PipeWire (privacy indicators).
+  Timer m_cameraDeviceScanTimer;
   std::unique_ptr<PolkitAgent> m_polkitAgent;
   std::optional<bool> m_notificationDaemonEnabled;
   bool m_notificationDaemonInitFailed = false;

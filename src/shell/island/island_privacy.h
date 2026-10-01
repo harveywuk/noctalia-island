@@ -11,6 +11,8 @@ namespace island {
   struct PrivacyActivity {
     PrivacyCaptureKind kind;
     std::vector<std::string> apps;
+    // Lower-case executables of those apps, where known, for focusing their windows.
+    std::vector<std::string> binaries;
     const char* icon() const {
       switch (kind) {
       case PrivacyCaptureKind::Microphone: return "microphone";
@@ -47,14 +49,20 @@ namespace island {
           {PrivacyCaptureKind::Camera, {}}, {PrivacyCaptureKind::Screen, {}}}};
       for (const auto& capture : state.captures) {
         const auto index = static_cast<std::size_t>(capture.kind);
-        if (index < groups.size() && !capture.appName.empty() && !m_filters[index].matches(capture.appName))
+        if (index < groups.size() && !capture.appName.empty() && !m_filters[index].matches(capture.appName)) {
           groups[index].apps.push_back(capture.appName);
+          if (!capture.binary.empty())
+            groups[index].binaries.push_back(capture.binary);
+        }
       }
       std::vector<PrivacyActivity> result;
       for (auto& group : groups) {
         std::ranges::sort(group.apps);
         const auto duplicates = std::ranges::unique(group.apps);
         group.apps.erase(duplicates.begin(), duplicates.end());
+        std::ranges::sort(group.binaries);
+        const auto duplicateBinaries = std::ranges::unique(group.binaries);
+        group.binaries.erase(duplicateBinaries.begin(), duplicateBinaries.end());
         if (!group.apps.empty()) result.push_back(std::move(group));
       }
       return result;
