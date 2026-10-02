@@ -18,23 +18,20 @@ class HttpClient;
 class Image;
 class Label;
 class MprisService;
-class PipeWireSpectrum;
 class RenderContext;
 class Slider;
-class AudioVisualizer;
 class ConfigService;
 class WaylandConnection;
 
 class MediaTab : public Tab {
 public:
   MediaTab(
-      MprisService* mpris, HttpClient* httpClient, PipeWireSpectrum* spectrum, ConfigService* config,
+      MprisService* mpris, HttpClient* httpClient, ConfigService* config,
       WaylandConnection* wayland, RenderContext* renderContext
   );
   ~MediaTab() override;
 
   std::unique_ptr<Flex> create() override;
-  void onFrameTick(float deltaMs) override;
   void setActive(bool active) override;
   void onClose() override;
   bool dismissTransientUi() override;
@@ -55,18 +52,13 @@ private:
 
   MprisService* m_mpris = nullptr;
   HttpClient* m_httpClient = nullptr;
-  PipeWireSpectrum* m_spectrum = nullptr;
   ConfigService* m_config = nullptr;
   WaylandConnection* m_wayland = nullptr;
   RenderContext* m_renderContext = nullptr;
-  std::uint64_t m_spectrumListenerId = 0;
   bool m_active = false;
 
   Flex* m_rootLayout = nullptr;
   Flex* m_mediaColumn = nullptr;
-  Flex* m_visualizerColumn = nullptr;
-  Flex* m_visualizerBody = nullptr;
-  AudioVisualizer* m_visualizerSpectrum = nullptr;
   Image* m_artwork = nullptr;
   Flex* m_artworkRow = nullptr;
   Flex* m_nowCard = nullptr;

@@ -7,7 +7,6 @@
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
 #include "net/http_client.h"
-#include "pipewire/pipewire_spectrum.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
 #include "shell/control_center/tab.h"
@@ -15,7 +14,6 @@
 #include "ui/builders.h"
 #include "ui/controls/context_menu.h"
 #include "ui/controls/context_menu_popup.h"
-#include "ui/visuals/audio_visualizer.h"
 
 #include <algorithm>
 #include <chrono>
@@ -66,15 +64,14 @@ namespace {
   std::string repeatGlyph(const std::string& loopStatus) { return loopStatus == "Track" ? "repeat-once" : "repeat"; }
 
   ButtonVariant toggleVariant(bool active) { return active ? ButtonVariant::Primary : ButtonVariant::Ghost; }
-  constexpr int kVisualizerBandCount = 32;
 
 } // namespace
 
 MediaTab::MediaTab(
-    MprisService* mpris, HttpClient* httpClient, PipeWireSpectrum* spectrum, ConfigService* config,
+    MprisService* mpris, HttpClient* httpClient, ConfigService* config,
     WaylandConnection* wayland, RenderContext* renderContext
 )
-    : m_mpris(mpris), m_httpClient(httpClient), m_spectrum(spectrum), m_config(config), m_wayland(wayland),
+    : m_mpris(mpris), m_httpClient(httpClient), m_config(config), m_wayland(wayland),
       m_renderContext(renderContext) {}
 
 MediaTab::~MediaTab() { m_aliveGuard.reset(); }
@@ -439,38 +436,7 @@ std::unique_ptr<Flex> MediaTab::create() {
   nowCard->addChild(std::move(mediaStack));
   mediaColumn->addChild(std::move(nowCard));
 
-  auto visualizerColumn = ui::column({
-      .out = &m_visualizerColumn,
-      .align = FlexAlign::Stretch,
-      .gap = Style::spaceMd * scale,
-      .clipChildren = true,
-      .flexGrow = 2.0F,
-      .configure = [scale, opacity = panelCardOpacity()](Flex& column) {
-        applySectionCardStyle(column, scale, opacity);
-      },
-  });
-
-  auto visualizerBody = ui::row({
-      .out = &m_visualizerBody,
-      .align = FlexAlign::Stretch,
-      .justify = FlexJustify::Start,
-      .fillWidth = true,
-      .flexGrow = 1.0F,
-  });
-
-  auto visualizerSpectrum = std::make_unique<AudioVisualizer>();
-  visualizerSpectrum->setGradient(colorForRole(ColorRole::Secondary), colorForRole(ColorRole::Tertiary));
-  visualizerSpectrum->setOrientation(AudioSpectrumOrientation::Vertical);
-  visualizerSpectrum->setMirrored(true);
-  visualizerSpectrum->setCentered(true);
-  visualizerSpectrum->setValues(std::vector<float>(kVisualizerBandCount, 0.0F));
-  visualizerSpectrum->tick(0.0F);
-  visualizerSpectrum->setFlexGrow(1.0F);
-  m_visualizerSpectrum = visualizerSpectrum.get();
-  visualizerBody->addChild(std::move(visualizerSpectrum));
-  visualizerColumn->addChild(std::move(visualizerBody));
   tab->addChild(std::move(mediaColumn));
-  tab->addChild(std::move(visualizerColumn));
 
   if (m_wayland != nullptr && m_renderContext != nullptr) {
     m_playerMenuPopup = std::make_unique<ContextMenuPopup>(*m_wayland, *m_renderContext);
@@ -570,29 +536,16 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
     m_mediaStack->layout(renderer);
   }
 
-  if (m_visualizerBody != nullptr && m_visualizerSpectrum != nullptr) {
-    const float bodyWidth = std::max(
-        0.0F, m_visualizerBody->width() - (m_visualizerBody->paddingLeft() + m_visualizerBody->paddingRight())
-    );
-    const float bodyHeightAvail = std::max(
-        0.0F, m_visualizerBody->height() - (m_visualizerBody->paddingTop() + m_visualizerBody->paddingBottom())
-    );
-    const float spectrumWidth = std::max(1.0F, bodyWidth);
-    const float spectrumHeight = std::max(1.0F, bodyHeightAvail);
-    m_visualizerSpectrum->setSize(spectrumWidth, spectrumHeight);
-    m_visualizerBody->layout(renderer);
-  }
+  // The stack is capped at a comfortable width; centre it when the card is wider.
+  m_mediaStack->setPosition(
+      m_nowCard->paddingLeft() + std::max(0.0F, (cardInnerWidth - mediaWidth) / 2), m_mediaStack->y()
+  );
 }
 
 void MediaTab::doUpdate(Renderer& renderer) {
   if (!m_active) {
     m_progressTimer.stop();
     return;
-  }
-  if (m_visualizerSpectrum != nullptr && m_spectrum != nullptr && m_spectrumListenerId != 0) {
-    if (!m_spectrum->idle() || !m_visualizerSpectrum->converged()) {
-      m_visualizerSpectrum->setValues(m_spectrum->values(m_spectrumListenerId));
-    }
   }
 
   const auto active = m_mpris != nullptr ? m_mpris->activePlayer() : std::nullopt;
@@ -618,37 +571,9 @@ void MediaTab::doUpdate(Renderer& renderer) {
   refresh(renderer);
 }
 
-void MediaTab::onFrameTick(float deltaMs) {
-  if (!m_active) {
-    return;
-  }
-
-  if (m_visualizerSpectrum != nullptr) {
-    if (m_spectrum != nullptr && m_spectrumListenerId != 0) {
-      if (!m_spectrum->idle() || !m_visualizerSpectrum->converged()) {
-        m_visualizerSpectrum->setValues(m_spectrum->values(m_spectrumListenerId));
-      }
-    }
-    m_visualizerSpectrum->tick(deltaMs);
-  }
-}
-
 void MediaTab::setActive(bool active) {
   const bool becameActive = active && !m_active;
   m_active = active;
-  if (m_spectrum != nullptr) {
-    if (active && m_spectrumListenerId == 0) {
-      m_spectrumListenerId = m_spectrum->addChangeListener(kVisualizerBandCount, [this]() {
-        if (!m_active || m_spectrum->idle()) {
-          return;
-        }
-        PanelManager::instance().requestFrameTick();
-      });
-    } else if (!active && m_spectrumListenerId != 0) {
-      m_spectrum->removeChangeListener(m_spectrumListenerId);
-      m_spectrumListenerId = 0;
-    }
-  }
   if (!active) {
     m_progressTimer.stop();
     m_positionSampleAt = {};
@@ -664,18 +589,9 @@ void MediaTab::setActive(bool active) {
 
 void MediaTab::onClose() {
   m_progressTimer.stop();
-  if (m_spectrum != nullptr) {
-    if (m_spectrumListenerId != 0) {
-      m_spectrum->removeChangeListener(m_spectrumListenerId);
-      m_spectrumListenerId = 0;
-    }
-  }
   m_active = false;
   m_rootLayout = nullptr;
   m_mediaColumn = nullptr;
-  m_visualizerColumn = nullptr;
-  m_visualizerBody = nullptr;
-  m_visualizerSpectrum = nullptr;
   m_artwork = nullptr;
   m_artworkRow = nullptr;
   m_nowCard = nullptr;

@@ -60,7 +60,7 @@ ControlCenterPanel::ControlCenterPanel(const ControlCenterServices& services) {
   m_dependencies = services.dependencies;
   m_tabs[tabIndex(TabId::Home)] = std::make_unique<HomeTab>(services);
   m_tabs[tabIndex(TabId::Media)] = std::make_unique<MediaTab>(
-      services.mpris, services.httpClient, services.spectrum, services.config, wayland,
+      services.mpris, services.httpClient, services.config, wayland,
       PanelManager::instance().renderContext()
   );
   m_tabs[tabIndex(TabId::Audio)] = std::make_unique<AudioTab>(
