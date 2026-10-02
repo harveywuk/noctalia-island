@@ -29,6 +29,10 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             hover_config=hover_config.replace('hover_widgets=["test/hover:widget","test_button","volume","clock"]',
                 'hover_widgets=["test_button"]\nhover_widgets_center=["test/hover:widget"]\nhover_widgets_right=["right_button"]')
             hover_config+='\n[widget.right_button]\ntype="custom_button"\nlabel="R"\n[widget.right_button.actions]\nleft="exec touch '+str(base/'right-clicked')+'"\n'
+        if '--hover-layout-only' in sys.argv:
+            # The Cupertino Island keeps hover widgets to the calendar view; the theme look shows
+            # them beside every expanded section, which is what these placement checks cover.
+            hover_config=hover_config.replace('[island]','[island]\nappearance="theme"',1)
         (cfg/'config.toml').write_text(hover_config)
     if '--progress-outline-only' in sys.argv:
         plugin_root=base/'progress-plugins';plugin=plugin_root/'timer';plugin.mkdir(parents=True)
@@ -612,7 +616,7 @@ play_sound=false
             # The shared picker appends to the selected group, including its existing items.
             centre_col=column('Centre');header_y=centre_col[1]+centre_col[3]//2
             move(centre_col[0]+188,header_y);click();time.sleep(.7);shot('picker')
-            move(*find_text('Search','hover-editor-picker-search.png'));click()
+            # The picker opens with its search field focused.
             for code in (46,38,24,46,37): key(code)  # clock
             time.sleep(.5);shot('picker-filtered');key(28);time.sleep(.8);shot('added-clock')
             assert saved()['hover_widgets_center']==['test/hover:widget','clock'], saved()
@@ -627,7 +631,6 @@ play_sound=false
             assert saved()['hover_widgets_right']==['right_button'], saved()
             # Plugin adds use the normal named-instance workflow and keep existing entries.
             move(right_col[0]+188,right_col[1]+right_col[3]//2);click();time.sleep(.7)
-            move(*find_text('Search','hover-editor-plugin-search.png'));click()
             for code in (35,24,47,18,19): key(code)  # hover
             time.sleep(.5);shot('plugin-picker-filtered');key(28);time.sleep(.8);shot('added-plugin')
             data=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
@@ -690,8 +693,13 @@ play_sound=false
                 publisher.terminate();publisher.wait(timeout=6)
             configure(hidden, 'restored')
             msg('settings-open','island');time.sleep(1);shot('settings')
-            move(925,273);click();time.sleep(.7);shot('section-settings')
-            move(1070,384);click();time.sleep(.7);shot('section-settings-edited')
+            # The section switches are on the Hover Sections sub-page, below the fold.
+            try: sections=find_text('Sections','hover-layout-groups.png',min_x=420)
+            except AssertionError:
+                move(760,500);command(pointer,'scroll 10');time.sleep(.6)
+                sections=find_text('Sections','hover-layout-groups.png',min_x=420)
+            move(*sections);click();time.sleep(.7);shot('section-settings')
+            click_switch('Clock','hover-layout-sections.png');time.sleep(.7);shot('section-settings-edited')
             settings_path=base/'state/noctalia/settings.toml'
             saved=tomllib.loads(settings_path.read_text()).get('island',{}) if settings_path.exists() else {}
             assert saved.get('hover_show_clock') is True, ('Section toggle must save the clock setting',saved)
