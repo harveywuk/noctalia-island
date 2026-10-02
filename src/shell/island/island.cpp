@@ -1446,6 +1446,47 @@ void Island::prepare(Instance& inst) {
     result->setPosition(x * s, y * s);
     return result;
   };
+  // Cupertino controls: grey capsules for text actions, and round symbol buttons, optionally
+  // tinted with an activity colour (orange pause for timers), as in Apple's Live Activities.
+  const auto pill = [&](Button* button) {
+    if (!gCupertino)
+      return;
+    setIslandVariant(button, ButtonVariant::Default);
+    button->setRadius(button->height() / 2);
+  };
+  const auto roundButton = [&](Button* button, std::optional<Color> tint = std::nullopt) {
+    if (!gCupertino)
+      return;
+    button->setRadius(button->width() / 2);
+    if (!tint) {
+      setIslandVariant(button, ButtonVariant::Default);
+      return;
+    }
+    const auto state = [&](float bg, float label) {
+      return Button::ButtonStateColors{
+          .bg = islandFixed(*tint, bg), .border = islandFixed(*tint, 0), .label = islandFixed(*tint, label)
+      };
+    };
+    button->setCustomPalette({
+        .normal = state(0.24F, 1.0F),
+        .hover = state(0.32F, 1.0F),
+        .pressed = state(0.4F, 1.0F),
+        .disabled = state(0.12F, 0.4F),
+        .selected = std::nullopt
+    });
+  };
+  // A round tinted badge behind a symbol, leading a row (downloads, unread notifications).
+  const auto badge = [&](const std::string& icon, float x, float y, float size, Color tint, ColorRole theme) {
+    auto disc = std::make_unique<Box>();
+    disc->setFill(islandTint(tint, theme, 0.22F));
+    disc->setRadius(size * s / 2);
+    disc->setSize(size * s, size * s);
+    disc->setPosition(x * s, y * s);
+    disc->setHitTestVisible(false);
+    canvas->addChild(std::move(disc));
+    const float glyphSize = std::round(size * 0.5F);
+    glyph(icon, x + (size - glyphSize) / 2, y + (size - glyphSize) / 2, glyphSize, islandTint(tint, theme));
+  };
   const auto panel = [this, &inst](const std::string& name) {
     if (inst.keyboardMode)
       releaseKeyboard(inst);
@@ -1537,14 +1578,18 @@ void Island::prepare(Instance& inst) {
       const float y = 57 + static_cast<float>(i) * 55;
       sectionCard(y - 6, y + 49);
       const auto& download = downloads[i];
-      label(download.name, 22, y, w - 110, 13, foreground, false, 1, FontWeight::Normal, true);
+      // Cupertino leads each row with a round blue badge, as Apple lists transfers.
+      const float textX = gCupertino ? 62 : 22;
+      if (gCupertino)
+        badge("download", 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
+      label(download.name, textX, y, w - textX - 88, 13, foreground, false, 1, FontWeight::Normal, true);
       if (download.determinate) {
         auto* percentage =
             label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
-        auto* bar = progress(static_cast<float>(download.progress), 22, y + 26, w - 44, 7);
+        auto* bar = progress(static_cast<float>(download.progress), textX, y + 26, w - textX - 22, 7);
         inst.downloadUi.push_back({download.desktopId, percentage, bar});
       } else {
-        label(i18n::tr("island.downloads." + download.phase), 22, y + 24, w - 44, 12, muted);
+        label(i18n::tr("island.downloads." + download.phase), textX, y + 24, w - textX - 22, 12, muted);
       }
     }
     h = 60 + static_cast<float>(rows) * 55;
@@ -1553,7 +1598,7 @@ void Island::prepare(Instance& inst) {
       h += 28;
     }
     if (player && cfg.hoverShowMedia && !showSwitcher) {
-      control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true, [panel] { panel("media"); });
+      pill(control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true, [panel] { panel("media"); }));
       h += 38;
     }
 
@@ -1935,8 +1980,11 @@ void Island::prepare(Instance& inst) {
       ring->setPosition(22 * s, (h + 6) * s);
       canvas->addChild(std::move(ring));
       glyph(timer.icon, 31, h + 15, 18, islandTint(kAppleOrange, ColorRole::Primary));
-      label(i18n::tr(timer.titleKey), 70, h + 3, w - 165, 13);
-      auto* remaining = label(timer.time(), w - 94, h + 3, 72, 16, foreground, true);
+      // Cupertino keeps the controls on the timer's row as round buttons; the theme look
+      // lists them as a row of text buttons below.
+      const float controlsWidth = gCupertino ? 3 * 32 + 2 * 8 + 10 : 0;
+      label(i18n::tr(timer.titleKey), 70, h + 3, w - 165 - controlsWidth, 13);
+      auto* remaining = label(timer.time(), w - 94 - controlsWidth, h + 3, 72, 16, foreground, true);
       inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
       label(
           i18n::tr(
@@ -1946,6 +1994,32 @@ void Island::prepare(Instance& inst) {
           ),
           70, h + 25, w - 92, 11, muted
       );
+      if (gCupertino) {
+        const float x = w - 22 - controlsWidth + 10;
+        const bool toggleAvailable = !timer.finished && timer.remaining > 0;
+        auto* toggle = control(
+            x, h + 8, 32, 32, "", timer.running ? "player-pause" : "player-play",
+            i18n::tr(timer.running ? "island.timer.pause" : "island.timer.resume"), 16, toggleAvailable,
+            [this, timer] { timerCommand(timer, timer.toggleCommand()); }
+        );
+        toggle->inputArea()->setTabFocusKey(timer.plugin + "-toggle");
+        roundButton(toggle, kAppleOrange);
+        auto* cancel = control(
+            x + 40, h + 8, 32, 32, "", "x", i18n::tr("island.timer.cancel"), 16, true,
+            [this, timer] { timerCommand(timer, timer.cancelCommand()); }
+        );
+        cancel->inputArea()->setTabFocusKey(timer.plugin + "-cancel");
+        roundButton(cancel);
+        auto* open = control(
+            x + 80, h + 8, 32, 32, "", "chevron-right", i18n::tr("island.timer.open"), 16, true,
+            [panel, timer] { panel(timer.panel); }
+        );
+        open->inputArea()->setTabFocusKey(timer.plugin + "-open");
+        roundButton(open);
+        h += 56;
+        sectionCard(sectionTop, h);
+        continue;
+      }
       h += 48;
       const float buttonWidth = (w - 60) / 3;
       auto* toggle = control(
@@ -1976,10 +2050,10 @@ void Island::prepare(Instance& inst) {
         for (const auto& timer : timers) {
           if (timer.active)
             continue;
-          control(
+          pill(control(
               x, h, width, 32, i18n::tr(timer.pomodoro ? "island.timer.pomodoro" : "island.timer.title"), timer.icon,
               "", 16, true, [panel, timer] { panel(timer.panel); }
-          );
+          ));
           x += width + 8;
         }
         h += 40;
@@ -2154,11 +2228,17 @@ void Island::prepare(Instance& inst) {
   }
   if (showUnread && expandedView && showExtras && cfg.hoverShowUnread) {
     const float sectionTop = h;
-    control(
-        22, h, w - 44, 24, i18n::trp("notifications.unread-count", unreadCount), "",
+    // Cupertino: a leading bell badge and left-aligned rows, matching the battery and timer rows.
+    const float rowX = gCupertino ? 58 : 22;
+    if (gCupertino)
+      badge("bell", 22, h + 2, 28, kAppleRed, ColorRole::Error);
+    auto* header = control(
+        rowX, h + 4, w - rowX - 22, 24, i18n::trp("notifications.unread-count", unreadCount), "",
         i18n::tr("notifications.unread-history"), 0, true, [panel] { panel("notifications"); }
     );
-    h += 32;
+    if (gCupertino)
+      header->setContentAlign(ButtonContentAlign::Start);
+    h += 36;
     std::size_t shown = 0;
     for (const auto& entry : m_notifications->history() | std::views::reverse) {
       if (entry.seen)
@@ -2169,7 +2249,10 @@ void Island::prepare(Instance& inst) {
       auto title = notification.appName + " · " + notification.summary;
       std::replace(title.begin(), title.end(), '\n', ' ');
       std::replace(title.begin(), title.end(), '\r', ' ');
-      control(22, h, w - 44, 30, title, "", notification.body, 0, true, [panel] { panel("notifications"); });
+      auto* row =
+          control(rowX, h, w - rowX - 22, 30, title, "", notification.body, 0, true, [panel] { panel("notifications"); });
+      if (gCupertino)
+        row->setContentAlign(ButtonContentAlign::Start);
       h += 34;
     }
     sectionCard(sectionTop, h);
@@ -2206,7 +2289,7 @@ void Island::prepare(Instance& inst) {
     });
   }
   if (view == island::View::Downloads) {
-    control(22, h, w - 44, 32, i18n::tr("island.downloads.close"), "", "", 0, true, [this, &inst] {
+    auto* close = control(22, h, w - 44, 32, i18n::tr("island.downloads.close"), "", "", 0, true, [this, &inst] {
       if (inst.keyboardMode)
         releaseKeyboard(inst);
       else {
@@ -2216,6 +2299,7 @@ void Island::prepare(Instance& inst) {
         refresh();
       }
     });
+    pill(close);
     h += 42;
   }
   if (expandedView
