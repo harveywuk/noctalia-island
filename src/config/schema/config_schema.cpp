@@ -5,6 +5,7 @@
 #include "config/schema/diagnostics.h"
 #include "config/schema/engine.h"
 #include "config/schema/ranges.h"
+#include "core/font_defaults.h"
 #include "core/input/key_chord.h"
 #include "notification/notification_filter.h"
 #include "scripting/plugin_id.h"
@@ -2032,14 +2033,14 @@ namespace noctalia::config::schema {
         field(&ShellConfig::popupBorders, "popup_borders"),
         field(&ShellConfig::popupShadows, "popup_shadows"),
         field(&ShellConfig::cardBorders, "card_borders"),
-        // font_family is trimmed; empty falls back to sans-serif.
+        // font_family is trimmed; empty falls back to the default family list.
         custom<ShellConfig>(
             "font_family",
             [](const toml::table& tbl, ShellConfig& out, std::string_view, Diagnostics&) {
               if (auto v = tbl["font_family"].value<std::string>()) {
                 out.fontFamily = StringUtils::trim(*v);
                 if (out.fontFamily.empty()) {
-                  out.fontFamily = "sans-serif";
+                  out.fontFamily = font_defaults::kFamily;
                 }
               }
             },
