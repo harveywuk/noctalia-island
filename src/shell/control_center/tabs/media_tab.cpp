@@ -41,6 +41,7 @@ namespace {
   constexpr float kMediaUnit = 36.0F;
 
   constexpr float kArtworkSize = kMediaUnit * 6;
+  constexpr float kMediaArtworkMinHeight = kMediaUnit * 4;
   constexpr float kMediaNowCardMinHeight = kMediaUnit * 11 + Style::spaceSm * 2;
   constexpr float kMediaControlsHeight = kMediaUnit + Style::spaceXs;
   constexpr float kMediaPlayPauseHeight = kMediaUnit + Style::spaceSm;
@@ -56,6 +57,11 @@ namespace {
 
   std::string playPauseGlyph(const std::string& playbackStatus) {
     return playbackStatus == "Playing" ? "media-pause" : "media-play";
+  }
+
+  [[nodiscard]] int mediaTabArtDecodeSize(float scale) {
+    // Match the widest artwork layout bound (see mediaWidth in doLayout).
+    return static_cast<int>(std::round(kMediaUnit * 11.0F * scale));
   }
 
   // The artwork flow advances at about 30 fps; it moves slowly, so more buys nothing.
@@ -254,12 +260,17 @@ std::unique_ptr<Flex> MediaTab::create() {
       .flexGrow = 1.0F,
   });
 
-  // Open space where the artwork, filling the card behind it, shows unobscured.
-  auto artworkRow = ui::row({
-      .out = &m_artworkRow,
-      .minHeight = kArtworkSize * scale,
-      .flexGrow = 1.0F,
-  });
+  // The cover, centred over the flowing gradient made from it.
+  auto artworkRow = ui::row(
+      {.out = &m_artworkRow, .align = FlexAlign::Center, .justify = FlexJustify::Center, .gap = 0.0F, .flexGrow = 1.0F},
+      ui::image({
+          .out = &m_artwork,
+          .fit = ImageFit::Cover,
+          .radius = Style::scaledRadiusXl(scale),
+          .width = kArtworkSize * scale,
+          .height = kArtworkSize * scale,
+      })
+  );
   mediaStack->addChild(std::move(artworkRow));
 
   mediaStack->addChild(
@@ -271,18 +282,21 @@ std::unique_ptr<Flex> MediaTab::create() {
               .fontSize = Style::fontSizeTitle * scale,
               .fontWeight = FontWeight::Bold,
               .color = colorSpecFromRole(ColorRole::Primary),
+              .textAlign = TextAlign::Center,
           }),
           ui::label({
               .out = &m_trackArtist,
               .text = i18n::tr("control-center.media.start-playback"),
               .fontSize = Style::fontSizeBody * scale,
               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .textAlign = TextAlign::Center,
           }),
           ui::label({
               .out = &m_trackAlbum,
               .text = "",
               .fontSize = Style::fontSizeCaption * scale,
               .color = colorSpecFromRole(ColorRole::Secondary),
+              .textAlign = TextAlign::Center,
               .visible = false,
           })
       )
@@ -525,20 +539,32 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
     }
   }
 
-  if (m_trackTitle != nullptr) {
-    m_trackTitle->setMaxWidth(mediaWidth);
-  }
-  if (m_trackArtist != nullptr) {
-    m_trackArtist->setMaxWidth(mediaWidth);
-  }
-  if (m_trackAlbum != nullptr) {
-    m_trackAlbum->setMaxWidth(mediaWidth);
+  // Track text spans the stack so it centres under the cover.
+  for (auto* text : {m_trackTitle, m_trackArtist, m_trackAlbum}) {
+    if (text != nullptr) {
+      text->setMinWidth(mediaWidth);
+      text->setMaxWidth(mediaWidth);
+    }
   }
   if (m_progressSlider != nullptr) {
     m_progressSlider->setSize(mediaWidth, 0.0F);
   }
 
   m_mediaStack->layout(renderer);
+
+  if (m_artwork != nullptr && m_artworkRow != nullptr) {
+    const float artWidth =
+        std::max(1.0F, m_artworkRow->width() - (m_artworkRow->paddingLeft() + m_artworkRow->paddingRight()));
+    const float artHeight = std::max(
+        kMediaArtworkMinHeight * scale,
+        m_artworkRow->height() - (m_artworkRow->paddingTop() + m_artworkRow->paddingBottom())
+    );
+    // Media art is always presented as a square (album-art convention).
+    const float side = std::min(artWidth, artHeight);
+    m_artwork->setSize(side, side);
+    m_artwork->setRadius(Style::scaledRadiusXl(scale));
+    m_mediaStack->layout(renderer);
+  }
 
   if (m_backdrop != nullptr) {
     // The flow is already dimmed; a little more shade behind the title and controls keeps
@@ -634,6 +660,7 @@ void MediaTab::onClose() {
   m_rootLayout = nullptr;
   m_mediaColumn = nullptr;
   m_backdrop = nullptr;
+  m_artwork = nullptr;
   m_nowLabel = nullptr;
   if (m_flowTexture.id != 0
       && !PanelManager::instance().withRenderer([this](Renderer& renderer) {
@@ -686,7 +713,9 @@ bool MediaTab::dismissTransientUi() {
 }
 
 void MediaTab::clearArt(Renderer& renderer) {
-  (void)renderer;
+  if (m_artwork != nullptr) {
+    m_artwork->clear(renderer);
+  }
   m_flow.clear();
   m_flowTimer.stop();
   if (m_backdrop != nullptr) {
@@ -934,6 +963,10 @@ void MediaTab::refreshContent(Renderer& renderer) {
       } else {
         kLog.debug(R"(artwork loaded url="{}" path="{}")", resolvedArtUrl, artPath);
         loaded = true;
+        if (m_artwork != nullptr
+            && !m_artwork->setSourceFile(renderer, artPath, mediaTabArtDecodeSize(contentScale()), true, true)) {
+          m_artwork->clear(renderer);
+        }
         uploadFlow(renderer);
         syncFlowTimer();
       }

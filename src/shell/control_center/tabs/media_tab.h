@@ -68,6 +68,7 @@ private:
 
   Flex* m_rootLayout = nullptr;
   Flex* m_mediaColumn = nullptr;
+  Image* m_artwork = nullptr;
   // The flowing artwork gradient, filling the Now Playing card behind its content.
   Image* m_backdrop = nullptr;
   Label* m_nowLabel = nullptr;
