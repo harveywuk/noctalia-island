@@ -50,6 +50,7 @@
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
+#include <unistd.h>
 #include <array>
 #include <cmath>
 #include <ctime>
@@ -1302,13 +1303,16 @@ void Island::prepare(Instance& inst) {
   }
   m_renderContext->makeCurrent(inst.surface->renderTarget());
   inst.signature = signature;
-  // Playing media floods the capsule with its artwork, as Apple Music's player does; OSDs shown
-  // meanwhile stay on it rather than dropping to the black capsule.
+  // Playing media floods the capsule with its artwork, as Apple Music's player does; OSDs and
+  // notifications shown meanwhile stay on it rather than dropping to the black capsule.
   if (gCupertino
       && cfg.mediaGradient
       && playing
       && !artPath.empty()
-      && (view == island::View::Media || view == island::View::Activity || view == island::View::Osd)) {
+      && (view == island::View::Media
+          || view == island::View::Activity
+          || view == island::View::Osd
+          || view == island::View::Notification)) {
     if (artPath != m_flowArt) {
       m_flowArt = artPath;
       auto art = loadImageFile(artPath, 32, true);
@@ -1538,6 +1542,52 @@ void Island::prepare(Instance& inst) {
     if (openPanel)
       openPanel(inst.output, name);
     refresh();
+  };
+  // The notification's own image, its icon (a file or theme name), or its app's icon by desktop
+  // entry or name, in that order, as a small rounded image.
+  const auto notificationIcon = [&](const Notification& note, float x, float y, float size) {
+    auto image = std::make_unique<Image>();
+    image->setSize(size * s, size * s);
+    image->setRadius(size * s * 0.25F);
+    image->setFit(ImageFit::Cover);
+    image->setPosition(x * s, y * s);
+    const int pixels = static_cast<int>(std::ceil(size * s * 2.0F));
+    bool loaded = false;
+    if (note.imageData && note.imageData->width > 0 && note.imageData->height > 0 && !note.imageData->data.empty()
+        && note.imageData->bitsPerSample == 8 && (note.imageData->channels == 3 || note.imageData->channels == 4)) {
+      const auto& raw = *note.imageData;
+      loaded = image->setSourceRaw(
+          renderer, raw.data.data(), raw.data.size(), raw.width, raw.height, raw.rowStride,
+          raw.channels == 3 ? PixmapFormat::RGB : PixmapFormat::RGBA, true
+      );
+    }
+    std::vector<std::string> names;
+    if (note.icon && !note.icon->empty()) {
+      std::string icon = *note.icon;
+      if (icon.starts_with("file://"))
+        icon.erase(0, 7);
+      if (icon.front() == '/' && ::access(icon.c_str(), R_OK) == 0)
+        loaded = loaded || image->setSourceFile(renderer, icon, pixels, true);
+      else if (icon.front() != '/' && !icon.starts_with("noctalia-glyph:"))
+        names.push_back(icon);
+    }
+    if (note.desktopEntry && !note.desktopEntry->empty())
+      names.push_back(*note.desktopEntry);
+    if (!note.appName.empty()) {
+      std::string lower = note.appName;
+      std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return std::tolower(c); });
+      std::ranges::replace(lower, ' ', '-');
+      names.push_back(lower);
+    }
+    for (const auto& name : names) {
+      if (loaded)
+        break;
+      const auto& path = m_iconResolver.resolve(name, pixels);
+      loaded = !path.empty() && image->setSourceFile(renderer, path, pixels, true);
+    }
+    if (loaded)
+      canvas->addChild(std::move(image));
+    return loaded;
   };
   const auto artwork = [&](float x, float y, float size) {
     auto image = std::make_unique<Image>();
@@ -1852,7 +1902,11 @@ void Island::prepare(Instance& inst) {
   } else if (view == island::View::Notification && m_notification) {
     const auto n = *m_notification;
     const bool expanded = inst.expandedNotification == n.id;
-    auto* appLabel = label(n.appName, 22, 14, w - 75, Style::fontSizeCaption, muted);
+    // The sending app's icon leads its name, as on macOS; the name sits alone when none resolves.
+    const float appIconSize = 18.0F;
+    const bool hasAppIcon = notificationIcon(n, 22, 12, appIconSize);
+    const float appLabelX = hasAppIcon ? 22 + appIconSize + 6 : 22;
+    auto* appLabel = label(n.appName, appLabelX, 14, w - 53 - appLabelX, Style::fontSizeCaption, muted);
     control(w - 47, 5, 32, 30, "", "x", i18n::tr("notifications.dismiss"), 18, true, [this] { dismissNotification(); });
     std::vector<std::pair<std::string, std::string>> visibleActions;
     const bool hasDefault = std::ranges::find(n.actions, "default") != n.actions.end();

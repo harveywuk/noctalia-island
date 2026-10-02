@@ -8,6 +8,7 @@
 #include "shell/island/island_privacy.h"
 #include "shell/island/island_state.h"
 #include "shell/osd/osd_overlay.h"
+#include "system/icon_resolver.h"
 #include "ui/visuals/artwork_flow.h"
 
 #include <chrono>
@@ -114,6 +115,8 @@ private:
   Timer m_notificationPreviewTimer;
   std::optional<OsdContent> m_osd;
   Timer m_tick;
+  // Resolves notification app icons (theme names, desktop entries) for the notification card.
+  IconResolver m_iconResolver;
   visuals::ArtworkFlow m_flow;
   std::string m_flowArt;
   std::vector<std::uint8_t> m_flowFrame;
