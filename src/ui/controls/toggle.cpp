@@ -68,7 +68,7 @@ void Toggle::setChecked(bool checked) {
     float from = m_checked ? 0.0F : 1.0F;
     float to = m_checked ? 1.0F : 0.0F;
     m_animId = animationManager()->animate(
-        from, to, Style::animFast, Easing::EaseOutCubic, [this](float t) { applyAnimatedState(t); },
+        from, to, Style::animNormal, Easing::EaseOutCubic, [this](float t) { applyAnimatedState(t); },
         [this]() { m_animId = 0; }, this
     );
     // Mark dirty so the surface's frame loop restarts and ticks the animation
@@ -200,11 +200,13 @@ void Toggle::applyAnimatedState(float t) {
   thumbStyle.fillMode = FillMode::Solid;
   thumbStyle.radius = m_thumbSize * 0.5F;
   thumbStyle.softness = 1.0F;
-  thumbStyle.borderWidth = 0.0F;
+  thumbStyle.borderWidth = Style::knobEdgeWidth * m_scale;
+  thumbStyle.border = rgba(0.0F, 0.0F, 0.0F, Style::knobEdgeAlpha);
   thumbStyle.fill = thumbColor;
   m_thumb->setStyle(thumbStyle);
 
   auto shadowStyle = thumbStyle;
+  shadowStyle.borderWidth = 0.0F;
   shadowStyle.fill = rgba(0.0F, 0.0F, 0.0F, Style::knobShadowAlpha);
   shadowStyle.softness = Style::knobShadowSoftness * m_scale;
   m_thumbShadow->setStyle(shadowStyle);

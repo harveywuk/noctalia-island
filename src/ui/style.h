@@ -111,9 +111,22 @@ namespace Style {
 
   // Soft drop shadow under white knobs (switch thumbs, slider knobs), which macOS uses instead of
   // an outline to lift the knob off the track.
-  inline constexpr float knobShadowAlpha = 0.3F;
-  inline constexpr float knobShadowSoftness = 1.5F;
-  inline constexpr float knobShadowOffsetY = 0.5F;
+  inline constexpr float knobShadowAlpha = 0.4F;
+  inline constexpr float knobShadowSoftness = 2.0F;
+  inline constexpr float knobShadowOffsetY = 1.0F;
+  // A faint edge keeps a white knob crisp against a light track.
+  inline constexpr float knobEdgeAlpha = 0.08F;
+  inline constexpr float knobEdgeWidth = 0.5F;
+
+  // Dark-mode push button bezel over the panel surface, and the brighter pressed bezel.
+  inline constexpr float pushButtonFillAlpha = 0.24F;
+  inline constexpr float pushButtonPressedFillAlpha = 0.34F;
+  // Filled (accent, destructive) buttons dim slightly while pressed.
+  inline constexpr float filledButtonPressedAlpha = 0.82F;
+  // Selected segment of a segmented control in dark mode; light mode uses a white segment.
+  inline constexpr float segmentSelectedFillAlpha = 0.24F;
+  // Light-mode track behind a segmented control, so the white selected segment reads as raised.
+  inline constexpr float segmentTrackLightAlpha = 0.07F;
 
   [[nodiscard]] float cornerRadiusScale() noexcept;
   void setCornerRadiusScale(float scale) noexcept;

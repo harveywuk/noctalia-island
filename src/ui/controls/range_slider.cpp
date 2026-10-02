@@ -37,6 +37,13 @@ namespace {
   constexpr Color kKnobColor = rgba(1.0F, 1.0F, 1.0F);
   constexpr Color kKnobPressedColor = rgba(0.94F, 0.94F, 0.95F);
 
+  RoundedRectStyle knobStyle(const Color& fill, float radius) {
+    auto style = solidStyle(fill, radius);
+    style.border = rgba(0.0F, 0.0F, 0.0F, Style::knobEdgeAlpha);
+    style.borderWidth = Style::knobEdgeWidth;
+    return style;
+  }
+
   RoundedRectStyle knobShadowStyle(float radius) {
     auto style = solidStyle(rgba(0.0F, 0.0F, 0.0F, Style::knobShadowAlpha), radius);
     style.softness = Style::knobShadowSoftness;
@@ -358,9 +365,9 @@ void RangeSlider::applyVisualState() {
   m_fill->setStyle(solidStyle(fillColor, m_trackHeight * 0.5F));
 
   const float knobRadius = m_thumbSizePx * 0.5F;
-  const auto knobStyle = [&](ActiveThumb thumb) {
+  const auto styleFor = [&](ActiveThumb thumb) {
     const bool active = m_enabled && m_activeThumb == thumb;
-    auto style = solidStyle(active && pressing ? kKnobPressedColor : kKnobColor, knobRadius);
+    auto style = knobStyle(active && pressing ? kKnobPressedColor : kKnobColor, knobRadius);
     // Focus rings only the knob the keyboard moves; with none chosen yet, both.
     if (focused && (active || m_activeThumb == ActiveThumb::None)) {
       style.border = resolveColorSpec(focusRingColorSpec());
@@ -368,8 +375,8 @@ void RangeSlider::applyVisualState() {
     }
     return style;
   };
-  m_lowThumb->setStyle(knobStyle(ActiveThumb::Low));
-  m_highThumb->setStyle(knobStyle(ActiveThumb::High));
+  m_lowThumb->setStyle(styleFor(ActiveThumb::Low));
+  m_highThumb->setStyle(styleFor(ActiveThumb::High));
   m_lowThumbShadow->setStyle(knobShadowStyle(knobRadius));
   m_highThumbShadow->setStyle(knobShadowStyle(knobRadius));
 }
