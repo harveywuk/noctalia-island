@@ -25,8 +25,8 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
-#include <linux/input-event-codes.h>
 #include <functional>
+#include <linux/input-event-codes.h>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -157,7 +157,8 @@ PanelPlacement SessionPanel::panelPlacement() const noexcept {
 float SessionPanel::preferredWidth() const { return std::round(scaled(kContentWidth + Style::panelPadding * 2.0F)); }
 
 float SessionPanel::menuHeight() const {
-  const std::vector<SessionPanelActionConfig> entries = !m_visibleEntries.empty() ? m_visibleEntries : effectiveActions();
+  const std::vector<SessionPanelActionConfig> entries =
+      !m_visibleEntries.empty() ? m_visibleEntries : effectiveActions();
   std::size_t separators = 0;
   for (std::size_t i = 1; i < entries.size(); ++i) {
     if (actionGroup(entries[i].action) != actionGroup(entries[i - 1].action)) {
@@ -191,7 +192,13 @@ float SessionPanel::alertHeightEstimate() const {
   // Icon, a two-line bold title, a two-line caption and the button row.
   const float titleLines = 2.0F * Style::fontSizeBody * 1.35F;
   const float bodyLines = 2.0F * Style::fontSizeCaption * 1.35F;
-  return Style::spaceXs + kAlertIconSize + Style::spaceMd + titleLines + Style::spaceXs + bodyLines + Style::spaceLg
+  return Style::spaceXs
+      + kAlertIconSize
+      + Style::spaceMd
+      + titleLines
+      + Style::spaceXs
+      + bodyLines
+      + Style::spaceLg
       + Style::controlHeightSm;
 }
 
@@ -462,7 +469,9 @@ void SessionPanel::requestHostResize() {
       // size on the same bar.
       const std::string context = m_reopenContext;
       const std::string bar(manager.attachedSourceBarName());
-      manager.openPanel("session", PanelOpenRequest{.output = manager.attachedPanelOutput(), .context = context, .sourceBarName = bar});
+      manager.openPanel(
+          "session", PanelOpenRequest{.output = manager.attachedPanelOutput(), .context = context, .sourceBarName = bar}
+      );
       return;
     }
     manager.relayoutActivePanelPreferredSize();
@@ -606,7 +615,8 @@ void SessionPanel::setAlertFocus(bool confirmFocused) {
           m_pendingConfirm.has_value() && m_pendingConfirm->index < m_visibleEntries.size()
           ? m_visibleEntries[m_pendingConfirm->index].variant
           : SessionActionButtonVariant::Default;
-      variant = configured == SessionActionButtonVariant::Default ? ButtonVariant::Primary : buttonVariantFor(configured);
+      variant =
+          configured == SessionActionButtonVariant::Default ? ButtonVariant::Primary : buttonVariantFor(configured);
     }
     m_confirmButton->setVariant(variant);
   }
@@ -759,7 +769,9 @@ void SessionPanel::layoutMenu(Renderer& renderer, float width) {
       row.shortcut->setPosition(width - inset - shortcutWidth, std::round((rowHeight - row.shortcut->height()) * 0.5F));
     }
     if (row.label != nullptr) {
-      row.label->setMaxWidth(std::max(1.0F, width - inset * 2.0F - (shortcutWidth > 0.0F ? shortcutWidth + inset : 0.0F)));
+      row.label->setMaxWidth(
+          std::max(1.0F, width - inset * 2.0F - (shortcutWidth > 0.0F ? shortcutWidth + inset : 0.0F))
+      );
       row.label->measure(renderer);
       row.label->setPosition(inset, std::round((rowHeight - row.label->height()) * 0.5F));
     }
