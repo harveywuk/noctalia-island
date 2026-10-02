@@ -79,10 +79,10 @@ bool RadioButton::pressed() const noexcept { return m_inputArea != nullptr && m_
 
 void RadioButton::doLayout(Renderer& /*renderer*/) {
   const float touchSize = Style::controlHeightSm * m_scale;
-  const float indicatorSize = (Style::fontSizeTitle + Style::spaceXs) * m_scale;
+  const float indicatorSize = Style::checkboxSize * m_scale;
   const float indicatorInset = (touchSize - indicatorSize) * 0.5F;
-  const float innerInset = (Style::spaceXs + Style::borderWidth) * m_scale;
-  const float innerSize = indicatorSize - innerInset * 2.0F;
+  const float innerSize = Style::radioDotSize * m_scale;
+  const float innerInset = (indicatorSize - innerSize) * 0.5F;
 
   setSize(touchSize, touchSize);
 
@@ -109,23 +109,22 @@ void RadioButton::applyState() {
     return;
   }
 
-  ColorSpec fill = colorSpecFromRole(ColorRole::Surface);
+  // Same treatment as Checkbox: hairline circle when off, accent fill when on, and a focus ring
+  // rather than a thicker outline.
+  ColorSpec fill = colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha);
   ColorSpec border = colorSpecFromRole(ColorRole::Outline, Style::controlBorderAlpha);
   float borderWidth = Style::borderWidth * m_scale;
   const bool focused = m_inputArea != nullptr && m_inputArea->focused();
   if (m_checked) {
     fill = colorSpecFromRole(ColorRole::Primary);
     border = colorSpecFromRole(ColorRole::Primary);
-    if (focused) {
-      border = colorSpecFromRole(ColorRole::Secondary);
-      borderWidth = Style::emphasizedBorderWidth * m_scale;
-    }
-  } else if (focused) {
-    fill = colorSpecFromRole(ColorRole::Secondary, 0.18F);
-    border = colorSpecFromRole(ColorRole::Secondary);
-    borderWidth = Style::emphasizedBorderWidth * m_scale;
-  } else if (hovered()) {
-    border = colorSpecFromRole(ColorRole::Hover);
+  } else if (pressed()) {
+    fill = colorSpecFromRole(ColorRole::OnSurface, Style::pressedFillAlpha);
+  }
+  if (focused) {
+    // The accent ring would vanish against a checked (accent) circle.
+    border = m_checked ? colorSpecFromRole(ColorRole::Secondary) : focusRingColorSpec();
+    borderWidth = Style::focusRingWidth * m_scale;
   }
 
   m_outer->setFill(fill);

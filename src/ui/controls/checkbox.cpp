@@ -98,7 +98,7 @@ bool Checkbox::pressed() const noexcept { return m_inputArea != nullptr && m_inp
 
 void Checkbox::doLayout(Renderer& renderer) {
   const float touchSize = Style::controlHeightSm * m_scale;
-  const float boxSize = (Style::fontSizeTitle + Style::spaceXs) * m_scale;
+  const float boxSize = Style::checkboxSize * m_scale;
   const float boxInset = (touchSize - boxSize) * 0.5F;
 
   setSize(touchSize, touchSize);
@@ -106,11 +106,11 @@ void Checkbox::doLayout(Renderer& renderer) {
   if (m_box != nullptr) {
     m_box->setPosition(boxInset, boxInset);
     m_box->setFrameSize(boxSize, boxSize);
-    m_box->setRadius(Style::scaledRadiusSm(m_scale));
+    m_box->setRadius(Style::scaledRadius(Style::checkboxRadius, m_scale));
   }
 
   if (m_checkGlyph != nullptr) {
-    m_checkGlyph->setGlyphSize((Style::fontSizeBody + Style::spaceXs * 0.5F) * m_scale);
+    m_checkGlyph->setGlyphSize((Style::checkboxSize - 3.0F) * m_scale);
     m_checkGlyph->measure(renderer);
     m_checkGlyph->setPosition(
         std::round(boxInset + (boxSize - m_checkGlyph->width()) * 0.5F),
@@ -129,7 +129,9 @@ void Checkbox::applyState() {
     return;
   }
 
-  ColorSpec fill = colorSpecFromRole(ColorRole::Surface);
+  // macOS checkboxes keep a hairline box when off and fill with the accent when on; focus adds a
+  // ring instead of thickening the box outline.
+  ColorSpec fill = colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha);
   ColorSpec border = colorSpecFromRole(ColorRole::Outline, Style::controlBorderAlpha);
   ColorSpec glyph = colorSpecFromRole(ColorRole::OnPrimary);
   float borderWidth = Style::borderWidth * m_scale;
@@ -138,16 +140,13 @@ void Checkbox::applyState() {
     fill = m_checkedFill.value_or(colorSpecFromRole(ColorRole::Primary));
     border = m_checkedBorder.value_or(colorSpecFromRole(ColorRole::Primary));
     glyph = m_checkedGlyph.value_or(colorSpecFromRole(ColorRole::OnPrimary));
-    if (focused) {
-      border = colorSpecFromRole(ColorRole::Secondary);
-      borderWidth = Style::emphasizedBorderWidth * m_scale;
-    }
-  } else if (focused) {
-    fill = colorSpecFromRole(ColorRole::Secondary, 0.18F);
-    border = colorSpecFromRole(ColorRole::Secondary);
-    borderWidth = Style::emphasizedBorderWidth * m_scale;
-  } else if (hovered()) {
-    border = colorSpecFromRole(ColorRole::Hover);
+  } else if (pressed()) {
+    fill = colorSpecFromRole(ColorRole::OnSurface, Style::pressedFillAlpha);
+  }
+  if (focused) {
+    // The accent ring would vanish against a checked (accent) box.
+    border = m_checked ? colorSpecFromRole(ColorRole::Secondary) : focusRingColorSpec();
+    borderWidth = Style::focusRingWidth * m_scale;
   }
 
   m_box->setFill(fill);
