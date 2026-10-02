@@ -13,7 +13,9 @@
 #include "notification/notification_manager.h"
 #include "pipewire/pipewire_spectrum.h"
 #include "render/animation/motion_service.h"
+#include "render/core/image_file_loader.h"
 #include "render/core/renderer.h"
+#include "render/core/texture_manager.h"
 #include "render/render_context.h"
 #include "render/scene/countdown_ring_node.h"
 #include "render/scene/input_dispatcher.h"
@@ -113,6 +115,10 @@ struct Island::Instance {
   Box* background = nullptr;
   island::ProgressOutline* progressOutline = nullptr;
   island::CaptureGlow* captureGlow = nullptr;
+  // Behind the content inside the capsule: the artwork flow while media plays.
+  Image* flowImage = nullptr;
+  TextureHandle flowTexture{};
+  bool flowShown = false;
   Node* content = nullptr;
   ScrollView* activityScroll = nullptr;
   island::View previousView = island::View::Rest;
@@ -481,7 +487,9 @@ void Island::timerCommand(const island::Countdown& timer, const std::string& com
 void Island::destroySurfaces() {
   if (closeHostedPanel)
     closeHostedPanel();
+  m_flowTimer.stop();
   for (auto& inst : m_instances) {
+    releaseFlow(*inst);
     inst->animations.cancelAll();
     inst->surface->setSceneRoot(nullptr);
   }
@@ -537,7 +545,11 @@ void Island::onOutputChange() {
   std::erase_if(m_instances, [&](const auto& inst) {
     const auto* output = m_wayland->findOutputByWl(inst->output);
     const auto bar = std::ranges::find(bars, inst->barConfig.name, &BarConfig::name);
-    return !output || !output->done || !output->hasUsableGeometry() || bar == bars.end() || !selected(*bar, *output);
+    const bool remove =
+        !output || !output->done || !output->hasUsableGeometry() || bar == bars.end() || !selected(*bar, *output);
+    if (remove)
+      releaseFlow(*inst);
+    return remove;
   });
   for (const auto& bar : bars)
     for (const auto& output : m_wayland->outputs()) {
@@ -951,6 +963,11 @@ void Island::geometry(Instance& inst) {
   }
   if (inst.captureGlow)
     inst.captureGlow->setGeometry(x, y, inst.width * s, inst.height * s, radius, s);
+  if (inst.flowImage) {
+    inst.flowImage->setPosition(0, 0);
+    inst.flowImage->setSize(inst.width * s, inst.height * s);
+    inst.flowImage->setRadius(radius);
+  }
   if (inst.content) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
     // Conceal content until the expanding capsule has room to contain it.
@@ -1283,6 +1300,18 @@ void Island::prepare(Instance& inst) {
   }
   m_renderContext->makeCurrent(inst.surface->renderTarget());
   inst.signature = signature;
+  // Playing media floods the capsule with its artwork, as Apple Music's player does.
+  if (gCupertino && playing && !artPath.empty() && (view == island::View::Media || view == island::View::Activity)) {
+    if (artPath != m_flowArt) {
+      m_flowArt = artPath;
+      auto art = loadImageFile(artPath, 32, true);
+      if (!art || !m_flow.setArtwork(art->rgba, art->width, art->height))
+        m_flow.clear();
+    }
+    showFlow(inst, m_flow.hasArtwork());
+  } else {
+    showFlow(inst, false);
+  }
   const float s = inst.scale;
   auto [w, h] = island::size(
       view, cfg.height, cfg.clockSize, cfg.clockSeconds, cfg.calendarLabels != IslandCalendarLabels::Initials,
@@ -1306,6 +1335,12 @@ void Island::prepare(Instance& inst) {
     box->setFill(islandRole(ColorRole::Surface));
     box->setClipChildren(true);
     inst.background = box.get();
+    // First child of the capsule, so rebuilt content always draws over it.
+    auto flow = std::make_unique<Image>();
+    flow->setFit(ImageFit::Cover);
+    flow->setHitTestVisible(false);
+    flow->setVisible(false);
+    inst.flowImage = static_cast<Image*>(box->addChild(std::move(flow)));
     inst.root->addChild(std::move(box));
     auto outline = std::make_unique<island::ProgressOutline>();
     inst.progressOutline = static_cast<island::ProgressOutline*>(inst.root->addChild(std::move(outline)));
@@ -2390,6 +2425,69 @@ void Island::prepare(Instance& inst) {
     );
   }
   geometry(inst);
+}
+
+void Island::showFlow(Instance& inst, bool show) {
+  if (inst.flowImage == nullptr)
+    return;
+  inst.flowShown = show;
+  if (!show) {
+    inst.flowImage->setVisible(false);
+    if (std::ranges::none_of(m_instances, [](const auto& other) { return other->flowShown; }))
+      m_flowTimer.stop();
+    return;
+  }
+  // The caller has made this surface's context current.
+  m_flow.render(
+      std::chrono::duration<float>(std::chrono::steady_clock::now() - m_flowStart).count(), m_flowFrame
+  );
+  auto& textures = inst.surface->renderTarget().renderer().textureManager();
+  if (inst.flowTexture.id == 0)
+    inst.flowTexture =
+        textures.createEmpty(visuals::ArtworkFlow::kWidth, visuals::ArtworkFlow::kHeight, TextureDataFormat::Rgba);
+  if (inst.flowTexture.id == 0
+      || !textures.updateSubImage(
+          inst.flowTexture, m_flowFrame.data(), 0, 0, visuals::ArtworkFlow::kWidth, visuals::ArtworkFlow::kHeight,
+          TextureDataFormat::Rgba
+      ))
+    return;
+  inst.flowImage->setExternalTexture(inst.surface->renderTarget().renderer(), inst.flowTexture);
+  inst.flowImage->setVisible(true);
+  inst.flowImage->markPaintDirty();
+  if (!m_flowTimer.active() && MotionService::instance().enabled())
+    m_flowTimer.startRepeating(std::chrono::milliseconds(33), [this] { tickFlow(); });
+}
+
+void Island::tickFlow() {
+  bool any = false;
+  for (auto& ptr : m_instances) {
+    auto& inst = *ptr;
+    if (!inst.flowShown || inst.panelHosted || inst.flowTexture.id == 0 || !m_renderContext)
+      continue;
+    if (!any)
+      m_flow.render(
+          std::chrono::duration<float>(std::chrono::steady_clock::now() - m_flowStart).count(), m_flowFrame
+      );
+    any = true;
+    m_renderContext->makeCurrent(inst.surface->renderTarget());
+    (void)inst.surface->renderTarget().renderer().textureManager().updateSubImage(
+        inst.flowTexture, m_flowFrame.data(), 0, 0, visuals::ArtworkFlow::kWidth, visuals::ArtworkFlow::kHeight,
+        TextureDataFormat::Rgba
+    );
+    inst.flowImage->markPaintDirty();
+    inst.surface->requestRedraw();
+  }
+  if (!any && std::ranges::none_of(m_instances, [](const auto& other) { return other->flowShown; }))
+    m_flowTimer.stop();
+}
+
+void Island::releaseFlow(Instance& inst) {
+  if (inst.flowTexture.id != 0 && m_renderContext && inst.surface) {
+    m_renderContext->makeCurrent(inst.surface->renderTarget());
+    inst.surface->renderTarget().renderer().textureManager().unload(inst.flowTexture);
+  }
+  inst.flowTexture = {};
+  inst.flowShown = false;
 }
 
 void Island::collapseAfterLeave(Instance& inst, std::chrono::milliseconds delay) {

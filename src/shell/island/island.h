@@ -8,6 +8,7 @@
 #include "shell/island/island_privacy.h"
 #include "shell/island/island_state.h"
 #include "shell/osd/osd_overlay.h"
+#include "ui/visuals/artwork_flow.h"
 
 #include <chrono>
 #include <functional>
@@ -79,6 +80,10 @@ private:
   void updateVisibility(Instance&);
   bool trackPreview(const IslandConfig&, wl_output*) const;
   void releaseKeyboard(Instance&);
+  // The flowing artwork gradient behind the capsule while media plays (Cupertino look).
+  void showFlow(Instance&, bool show);
+  void tickFlow();
+  void releaseFlow(Instance&);
   void collapseAfterLeave(Instance&, std::chrono::milliseconds delay);
   void dismissNotification();
   void updateNotificationPreview();
@@ -109,6 +114,11 @@ private:
   Timer m_notificationPreviewTimer;
   std::optional<OsdContent> m_osd;
   Timer m_tick;
+  visuals::ArtworkFlow m_flow;
+  std::string m_flowArt;
+  std::vector<std::uint8_t> m_flowFrame;
+  Timer m_flowTimer;
+  std::chrono::steady_clock::time_point m_flowStart = std::chrono::steady_clock::now();
   std::unique_ptr<island::BatteryConnections> m_batteryConnections;
   Timer m_batteryTimeout;
   Timer m_osdTimeout;
