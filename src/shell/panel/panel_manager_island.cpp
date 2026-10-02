@@ -148,8 +148,10 @@ void PanelManager::resizeIslandPanel(float width, float height, bool first) {
   m_panelVisualHeight = static_cast<std::uint32_t>(height);
   m_islandResizing = !first;
   m_islandProgress = 0;
-  m_islandMorph = m_animations.animate(
-      0.0F, 1.0F, first ? Motion::revealMs : Motion::resizeMs, Motion::reveal,
+  // The panel springs out of the Island, and between sizes, like the Island's own capsule.
+  const bool growing = width > m_islandCollapsedWidth || height > m_islandCollapsedHeight;
+  m_islandMorph = Motion::animateSpring(
+      m_animations, 0.0F, 1.0F, first || growing ? Motion::panelOpen : Motion::panelClose,
       [this](float value) { applyIslandReveal(value); }, [this] { m_islandResizing = false; }, m_sceneRoot.get()
   );
 }
