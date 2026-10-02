@@ -2448,7 +2448,7 @@
           "description": "Cast the global surface shadow from the dock"
         },
         "show-dots": {
-          "description": "Show running window dots below dock icons",
+          "description": "Show a dot below apps that are running",
           "label": "Show Dots"
         },
         "show-instance-count": {

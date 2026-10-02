@@ -104,6 +104,7 @@ namespace shell::dock {
     }
 
     std::vector<DesktopEntry> itemEntries = deps.pinnedEntries;
+    snapshot.pinnedCount = itemEntries.size();
     if (deps.config.showRunning) {
       for (const auto& run : resolvedRunning) {
         if (!alreadyListsResolvedEntry(itemEntries, run)) {
@@ -130,7 +131,7 @@ namespace shell::dock {
       }
 
       dockItem.active = !snapshot.activeAppIdLower.empty() && snapshot.activeAppIdLower == dockItem.idLower;
-      if (deps.config.showDots || deps.config.showInstanceCount) {
+      if (deps.config.showInstanceCount) {
         dockItem.instanceCount = windowsForDockItem(deps.platform, dockItem, snapshot.filterOutput).size();
       }
       snapshot.items.push_back(std::move(dockItem));
@@ -140,7 +141,7 @@ namespace shell::dock {
   }
 
   bool sameDockItemSet(const DockSnapshot& a, const DockSnapshot& b) {
-    if (a.items.size() != b.items.size()) {
+    if (a.items.size() != b.items.size() || a.pinnedCount != b.pinnedCount) {
       return false;
     }
     for (std::size_t i = 0; i < a.items.size(); ++i) {

@@ -3,7 +3,6 @@
 #include "render/animation/animation_manager.h"
 #include "system/desktop_entry.h"
 
-#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -29,7 +28,7 @@ namespace shell::dock {
   struct DockItemView {
     InputArea* area = nullptr;
     Node* motionNode = nullptr;
-    std::array<Box*, 3> dotIndicators{};
+    Box* runningDot = nullptr;
     Box* badge = nullptr;
     Label* badgeLabel = nullptr;
     Image* iconImage = nullptr;
