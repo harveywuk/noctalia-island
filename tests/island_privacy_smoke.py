@@ -96,8 +96,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         expanded = Image.open(shot('privacy-expanded')).convert('RGB')
         # The expanded Island shows capture indicators as a centred row of icons below its
         # content; the microphone is the lowest white glyph on the centre line.
-        column = [max(expanded.getpixel((expanded.width//2, y))) for y in range(0, 500)]
-        island_bottom = max(y for y, v in enumerate(column) if v < 45)
+        # Playing media fills the capsule with its artwork gradient, so find its edge as the lowest
+        # row on the centre line that differs from the wallpaper seen under the compact Island.
+        island_bottom = max(y for y in range(bottom + 4, 500)
+                            if sum(abs(a - b) for a, b in zip(expanded.getpixel((expanded.width//2, y)),
+                                                              compact.getpixel((compact.width//2, y)))) > 30)
         rows = [y for y in range(island_bottom-60, island_bottom)
                 if any(min(expanded.getpixel((x, y))) > 200 for x in range(expanded.width//2-8, expanded.width//2+8))]
         assert rows, 'Expanded microphone icon missing'

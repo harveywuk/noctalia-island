@@ -1300,8 +1300,12 @@ void Island::prepare(Instance& inst) {
   }
   m_renderContext->makeCurrent(inst.surface->renderTarget());
   inst.signature = signature;
-  // Playing media floods the capsule with its artwork, as Apple Music's player does.
-  if (gCupertino && playing && !artPath.empty() && (view == island::View::Media || view == island::View::Activity)) {
+  // Playing media floods the capsule with its artwork, as Apple Music's player does; OSDs shown
+  // meanwhile stay on it rather than dropping to the black capsule.
+  if (gCupertino
+      && playing
+      && !artPath.empty()
+      && (view == island::View::Media || view == island::View::Activity || view == island::View::Osd)) {
     if (artPath != m_flowArt) {
       m_flowArt = artPath;
       auto art = loadImageFile(artPath, 32, true);
