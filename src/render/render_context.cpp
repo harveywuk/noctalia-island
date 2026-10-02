@@ -1,5 +1,6 @@
 #include "render/render_context.h"
 
+#include "core/font_defaults.h"
 #include "core/files/resource_paths.h"
 #include "core/log.h"
 #include "core/scoped_timer.h"
@@ -168,7 +169,7 @@ bool RenderContext::makeCurrent(RenderTarget& target) {
 
 void RenderContext::setTextFontFamily(std::string family) {
   if (family.empty()) {
-    family = "sans-serif";
+    family = font_defaults::kFamily;
   }
   if (m_textFontFamily == family) {
     return;
