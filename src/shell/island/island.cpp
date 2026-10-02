@@ -1764,9 +1764,6 @@ void Island::prepare(Instance& inst) {
         );
       }
       if (cfg.hoverShowCalendar) {
-        // The week strip keeps the system sans face rather than the shell font: its wider,
-        // rounder figures read better at a glance than Inter's at this size.
-        constexpr const char* kWeekStripFontFamily = "sans-serif";
         constexpr float dateSize = 17.0F;
         constexpr float daySize = 13.0F;
         const float preferredCellWidth = cfg.calendarLabels == IslandCalendarLabels::Initials ? 32.0F : 44.0F;
@@ -1799,17 +1796,13 @@ void Island::prepare(Instance& inst) {
               shortName, x, stripY, cellWidth, daySize, color, true, 1,
               today ? FontWeight::Bold : FontWeight::SemiBold
           );
-          weekday->setFontFamily(kWeekStripFontFamily);
-          weekday->measure(renderer);
           weekday->setPosition(x * s, stripY * s + (dayHeight * s - weekday->height()) / 2.0F);
           g_free(shortName);
-          auto* dateLabel = label(
+          label(
               std::to_string(tm.tm_mday), x, stripY + dayHeight + 2.0F, cellWidth,
               std::round(dateSize * grade * (today ? 1.25F : 1.0F)), color, true, 1,
               today ? FontWeight::Bold : FontWeight::Medium
           );
-          dateLabel->setFontFamily(kWeekStripFontFamily);
-          dateLabel->measure(renderer);
           ++tm.tm_mday;
           tm.tm_isdst = -1;
           std::mktime(&tm);
