@@ -366,7 +366,8 @@ namespace shell::dock {
     }
 
     const auto surfaceGeometry = shell::dock::computeSurfaceGeometry(
-        cfg, shadowConfig, instance.items.size() + shell::dock::dockLauncherButtonCount(cfg), instance.fractionalScale
+        cfg, shadowConfig, instance.items.size() + shell::dock::dockLauncherButtonCount(cfg), instance.fractionalScale,
+        instance.divider != nullptr ? 1U : 0U
     );
 
     if (instance.surface->width() != surfaceGeometry.surfaceW

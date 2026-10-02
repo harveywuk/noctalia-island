@@ -17,6 +17,7 @@
 #include "render/scene/input_area.h"
 #include "shell/surface/edge_inset.h"
 #include "ui/builders.h"
+#include "ui/material.h"
 #include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -2314,7 +2315,13 @@ InputArea* NotificationToast::buildCard(
   });
   *outCardForeground = foreground.get();
 
-  const float bgAlpha = m_config != nullptr ? m_config->config().notification.backgroundOpacity : 0.97F;
+  // The configured opacity caps the material tint, so Solid (or no compositor blur) keeps it as set.
+  const float bgAlpha = m_config != nullptr
+      ? std::min(
+            m_config->config().notification.backgroundOpacity,
+            ui::material::tintOpacity(ui::material::Kind::Toast, m_config->config().shell.panel.transparencyMode)
+        )
+      : 0.97F;
   const bool hasBorder = m_config == nullptr || m_config->config().notification.border;
   const float borderWidth =
       hasBorder ? (entry.urgency == Urgency::Critical ? Style::emphasizedBorderWidth : Style::borderWidth) : 0.0F;

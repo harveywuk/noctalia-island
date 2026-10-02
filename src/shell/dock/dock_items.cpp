@@ -15,6 +15,7 @@
 #include "system/internal_app_metadata.h"
 #include "ui/app_icon_colorization.h"
 #include "ui/builders.h"
+#include "ui/controls/separator.h"
 #include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -27,6 +28,8 @@
 #include <linux/input-event-codes.h>
 #include <memory>
 #include <numbers>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -38,9 +41,10 @@ namespace {
   constexpr float kBadgeFontRatio = 0.72F; // font size relative to badge diameter
   constexpr float kBadgeCornerInsetX = 0.55F;
   constexpr float kBadgeCornerInsetY = 0.45F;
+  // One running indicator per app, whatever its window count, as in the macOS dock.
   constexpr float kDotSizeRatio = 0.09F;
   constexpr float kDotMinSize = 4.0F;
-  constexpr float kDotGap = 3.0F;
+  constexpr float kDotAlpha = 0.75F;
   constexpr float kCellPad = 6.0F;
   constexpr float kLauncherGlyphSizeRatio = 0.8F;
   constexpr float kHoverZoomReferenceFrameMs = 1000.0F / 60.0F;
@@ -50,6 +54,11 @@ namespace {
   constexpr float kHoverZoomFalloffInfluence = 1.5F;
   constexpr std::int32_t kHoverZoomZScale = 100;
   constexpr auto kDragHoldDelay = std::chrono::milliseconds(300);
+  // Launch bounce: full hops repeat until the app is running, then one small settling hop.
+  constexpr float kLaunchHopMs = 390.0F;
+  constexpr float kLaunchSettleMs = 260.0F;
+  constexpr float kLaunchHopEnd = 0.6F; // Motion::launchLift progress where the first hop lands
+  constexpr auto kLaunchBounceTimeout = std::chrono::seconds(8);
 
   [[nodiscard]] float pointerMainOnRow(const DockConfig& cfg, const InputArea* area, float localX, float localY) {
     if (area == nullptr) {
@@ -130,14 +139,51 @@ namespace {
 
   [[nodiscard]] float itemRestCenterMain(float restMainPos, float cellMain) { return restMainPos + cellMain * 0.5F; }
 
-  void applyItemMainOffset(InputArea* area, bool vertical, float restMain, float restCross, float offset) {
-    if (area == nullptr) {
+  void applyItemMainOffset(Node* node, bool vertical, float restMain, float restCross, float offset) {
+    if (node == nullptr) {
       return;
     }
     if (!vertical) {
-      area->setPosition(restMain + offset, restCross);
+      node->setPosition(restMain + offset, restCross);
     } else {
-      area->setPosition(restCross, restMain + offset);
+      node->setPosition(restCross, restMain + offset);
+    }
+  }
+
+  [[nodiscard]] std::unique_ptr<Separator> makeDockDivider(const DockConfig& cfg, bool vertical) {
+    const auto length = static_cast<float>(cfg.iconSize);
+    return ui::separator({
+        .thickness = shell::dock::kDockDividerThickness,
+        .spacing = shell::dock::kDockDividerSpacing,
+        .orientation = vertical ? SeparatorOrientation::HorizontalRule : SeparatorOrientation::VerticalRule,
+        .width = vertical ? std::optional<float>{length} : std::nullopt,
+        .height = vertical ? std::nullopt : std::optional<float>{length},
+    });
+  }
+
+  // Running dot sits centred in the gap between the icon and the dock's screen-side edge.
+  void positionRunningDot(Box* dot, DockEdge edge, float iconSize, float crossPad) {
+    if (dot == nullptr) {
+      return;
+    }
+    const float size = dot->width();
+    const float gap = std::max(1.0F, std::round((kCellPad + crossPad - size) * 0.5F));
+    const float along = std::round(kCellPad + (iconSize - size) * 0.5F);
+    const float nearEdge = kCellPad + iconSize + gap;
+    const float farEdge = kCellPad - gap - size;
+    switch (edge) {
+    case DockEdge::Bottom:
+      dot->setPosition(along, nearEdge);
+      break;
+    case DockEdge::Top:
+      dot->setPosition(along, farEdge);
+      break;
+    case DockEdge::Left:
+      dot->setPosition(farEdge, along);
+      break;
+    case DockEdge::Right:
+      dot->setPosition(nearEdge, along);
+      break;
     }
   }
 
@@ -520,6 +566,8 @@ namespace shell::dock {
       instance.row = nullptr;
     }
     instance.items.clear();
+    instance.divider = nullptr;
+    instance.dividerHoverMainOffset = 0.0F;
     instance.launcherArea = nullptr;
     instance.launcherIconNode = nullptr;
     instance.launcherVisualScale = -1.0F;
@@ -544,6 +592,9 @@ namespace shell::dock {
 
     for (std::size_t itemIndex = 0; itemIndex < itemModels.size(); ++itemIndex) {
       const auto& model = itemModels[itemIndex];
+      if (itemIndex > 0 && itemIndex == snapshot.pinnedCount) {
+        instance.divider = instance.row->addChild(makeDockDivider(cfg, vert));
+      }
       auto& item = instance.items.emplace_back();
       DockItemAction action{
           .entry = model.entry,
@@ -607,28 +658,16 @@ namespace shell::dock {
 
       if (cfg.showDots) {
         const float dot = std::max(kDotMinSize, std::round(iSize * kDotSizeRatio));
-        const bool verticalDots = shell::dock::isVerticalEdge(edge);
-
-        for (auto& dotIndicator : item.dotIndicators) {
-          dotIndicator = static_cast<Box*>(areaNode->addChild(
-              ui::box({
-                  .fill = colorSpecFromRole(ColorRole::OnSurface, 0.6F),
-                  .radius = dot * 0.5F,
-                  .width = dot,
-                  .height = dot,
-                  .visible = false,
-                  .configure = [verticalDots, edge, cellMain, dot](Box& box) {
-                    if (verticalDots) {
-                      const float x = edge == DockEdge::Left ? 1.0F : std::round(cellMain - dot - 1.0F);
-                      box.setPosition(x, std::round((cellMain - dot) * 0.5F));
-                    } else {
-                      const float y = edge == DockEdge::Bottom ? std::round(cellMain - dot - 1.0F) : 1.0F;
-                      box.setPosition(std::round((cellMain - dot) * 0.5F), y);
-                    }
-                  },
-              })
-          ));
-        }
+        item.runningDot = static_cast<Box*>(areaNode->addChild(
+            ui::box({
+                .fill = colorSpecFromRole(ColorRole::OnSurface, kDotAlpha),
+                .radius = dot * 0.5F,
+                .width = dot,
+                .height = dot,
+                .visible = false,
+            })
+        ));
+        positionRunningDot(item.runningDot, edge, iSize, static_cast<float>(cfg.crossAxisPadding));
       }
 
       if (cfg.showInstanceCount) {
@@ -875,35 +914,8 @@ namespace shell::dock {
 
       const std::size_t count = model.instanceCount;
 
-      if (cfg.showDots) {
-        const std::size_t dotCount = std::min<std::size_t>(count, 3);
-        const auto iSize = static_cast<float>(cfg.iconSize);
-        const float cellMain = iSize + 2.0F * kCellPad;
-        const float dot = std::max(kDotMinSize, std::round(iSize * kDotSizeRatio));
-        const float groupLength =
-            dotCount == 0 ? dot : dot * static_cast<float>(dotCount) + kDotGap * static_cast<float>(dotCount - 1);
-        const float groupStart = std::round((cellMain - groupLength) * 0.5F);
-        const bool verticalDots = shell::dock::isVerticalEdge(edge);
-
-        for (std::size_t dotIndex = 0; dotIndex < item.dotIndicators.size(); ++dotIndex) {
-          if (item.dotIndicators[dotIndex] == nullptr) {
-            continue;
-          }
-          Box* dotNode = item.dotIndicators[dotIndex];
-          const bool visible = dotIndex < dotCount;
-          dotNode->setVisible(visible);
-          dotNode->setFill(colorSpecFromRole(ColorRole::OnSurface, model.active ? 0.9F : 0.6F));
-          if (visible) {
-            const float main = groupStart + static_cast<float>(dotIndex) * (dot + kDotGap);
-            if (verticalDots) {
-              const float x = edge == DockEdge::Left ? 1.0F : std::round(cellMain - dot - 1.0F);
-              dotNode->setPosition(x, main);
-            } else {
-              const float y = edge == DockEdge::Bottom ? std::round(cellMain - dot - 1.0F) : 1.0F;
-              dotNode->setPosition(main, y);
-            }
-          }
-        }
+      if (item.runningDot != nullptr) {
+        item.runningDot->setVisible(model.running);
       }
 
       if (item.badge != nullptr && item.badgeLabel != nullptr) {
@@ -1137,6 +1149,20 @@ namespace shell::dock {
       slots[index].targetMainOffset = targetOffsets[index];
     }
 
+    // The divider stays centred between the two items either side of it as they spread apart.
+    if (instance.divider != nullptr && snapshot.pinnedCount > 0 && snapshot.pinnedCount < itemCount) {
+      const std::size_t firstItemSlot = cfg.launcherPosition == DockLauncherPosition::Start ? 1U : 0U;
+      const std::size_t before = firstItemSlot + snapshot.pinnedCount - 1U;
+      const float target = pointerActive ? (targetOffsets[before] + targetOffsets[before + 1U]) * 0.5F : 0.0F;
+      if (lerpHoverMainOffset(instance.dividerHoverMainOffset, target, lerpFactor)) {
+        needsMoreFrames = true;
+      }
+      applyItemMainOffset(
+          instance.divider, vertical, instance.dividerRestMainPos, instance.dividerRestCrossPos,
+          instance.dividerHoverMainOffset
+      );
+    }
+
     for (HoverSlot& slot : slots) {
       if (lerpHoverMainOffset(*slot.hoverMainOffset, pointerActive ? slot.targetMainOffset : 0.0F, lerpFactor)) {
         needsMoreFrames = true;
@@ -1180,6 +1206,11 @@ namespace shell::dock {
       item.restMainPos = vertical ? item.area->y() : item.area->x();
       item.restCrossPos = vertical ? item.area->x() : item.area->y();
       item.hoverMainOffset = 0.0F;
+    }
+    if (instance.divider != nullptr) {
+      instance.dividerRestMainPos = vertical ? instance.divider->y() : instance.divider->x();
+      instance.dividerRestCrossPos = vertical ? instance.divider->x() : instance.divider->y();
+      instance.dividerHoverMainOffset = 0.0F;
     }
     if (cfg.launcherPosition == DockLauncherPosition::End && instance.launcherArea != nullptr) {
       instance.launcherRestMainPos = vertical ? instance.launcherArea->y() : instance.launcherArea->x();
@@ -1304,28 +1335,61 @@ namespace shell::dock {
 
   void dismissDockTooltip() { dismissDockTooltipImpl(); }
 
-  void animateLaunch(DockInstance& instance, const DockConfig& cfg, std::string_view idLower) {
-    if (!cfg.animateLaunch || !MotionService::instance().enabled())
-      return;
-    for (std::size_t i = 0; i < instance.items.size() && i < instance.snapshot.items.size(); ++i) {
-      if (instance.snapshot.items[i].idLower != idLower || !instance.items[i].motionNode)
-        continue;
-      auto* node = instance.items[i].motionNode;
+  namespace {
+
+    struct LaunchBounce {
+      std::string idLower;
+      DockEdge edge = DockEdge::Bottom;
+      float lift = 0.0F;
+      std::chrono::steady_clock::time_point deadline;
+    };
+
+    [[nodiscard]] std::size_t launchItemIndex(const DockInstance& instance, std::string_view idLower) {
+      for (std::size_t i = 0; i < instance.items.size() && i < instance.snapshot.items.size(); ++i) {
+        if (instance.snapshot.items[i].idLower == idLower && instance.items[i].motionNode != nullptr)
+          return i;
+      }
+      return instance.items.size();
+    }
+
+    // Each step looks the icon up again: a model rebuild while the app starts replaces the node.
+    void bounceLaunchStep(DockInstance& instance, const LaunchBounce& bounce) {
+      const std::size_t index = launchItemIndex(instance, bounce.idLower);
+      if (index >= instance.items.size())
+        return;
+      auto* node = instance.items[index].motionNode;
+      const bool settle = instance.snapshot.items[index].running || std::chrono::steady_clock::now() >= bounce.deadline;
       instance.animations.cancelForOwner(node);
-      const float lift = static_cast<float>(cfg.iconSize) * 0.22F;
       instance.animations.animate(
-          0, 1, 650, Easing::Linear,
-          [node, edge = cfg.position, lift](float t) {
+          settle ? kLaunchHopEnd : 0.0F, settle ? 1.0F : kLaunchHopEnd, settle ? kLaunchSettleMs : kLaunchHopMs,
+          Easing::Linear,
+          [node, edge = bounce.edge, lift = bounce.lift](float t) {
             float x = 0, y = 0;
             shiftAlongEdge(edge, x, y, -lift * Motion::launchLift(t));
             node->setPosition(x, y);
           },
-          {}, node
+          settle ? std::function<void()>{}
+                 : std::function<void()>{[inst = &instance, bounce] { bounceLaunchStep(*inst, bounce); }},
+          node
       );
       if (instance.surface)
         instance.surface->requestRedraw();
-      break;
     }
+
+  } // namespace
+
+  void animateLaunch(DockInstance& instance, const DockConfig& cfg, std::string_view idLower) {
+    if (!cfg.animateLaunch || !MotionService::instance().enabled())
+      return;
+    bounceLaunchStep(
+        instance,
+        LaunchBounce{
+            .idLower = std::string(idLower),
+            .edge = cfg.position,
+            .lift = static_cast<float>(cfg.iconSize) * 0.22F,
+            .deadline = std::chrono::steady_clock::now() + kLaunchBounceTimeout,
+        }
+    );
   }
 
 } // namespace shell::dock

@@ -5,6 +5,7 @@
 #include "shell/settings/settings_registry.h"
 #include "ui/builders.h"
 #include "ui/controls/roving_list_nav.h"
+#include "ui/material.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
@@ -163,7 +164,8 @@ namespace settings {
         .scrollbarVisible = true,
         .viewportPaddingH = 0.0F,
         .viewportPaddingV = 0.0F,
-        .fill = ctx.config.shell.settingsWindowTranslucent ? clearColorSpec() : colorSpecFromRole(ColorRole::Surface),
+        .fill = ui::material::settingsWindowOpacity(ctx.config.shell) < 1.0F ? clearColorSpec()
+                                                                             : colorSpecFromRole(ColorRole::Surface),
         .radius = Style::scaledRadiusXl(scale),
         .minWidth = kSidebarWidth * scale,
         .fillHeight = true,

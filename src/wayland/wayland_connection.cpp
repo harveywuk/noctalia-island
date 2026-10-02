@@ -20,6 +20,7 @@
 #include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
 #include "org-kde-plasma-virtual-desktop-client-protocol.h"
 #include "text-input-unstable-v3-client-protocol.h"
+#include "ui/material.h"
 #include "util/string_utils.h"
 #include "viewporter-client-protocol.h"
 #include "virtual-keyboard-unstable-v1-client-protocol.h"
@@ -812,6 +813,7 @@ wp_viewporter* WaylandConnection::viewporter() const noexcept { return m_viewpor
 
 void WaylandConnection::onBackgroundEffectCapabilities(std::uint32_t capabilities) noexcept {
   m_backgroundEffectBlurSupported = (capabilities & kExtBackgroundEffectBlurCapabilityMask) != 0U;
+  ui::material::setBackgroundBlurAvailable(m_backgroundEffectBlurSupported);
 }
 
 void WaylandConnection::onOutputManagerHead(zwlr_output_head_v1* head) { m_outputHeads.try_emplace(head); }
@@ -1420,6 +1422,7 @@ void WaylandConnection::cleanup() {
     ext_background_effect_manager_v1_destroy(m_backgroundEffectManager);
     m_backgroundEffectManager = nullptr;
     m_backgroundEffectBlurSupported = false;
+    ui::material::setBackgroundBlurAvailable(false);
   }
 
   if (m_fractionalScaleManager != nullptr) {
