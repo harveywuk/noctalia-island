@@ -516,6 +516,14 @@ void Button::setVariant(ButtonVariant variant) {
   applyVariant();
 }
 
+void Button::clearCustomPalette() {
+  if (!m_customPalette) {
+    return;
+  }
+  m_customPalette.reset();
+  applyVariant();
+}
+
 void Button::setCustomPalette(ButtonPalette customPalette) {
   m_customPalette = customPalette;
   applyVariant();

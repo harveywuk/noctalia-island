@@ -31,6 +31,7 @@ class LayerSurface;
 class Node;
 class Panel;
 class RenderContext;
+class Renderer;
 class Surface;
 class WaylandConnection;
 enum class LayerShellLayer : std::uint32_t;
@@ -167,6 +168,9 @@ public:
   // Requests a redraw on the active panel surface without re-running panel
   // update/layout. Used for reactive palette restyling.
   void requestRedraw();
+  // Runs `fn` with the open panel's renderer current, for per-frame GPU work (texture uploads)
+  // outside update and layout, which rebuild an Island-hosted panel's scene. False when closed.
+  bool withRenderer(const std::function<void(Renderer&)>& fn);
   void requestFrameTick();
   void close();
   void beginAttachedPopup(wl_surface* surface);

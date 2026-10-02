@@ -63,6 +63,7 @@ public:
   void setContentAlign(ButtonContentAlign align);
   void setVariant(ButtonVariant variant);
   void setCustomPalette(ButtonPalette customPalette);
+  void clearCustomPalette();
   void setSurfaceOpacity(float opacity);
   void setOnClick(std::function<void()> callback);
   void setOnRightClick(std::function<void()> callback);

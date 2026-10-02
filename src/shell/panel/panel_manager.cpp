@@ -1971,6 +1971,15 @@ void PanelManager::requestRedraw() {
   m_surface->requestRedraw();
 }
 
+bool PanelManager::withRenderer(const std::function<void(Renderer&)>& fn) {
+  if (!isOpen() || m_surface == nullptr || m_renderContext == nullptr) {
+    return false;
+  }
+  m_renderContext->makeCurrent(m_surface->renderTarget());
+  fn(m_surface->renderTarget().renderer());
+  return true;
+}
+
 void PanelManager::requestFrameTick() {
   if (!isOpen() || m_surface == nullptr) {
     return;

@@ -1462,9 +1462,9 @@ void Island::prepare(Instance& inst) {
       setIslandVariant(button, ButtonVariant::Default);
       return;
     }
-    const auto state = [&](float bg, float label) {
+    const auto state = [&](float bg, float text) {
       return Button::ButtonStateColors{
-          .bg = islandFixed(*tint, bg), .border = islandFixed(*tint, 0), .label = islandFixed(*tint, label)
+          .bg = islandFixed(*tint, bg), .border = islandFixed(*tint, 0), .label = islandFixed(*tint, text)
       };
     };
     button->setCustomPalette({
@@ -1476,7 +1476,7 @@ void Island::prepare(Instance& inst) {
     });
   };
   // A round tinted badge behind a symbol, leading a row (downloads, unread notifications).
-  const auto badge = [&](const std::string& icon, float x, float y, float size, Color tint, ColorRole theme) {
+  const auto leadingBadge = [&](const std::string& icon, float x, float y, float size, Color tint, ColorRole theme) {
     auto disc = std::make_unique<Box>();
     disc->setFill(islandTint(tint, theme, 0.22F));
     disc->setRadius(size * s / 2);
@@ -1581,7 +1581,7 @@ void Island::prepare(Instance& inst) {
       // Cupertino leads each row with a round blue badge, as Apple lists transfers.
       const float textX = gCupertino ? 62 : 22;
       if (gCupertino)
-        badge("download", 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
+        leadingBadge("download", 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
       label(download.name, textX, y, w - textX - 88, 13, foreground, false, 1, FontWeight::Normal, true);
       if (download.determinate) {
         auto* percentage =
@@ -2231,7 +2231,7 @@ void Island::prepare(Instance& inst) {
     // Cupertino: a leading bell badge and left-aligned rows, matching the battery and timer rows.
     const float rowX = gCupertino ? 58 : 22;
     if (gCupertino)
-      badge("bell", 22, h + 2, 28, kAppleRed, ColorRole::Error);
+      leadingBadge("bell", 22, h + 2, 28, kAppleRed, ColorRole::Error);
     auto* header = control(
         rowX, h + 4, w - rowX - 22, 24, i18n::trp("notifications.unread-count", unreadCount), "",
         i18n::tr("notifications.unread-history"), 0, true, [panel] { panel("notifications"); }

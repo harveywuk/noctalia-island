@@ -4,6 +4,7 @@
 #include "ui/style.h"
 
 #include <functional>
+#include <optional>
 
 class InputArea;
 class RectNode;
@@ -22,6 +23,8 @@ public:
   void setWheelAdjustEnabled(bool enabled);
   void setOnValueChanged(std::function<void(double)> callback);
   void setOnDragEnd(std::function<void()> callback);
+  // Track and fill colours in place of the palette's, e.g. white over artwork; nullopt restores.
+  void setColorOverride(std::optional<Color> track, std::optional<Color> fill);
 
   [[nodiscard]] double value() const noexcept { return m_value; }
   [[nodiscard]] double minValue() const noexcept { return m_min; }
@@ -57,4 +60,6 @@ private:
   float m_trackHeight = Style::sliderTrackHeight;
   float m_thumbSizePx = Style::sliderThumbSize;
   float m_controlHeightPx = Style::controlHeight;
+  std::optional<Color> m_trackOverride;
+  std::optional<Color> m_fillOverride;
 };

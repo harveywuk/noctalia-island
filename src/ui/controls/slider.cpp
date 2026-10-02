@@ -282,6 +282,15 @@ void Slider::updateFromLocalX(float x) {
   setValue(m_min + t * (m_max - m_min));
 }
 
+void Slider::setColorOverride(std::optional<Color> track, std::optional<Color> fill) {
+  if (m_trackOverride == track && m_fillOverride == fill) {
+    return;
+  }
+  m_trackOverride = track;
+  m_fillOverride = fill;
+  applyVisualState();
+}
+
 void Slider::applyVisualState() {
   const bool hovering = m_inputArea != nullptr && m_inputArea->hovered();
   const bool pressing = m_inputArea != nullptr && m_inputArea->pressed();
@@ -303,6 +312,13 @@ void Slider::applyVisualState() {
     thumbBorder = resolveColorSpec(focusRingColorSpec());
   } else if (hovering) {
     thumbBorder = resolved(ColorRole::Hover);
+  }
+
+  if (m_trackOverride) {
+    trackColor = *m_trackOverride;
+  }
+  if (m_fillOverride) {
+    fillColor = m_enabled ? *m_fillOverride : withAlpha(*m_fillOverride, m_fillOverride->a * 0.5F);
   }
 
   auto trackStyle = solidStyle(trackColor, m_trackHeight * 0.5F);

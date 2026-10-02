@@ -7,6 +7,9 @@
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
 #include "net/http_client.h"
+#include "render/animation/motion_service.h"
+#include "render/core/image_file_loader.h"
+#include "render/core/texture_manager.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
 #include "shell/control_center/tab.h"
@@ -55,10 +58,24 @@ namespace {
     return playbackStatus == "Playing" ? "media-pause" : "media-play";
   }
 
-  [[nodiscard]] int mediaTabArtDecodeSize(float scale) {
-    // The artwork fills the Now Playing card; decode for its widest layout, with headroom for
-    // fractional scales.
-    return static_cast<int>(std::round(kMediaUnit * 18.0F * scale * 1.5F));
+  // The artwork flow advances at about 30 fps; it moves slowly, so more buys nothing.
+  constexpr auto kFlowFrameInterval = std::chrono::milliseconds(33);
+
+  // Apple Music's overlay: white symbols with a faint lift on hover, and a brighter fill for
+  // toggles that are on and for play/pause.
+  [[nodiscard]] Button::ButtonPalette overlayPalette(bool filled) {
+    const auto white = [](float alpha) { return fixedColorSpec(rgba(1.0F, 1.0F, 1.0F, alpha)); };
+    const float base = filled ? 0.22F : 0.0F;
+    const auto state = [&](float bg, float label) {
+      return Button::ButtonStateColors{.bg = white(bg), .border = white(0.0F), .label = white(label)};
+    };
+    return {
+        .normal = state(base, 0.95F),
+        .hover = state(base + 0.12F, 1.0F),
+        .pressed = state(base + 0.2F, 1.0F),
+        .disabled = state(base * 0.5F, 0.4F),
+        .selected = std::nullopt,
+    };
   }
 
   std::string repeatGlyph(const std::string& loopStatus) { return loopStatus == "Track" ? "repeat-once" : "repeat"; }
@@ -195,6 +212,7 @@ std::unique_ptr<Flex> MediaTab::create() {
        .gap = Style::spaceSm * scale,
        .minHeight = Style::controlHeightSm * scale},
       ui::label({
+          .out = &m_nowLabel,
           .text = i18n::tr("control-center.media.now-playing"),
           .fontSize = Style::fontSizeTitle * scale,
           .fontWeight = FontWeight::Bold,
@@ -223,7 +241,7 @@ std::unique_ptr<Flex> MediaTab::create() {
           },
       })
   );
-  auto backdrop = ui::image({.out = &m_backdrop, .fit = ImageFit::Cover});
+  auto backdrop = ui::image({.out = &m_backdrop, .fit = ImageFit::Cover, .visible = false});
   backdrop->setParticipatesInLayout(false);
   backdrop->setHitTestVisible(false);
   nowCard->addChild(std::move(backdrop));
@@ -523,13 +541,12 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
   m_mediaStack->layout(renderer);
 
   if (m_backdrop != nullptr) {
-    // The card's own surface colour over the artwork keeps its text readable in either theme:
-    // a light veil under the header, clear through the middle, and dense behind the title,
-    // progress and controls.
-    const auto surface = [](float alpha) { return colorForRole(ColorRole::SurfaceVariant, alpha); };
+    // The flow is already dimmed; a little more shade behind the title and controls keeps
+    // white text crisp over bright artwork.
+    const auto shade = [](float alpha) { return rgba(0.0F, 0.0F, 0.0F, alpha); };
     m_backdrop->setScrim({
         .direction = GradientDirection::Vertical,
-        .stops = {{{0.0F, surface(0.6F)}, {0.18F, surface(0.0F)}, {0.5F, surface(0.55F)}, {1.0F, surface(0.92F)}}},
+        .stops = {{{0.0F, shade(0.12F)}, {0.35F, shade(0.0F)}, {0.65F, shade(0.15F)}, {1.0F, shade(0.35F)}}},
         .enabled = true,
     });
     m_backdrop->setPosition(0, 0);
@@ -572,9 +589,32 @@ void MediaTab::doUpdate(Renderer& renderer) {
   refresh(renderer);
 }
 
+void MediaTab::syncFlowTimer() {
+  // A repeating timer rather than frame ticks: ticks only chain while the surface keeps
+  // drawing, and the flow needs only about 30 fps.
+  const bool animate = m_active && m_flow.hasArtwork() && MotionService::instance().enabled();
+  if (!animate) {
+    m_flowTimer.stop();
+    return;
+  }
+  if (m_flowTimer.active()) {
+    return;
+  }
+  m_flowLastTick = std::chrono::steady_clock::now();
+  m_flowTimer.startRepeating(kFlowFrameInterval, [this]() {
+    const auto now = std::chrono::steady_clock::now();
+    m_flowSeconds += std::chrono::duration<float>(now - m_flowLastTick).count();
+    m_flowLastTick = now;
+    if (PanelManager::instance().withRenderer([this](Renderer& renderer) { uploadFlow(renderer); })) {
+      PanelManager::instance().requestRedraw();
+    }
+  });
+}
+
 void MediaTab::setActive(bool active) {
   const bool becameActive = active && !m_active;
   m_active = active;
+  syncFlowTimer();
   if (!active) {
     m_progressTimer.stop();
     m_positionSampleAt = {};
@@ -594,6 +634,16 @@ void MediaTab::onClose() {
   m_rootLayout = nullptr;
   m_mediaColumn = nullptr;
   m_backdrop = nullptr;
+  m_nowLabel = nullptr;
+  if (m_flowTexture.id != 0
+      && !PanelManager::instance().withRenderer([this](Renderer& renderer) {
+           renderer.textureManager().unload(m_flowTexture);
+         })) {
+    m_flowTexture = {};
+  }
+  m_flow.clear();
+  m_flowTimer.stop();
+  m_overlay = false;
   m_artworkRow = nullptr;
   m_nowCard = nullptr;
   m_mediaStack = nullptr;
@@ -636,8 +686,60 @@ bool MediaTab::dismissTransientUi() {
 }
 
 void MediaTab::clearArt(Renderer& renderer) {
+  (void)renderer;
+  m_flow.clear();
+  m_flowTimer.stop();
   if (m_backdrop != nullptr) {
-    m_backdrop->clear(renderer);
+    m_backdrop->setVisible(false);
+  }
+  applyOverlay(false);
+}
+
+void MediaTab::uploadFlow(Renderer& renderer) {
+  if (m_backdrop == nullptr || !m_flow.hasArtwork()) {
+    return;
+  }
+  m_flow.render(m_flowSeconds, m_flowFrame);
+  auto& textures = renderer.textureManager();
+  if (m_flowTexture.id == 0) {
+    m_flowTexture = textures.createEmpty(visuals::ArtworkFlow::kWidth, visuals::ArtworkFlow::kHeight, TextureDataFormat::Rgba);
+  }
+  if (m_flowTexture.id == 0
+      || !textures.updateSubImage(
+          m_flowTexture, m_flowFrame.data(), 0, 0, visuals::ArtworkFlow::kWidth, visuals::ArtworkFlow::kHeight,
+          TextureDataFormat::Rgba
+      )) {
+    return;
+  }
+  m_backdrop->setExternalTexture(renderer, m_flowTexture);
+  m_backdrop->setVisible(true);
+  m_backdrop->markPaintDirty();
+}
+
+void MediaTab::applyOverlay(bool overlay) {
+  m_overlay = overlay;
+  const auto white = [](float alpha) { return fixedColorSpec(rgba(1.0F, 1.0F, 1.0F, alpha)); };
+  const auto colour = [&](Label* label, float alpha, ColorSpec theme) {
+    if (label != nullptr)
+      label->setColor(overlay ? white(alpha) : theme);
+  };
+  colour(m_nowLabel, 0.9F, colorSpecFromRole(ColorRole::OnSurface));
+  colour(m_trackTitle, 1.0F, colorSpecFromRole(ColorRole::Primary));
+  colour(m_trackArtist, 0.72F, colorSpecFromRole(ColorRole::OnSurfaceVariant));
+  colour(m_trackAlbum, 0.55F, colorSpecFromRole(ColorRole::Secondary));
+  for (auto* button : {m_playerMenuButton, m_repeatButton, m_prevButton, m_playPauseButton, m_nextButton, m_shuffleButton}) {
+    if (button == nullptr)
+      continue;
+    if (overlay)
+      button->setCustomPalette(overlayPalette(button->variant() == ButtonVariant::Primary));
+    else
+      button->clearCustomPalette();
+  }
+  if (m_progressSlider != nullptr) {
+    if (overlay)
+      m_progressSlider->setColorOverride(rgba(1.0F, 1.0F, 1.0F, 0.28F), rgba(1.0F, 1.0F, 1.0F, 0.92F));
+    else
+      m_progressSlider->setColorOverride(std::nullopt, std::nullopt);
   }
 }
 
@@ -673,6 +775,12 @@ void MediaTab::commitPendingSeek(double valueSeconds) {
 }
 
 void MediaTab::refresh(Renderer& renderer) {
+  refreshContent(renderer);
+  // Variant changes during the refresh drop custom palettes; reapply the overlay after it.
+  applyOverlay(m_flow.hasArtwork());
+}
+
+void MediaTab::refreshContent(Renderer& renderer) {
   std::vector<MprisPlayerInfo> players;
   std::optional<MprisPlayerInfo> active;
   const auto now = std::chrono::steady_clock::now();
@@ -815,17 +923,19 @@ void MediaTab::refresh(Renderer& renderer) {
     );
 
     if (m_backdrop != nullptr
-        && (!resolvedArtUrl.empty() && (resolvedArtUrl != m_lastArtPath || !m_backdrop->hasImage()))) {
+        && (!resolvedArtUrl.empty() && (resolvedArtUrl != m_lastArtPath || !m_flow.hasArtwork()))) {
       bool loaded = false;
       if (artPath.empty()) {
         kLog.debug("artwork unresolved url=\"{}\"", resolvedArtUrl);
         clearArt(renderer);
-      } else if (!m_backdrop->setSourceFile(renderer, artPath, mediaTabArtDecodeSize(contentScale()), true)) {
+      } else if (auto art = loadImageFile(artPath, 32, true); !art || !m_flow.setArtwork(art->rgba, art->width, art->height)) {
         kLog.warn(R"(artwork load failed url="{}" path="{}")", resolvedArtUrl, artPath);
         clearArt(renderer);
       } else {
         kLog.debug(R"(artwork loaded url="{}" path="{}")", resolvedArtUrl, artPath);
         loaded = true;
+        uploadFlow(renderer);
+        syncFlowTimer();
       }
 
       // Only lock this URL once we actually have an image.
