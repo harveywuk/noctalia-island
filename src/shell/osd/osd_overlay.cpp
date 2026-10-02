@@ -12,6 +12,7 @@
 #include "render/scene/node.h"
 #include "shell/surface/edge_inset.h"
 #include "ui/builders.h"
+#include "ui/material.h"
 #include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -84,7 +85,10 @@ namespace {
     if (config == nullptr) {
       return 0.97F;
     }
-    return std::clamp(config->config().osd.backgroundOpacity, 0.0F, 1.0F);
+    // The configured opacity caps the material tint, so Solid (or no compositor blur) keeps it as set.
+    const float material =
+        ui::material::tintOpacity(ui::material::Kind::Osd, config->config().shell.panel.transparencyMode);
+    return std::clamp(std::min(config->config().osd.backgroundOpacity, material), 0.0F, 1.0F);
   }
 
   [[nodiscard]] bool isVerticalOrientation(const std::string& orientation) { return orientation == "vertical"; }

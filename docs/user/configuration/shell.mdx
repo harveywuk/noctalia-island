@@ -61,7 +61,7 @@ polkit_agent          = false           # register Noctalia's native polkit auth
 password_style        = "default"       # default | random
 avatar_path           = "~/Pictures/avatar.png"
 settings_show_advanced = true           # show advanced settings by default in Settings
-settings_window_translucent = false     # translucent Settings window background
+settings_window_translucent = true      # Settings window uses the panel transparency material
 show_location         = true            # show weather location text in shell UI
 launch_apps_as_systemd_services = false # launch apps as transient systemd services (needs Noctalia to be a user unit)
 launch_apps_custom_command = ""         # wrap launched apps; $CMD is replaced with the app command
@@ -90,7 +90,7 @@ direction = "down"  # center, up, down, left, right, up_left, up_right, down_lef
 alpha     = 0.55    # multiplied by each component's background opacity
 
 [shell.panel]
-transparency_mode     = "solid"  # solid | soft | glass; controls floating panel opacity and card translucency
+transparency_mode     = "auto"   # auto | solid | soft | glass; auto = glass with compositor blur, else solid
 borders               = true   # outline on floating panel surfaces
 shadow                = true   # cast the global [shell.shadow] from panel surfaces
 list_item_background  = false  # filled rounded background behind launcher and clipboard list items
@@ -231,7 +231,7 @@ Notes:
 - `password_style`: `default` uses `circle-filled`; `random` cycles through multiple filled glyph shapes on polkit and lock screen inputs.
 - `settings_show_advanced`: when `true`, Settings opens with advanced entries visible.
 - `settings_expand_all_groups`: retained for configuration compatibility; focused Settings pages no longer use collapsible groups.
-- `settings_window_translucent`: when `true`, the Settings window background is drawn translucent. Compositor blur or other effects can be applied via compositor window rules.
+- `settings_window_translucent`: when `true` (the default), the Settings window background uses the same material as `shell.panel.transparency_mode` and asks the compositor to blur behind it. With `solid`, or `auto` on a compositor without background blur, the window stays opaque.
 - `show_location`: when `false`, weather location text/coordinates are hidden in shell surfaces.
 - `app_icon_colorize` and `app_icon_color`: global application icon tinting for the dock, system tray (bar and drawer), taskbar, active-window widget, and launcher panel results. See [App icon colorization](#app-icon-colorization). Bar `launcher` / `control-center` widgets can optionally tint `custom_image` via `custom_image_colorize` using the widget **Color** setting (Presentation group in the widget editor).
 - `lang`: empty follows `$LC_ALL`, `$LC_MESSAGES`, then `$LANG`. Values may be BCP-47 tags (`pt-BR`, `zh-Hans`) or POSIX locale names (`pt_BR.UTF-8`, `zh_CN.UTF-8`). Chinese region locales infer script before matching catalogs, so `zh_CN` and `zh_SG` match `zh-Hans`, while `zh_TW`, `zh_HK`, and `zh_MO` match `zh-Hant`. When a right-to-left catalog is loaded, Noctalia mirrors text, controls, grids, scrollbars, and directional icons automatically. Bar `start`/`center`/`end` lanes and dock item order remain on their configured physical sides. If no matching catalog loads and Noctalia falls back to English, the UI remains left-to-right.
@@ -258,7 +258,7 @@ Notes:
 - `disable_mipmaps`: when `true`, Noctalia skips mipmap generation for textures. Startup-only - try it if downscaled application icons or wallpapers look blurry or show GPU mipmap artifacts.
 - `shell.animation.enabled` disables all animated transitions globally. `speed` scales durations globally.
 - `shell.shadow` defines the shared shadow style for shell surfaces and xdg-popup chrome such as panels, menus, pickers, and select dropdowns. `direction` controls which way the shadow is cast; blur is fixed at 12 px. Components such as panels, bars, and the dock only opt in/out with `shadow = true|false`; popups and dropdowns opt in/out with the global `popup_shadows` toggle above.
-- `shell.panel.transparency_mode` controls panel glass styling. `solid` keeps cards opaque and floating panels solid, `soft` makes floating panels lightly translucent and cards subtly translucent, and `glass` makes both visibly translucent while clamping card opacity high enough for readable text. Attached panels keep their own layer surface and use the attached-placement panel styling.
+- `shell.panel.transparency_mode` controls the translucent material used by floating panels, popovers, notification toasts, OSDs and the Settings window. `auto` (the default) uses `glass` when the compositor supports `ext-background-effect-v1` blur and `solid` otherwise. `solid` keeps cards opaque and floating panels solid, `soft` makes floating panels lightly translucent and cards subtly translucent, and `glass` makes both visibly translucent while clamping card opacity high enough for readable text. Attached panels keep their own layer surface and use the attached-placement panel styling.
 - `shell.panel.borders` draws an outline on floating panel surfaces. Attached panels stay borderless on the bar edge. Default is `true`; set to `false` for a flatter look. Section cards inside panels are controlled by `[shell].card_borders`.
 - `shell.panel.shadow` toggles the rendered drop shadow on attached and floating panels. Shadow direction and alpha come from `[shell.shadow]`.
 - `shell.panel.list_item_background` draws a filled rounded background behind each item in the launcher results (list and app-grid views) and the clipboard history list. The fill uses the same rounded shape as the hover highlight and follows the panel transparency mode; hover and keyboard-selection colors are unchanged. Default is `false`. Toggle in **Settings → Panels → Effects**.
@@ -415,7 +415,7 @@ effective OSD size on top of
 `shell.ui_scale` (for example `1.25` makes volume, brightness, and lock-key popups 25% larger than the default).
 `monitors` limits OSD popups to the listed connector names (same matching rules as notification toasts and the dock);
 leave it empty to show on every connected output. If none of the configured monitors are connected, OSD falls back to all
-outputs until one reconnects. `background_opacity` sets popup background opacity, `border` draws the card outline (default
+outputs until one reconnects. `background_opacity` sets the most opaque the popup background can be (with a translucent `shell.panel.transparency_mode` the material may sit lower), `border` draws the card outline (default
 `true`; set `false` for a borderless look), and `offset_x` / `offset_y` are the
 absolute margins from the screen edge for the chosen `position`.
 Each popup kind can be toggled independently under `[osd.kinds]`. The volume master toggle enables both output and input

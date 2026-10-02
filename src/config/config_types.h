@@ -1085,17 +1085,19 @@ enum class PanelTransparencyMode : std::uint8_t {
   Solid = 0,
   Soft = 1,
   Glass = 2,
+  Auto = 3, // Glass when the compositor offers background blur, otherwise Solid
 };
 
 constexpr EnumOption<PanelTransparencyMode> kPanelTransparencyModes[] = {
+    {PanelTransparencyMode::Auto, "auto", "settings.options.shell.panel-transparency.auto"},
     {PanelTransparencyMode::Solid, "solid", "settings.options.shell.panel-transparency.solid"},
     {PanelTransparencyMode::Soft, "soft", "settings.options.shell.panel-transparency.soft"},
     {PanelTransparencyMode::Glass, "glass", "settings.options.shell.panel-transparency.glass"},
 };
 
+// Expects a resolved mode (see ui::material::resolveMode); Auto is treated as Solid.
 [[nodiscard]] float
 panelCardOpacityForTransparencyMode(PanelTransparencyMode mode, float panelBackgroundOpacity) noexcept;
-[[nodiscard]] float detachedPanelBackgroundOpacityForTransparencyMode(PanelTransparencyMode mode) noexcept;
 
 enum class PanelPlacement : std::uint8_t {
   Attached = 0,
@@ -1614,7 +1616,7 @@ struct ShellConfig {
   };
 
   struct PanelConfig {
-    PanelTransparencyMode transparencyMode = PanelTransparencyMode::Solid;
+    PanelTransparencyMode transparencyMode = PanelTransparencyMode::Auto;
     bool borders = true;                   // outline on floating panel surfaces
     bool shadow = true;                    // cast the global [shell.shadow] from panel surfaces
     bool listItemBackground = false;       // filled rounded background behind launcher/clipboard list items
@@ -1775,7 +1777,7 @@ struct ShellConfig {
   std::string avatarPath;
   bool settingsShowAdvanced = true;
   bool settingsExpandAllGroups = false;
-  bool settingsWindowTranslucent = false;
+  bool settingsWindowTranslucent = true; // follows panel transparency_mode; solid without compositor blur
   bool showLocation = true;
   bool appIconColorize = false;
   std::optional<ColorSpec> appIconColor;
