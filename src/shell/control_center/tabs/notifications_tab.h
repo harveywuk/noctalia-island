@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -31,6 +32,18 @@ public:
   void onClose() override;
 
 private:
+  // One row of the history list. Notifications from the same app share a group: a lone one is a
+  // plain card, a collapsed group is its newest card stacked on plates (macOS), and an expanded
+  // group is a header row followed by each of its cards.
+  struct HistoryItem {
+    enum class Kind : std::uint8_t { Card, GroupHeader };
+    Kind kind = Kind::Card;
+    const NotificationHistoryEntry* entry = nullptr; // the card's notification (a header: the group's newest)
+    std::string groupKey;
+    std::size_t groupSize = 1;
+    bool collapsedStack = false;
+  };
+
   void onPanelCardOpacityChanged(float opacity) override;
   friend class NotificationHistoryAdapter;
 
@@ -40,6 +53,9 @@ private:
   void removeNotificationEntry(uint32_t id, bool wasActive);
   void toggleDoNotDisturb();
   void toggleNotificationExpanded(uint32_t id);
+  void setGroupExpanded(const std::string& groupKey, bool expanded);
+  void clearGroup(const std::string& groupKey);
+  void rebuildItems();
   void invokeNotificationAction(uint32_t id, const std::string& actionKey);
   bool refreshDataSnapshot();
   void syncDndButton();
@@ -56,6 +72,8 @@ private:
   IconResolver m_iconResolver;
   std::unique_ptr<NotificationHistoryAdapter> m_adapter;
   std::vector<const NotificationHistoryEntry*> m_filtered;
+  std::vector<HistoryItem> m_items;
+  std::unordered_set<std::string> m_expandedGroups;
   Flex* m_root = nullptr;
   VirtualListView* m_list = nullptr;
   Flex* m_emptyCard = nullptr;

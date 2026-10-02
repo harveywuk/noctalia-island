@@ -96,5 +96,19 @@ int main() {
            formatLocalUnixTime(kFixedStamp, "{}"), "2023-11-15 03:58:20", "chrono path honors the configured timezone"
        )
       && ok;
+
+  // Notification timestamps, relative to 2023-11-15 03:58:20 (a Wednesday) in Kathmandu.
+  const auto fixedNow = system_clock::time_point{seconds{kFixedStamp}};
+  ok = expectEqual(formatNotificationTime(fixedNow - 30s, fixedNow), "now", "notification time under a minute") && ok;
+  ok = expectEqual(formatNotificationTime(fixedNow - 5min, fixedNow), "5m ago", "notification time in minutes") && ok;
+  ok = expectEqual(formatNotificationTime(fixedNow - 3h, fixedNow), "3h ago", "notification time earlier today") && ok;
+  ok = expectEqual(formatNotificationTime(fixedNow - 5h, fixedNow), "Yesterday", "notification time yesterday") && ok;
+  ok = expectEqual(formatNotificationTime(fixedNow - 72h, fixedNow), "Sunday", "notification time this week") && ok;
+  ok = expectEqual(formatNotificationTime(fixedNow - 240h, fixedNow), "Nov 5", "notification time this year") && ok;
+  ok = expectEqual(
+           formatNotificationTime(fixedNow - 24h * 400, fixedNow), "Oct 11, 2022", "notification time in another year"
+       )
+      && ok;
+  ok = expectEqual(formatNotificationTime(fixedNow + 5s, fixedNow), "now", "notification time from the future") && ok;
   return ok ? 0 : 1;
 }

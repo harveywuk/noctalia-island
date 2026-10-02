@@ -12,6 +12,13 @@ std::string formatTimeAgo(std::chrono::system_clock::time_point tp);
 // Same wording as formatTimeAgo, but duration is computed from steady_clock (e.g. Notification::receivedTime).
 [[nodiscard]] std::string formatElapsedSince(std::chrono::steady_clock::time_point since);
 
+// macOS Notification Center wording: "now", "5m ago", "2h ago", "Yesterday", a weekday within the
+// last week, then a short date. Calendar days are local; `now` is a parameter for tests.
+[[nodiscard]] std::string formatNotificationTime(
+    std::chrono::system_clock::time_point tp,
+    std::chrono::system_clock::time_point now = std::chrono::system_clock::now()
+);
+
 // Formats a duration using translated day/hour/minute units.
 [[nodiscard]] std::string formatDuration(std::chrono::seconds duration);
 

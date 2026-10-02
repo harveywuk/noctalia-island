@@ -417,6 +417,7 @@
     },
     "notifications": {
       "clear-all": "Clear all notifications",
+      "clear-group": "Clear {app} notifications",
       "dnd-off": "Turn Do Not Disturb Off",
       "dnd-on": "Turn Do Not Disturb On",
       "empty-body": "Recent notifications will show here.",
@@ -429,6 +430,7 @@
       },
       "filter-empty-body": "No notifications match this filter.",
       "filter-empty-title": "Nothing here",
+      "show-less": "Show less",
       "untitled": "Untitled notification"
     },
     "power": {
@@ -5964,9 +5966,15 @@
       "days-ago-plural": "{count} days ago",
       "hours-ago": "{count} hr ago",
       "hours-ago-plural": "{count} hr ago",
+      "hours-ago-short": "{count}h ago",
+      "hours-ago-short-plural": "{count}h ago",
       "just-now": "just now",
       "minutes-ago": "{count} min ago",
-      "minutes-ago-plural": "{count} min ago"
+      "minutes-ago-plural": "{count} min ago",
+      "minutes-ago-short": "{count}m ago",
+      "minutes-ago-short-plural": "{count}m ago",
+      "now": "now",
+      "yesterday": "Yesterday"
     },
     "units": {
       "day": "{count} day",

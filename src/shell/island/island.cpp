@@ -1131,7 +1131,8 @@ void Island::prepare(Instance& inst) {
         + m_notification->summary
         + m_notification->body
         + actionSignature
-        + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed");
+        + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed")
+        + formatNotificationTime(m_notification->receivedWallClock.value_or(WallClock::now()));
     break;
   case island::View::Osd:
     signature += std::format(
@@ -1909,7 +1910,16 @@ void Island::prepare(Instance& inst) {
     const float appIconSize = 18.0F;
     const bool hasAppIcon = notificationIcon(n, 22, 12, appIconSize);
     const float appLabelX = hasAppIcon ? 22 + appIconSize + 6 : 22;
-    auto* appLabel = label(n.appName, appLabelX, 14, w - 53 - appLabelX, Style::fontSizeCaption, muted);
+    // "now" / "5m ago" closes the header row, as on the notification banners.
+    constexpr float timeWidth = 56.0F;
+    auto* appLabel =
+        label(n.appName, appLabelX, 14, w - 55 - timeWidth - appLabelX, Style::fontSizeCaption, muted);
+    auto* timeLabel = label(
+        formatNotificationTime(n.receivedWallClock.value_or(WallClock::now())), w - 51 - timeWidth, 14, timeWidth,
+        Style::fontSizeCaption, muted
+    );
+    timeLabel->setTextAlign(TextAlign::End);
+    timeLabel->measure(renderer);
     control(w - 47, 5, 32, 30, "", "x", i18n::tr("notifications.dismiss"), 18, true, [this] { dismissNotification(); });
     std::vector<std::pair<std::string, std::string>> visibleActions;
     const bool hasDefault = std::ranges::find(n.actions, "default") != n.actions.end();
@@ -1996,9 +2006,10 @@ void Island::prepare(Instance& inst) {
       refresh();
     };
     if (expanded || truncated) {
-      appLabel->setMinWidth((w - 112) * s);
-      appLabel->setMaxWidth((w - 112) * s);
+      appLabel->setMinWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
+      appLabel->setMaxWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
       appLabel->measure(renderer);
+      timeLabel->setPosition((w - 86 - timeWidth) * s, timeLabel->y());
       auto* expandControl = control(
           w - 82, 5, 32, 30, "", expanded ? "chevron-up" : "chevron-down",
           i18n::tr(expanded ? "notifications.collapse" : "notifications.expand"), 18, true, toggleExpanded
