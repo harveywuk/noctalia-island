@@ -1775,7 +1775,6 @@ void Island::prepare(Instance& inst) {
         const float stripX = (w - 7.0F * cellWidth) / 2.0F;
         const float calendarTop = cfg.hoverShowClock ? cfg.height : 0;
         const float stripY = calendarTop + 10.0F;
-        sectionCard(calendarTop, h - 2);
         const auto now = std::time(nullptr);
         std::tm tm{};
         localtime_r(&now, &tm);
@@ -1784,37 +1783,30 @@ void Island::prepare(Instance& inst) {
         tm.tm_isdst = -1;
         std::mktime(&tm);
         for (int day = 0; day < 7; ++day) {
+          // Orbit's strip fans out from today: each step away is smaller and more transparent.
           const bool today = day == 3;
-          auto color = islandRole(today ? ColorRole::OnSurface : ColorRole::OnSurfaceVariant);
+          const int distance = std::abs(day - 3);
+          const float grade = today ? 1.0F : 1.0F - static_cast<float>(distance - 1) * 0.07F;
+          auto color = today ? colorSpecFromRole(ColorRole::Primary) : islandRole(ColorRole::OnSurfaceVariant);
+          color.alpha *= std::max(0.2F, 1.0F - static_cast<float>(distance) * 0.27F);
           char dayName[64]{};
           std::strftime(dayName, sizeof(dayName), "%a", &tm);
           const bool abbreviated = cfg.calendarLabels == IslandCalendarLabels::Abbreviated
               || (today && cfg.calendarLabels == IslandCalendarLabels::TodayAbbreviated);
           char* shortName = g_utf8_substring(dayName, 0, abbreviated ? 3 : 1);
           const float x = stripX + static_cast<float>(day) * cellWidth;
-          const float dateY = stripY + dayHeight + 2.0F;
-          if (today) {
-            auto selection = std::make_unique<Box>();
-            // Apple marks today in red.
-            selection->setFill(islandTint(kAppleRed, ColorRole::Primary));
-            selection->setSize(28 * s, 28 * s);
-            selection->setRadius(Style::scaledRadius(14, s));
-            selection->setPosition((x + (cellWidth - 28) / 2) * s, (dateY - 3) * s);
-            selection->setHitTestVisible(false);
-            canvas->addChild(std::move(selection));
-          }
           auto* weekday = label(
               shortName, x, stripY, cellWidth, daySize, color, true, 1,
-              today ? FontWeight::SemiBold : FontWeight::Normal
+              today ? FontWeight::Bold : FontWeight::SemiBold
           );
           weekday->setFontFamily(kWeekStripFontFamily);
           weekday->measure(renderer);
           weekday->setPosition(x * s, stripY * s + (dayHeight * s - weekday->height()) / 2.0F);
           g_free(shortName);
           auto* dateLabel = label(
-              std::to_string(tm.tm_mday), x, dateY, cellWidth, dateSize,
-              today ? (gCupertino ? islandRole(ColorRole::OnSurface) : islandRole(ColorRole::OnPrimary)) : foreground,
-              true, 1, today ? FontWeight::SemiBold : FontWeight::Normal
+              std::to_string(tm.tm_mday), x, stripY + dayHeight + 2.0F, cellWidth,
+              std::round(dateSize * grade * (today ? 1.25F : 1.0F)), color, true, 1,
+              today ? FontWeight::Bold : FontWeight::Medium
           );
           dateLabel->setFontFamily(kWeekStripFontFamily);
           dateLabel->measure(renderer);
