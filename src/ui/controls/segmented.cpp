@@ -18,6 +18,11 @@ Segmented::Segmented() {
   setAlign(FlexAlign::Stretch);
   setGap(0.0F);
   applyOuterStyle();
+  // The light and dark treatments differ, so re-derive them when the theme flips.
+  m_themeConn = paletteChanged().connect([this] {
+    applyOuterStyle();
+    refreshVariants();
+  });
 
   auto area = std::make_unique<InputArea>();
   area->setFocusable(true);
@@ -244,6 +249,11 @@ void Segmented::refreshVariants() {
       continue;
     }
     m_buttons[i]->setVariant(i == m_selected ? ButtonVariant::TabActive : ButtonVariant::Tab);
+    if (i == m_selected) {
+      // macOS shows the selected segment as a raised neutral pill rather than an accent fill. The
+      // variant stays TabActive so keyboard navigation still finds the selection.
+      m_buttons[i]->setCustomPalette(selectedSegmentPalette());
+    }
     m_buttons[i]->setRadii(Radii{std::max(0.0F, r - 2.0F * m_scale)});
   }
   for (std::size_t i = 0; i < m_separators.size(); ++i) {
@@ -252,9 +262,32 @@ void Segmented::refreshVariants() {
   }
 }
 
+Button::ButtonPalette Segmented::selectedSegmentPalette() {
+  const bool light = isResolvedLightTheme();
+  const ColorSpec fill = light ? colorSpecFromRole(ColorRole::SurfaceVariant)
+                               : colorSpecFromRole(ColorRole::OnSurface, Style::segmentSelectedFillAlpha);
+  const ColorSpec edge = light ? colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha) : clearColorSpec();
+  const ColorSpec label = colorSpecFromRole(ColorRole::OnSurface);
+  const Button::ButtonStateColors state{.bg = fill, .border = edge, .label = label};
+  return Button::ButtonPalette{
+      .borderWidth = light ? Style::borderWidth : 0.0F,
+      .normal = state,
+      .hover = state,
+      .pressed = state,
+      .disabled = state,
+      .selected = std::nullopt,
+  };
+}
+
 void Segmented::applyOuterStyle() {
   Flex::setPadding(m_outerPadding + 2.0F * m_scale);
-  setFill(colorSpecFromRole(m_surfaceRole, m_surfaceOpacity));
+  // A white track would swallow the white selected segment in light mode, so the default
+  // surface becomes a faint grey there, as on macOS.
+  const bool lightDefaultTrack = isResolvedLightTheme() && m_surfaceRole == ColorRole::SurfaceVariant;
+  setFill(
+      lightDefaultTrack ? colorSpecFromRole(ColorRole::OnSurface, Style::segmentTrackLightAlpha * m_surfaceOpacity)
+                        : colorSpecFromRole(m_surfaceRole, m_surfaceOpacity)
+  );
   clearBorder();
   setRadius(Style::scaledRadiusMd(m_scale));
 }

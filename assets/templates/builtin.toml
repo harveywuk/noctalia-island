@@ -44,6 +44,10 @@ category = "system"
 name = "Kitty"
 category = "terminal"
 
+[catalog.kvantum]
+name = "Kvantum (Qt controls)"
+category = "system"
+
 [catalog.labwc]
 name = "Labwc"
 category = "compositor"
@@ -152,6 +156,12 @@ input_path = "./kitty/kitty.conf"
 output_path = "$XDG_CONFIG_HOME/kitty/themes/noctalia.conf"
 post_hook = "bash '{{ config_dir }}/kitty/apply.sh'"
 undo_hook = "bash '{{ config_dir }}/kitty/undo.sh'"
+
+[templates.kvantum]
+input_path = "./kvantum/noctalia.kvconfig"
+output_path = "$XDG_CONFIG_HOME/Kvantum/Noctalia/overrides.kvconfig"
+post_hook = "bash '{{ config_dir }}/kvantum/apply.sh' {{ mode }}"
+undo_hook = "bash '{{ config_dir }}/kvantum/undo.sh'"
 
 [templates.labwc]
 input_path = "./labwc/labwc.conf"

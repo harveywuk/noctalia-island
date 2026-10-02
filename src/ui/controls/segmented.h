@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ui/controls/button.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/roving_list_nav.h"
 #include "ui/palette.h"
@@ -58,6 +59,7 @@ private:
   void refreshVariants();
   void applyOuterStyle();
   [[nodiscard]] float effectiveFontSize() const noexcept;
+  [[nodiscard]] static Button::ButtonPalette selectedSegmentPalette();
 
   RovingListNavController m_rovingNav;
   std::vector<Separator*> m_separators;
@@ -73,4 +75,5 @@ private:
   float m_surfaceOpacity = 1.0F;
   ColorRole m_surfaceRole = ColorRole::SurfaceVariant;
   bool m_enabled = true;
+  Signal<>::ScopedConnection m_themeConn;
 };

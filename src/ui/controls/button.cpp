@@ -31,27 +31,33 @@ namespace {
     );
   }
 
+  // macOS push buttons: a white bezel with a hairline edge in light mode, a raised grey bezel with
+  // no edge in dark mode. They don't react to hover; pressing darkens (light) or brightens (dark).
+  ColorSpec pushButtonFill() {
+    return isResolvedLightTheme() ? colorSpecFromRole(ColorRole::SurfaceVariant)
+                                  : colorSpecFromRole(ColorRole::OnSurface, Style::pushButtonFillAlpha);
+  }
+
+  ColorSpec pushButtonPressedFill() {
+    return isResolvedLightTheme() ? colorSpecFromRole(ColorRole::OnSurface, Style::pressedFillAlpha)
+                                  : colorSpecFromRole(ColorRole::OnSurface, Style::pushButtonPressedFillAlpha);
+  }
+
+  ColorSpec pushButtonEdge() {
+    return isResolvedLightTheme() ? colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha) : clearColorSpec();
+  }
+
   Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
     constexpr float kDisabledAlpha = 0.55F;
     switch (variant) {
     case ButtonVariant::Default:
       return Button::ButtonPalette{
           .borderWidth = Style::borderWidth,
-          .normal = makeState(
-              colorSpecFromRole(ColorRole::SurfaceVariant),
-              colorSpecFromRole(ColorRole::Outline, Style::controlBorderAlpha), colorSpecFromRole(ColorRole::OnSurface)
-          ),
-          .hover = makeState(
-              colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha), clearColorSpec(),
-              colorSpecFromRole(ColorRole::OnSurface)
-          ),
-          .pressed = makeState(
-              colorSpecFromRole(ColorRole::OnSurface, Style::pressedFillAlpha), clearColorSpec(),
-              colorSpecFromRole(ColorRole::OnSurface)
-          ),
+          .normal = makeState(pushButtonFill(), pushButtonEdge(), colorSpecFromRole(ColorRole::OnSurface)),
+          .hover = makeState(pushButtonFill(), pushButtonEdge(), colorSpecFromRole(ColorRole::OnSurface)),
+          .pressed = makeState(pushButtonPressedFill(), pushButtonEdge(), colorSpecFromRole(ColorRole::OnSurface)),
           .disabled = makeState(
-              colorSpecFromRole(ColorRole::SurfaceVariant, kDisabledAlpha),
-              colorSpecFromRole(ColorRole::Outline, Style::disabledOutlineAlpha),
+              colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha), pushButtonEdge(),
               colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)
           ),
           .selected = selectedState(),
@@ -63,10 +69,10 @@ namespace {
               colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
           ),
           .hover = makeState(
-              colorSpecFromRole(ColorRole::Primary, 0.95F), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
+              colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
           ),
           .pressed = makeState(
-              colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
+              colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)
           ),
           .disabled = makeState(
               colorSpecFromRole(ColorRole::Primary, kDisabledAlpha), clearColorSpec(),
@@ -76,18 +82,16 @@ namespace {
       };
     case ButtonVariant::Secondary:
       return Button::ButtonPalette{
-          .borderWidth = Style::borderWidth,
+          .borderWidth = 0.0F,
           .normal = makeState(
-              colorSpecFromRole(ColorRole::Secondary), colorSpecFromRole(ColorRole::Outline, Style::controlBorderAlpha),
-              colorSpecFromRole(ColorRole::OnSecondary)
+              colorSpecFromRole(ColorRole::Secondary), clearColorSpec(), colorSpecFromRole(ColorRole::OnSecondary)
           ),
           .hover = makeState(
-              colorSpecFromRole(ColorRole::Secondary, 0.95F), clearColorSpec(),
-              colorSpecFromRole(ColorRole::OnSecondary)
+              colorSpecFromRole(ColorRole::Secondary), clearColorSpec(), colorSpecFromRole(ColorRole::OnSecondary)
           ),
           .pressed = makeState(
-              colorSpecFromRole(ColorRole::Primary), colorSpecFromRole(ColorRole::Primary),
-              colorSpecFromRole(ColorRole::OnPrimary)
+              colorSpecFromRole(ColorRole::Secondary, Style::filledButtonPressedAlpha), clearColorSpec(),
+              colorSpecFromRole(ColorRole::OnSecondary)
           ),
           .disabled = makeState(
               colorSpecFromRole(ColorRole::Secondary, kDisabledAlpha),
@@ -98,16 +102,15 @@ namespace {
       };
     case ButtonVariant::Destructive:
       return Button::ButtonPalette{
-          .borderWidth = Style::borderWidth,
+          .borderWidth = 0.0F,
           .normal = makeState(
-              colorSpecFromRole(ColorRole::Error), colorSpecFromRole(ColorRole::Outline, Style::controlBorderAlpha),
-              colorSpecFromRole(ColorRole::OnError)
+              colorSpecFromRole(ColorRole::Error), clearColorSpec(), colorSpecFromRole(ColorRole::OnError)
           ),
           .hover = makeState(
-              colorSpecFromRole(ColorRole::Error, 0.95F), clearColorSpec(), colorSpecFromRole(ColorRole::OnError)
+              colorSpecFromRole(ColorRole::Error), clearColorSpec(), colorSpecFromRole(ColorRole::OnError)
           ),
           .pressed = makeState(
-              colorSpecFromRole(ColorRole::Error), colorSpecFromRole(ColorRole::Error),
+              colorSpecFromRole(ColorRole::Error, Style::filledButtonPressedAlpha), clearColorSpec(),
               colorSpecFromRole(ColorRole::OnError)
           ),
           .disabled = makeState(

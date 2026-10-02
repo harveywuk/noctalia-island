@@ -1189,6 +1189,7 @@ if build_tests
     'annotation_raster',
     'screen_recorder',
     'animation_manager',
+    'motion_spring',
     'island_state',
     'island_widget_layout',
     'island_widget_editor',

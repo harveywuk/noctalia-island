@@ -77,9 +77,23 @@ uniform vec4 u_scrim_color3;
 varying vec2 v_texcoord;
 varying vec2 v_local;
 
+// Continuous corners, matching the rect shader so artwork lines up with the card
+// it sits in. See rect_program.cpp for how the extent and exponent are chosen.
 float rounded_rect_distance(vec2 centered, vec2 half_size, float radius) {
-    vec2 q = abs(centered) - (half_size - vec2(radius));
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    float extent = min(radius * 1.528, max(min(half_size.x, half_size.y), radius));
+    float n = 2.0;
+    if (extent > radius + 1e-3) {
+        n = 0.69314718 / -log(1.0 - 0.29289322 * radius / extent);
+    }
+    vec2 q = abs(centered) - (half_size - vec2(extent));
+    vec2 v = max(q, vec2(0.0));
+    float m = max(v.x, v.y);
+    float corner = 0.0;
+    if (m > 0.0) {
+        vec2 t = v / m;
+        corner = m * pow(pow(t.x, n) + pow(t.y, n), 1.0 / n);
+    }
+    return corner + min(max(q.x, q.y), 0.0) - extent;
 }
 
 float scrim_segment_t(float position, float start, float end) {

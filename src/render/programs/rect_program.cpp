@@ -62,14 +62,56 @@ uniform vec4 u_shadow_exclusion_logical_inset;
 uniform vec4 u_shadow_exclusion_radii;
 varying vec2 v_pixel;
 
+// Continuous ("squircle") corners in the style of Apple's UI. A convex corner of
+// nominal radius r is drawn as a superellipse that starts curving ~1.53r from the
+// corner, so curvature eases in from the straight edge instead of jumping to 1/r.
+// The exponent is picked so the curve crosses the diagonal where the circle of
+// radius r would, which keeps the visual size of a radius unchanged. When the
+// extent cannot fit (capsules, small controls) it shrinks toward r and the
+// exponent toward 2, so a pill stays a true semicircle.
+const float kContinuousCornerExtent = 1.528;
+
+float corner_extent(float radius, float max_radius) {
+    return min(radius * kContinuousCornerExtent, max(max_radius, radius));
+}
+
+float corner_exponent(float radius, float extent) {
+    if (extent <= radius + 1e-3) {
+        return 2.0;
+    }
+    // 1 - 1/sqrt(2): how far a circle's diagonal point sits from the corner.
+    float k = 1.0 - 0.29289322 * radius / extent;
+    return 0.69314718 / -log(k);
+}
+
+// Superellipse norm, normalized by the larger component so pow() stays in range.
+float corner_norm(vec2 v, float n) {
+    v = max(v, vec2(0.0));
+    float m = max(v.x, v.y);
+    if (m <= 0.0) {
+        return 0.0;
+    }
+    vec2 t = v / m;
+    return m * pow(pow(t.x, n) + pow(t.y, n), 1.0 / n);
+}
+
+// Distance-like field for a convex continuous corner. offset is the point's
+// distance inward from the corner centre (both components positive inside the
+// corner box). Not a true SDF, but coverage_for() normalizes by the screen-space
+// gradient, so the antialiasing ramp stays one device pixel wide.
+float continuous_corner_distance(vec2 offset, float radius, float extent) {
+    return corner_norm(offset, corner_exponent(radius, extent)) - extent;
+}
+
 float rounded_rect_distance(vec2 point, vec2 size, vec4 radii) {
     vec2 half_size = size * 0.5;
     vec2 centered = point - half_size;
     float r = centered.x < 0.0
         ? (centered.y < 0.0 ? radii.x : radii.w)
         : (centered.y < 0.0 ? radii.y : radii.z);
-    vec2 q = abs(centered) - (half_size - vec2(r));
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+    float extent = corner_extent(r, min(half_size.x, half_size.y));
+    vec2 q = abs(centered) - (half_size - vec2(extent));
+    return corner_norm(q, corner_exponent(r, extent)) + min(max(q.x, q.y), 0.0) - extent;
 }
 
 float circle_extent(float radius, float delta) {
@@ -193,37 +235,47 @@ float shape_distance(vec2 point, vec2 size, vec4 radii, vec4 corner_shapes, vec4
 
     // The carved boundary above measures distance along x/y, so on an arc its
     // gradient is not unit length and it creases where the dominant edge term
-    // switches; both distort the coverage ramp. A convex corner is a single circle,
-    // so use its exact perpendicular distance and keep the corner a true SDF.
+    // switches; both distort the coverage ramp. Convex corners are continuous
+    // corners like the plain rounded rect, so replace the carve inside each
+    // corner box with that field. Concave corners stay circular: they meet the
+    // bar's own circular fillet.
     radius = r.x;
-    if (!tl_concave && radius > 0.0 && x < body_min.x + radius && y < body_min.y + radius) {
+    float extent = corner_extent(radius, max_radius);
+    if (!tl_concave && radius > 0.0 && x < body_min.x + extent && y < body_min.y + extent) {
         boundary_distance = max(
             max(x - body_max.x, y - body_max.y),
-            length(point - vec2(body_min.x + radius, body_min.y + radius)) - radius
+            continuous_corner_distance(body_min + vec2(extent) - point, radius, extent)
         );
     }
 
     radius = r.y;
-    if (!tr_concave && radius > 0.0 && x > body_max.x - radius && y < body_min.y + radius) {
+    extent = corner_extent(radius, max_radius);
+    if (!tr_concave && radius > 0.0 && x > body_max.x - extent && y < body_min.y + extent) {
         boundary_distance = max(
             max(body_min.x - x, y - body_max.y),
-            length(point - vec2(body_max.x - radius, body_min.y + radius)) - radius
+            continuous_corner_distance(
+                vec2(x - (body_max.x - extent), body_min.y + extent - y), radius, extent
+            )
         );
     }
 
     radius = r.z;
-    if (!br_concave && radius > 0.0 && x > body_max.x - radius && y > body_max.y - radius) {
+    extent = corner_extent(radius, max_radius);
+    if (!br_concave && radius > 0.0 && x > body_max.x - extent && y > body_max.y - extent) {
         boundary_distance = max(
             max(body_min.x - x, body_min.y - y),
-            length(point - vec2(body_max.x - radius, body_max.y - radius)) - radius
+            continuous_corner_distance(point - (body_max - vec2(extent)), radius, extent)
         );
     }
 
     radius = r.w;
-    if (!bl_concave && radius > 0.0 && x < body_min.x + radius && y > body_max.y - radius) {
+    extent = corner_extent(radius, max_radius);
+    if (!bl_concave && radius > 0.0 && x < body_min.x + extent && y > body_max.y - extent) {
         boundary_distance = max(
             max(x - body_max.x, body_min.y - y),
-            length(point - vec2(body_min.x + radius, body_max.y - radius)) - radius
+            continuous_corner_distance(
+                vec2(body_min.x + extent - x, y - (body_max.y - extent)), radius, extent
+            )
         );
     }
 
