@@ -125,6 +125,8 @@ struct Island::Instance {
   bool hovered = false;
   bool badgeHovered = false;
   island::PrivacyRotation privacyRotation;
+  // Icon last shown in the compact indicator slot, to animate the change to the next one.
+  std::string slotIcon;
   bool keyboardMode = false;
   island::ActivitySelection activities;
   island::CompactActivity compactActivity;
@@ -1062,6 +1064,8 @@ void Island::prepare(Instance& inst) {
     (void)inst.privacyRotation.pick({}, island::PrivacyRotation::Clock::now());
   }
   const float privacyWidth = privacyList.empty() ? 0 : static_cast<float>(privacyList.size()) * 24 + 8;
+  if (!compactView || privacyList.empty())
+    inst.slotIcon.clear();
   // A gesture belongs to the track and card where it started.
   if (inst.seeking
       && (view != island::View::Media
@@ -2025,6 +2029,32 @@ void Island::prepare(Instance& inst) {
       iconPalette.normal.label = islandRole(ColorRole::Primary);
       icon->setCustomPalette(std::move(iconPalette));
       if (compactView) {
+        // When the slot moves on, the outgoing icon rises and fades as the next rises into place.
+        const std::string slotIcon = slotBell ? "bell" : activity.icon();
+        if (!inst.slotIcon.empty() && inst.slotIcon != slotIcon) {
+          auto ghost = std::make_unique<Glyph>();
+          ghost->setGlyph(inst.slotIcon);
+          ghost->setGlyphSize(16 * s);
+          ghost->setColor(islandRole(ColorRole::Primary));
+          ghost->measure(renderer);
+          ghost->setPosition(icon->x() + (icon->width() - ghost->width()) / 2, icon->y() + (icon->height() - ghost->height()) / 2);
+          auto* outgoing = static_cast<Glyph*>(canvas->addChild(std::move(ghost)));
+          const float iconY = icon->y(), outgoingY = outgoing->y(), travel = 8 * s;
+          icon->setOpacity(0);
+          icon->setPosition(icon->x(), iconY + travel);
+          inst.animations.animate(
+              0, 1, Motion::resizeMs, Motion::reveal,
+              [icon, outgoing, iconY, outgoingY, travel](float t) {
+                // The incoming icon waits for the outgoing one to clear before it shows.
+                icon->setOpacity(std::clamp((t - 0.25F) / 0.75F, 0.0F, 1.0F));
+                icon->setPosition(icon->x(), iconY + (1 - t) * travel);
+                outgoing->setOpacity(std::max(0.0F, 1 - 2 * t));
+                outgoing->setPosition(outgoing->x(), outgoingY - t * travel);
+              },
+              {}, icon
+          );
+        }
+        inst.slotIcon = slotIcon;
         icon->setOnEnter([&inst] {
           inst.badgeHovered = true;
           inst.enter.stop();
