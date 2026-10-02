@@ -18,13 +18,12 @@ class InputArea;
 class Label;
 class Node;
 class Renderer;
-class Separator;
 class ConfigService;
 class SessionActionRunner;
 
-// The session menu, modelled on macOS: a compact menu (Sleep, Restart…, Shut Down…,
-// Lock Screen, Log Out…) and, for actions with a countdown, the "Are you sure you want
-// to shut down your computer now?" alert that runs the action when the countdown ends.
+// The session panel: a row of action cards (Sleep, Restart…, Shut Down…, Lock Screen,
+// Log Out…) styled after macOS, and, for actions with a countdown, the "Are you sure you
+// want to shut down your computer now?" alert that runs the action when it ends.
 // Both stages live in one panel; switching resizes it in place (the Island morphs).
 class SessionPanel : public Panel {
 public:
@@ -52,7 +51,9 @@ private:
   struct MenuRow {
     std::size_t entryIndex = 0;
     InputArea* area = nullptr;
-    Box* highlight = nullptr;
+    Box* card = nullptr;
+    Box* well = nullptr;
+    Glyph* icon = nullptr;
     Label* label = nullptr;
     Label* shortcut = nullptr;
   };
@@ -94,6 +95,10 @@ private:
   [[nodiscard]] std::optional<std::size_t> rowForEntry(std::size_t entryIndex) const;
   [[nodiscard]] std::optional<std::size_t> entryForContext(std::string_view context) const;
   [[nodiscard]] Stage stageForContext(std::string_view context) const;
+  [[nodiscard]] std::size_t entryCount() const;
+  [[nodiscard]] std::size_t columnCount() const;
+  [[nodiscard]] std::size_t rowCount() const;
+  [[nodiscard]] float menuWidth() const;
   [[nodiscard]] float menuHeight() const;
   [[nodiscard]] float alertHeightEstimate() const;
 
@@ -106,9 +111,6 @@ private:
   Button* m_cancelButton = nullptr;
   Button* m_confirmButton = nullptr;
   std::vector<MenuRow> m_rows;
-  std::vector<Separator*> m_separators;
-  // Separator i sits directly above the row at m_separatorRows[i].
-  std::vector<std::size_t> m_separatorRows;
 
   std::vector<SessionPanelActionConfig> m_visibleEntries;
   Stage m_stage = Stage::Menu;

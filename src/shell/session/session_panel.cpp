@@ -10,14 +10,12 @@
 #include "shell/panel/panel_manager.h"
 #include "shell/session/session_action_meta.h"
 #include "shell/session/session_action_runner.h"
-#include "system/distro_info.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/label.h"
-#include "ui/controls/separator.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
@@ -36,11 +34,15 @@ namespace {
 
   constexpr Logger kLog("session");
 
-  // Menu metrics follow ContextMenuControl so the session menu reads like every other
-  // shell menu (and like a macOS menu): body-size items, a thin rule between groups.
-  constexpr float kRowHeight = Style::controlHeightSm;
-  constexpr float kSeparatorHeight = 10.0F;
-  constexpr float kRowInset = 8.0F;
+  // Action cards: a rounded tile holding a round icon well and the label, after the
+  // round buttons of the macOS login window and the Control Center modules.
+  constexpr float kCardWidth = 104.0F;
+  constexpr float kCardHeight = 104.0F;
+  constexpr float kCardGap = 10.0F;
+  constexpr float kCardRadius = Style::radiusXl;
+  constexpr float kIconWellSize = 48.0F;
+  constexpr float kIconSize = 22.0F;
+  constexpr std::size_t kMaxColumns = 5;
 
   // Internal open contexts, used when the panel has to reopen itself to change size
   // (attached panels can't resize in place).
@@ -63,18 +65,6 @@ namespace {
       return ButtonVariant::Ghost;
     }
     return ButtonVariant::Default;
-  }
-
-  // macOS groups the power actions (Sleep, Restart, Shut Down) apart from the session
-  // ones (Lock Screen, Log Out); a rule is drawn wherever the group changes.
-  [[nodiscard]] int actionGroup(std::string_view action) {
-    if (action == "suspend" || action == "lock_and_suspend" || action == "reboot" || action == "shutdown") {
-      return 0;
-    }
-    if (action == "lock" || action == "logout") {
-      return 1;
-    }
-    return 2;
   }
 
   // Translation key segment for the alert's wording.
@@ -133,15 +123,8 @@ std::string SessionPanel::actionLabel(const SessionPanelActionConfig& cfg) const
 }
 
 std::string SessionPanel::menuLabel(const SessionPanelActionConfig& cfg) const {
-  std::string text;
-  if (cfg.action == "logout" && (!cfg.label.has_value() || cfg.label->empty())) {
-    // "Log Out Harvey…", as in the Apple menu.
-    const std::string name = sessionDisplayName();
-    text = name.empty() ? actionLabel(cfg) : i18n::tr("session.menu.logout-user", "name", name);
-  } else {
-    text = actionLabel(cfg);
-  }
-  // macOS marks menu items that open a confirmation with an ellipsis.
+  std::string text = actionLabel(cfg);
+  // macOS marks actions that ask for confirmation with an ellipsis.
   if (needsConfirm(cfg) && !text.ends_with("…") && !text.ends_with("...")) {
     text += "…";
   }
@@ -154,19 +137,41 @@ PanelPlacement SessionPanel::panelPlacement() const noexcept {
   return m_config != nullptr ? m_config->config().shell.panel.sessionPlacement : PanelPlacement::Attached;
 }
 
-float SessionPanel::preferredWidth() const { return std::round(scaled(kContentWidth + Style::panelPadding * 2.0F)); }
+std::size_t SessionPanel::entryCount() const {
+  return std::max<std::size_t>(1, !m_visibleEntries.empty() ? m_visibleEntries.size() : effectiveActions().size());
+}
+
+std::size_t SessionPanel::columnCount() const {
+  const std::size_t n = entryCount();
+  if (m_config != nullptr && m_config->config().shell.session.grid) {
+    const auto columns = static_cast<std::size_t>(std::max(1, m_config->config().shell.session.gridColumns));
+    return std::min(columns, n);
+  }
+  if (n <= kMaxColumns) {
+    return n;
+  }
+  return std::min<std::size_t>(kMaxColumns, (n + 1) / 2);
+}
+
+std::size_t SessionPanel::rowCount() const {
+  const std::size_t columns = columnCount();
+  return (entryCount() + columns - 1) / columns;
+}
+
+float SessionPanel::menuWidth() const {
+  const auto columns = static_cast<float>(columnCount());
+  return kCardWidth * columns + kCardGap * (columns - 1.0F);
+}
 
 float SessionPanel::menuHeight() const {
-  const std::vector<SessionPanelActionConfig> entries =
-      !m_visibleEntries.empty() ? m_visibleEntries : effectiveActions();
-  std::size_t separators = 0;
-  for (std::size_t i = 1; i < entries.size(); ++i) {
-    if (actionGroup(entries[i].action) != actionGroup(entries[i - 1].action)) {
-      ++separators;
-    }
-  }
-  return kRowHeight * static_cast<float>(std::max<std::size_t>(1, entries.size()))
-      + kSeparatorHeight * static_cast<float>(separators);
+  const auto rows = static_cast<float>(rowCount());
+  return kCardHeight * rows + kCardGap * (rows - 1.0F);
+}
+
+float SessionPanel::preferredWidth() const {
+  const Stage stage = m_rootNode == nullptr ? stageForContext(pendingOpenContext()) : m_stage;
+  const float content = stage == Stage::Confirm ? kContentWidth : menuWidth();
+  return std::round(scaled(content + Style::panelPadding * 2.0F));
 }
 
 SessionPanel::Stage SessionPanel::stageForContext(std::string_view context) const {
@@ -221,8 +226,6 @@ void SessionPanel::create() {
   const float scale = contentScale();
   m_visibleEntries = effectiveActions();
   m_rows.clear();
-  m_separators.clear();
-  m_separatorRows.clear();
   m_measuredAlertHeight = 0.0F;
 
   auto root = std::make_unique<Node>();
@@ -242,31 +245,27 @@ void SessionPanel::buildMenu(Node& parent, float scale) {
   m_menuNode = menu.get();
 
   const bool showShortcuts = m_config == nullptr || m_config->config().shell.session.showShortcuts;
-  const float highlightRadius = std::max(0.0F, Style::scaledRadiusLg(scale) - Style::spaceXs * scale);
 
   for (std::size_t i = 0; i < m_visibleEntries.size(); ++i) {
     const SessionPanelActionConfig& cfg = m_visibleEntries[i];
-    if (i > 0 && actionGroup(cfg.action) != actionGroup(m_visibleEntries[i - 1].action)) {
-      auto sep = ui::separator({
-          .orientation = SeparatorOrientation::HorizontalRule,
-          .configure = [scale](Separator& s) { s.setThickness(std::max(1.0F, scale)); },
-      });
-      m_separators.push_back(sep.get());
-      m_separatorRows.push_back(m_rows.size());
-      menu->addChild(std::move(sep));
-    }
+    const std::string glyph =
+        cfg.glyph.has_value() && !cfg.glyph->empty() ? *cfg.glyph : session_action::defaultGlyph(cfg.action);
 
     MenuRow row{.entryIndex = i};
     const std::size_t rowIndex = m_rows.size();
     auto area = ui::inputArea({.out = &row.area});
-    area->addChild(ui::box({.out = &row.highlight, .fill = clearColorSpec(), .radius = highlightRadius}));
+    area->addChild(ui::box({.out = &row.card, .radius = kCardRadius * scale}));
+    area->addChild(ui::box({.out = &row.well, .radius = kIconWellSize * scale * 0.5F}));
+    area->addChild(ui::glyph({.out = &row.icon, .glyph = glyph, .glyphSize = kIconSize * scale}));
     area->addChild(
         ui::label({
             .out = &row.label,
             .text = menuLabel(cfg),
-            .fontSize = Style::fontSizeBody * scale,
-            .color = colorSpecFromRole(ColorRole::OnSurface),
+            .fontSize = (Style::fontSizeCaption + 1.0F) * scale,
+            .fontWeight = FontWeight::Medium,
+            .maxWidth = (kCardWidth - Style::spaceSm * 2.0F) * scale,
             .maxLines = 1,
+            .textAlign = TextAlign::Center,
             .ellipsize = TextEllipsize::End,
         })
     );
@@ -275,8 +274,8 @@ void SessionPanel::buildMenu(Node& parent, float scale) {
           ui::label({
               .out = &row.shortcut,
               .text = keyChordDisplayLabel(*cfg.shortcut),
-              .fontSize = Style::fontSizeBody * scale,
-              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .fontSize = Style::fontSizeMini * scale,
+              .fontWeight = FontWeight::Medium,
               .maxLines = 1,
           })
       );
@@ -586,16 +585,23 @@ void SessionPanel::setHighlightedRow(std::optional<std::size_t> row) {
   for (std::size_t i = 0; i < m_rows.size(); ++i) {
     const MenuRow& r = m_rows[i];
     const bool on = row.has_value() && *row == i;
-    if (r.highlight != nullptr) {
-      r.highlight->setFill(on ? colorSpecFromRole(ColorRole::Primary) : clearColorSpec());
+    // Resting cards are a faint fill with a round grey well; the selected card lifts
+    // its fill and turns its well accent blue, like an active Control Center button.
+    if (r.card != nullptr) {
+      r.card->setFill(colorSpecFromRole(ColorRole::OnSurface, on ? 0.12F : 0.06F));
+      r.card->setBorder(colorSpecFromRole(ColorRole::OnSurface, on ? 0.12F : 0.07F), 1.0F);
+    }
+    if (r.well != nullptr) {
+      r.well->setFill(on ? colorSpecFromRole(ColorRole::Primary) : colorSpecFromRole(ColorRole::OnSurface, 0.1F));
+    }
+    if (r.icon != nullptr) {
+      r.icon->setColor(on ? colorSpecFromRole(ColorRole::OnPrimary) : colorSpecFromRole(ColorRole::OnSurface));
     }
     if (r.label != nullptr) {
-      r.label->setColor(on ? colorSpecFromRole(ColorRole::OnPrimary) : colorSpecFromRole(ColorRole::OnSurface));
+      r.label->setColor(colorSpecFromRole(ColorRole::OnSurface));
     }
     if (r.shortcut != nullptr) {
-      r.shortcut->setColor(
-          on ? colorSpecFromRole(ColorRole::OnPrimary, 0.8F) : colorSpecFromRole(ColorRole::OnSurfaceVariant)
-      );
+      r.shortcut->setColor(colorSpecFromRole(ColorRole::OnSurfaceVariant, on ? 0.9F : 0.6F));
     }
   }
   requestRedraw();
@@ -705,16 +711,31 @@ bool SessionPanel::handleGlobalKey(std::uint32_t sym, std::uint32_t modifiers, b
     return false;
   }
   const std::size_t last = m_rows.size() - 1;
+  const std::size_t columns = columnCount();
+  const auto current = m_highlightedRow;
 
-  if (KeybindMatcher::matches(KeybindAction::Up, sym, modifiers)
-      || KeybindMatcher::matches(KeybindAction::TabPrevious, sym, modifiers)) {
-    // Like a macOS menu, moving past either end wraps around.
-    setHighlightedRow(!m_highlightedRow.has_value() || *m_highlightedRow == 0 ? last : *m_highlightedRow - 1);
+  if (KeybindMatcher::matches(KeybindAction::TabPrevious, sym, modifiers)) {
+    setHighlightedRow(!current.has_value() || *current == 0 ? last : *current - 1);
     return true;
   }
-  if (KeybindMatcher::matches(KeybindAction::Down, sym, modifiers)
-      || KeybindMatcher::matches(KeybindAction::TabNext, sym, modifiers)) {
-    setHighlightedRow(!m_highlightedRow.has_value() || *m_highlightedRow >= last ? 0 : *m_highlightedRow + 1);
+  if (KeybindMatcher::matches(KeybindAction::TabNext, sym, modifiers)) {
+    setHighlightedRow(!current.has_value() || *current >= last ? 0 : *current + 1);
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Left, sym, modifiers)) {
+    setHighlightedRow(!current.has_value() ? last : (*current > 0 ? *current - 1 : 0));
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Right, sym, modifiers)) {
+    setHighlightedRow(!current.has_value() ? 0 : std::min(last, *current + 1));
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Up, sym, modifiers)) {
+    setHighlightedRow(!current.has_value() ? last : (*current >= columns ? *current - columns : *current));
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Down, sym, modifiers)) {
+    setHighlightedRow(!current.has_value() ? 0 : (*current + columns <= last ? *current + columns : *current));
     return true;
   }
   if (KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers)) {
@@ -733,52 +754,58 @@ void SessionPanel::layoutMenu(Renderer& renderer, float width) {
     return;
   }
   const float scale = contentScale();
-  const float rowHeight = kRowHeight * scale;
-  const float separatorHeight = kSeparatorHeight * scale;
-  const float inset = kRowInset * scale;
+  const std::size_t columns = columnCount();
+  const float gap = kCardGap * scale;
+  const float cardHeight = kCardHeight * scale;
+  // Cards share the row's width so a resized host still fills edge to edge.
+  const float cardWidth = std::floor((width - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns));
+  const float well = kIconWellSize * scale;
+  const float labelGap = Style::spaceSm * scale;
 
-  float y = 0.0F;
-  std::size_t nextSeparator = 0;
   for (std::size_t i = 0; i < m_rows.size(); ++i) {
-    while (nextSeparator < m_separatorRows.size() && m_separatorRows[nextSeparator] == i) {
-      if (Separator* sep = m_separators[nextSeparator]; sep != nullptr) {
-        const float thickness = std::max(1.0F, scale);
-        sep->setPosition(inset, y + std::round((separatorHeight - thickness) * 0.5F));
-        sep->setFrameSize(width - inset * 2.0F, thickness);
-        sep->layout(renderer);
-      }
-      y += separatorHeight;
-      ++nextSeparator;
-    }
-
     const MenuRow& row = m_rows[i];
     if (row.area == nullptr) {
       continue;
     }
-    row.area->setPosition(0.0F, y);
-    row.area->setFrameSize(width, rowHeight);
-    if (row.highlight != nullptr) {
-      row.highlight->setPosition(0.0F, 0.0F);
-      row.highlight->setFrameSize(width, rowHeight);
-      row.highlight->setSize(width, rowHeight);
+    const float x = static_cast<float>(i % columns) * (cardWidth + gap);
+    const float y = static_cast<float>(i / columns) * (cardHeight + gap);
+    row.area->setPosition(x, y);
+    row.area->setFrameSize(cardWidth, cardHeight);
+    if (row.card != nullptr) {
+      row.card->setPosition(0.0F, 0.0F);
+      row.card->setFrameSize(cardWidth, cardHeight);
+      row.card->setSize(cardWidth, cardHeight);
     }
-    float shortcutWidth = 0.0F;
-    if (row.shortcut != nullptr) {
-      row.shortcut->measure(renderer);
-      shortcutWidth = row.shortcut->width();
-      row.shortcut->setPosition(width - inset - shortcutWidth, std::round((rowHeight - row.shortcut->height()) * 0.5F));
+
+    float labelHeight = 0.0F;
+    if (row.label != nullptr) {
+      row.label->setMaxWidth(std::max(1.0F, cardWidth - Style::spaceSm * 2.0F * scale));
+      row.label->measure(renderer);
+      labelHeight = row.label->height();
+    }
+    const float top = std::round((cardHeight - well - labelGap - labelHeight) * 0.5F);
+    if (row.well != nullptr) {
+      row.well->setPosition(std::round((cardWidth - well) * 0.5F), top);
+      row.well->setFrameSize(well, well);
+      row.well->setSize(well, well);
+    }
+    if (row.icon != nullptr) {
+      row.icon->measure(renderer);
+      row.icon->setPosition(
+          std::round((cardWidth - row.icon->width()) * 0.5F), top + std::round((well - row.icon->height()) * 0.5F)
+      );
     }
     if (row.label != nullptr) {
-      row.label->setMaxWidth(
-          std::max(1.0F, width - inset * 2.0F - (shortcutWidth > 0.0F ? shortcutWidth + inset : 0.0F))
-      );
-      row.label->measure(renderer);
-      row.label->setPosition(inset, std::round((rowHeight - row.label->height()) * 0.5F));
+      row.label->setPosition(std::round((cardWidth - row.label->width()) * 0.5F), top + well + labelGap);
     }
-    y += rowHeight;
+    if (row.shortcut != nullptr) {
+      row.shortcut->measure(renderer);
+      const float inset = Style::spaceSm * scale;
+      row.shortcut->setPosition(cardWidth - inset - row.shortcut->width(), inset * 0.75F);
+    }
   }
   m_menuNode->setPosition(0.0F, 0.0F);
-  m_menuNode->setFrameSize(width, y);
+  m_menuNode->setFrameSize(width, menuHeight() * scale);
 }
 
 void SessionPanel::layoutAlert(Renderer& renderer, float width) {
@@ -864,8 +891,6 @@ void SessionPanel::onClose() {
   m_cancelButton = nullptr;
   m_confirmButton = nullptr;
   m_rows.clear();
-  m_separators.clear();
-  m_separatorRows.clear();
   m_visibleEntries.clear();
   m_measuredAlertHeight = 0.0F;
   m_reopenContext.clear();

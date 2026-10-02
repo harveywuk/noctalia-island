@@ -1075,9 +1075,6 @@
       "suspend-body-plural": "If you do nothing, the computer will go to sleep automatically in {count} seconds.",
       "suspend-title": "Are you sure you want to put your computer to sleep now?"
     },
-    "menu": {
-      "logout-user": "Log Out {name}"
-    },
     "errors": {
       "lock-body": "The session lock protocol is not available.",
       "lock-title": "Lock unavailable"
