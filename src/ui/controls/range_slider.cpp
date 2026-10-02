@@ -33,6 +33,16 @@ namespace {
 
   Color resolved(ColorRole role, float alpha = 1.0F) { return colorForRole(role, alpha); }
 
+  // macOS knobs are plain white, lifted off the track by a soft shadow rather than an outline.
+  constexpr Color kKnobColor = rgba(1.0F, 1.0F, 1.0F);
+  constexpr Color kKnobPressedColor = rgba(0.94F, 0.94F, 0.95F);
+
+  RoundedRectStyle knobShadowStyle(float radius) {
+    auto style = solidStyle(rgba(0.0F, 0.0F, 0.0F, Style::knobShadowAlpha), radius);
+    style.softness = Style::knobShadowSoftness;
+    return style;
+  }
+
 } // namespace
 
 RangeSlider::RangeSlider() {
@@ -41,6 +51,12 @@ RangeSlider::RangeSlider() {
 
   auto fill = std::make_unique<RectNode>();
   m_fill = static_cast<RectNode*>(addChild(std::move(fill)));
+
+  auto lowThumbShadow = std::make_unique<RectNode>();
+  m_lowThumbShadow = static_cast<RectNode*>(addChild(std::move(lowThumbShadow)));
+
+  auto highThumbShadow = std::make_unique<RectNode>();
+  m_highThumbShadow = static_cast<RectNode*>(addChild(std::move(highThumbShadow)));
 
   auto lowThumb = std::make_unique<RectNode>();
   m_lowThumb = static_cast<RectNode*>(addChild(std::move(lowThumb)));
@@ -295,6 +311,10 @@ void RangeSlider::updateGeometry() {
   m_lowThumb->setFrameSize(m_thumbSizePx, m_thumbSizePx);
   m_highThumb->setPosition(util::clampOrdered(highX - m_thumbSizePx * 0.5F, trackX, maxThumbX), thumbY);
   m_highThumb->setFrameSize(m_thumbSizePx, m_thumbSizePx);
+  m_lowThumbShadow->setPosition(m_lowThumb->x(), thumbY + Style::knobShadowOffsetY);
+  m_lowThumbShadow->setFrameSize(m_thumbSizePx, m_thumbSizePx);
+  m_highThumbShadow->setPosition(m_highThumb->x(), thumbY + Style::knobShadowOffsetY);
+  m_highThumbShadow->setFrameSize(m_thumbSizePx, m_thumbSizePx);
 
   m_inputArea->setPosition(0.0F, 0.0F);
   m_inputArea->setFrameSize(widthPx, heightPx);
@@ -318,45 +338,40 @@ void RangeSlider::updateFromLocalX(float x) {
 }
 
 void RangeSlider::applyVisualState() {
-  const bool hovering = m_inputArea != nullptr && m_inputArea->hovered();
+  const bool pressing = m_inputArea != nullptr && m_inputArea->pressed();
   const bool focused = m_inputArea != nullptr && m_inputArea->focused();
 
   Color trackColor = resolved(ColorRole::OnSurface, 0.16F);
   Color fillColor = resolved(ColorRole::Primary);
-  Color thumbColor = hex("#FAFAFC");
-  Color thumbBorder = resolved(ColorRole::Outline, Style::controlBorderAlpha);
 
   m_lowThumb->setVisible(m_enabled);
   m_highThumb->setVisible(m_enabled);
+  m_lowThumbShadow->setVisible(m_enabled);
+  m_highThumbShadow->setVisible(m_enabled);
 
   if (!m_enabled) {
     trackColor = resolved(ColorRole::Outline, Style::disabledOutlineAlpha);
     fillColor = resolved(ColorRole::Primary, 0.5F);
-  } else if (focused) {
-    thumbBorder = resolveColorSpec(focusRingColorSpec());
-  } else if (hovering) {
-    thumbBorder = resolved(ColorRole::Hover);
   }
 
   m_track->setStyle(solidStyle(trackColor, m_trackHeight * 0.5F));
   m_fill->setStyle(solidStyle(fillColor, m_trackHeight * 0.5F));
 
-  auto thumbStyle = solidStyle(thumbColor, m_thumbSizePx * 0.5F);
-  thumbStyle.border = thumbBorder;
-  thumbStyle.borderWidth = focused ? Style::focusRingWidth : Style::borderWidth;
-  m_lowThumb->setStyle(thumbStyle);
-  m_highThumb->setStyle(thumbStyle);
-
-  if (m_enabled && focused && m_activeThumb != ActiveThumb::None) {
-    auto activeStyle = thumbStyle;
-    activeStyle.border = resolveColorSpec(focusRingColorSpec());
-    activeStyle.borderWidth = Style::focusRingWidth;
-    if (m_activeThumb == ActiveThumb::Low) {
-      m_lowThumb->setStyle(activeStyle);
-    } else {
-      m_highThumb->setStyle(activeStyle);
+  const float knobRadius = m_thumbSizePx * 0.5F;
+  const auto knobStyle = [&](ActiveThumb thumb) {
+    const bool active = m_enabled && m_activeThumb == thumb;
+    auto style = solidStyle(active && pressing ? kKnobPressedColor : kKnobColor, knobRadius);
+    // Focus rings only the knob the keyboard moves; with none chosen yet, both.
+    if (focused && (active || m_activeThumb == ActiveThumb::None)) {
+      style.border = resolveColorSpec(focusRingColorSpec());
+      style.borderWidth = Style::focusRingWidth;
     }
-  }
+    return style;
+  };
+  m_lowThumb->setStyle(knobStyle(ActiveThumb::Low));
+  m_highThumb->setStyle(knobStyle(ActiveThumb::High));
+  m_lowThumbShadow->setStyle(knobShadowStyle(knobRadius));
+  m_highThumbShadow->setStyle(knobShadowStyle(knobRadius));
 }
 
 float RangeSlider::normalized(double value) const noexcept {

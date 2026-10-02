@@ -32,6 +32,16 @@ namespace {
 
   Color resolved(ColorRole role, float alpha = 1.0F) { return colorForRole(role, alpha); }
 
+  // macOS knobs are plain white, lifted off the track by a soft shadow rather than an outline.
+  constexpr Color kKnobColor = rgba(1.0F, 1.0F, 1.0F);
+  constexpr Color kKnobPressedColor = rgba(0.94F, 0.94F, 0.95F);
+
+  RoundedRectStyle knobShadowStyle(float radius) {
+    auto style = solidStyle(rgba(0.0F, 0.0F, 0.0F, Style::knobShadowAlpha), radius);
+    style.softness = Style::knobShadowSoftness;
+    return style;
+  }
+
 } // namespace
 
 Slider::Slider() {
@@ -40,6 +50,9 @@ Slider::Slider() {
 
   auto fill = std::make_unique<RectNode>();
   m_fill = static_cast<RectNode*>(addChild(std::move(fill)));
+
+  auto thumbShadow = std::make_unique<RectNode>();
+  m_thumbShadow = static_cast<RectNode*>(addChild(std::move(thumbShadow)));
 
   auto thumb = std::make_unique<RectNode>();
   m_thumb = static_cast<RectNode*>(addChild(std::move(thumb)));
@@ -261,10 +274,11 @@ void Slider::updateGeometry() {
   m_fill->setPosition(fillX, trackY);
   m_fill->setFrameSize(std::max(0.0F, fillWidth), m_trackHeight);
 
-  m_thumb->setPosition(
-      util::clampOrdered(thumbX - m_thumbSizePx * 0.5F, trackX, trackX + trackW - m_thumbSizePx), thumbY
-  );
+  const float thumbLeft = util::clampOrdered(thumbX - m_thumbSizePx * 0.5F, trackX, trackX + trackW - m_thumbSizePx);
+  m_thumb->setPosition(thumbLeft, thumbY);
   m_thumb->setFrameSize(m_thumbSizePx, m_thumbSizePx);
+  m_thumbShadow->setPosition(thumbLeft, thumbY + Style::knobShadowOffsetY);
+  m_thumbShadow->setFrameSize(m_thumbSizePx, m_thumbSizePx);
 
   m_inputArea->setPosition(0.0F, 0.0F);
   m_inputArea->setFrameSize(widthPx, heightPx);
@@ -292,26 +306,18 @@ void Slider::setColorOverride(std::optional<Color> track, std::optional<Color> f
 }
 
 void Slider::applyVisualState() {
-  const bool hovering = m_inputArea != nullptr && m_inputArea->hovered();
   const bool pressing = m_inputArea != nullptr && m_inputArea->pressed();
   const bool focused = m_inputArea != nullptr && m_inputArea->focused();
 
   Color trackColor = resolved(ColorRole::OnSurface, 0.16F);
   Color fillColor = resolved(ColorRole::Primary);
-  Color thumbColor = hex("#FAFAFC");
-  Color thumbBorder = resolved(ColorRole::Outline, Style::controlBorderAlpha);
 
   m_thumb->setVisible(m_enabled);
+  m_thumbShadow->setVisible(m_enabled);
 
   if (!m_enabled) {
     trackColor = resolved(ColorRole::Outline, Style::disabledOutlineAlpha);
     fillColor = resolved(ColorRole::Primary, 0.5F);
-  } else if (pressing) {
-    fillColor = resolved(ColorRole::Primary);
-  } else if (focused) {
-    thumbBorder = resolveColorSpec(focusRingColorSpec());
-  } else if (hovering) {
-    thumbBorder = resolved(ColorRole::Hover);
   }
 
   if (m_trackOverride) {
@@ -327,10 +333,13 @@ void Slider::applyVisualState() {
   auto fillStyle = solidStyle(fillColor, m_trackHeight * 0.5F);
   m_fill->setStyle(fillStyle);
 
-  auto thumbStyle = solidStyle(thumbColor, m_thumbSizePx * 0.5F);
-  thumbStyle.border = thumbBorder;
-  thumbStyle.borderWidth = focused ? Style::focusRingWidth : Style::borderWidth;
+  auto thumbStyle = solidStyle(pressing ? kKnobPressedColor : kKnobColor, m_thumbSizePx * 0.5F);
+  if (focused) {
+    thumbStyle.border = resolveColorSpec(focusRingColorSpec());
+    thumbStyle.borderWidth = Style::focusRingWidth;
+  }
   m_thumb->setStyle(thumbStyle);
+  m_thumbShadow->setStyle(knobShadowStyle(m_thumbSizePx * 0.5F));
 }
 
 float Slider::normalizedValue() const noexcept {

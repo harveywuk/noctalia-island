@@ -43,9 +43,11 @@ namespace Style {
   inline constexpr float fontSizeTitle = 16.0F;
   inline constexpr float fontSizeHeader = 20.0F;
 
-  inline constexpr float controlHeightSm = 32.0F;
-  inline constexpr float controlHeight = 38.0F;
-  inline constexpr float controlHeightLg = 44.0F;
+  // Closer to macOS control density: sidebar rows and small buttons 28, push buttons, pop-up
+  // buttons and fields 32, prominent actions 40.
+  inline constexpr float controlHeightSm = 28.0F;
+  inline constexpr float controlHeight = 32.0F;
+  inline constexpr float controlHeightLg = 40.0F;
   inline constexpr float scrollWheelStep = 56.0F;
   // Pointer distance in logical px before an armed drag becomes active.
   inline constexpr float dragStartThreshold = 6.0F;
@@ -71,11 +73,11 @@ namespace Style {
   inline constexpr float windowSwitcherFarCardWidth = 280.0F;
   inline constexpr float windowSwitcherCompactCardWidth = 220.0F;
   inline constexpr float windowSwitcherPreviewAspect = 1.6F;
-  inline constexpr float windowSwitcherCardOverlap = controlHeightLg + spaceLg;
+  inline constexpr float windowSwitcherCardOverlap = 44.0F + spaceLg;
   inline constexpr float windowSwitcherNarrowLayoutThreshold = 0.72F;
   inline constexpr float windowSwitcherPreviewIconScale = 0.12F;
   inline constexpr float windowSwitcherFallbackIconScale = 0.28F;
-  inline constexpr float windowSwitcherCaptionHeight = controlHeightLg;
+  inline constexpr float windowSwitcherCaptionHeight = 44.0F;
   inline constexpr float windowSwitcherCaptionLineGap = -spaceXs;
   inline constexpr float windowSwitcherIncomingCardScale = 0.9F;
   inline constexpr float windowSwitcherIncomingCardSlide = 0.25F;
@@ -83,21 +85,35 @@ namespace Style {
   inline constexpr float windowSwitcherRevealScale = 0.95F;
 
   // Toggle preset geometry. Track height = thumb + 2 * inset; track width = thumb + 2 * inset + travel.
-  inline constexpr float toggleThumbSizeSm = 14.0F;
-  inline constexpr float toggleInsetSm = 2.0F;
-  inline constexpr float toggleTravelSm = 12.0F;
-  inline constexpr float toggleThumbSizeMd = 18.0F;
-  inline constexpr float toggleInsetMd = 3.0F;
-  inline constexpr float toggleTravelMd = 16.0F;
-  inline constexpr float toggleThumbSizeLg = 22.0F;
-  inline constexpr float toggleInsetLg = 4.0F;
-  inline constexpr float toggleTravelLg = 20.0F;
+  // Matches the macOS switch sizes: mini 26x15, small 32x18, regular 38x22, with the knob nearly
+  // filling the track.
+  inline constexpr float toggleThumbSizeSm = 13.0F;
+  inline constexpr float toggleInsetSm = 1.0F;
+  inline constexpr float toggleTravelSm = 11.0F;
+  inline constexpr float toggleThumbSizeMd = 16.0F;
+  inline constexpr float toggleInsetMd = 1.0F;
+  inline constexpr float toggleTravelMd = 14.0F;
+  inline constexpr float toggleThumbSizeLg = 20.0F;
+  inline constexpr float toggleInsetLg = 1.0F;
+  inline constexpr float toggleTravelLg = 16.0F;
 
-  // Slider geometry.
+  // Slider geometry: a thin macOS track with a round white knob.
   inline constexpr float sliderDefaultWidth = 180.0F;
-  inline constexpr float sliderTrackHeight = 6.0F;
-  inline constexpr float sliderThumbSize = 18.0F;
+  inline constexpr float sliderTrackHeight = 4.0F;
+  inline constexpr float sliderThumbSize = 20.0F;
   inline constexpr float sliderHorizontalPadding = 2.0F;
+
+  // Checkbox box and radio circle, as on macOS: 14px at body text size, scaled up a touch for the
+  // shell's larger default text. The checked radio shows a small centred dot.
+  inline constexpr float checkboxSize = 16.0F;
+  inline constexpr float checkboxRadius = 4.0F;
+  inline constexpr float radioDotSize = 6.0F;
+
+  // Soft drop shadow under white knobs (switch thumbs, slider knobs), which macOS uses instead of
+  // an outline to lift the knob off the track.
+  inline constexpr float knobShadowAlpha = 0.3F;
+  inline constexpr float knobShadowSoftness = 1.5F;
+  inline constexpr float knobShadowOffsetY = 0.5F;
 
   [[nodiscard]] float cornerRadiusScale() noexcept;
   void setCornerRadiusScale(float scale) noexcept;

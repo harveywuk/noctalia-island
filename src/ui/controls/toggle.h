@@ -36,10 +36,12 @@ private:
   void applySize();
   void applyState();
   void applyAnimatedState(float t);
+  void placeThumbShadow();
   void doLayout(Renderer& renderer) override;
   LayoutSize doMeasure(Renderer& renderer, const LayoutConstraints& constraints) override;
   void doArrange(Renderer& renderer, const LayoutRect& rect) override;
 
+  class RectNode* m_thumbShadow = nullptr;
   class RectNode* m_thumb = nullptr;
   InputArea* m_inputArea = nullptr;
   std::uint32_t m_animId = 0;
