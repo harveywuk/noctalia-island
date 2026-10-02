@@ -215,6 +215,8 @@ namespace {
   constexpr Color kAppleGreen = rgba(0.188F, 0.82F, 0.345F);
   constexpr Color kAppleBlue = rgba(0.039F, 0.518F, 1.0F);
   constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
+  // Focus modes, Do Not Disturb among them, are indigo.
+  constexpr Color kAppleIndigo = rgba(0.369F, 0.361F, 0.902F);
   // View changes crossfade the capsule's content.
   constexpr float kViewFadeOutMs = 150.0F;
   constexpr float kViewFadeInMs = 240.0F;
@@ -2077,6 +2079,35 @@ void Island::prepare(Instance& inst) {
         m_mpris->setPosition(bus, static_cast<std::int64_t>(static_cast<double>(length) * seekFraction));
       };
     }
+  } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::Dnd || m_osd->kind == OsdKind::Charging)) {
+    // Status pills, as the iPhone announces a Focus or a charger: a tinted symbol and title lead,
+    // and the state (On, Off or the charge level) sits at the far end in the same tint.
+    const bool charging = m_osd->kind == OsdKind::Charging;
+    const bool on = charging || !m_osd->inactive;
+    const Color tint = charging ? kAppleGreen : kAppleIndigo;
+    const ColorRole role = charging ? ColorRole::Secondary : ColorRole::Primary;
+    constexpr float badgeSize = 34.0F;
+    const float badgeX = 16.0F;
+    const std::string icon = charging ? "bolt" : on ? "moon" : "moon-off";
+    if (on)
+      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, tint, role);
+    else
+      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, rgba(1.0F, 1.0F, 1.0F), ColorRole::OnSurfaceVariant);
+    const auto state = charging ? std::format("{}%", std::lround(m_osd->progress * 100))
+                                : i18n::tr(on ? "island.status.on" : "island.status.off");
+    const auto stateColor = on ? islandTint(tint, role) : muted;
+    const auto stateMetrics = renderer.measureText(
+        state, 15 * s, FontWeight::SemiBold, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+    );
+    const float stateWidth = std::ceil(stateMetrics.width / s) + 2;
+    auto* stateLabel = label(state, w - 22 - stateWidth, 0, stateWidth, 15, stateColor, false, 1, FontWeight::SemiBold);
+    stateLabel->setPosition(stateLabel->x(), (h * s - stateLabel->height()) / 2);
+    const float titleX = badgeX + badgeSize + 12;
+    auto* title = label(
+        i18n::tr(charging ? "island.status.charging" : "island.status.dnd"), titleX, 0,
+        std::max(1.0F, w - 22 - stateWidth - 12 - titleX), 15, foreground, false, 1, FontWeight::SemiBold
+    );
+    title->setPosition(title->x(), (h * s - title->height()) / 2);
   } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::LockKeys || !m_osd->showProgress)) {
     // Status messages without a level centre their icon and text as one group.
     constexpr float iconSize = 26.0F;

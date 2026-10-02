@@ -64,6 +64,11 @@ the two until the activity it brought forward ends. Hovering or an alert tucks t
 bubble back under the capsule. Set `split_activities = false` to hide the second
 activity instead, or to cycle activities with `cycle_activities = true`.
 
+Turning Do Not Disturb on or off from a keybind or `noctalia msg notification-dnd-set`
+shows a short pill: an indigo moon, "Do Not Disturb", and On or Off. Plugging in a
+laptop's charger shows a green "Charging" pill with the battery level. Turn the
+charging pill off with `[osd.kinds] charging = false`.
+
 ## Download indicators
 
 Applications publishing `com.canonical.Unity.LauncherEntry.Update` progress appear

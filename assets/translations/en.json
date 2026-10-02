@@ -5,6 +5,12 @@
       "downloads": "Downloads",
       "timers": "Timers"
     },
+    "status": {
+      "dnd": "Do Not Disturb",
+      "charging": "Charging",
+      "on": "On",
+      "off": "Off"
+    },
     "split": {
       "media": "Show Now Playing",
       "downloads": "Show downloads",
@@ -974,6 +980,7 @@
       "off": "Caffeine Off",
       "on": "Caffeine On"
     },
+    "charging": "Charging",
     "dnd": {
       "off": "DND Off",
       "on": "DND On"
@@ -3378,6 +3385,10 @@
         "osd-kinds-caffeine": {
           "description": "Show an OSD popup when the caffeine (idle inhibitor) state changes",
           "label": "Caffeine"
+        },
+        "osd-kinds-charging": {
+          "description": "Show an OSD popup when a charger is plugged in",
+          "label": "Charging"
         },
         "osd-kinds-dnd": {
           "description": "Show an OSD popup when Do Not Disturb is toggled",
