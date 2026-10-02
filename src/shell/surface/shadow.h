@@ -7,7 +7,8 @@
 
 namespace shell::surface_shadow {
 
-  constexpr std::int32_t kBlurRadius = 12;
+  // Large, soft falloff in the manner of macOS popover and window shadows.
+  constexpr std::int32_t kBlurRadius = 24;
 
   struct Bleed {
     std::int32_t left = 0;

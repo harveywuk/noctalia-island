@@ -3,6 +3,7 @@
 #include "config/color_spec.h"
 #include "config/config_limits.h"
 #include "config/widget_setting_value.h"
+#include "core/font_defaults.h"
 #include "core/input/key_chord.h"
 #include "system/sysmon_threshold_profile.h"
 #include "ui/style.h"
@@ -1058,27 +1059,29 @@ struct ShadowDirectionOffset {
 };
 
 constexpr ShadowDirectionOffset shadowDirectionOffset(ShadowDirection dir) noexcept {
+  // Cast distance in logical px; with the larger blur this reads as a lifted macOS surface.
+  constexpr std::int32_t kShadowOffset = 6;
   switch (dir) {
   case ShadowDirection::Center:
     return {0, 0};
   case ShadowDirection::Down:
-    return {0, 2};
+    return {0, kShadowOffset};
   case ShadowDirection::Up:
-    return {0, -2};
+    return {0, -kShadowOffset};
   case ShadowDirection::Left:
-    return {-2, 0};
+    return {-kShadowOffset, 0};
   case ShadowDirection::Right:
-    return {2, 0};
+    return {kShadowOffset, 0};
   case ShadowDirection::DownLeft:
-    return {-2, 2};
+    return {-kShadowOffset, kShadowOffset};
   case ShadowDirection::DownRight:
-    return {2, 2};
+    return {kShadowOffset, kShadowOffset};
   case ShadowDirection::UpLeft:
-    return {-2, -2};
+    return {-kShadowOffset, -kShadowOffset};
   case ShadowDirection::UpRight:
-    return {2, -2};
+    return {kShadowOffset, -kShadowOffset};
   }
-  return {0, 2};
+  return {0, kShadowOffset};
 }
 
 enum class PanelTransparencyMode : std::uint8_t {
@@ -1608,7 +1611,7 @@ struct ShellConfig {
 
   struct ShadowConfig {
     ShadowDirection direction = ShadowDirection::Down;
-    float alpha = 0.55F;
+    float alpha = 0.35F;
 
     bool operator==(const ShadowConfig&) const = default;
   };
@@ -1755,7 +1758,7 @@ struct ShellConfig {
   bool popupBorders = true;
   bool popupShadows = true;
   bool cardBorders = true;
-  std::string fontFamily = "sans-serif";
+  std::string fontFamily = font_defaults::kFamily;
   std::string lang; // empty = auto-detect from $LC_ALL/$LC_MESSAGES/$LANG
   std::string timeFormat = "{:%H:%M}";
   std::string dateFormat = "%A, %x";
