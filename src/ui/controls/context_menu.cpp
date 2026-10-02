@@ -18,8 +18,9 @@ namespace {
   constexpr float kItemHeight = 24.0F;
   constexpr float kSeparatorHeight = 10.0F;
   constexpr float kItemGap = 0.0F;
-  constexpr float kMenuFontSize = Style::fontSizeCaption;
-  constexpr float kMenuGlyphSize = Style::fontSizeCaption - 1.0F;
+  // macOS menus set their items at body size (13px).
+  constexpr float kMenuFontSize = Style::fontSizeBody;
+  constexpr float kMenuGlyphSize = Style::fontSizeBody - 1.0F;
   // Leading check/radio column: the glyph plus a small gap before the label (or leading visual).
   constexpr float kToggleSlot = kMenuGlyphSize + Style::spaceXs;
 

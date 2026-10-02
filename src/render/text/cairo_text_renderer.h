@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/font_defaults.h"
 #include "render/core/renderer.h"
 #include "render/core/texture_handle.h"
 
@@ -208,7 +209,7 @@ private:
 
   bool m_fontConfigInitialized = false;
   std::uint64_t m_syncedFontGeneration = 0;
-  std::string m_fontFamily = "sans-serif";
+  std::string m_fontFamily = font_defaults::kFamily;
   bool m_baseDirRtl = false;
 
   PangoFontMap* m_fontMap = nullptr;      // owned

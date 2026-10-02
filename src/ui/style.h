@@ -10,10 +10,12 @@ namespace Style {
   inline constexpr int animNormal = 200;
   inline constexpr int animSlow = 400;
 
-  inline constexpr float radiusSm = 5.0F;
+  // macOS-style radius ladder: controls 6-8, popovers and Control Center modules 12,
+  // panels and windows 16. The rect shader draws these as continuous corners.
+  inline constexpr float radiusSm = 6.0F;
   inline constexpr float radiusMd = 8.0F;
   inline constexpr float radiusLg = 12.0F;
-  inline constexpr float radiusXl = 18.0F;
+  inline constexpr float radiusXl = 16.0F;
 
   inline constexpr float borderWidth = 1.0F;
   inline constexpr float emphasizedBorderWidth = 3.0F;
@@ -37,11 +39,12 @@ namespace Style {
   inline constexpr float barCapsulePadding = 6.0F;
   inline constexpr float baseGlyphSize = 16.0F;
 
-  inline constexpr float fontSizeMini = 11.0F;
-  inline constexpr float fontSizeCaption = 13.0F;
-  inline constexpr float fontSizeBody = 14.0F;
-  inline constexpr float fontSizeTitle = 16.0F;
-  inline constexpr float fontSizeHeader = 20.0F;
+  // macOS text styles: caption 10, subheadline 11, body 13, title3 15, title2 17.
+  inline constexpr float fontSizeMini = 10.0F;
+  inline constexpr float fontSizeCaption = 11.0F;
+  inline constexpr float fontSizeBody = 13.0F;
+  inline constexpr float fontSizeTitle = 15.0F;
+  inline constexpr float fontSizeHeader = 17.0F;
 
   // Closer to macOS control density: sidebar rows and small buttons 28, push buttons, pop-up
   // buttons and fields 32, prominent actions 40.

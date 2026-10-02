@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/core/renderer.h"
+#include "core/font_defaults.h"
 #include "render/text/cairo_glyph_renderer.h"
 #include "render/text/cairo_text_renderer.h"
 
@@ -88,7 +89,7 @@ private:
   std::unique_ptr<RenderBackend> m_backend;
   CairoTextRenderer m_textRenderer;
   CairoGlyphRenderer m_glyphRenderer;
-  std::string m_textFontFamily = "sans-serif";
+  std::string m_textFontFamily = font_defaults::kFamily;
   bool m_textBaseDirRtl = false;
   std::uint64_t m_textMetricsGeneration = 1;
   std::uint64_t m_gpuResourceGeneration = 0;
