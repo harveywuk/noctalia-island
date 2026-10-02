@@ -3,6 +3,7 @@
 A fake /proc (NOCTALIA_PRIVACY_PROC_ROOT) lists a "camtest" process holding /dev/video0, and a
 kitty window with that class stands in for the app. The compact Island must show the camera
 icon, name the app on hover, and raise its window when clicked; so must the expanded Island.
+With a microphone capture too, the compact Island keeps one indicator slot that alternates.
 """
 import json
 import os
@@ -76,6 +77,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
                   if min(image.getpixel((x, y))) > 200]
         return sum(p[0] for p in pixels)//len(pixels), sum(p[1] for p in pixels)//len(pixels)
 
+    capture = None
     kitty = ['kitty', '--config', 'NONE', '-o', 'confirm_os_window_close=0']
     try:
         ctl('dismissnotify'); dispatch('hl.dsp.focus({monitor="TEST-1"})')
@@ -117,7 +119,29 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert 'Camera' in text and 'camtest' in text, 'Expanded camera tooltip missing: '+text
         click()
         assert active_class() == 'camtest', 'Expanded camera icon did not raise its app: '+active_class()
+
+        # Microphone and camera share the compact slot: one glyph at a time, alternating.
+        move(1000, 400); time.sleep(1.5)
+        run(['pactl', 'load-module', 'module-remap-source', 'source_name=privacy-mic', 'master=hyprland-test.monitor'])
+        capture = subprocess.Popen(['parec', '--device=privacy-mic', '--client-name=Privacy test'], env=env,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(7)  # Past the capture preview.
+        patterns = []
+        for index in range(12):
+            frame = Image.open(shot(f'camera-rotation-{index}')).convert('RGB')
+            fl, fr, ft, fb = (lambda xs, ys: (min(xs), max(xs), min(ys), max(ys)))(
+                [x for x in range(frame.width) if max(frame.getpixel((x, 20))) < 12],
+                [y for y in range(0, 200) if max(frame.getpixel((frame.width//2, y))) < 12])
+            assert fr-fl <= right-left+2, f'Indicators widened the Island ({fr-fl} > {right-left})'
+            ix, iy = camera_icon(frame, ft, fb, (fl+fr)//2, fr)
+            patterns.append(tuple(min(frame.getpixel((x, y))) > 200
+                                  for x in range(ix-8, ix+8) for y in range(iy-8, iy+8)))
+            time.sleep(1)
+        assert len(set(patterns)) >= 2, 'Compact privacy indicator did not alternate'
         assert shell.poll() is None
-        print('PASS: webcam held outside PipeWire shows, names and raises its app (compact and expanded)', flush=True)
+        print('PASS: webcam held outside PipeWire shows, names and raises its app (compact and expanded); '
+              'one compact slot alternates with the microphone', flush=True)
     finally:
+        if capture is not None:
+            capture.terminate(); capture.wait(timeout=5)
         pointer.terminate(); pointer.wait(timeout=5)

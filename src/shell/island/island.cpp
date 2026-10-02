@@ -124,6 +124,7 @@ struct Island::Instance {
   bool inside = false;
   bool hovered = false;
   bool badgeHovered = false;
+  island::PrivacyRotation privacyRotation;
   bool keyboardMode = false;
   island::ActivitySelection activities;
   island::CompactActivity compactActivity;
@@ -1028,7 +1029,11 @@ void Island::prepare(Instance& inst) {
   const auto batteryList =
       !recording && (compactView || expandedView) ? batteries(cfg, inst.output) : std::vector<island::Battery>{};
   const bool showBattery = compactView && !batteryList.empty() && batteryList.front().compact();
-  const auto privacyList = privacy();
+  auto privacyList = privacy();
+  // Outside the expanded Island capture indicators share one slot, cycling every few seconds.
+  if (const auto* shown = inst.privacyRotation.pick(privacyList, island::PrivacyRotation::Clock::now(), inst.badgeHovered);
+      shown != nullptr && !expandedView)
+    privacyList = {*shown};
   const float privacyWidth = privacyList.empty() ? 0 : static_cast<float>(privacyList.size()) * 24 + 8;
   const auto unreadCount = m_notifications
       ? std::ranges::count_if(m_notifications->history(), [](const auto& entry) { return !entry.seen; })
@@ -2502,7 +2507,7 @@ island::Size Island::panelReturnSize() const {
         || view == island::View::Activity
         || view == island::View::DownloadActivity
         || view == island::View::TimerActivity)
-      size.width += 2 * (static_cast<float>(privacyList.size()) * 24 + 8);
+      size.width += 2 * (24.0F + 8.0F); // One indicator slot; see PrivacyRotation.
     else if (view == island::View::Osd || view == island::View::Notification)
       size.height += 32;
   }

@@ -36,5 +36,28 @@ int main() {
   TEST_CHECK((snapshot[0].binaries == std::vector<std::string>{"discord", "firefox"}));
   state.captures.clear();
   TEST_CHECK(summary.snapshot(state, config).empty());
+
+  // One slot cycles through active kinds every five seconds.
+  using namespace std::chrono_literals;
+  island::PrivacyRotation rotation;
+  const island::PrivacyRotation::Clock::time_point t0{};
+  std::vector<island::PrivacyActivity> list{{PrivacyCaptureKind::Microphone, {"Call"}},
+                                            {PrivacyCaptureKind::Camera, {"Call"}}};
+  TEST_CHECK(rotation.pick({}, t0) == nullptr);
+  TEST_CHECK(rotation.pick(list, t0)->kind == PrivacyCaptureKind::Camera); // Newest first.
+  TEST_CHECK(rotation.pick(list, t0 + 4s)->kind == PrivacyCaptureKind::Camera);
+  TEST_CHECK(rotation.pick(list, t0 + 5s)->kind == PrivacyCaptureKind::Microphone);
+  TEST_CHECK(rotation.pick(list, t0 + 10s)->kind == PrivacyCaptureKind::Camera);
+  // Hovering holds the current icon, and the interval restarts on leaving.
+  TEST_CHECK(rotation.pick(list, t0 + 16s, true)->kind == PrivacyCaptureKind::Camera);
+  TEST_CHECK(rotation.pick(list, t0 + 20s)->kind == PrivacyCaptureKind::Camera);
+  TEST_CHECK(rotation.pick(list, t0 + 21s)->kind == PrivacyCaptureKind::Microphone);
+  // A capture that starts is shown at once; one that stops falls back to what remains.
+  list.push_back({PrivacyCaptureKind::Screen, {"Recorder"}});
+  TEST_CHECK(rotation.pick(list, t0 + 22s)->kind == PrivacyCaptureKind::Screen);
+  list.pop_back();
+  TEST_CHECK(rotation.pick(list, t0 + 23s)->kind == PrivacyCaptureKind::Microphone);
+  list.erase(list.begin());
+  TEST_CHECK(rotation.pick(list, t0 + 24s)->kind == PrivacyCaptureKind::Camera);
   return 0;
 }
