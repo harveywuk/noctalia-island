@@ -593,14 +593,14 @@ std::unique_ptr<Flex> HomeTab::create() {
     const bool isActive = shortcut->isToggle() && shortcut->active();
 
     const std::size_t padIdx = m_shortcutPads.size();
+    // macOS Control Center style: a round toggle (accent-filled when on) with its caption below.
+    // The circle's diameter follows the cell, set in doLayout.
     auto btn = ui::button({
-        .text = showLabels ? std::optional<std::string>{label} : std::nullopt,
         .glyph = shortcut->displayIcon(),
         .glyphSize = Style::fontSizeTitle * 1.75F * scale,
-        .contentAlign = showLabels ? ButtonContentAlign::Start : ButtonContentAlign::Center,
+        .contentAlign = ButtonContentAlign::Center,
         .minHeight = 0.0F,
-        .padding = Style::spaceSm * scale,
-        .gap = Style::spaceXs * scale,
+        .padding = 0.0F,
         .radius = Style::scaledRadiusXl(scale),
         .onClick =
             [this, padIdx]() {
@@ -615,25 +615,15 @@ std::unique_ptr<Flex> HomeTab::create() {
               }
             },
         .configure =
-            [enabled, isActive, showLabels, fillOpacity = panelCardOpacity(), scale](Button& button) {
-              button.setDirection(FlexDirection::Vertical);
+            [enabled, isActive, fillOpacity = panelCardOpacity()](Button& button) {
+              button.setAlign(FlexAlign::Center);
               button.setJustify(FlexJustify::Center);
-              if (showLabels) {
-                // Stretch so the label width follows the cell; Center uses intrinsic text
-                // width and fights setMaxWidth.
-                button.setAlign(FlexAlign::Stretch);
-                if (button.label() != nullptr) {
-                  button.label()->setFontSize(Style::fontSizeMini * scale);
-                  button.label()->setMaxLines(1);
-                  button.label()->setTextAlign(TextAlign::Center);
-                }
-              } else {
-                button.setAlign(FlexAlign::Center);
-              }
               applyShortcutButtonStyle(button, enabled, isActive, fillOpacity);
             },
     });
-
+    if (!showLabels) {
+      btn->setTooltip(label);
+    }
     Button* btnPtr = btn.get();
     if (auto* ia = btnPtr->inputArea(); ia != nullptr) {
       ia->setOnAxisHandler([this, padIdx](const InputArea::PointerData& data) -> bool {
@@ -649,13 +639,26 @@ std::unique_ptr<Flex> HomeTab::create() {
         return true;
       });
     }
+    auto cell = ui::column({.align = FlexAlign::Center, .justify = FlexJustify::Center, .gap = Style::spaceXs * scale});
+    cell->addChild(std::move(btn));
+    Label* caption = nullptr;
+    if (showLabels) {
+      cell->addChild(ui::label({
+          .out = &caption,
+          .text = label,
+          .fontSize = Style::fontSizeMini * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurface),
+          .maxLines = 1,
+          .textAlign = TextAlign::Center,
+      }));
+    }
     ShortcutPad pad;
     pad.shortcut = std::move(shortcut);
     pad.button = btnPtr;
     pad.glyph = btnPtr->glyph();
-    pad.label = btnPtr->label();
+    pad.label = caption;
     m_shortcutPads.push_back(std::move(pad));
-    grid->addChild(std::move(btn));
+    grid->addChild(std::move(cell));
   }
 
   if (m_shortcutPads.size() <= kHomeStackedShortcutMax) {
@@ -889,8 +892,8 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
         continue;
       }
       float inner = 1.0F;
-      if (pad.button != nullptr && pad.button->width() > 1.0F) {
-        inner = std::max(1.0F, pad.button->width() - pad.button->paddingLeft() - pad.button->paddingRight());
+      if (pad.label->parent() != nullptr && pad.label->parent()->width() > 1.0F) {
+        inner = std::max(1.0F, pad.label->parent()->width() - 2.0F * Style::spaceXs * scale);
       } else {
         const float gridW = m_shortcutsGrid->width();
         const float innerGrid =
@@ -995,15 +998,18 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
     // doesn't tower over the user card area. The width was capped earlier so this stays bounded.
     const float cellSide = cellWidth * kHomeShortcutSquareTrim;
     const bool showLabels = m_config != nullptr ? m_config->config().controlCenter.showShortcutLabels : true;
+    // Round toggles: the circle takes most of the cell, leaving room for the caption below.
+    const float diameter = std::clamp(cellSide * (showLabels ? 0.56F : 0.7F), 36.0F * scale, 72.0F * scale);
     for (auto& pad : m_shortcutPads) {
-      if (pad.glyph == nullptr) {
-        continue;
+      if (pad.button != nullptr) {
+        pad.button->setMinWidth(diameter);
+        pad.button->setMaxWidth(diameter);
+        pad.button->setMinHeight(diameter);
+        pad.button->setMaxHeight(diameter);
+        pad.button->setRadius(diameter / 2.0F);
       }
-      if (showLabels) {
-        pad.glyph->setGlyphSize(Style::fontSizeTitle * 1.75F * scale);
-      } else {
-        const float dynamicGlyphSize = std::clamp(cellSide * 0.28F, 22.0F * scale, 44.0F * scale);
-        pad.glyph->setGlyphSize(dynamicGlyphSize);
+      if (pad.glyph != nullptr) {
+        pad.glyph->setGlyphSize(std::round(diameter * 0.45F));
       }
     }
 
@@ -1549,12 +1555,7 @@ void HomeTab::syncScaledFonts() {
     if (pad.label != nullptr) {
       pad.label->setFontSize(Style::fontSizeMini * s);
     }
-    if (pad.glyph != nullptr) {
-      // Icon-only glyphs are sized from cell side in doLayout.
-      if (m_config == nullptr || m_config->config().controlCenter.showShortcutLabels) {
-        pad.glyph->setGlyphSize(Style::fontSizeTitle * 1.75F * s);
-      }
-    }
+    // Glyphs follow the round toggle's diameter, set in doLayout.
   }
 }
 
@@ -1842,11 +1843,13 @@ void HomeTab::syncShortcuts() {
     if (pad.glyph != nullptr) {
       pad.glyph->setGlyph(sc.displayIcon());
     }
-    if (pad.button != nullptr && pad.label != nullptr) {
+    if (pad.label != nullptr) {
       const std::string label = sc.displayLabel();
       if (pad.label->text() != label) {
-        pad.button->setText(label);
+        pad.label->setText(label);
       }
+    } else if (pad.button != nullptr) {
+      pad.button->setTooltip(sc.displayLabel());
     }
   }
 }
