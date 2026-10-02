@@ -85,17 +85,17 @@ namespace Style {
   inline constexpr float windowSwitcherRevealScale = 0.95F;
 
   // Toggle preset geometry. Track height = thumb + 2 * inset; track width = thumb + 2 * inset + travel.
-  // Matches the macOS switch sizes: mini 26x15, small 32x18, regular 38x22, with the knob nearly
-  // filling the track.
+  // The knob nearly fills the track, as on macOS, and travels its own width, as GTK draws switches
+  // (always twice as wide as the knob), so shell and GTK switches match: 28x15, 34x18, 42x22.
   inline constexpr float toggleThumbSizeSm = 13.0F;
   inline constexpr float toggleInsetSm = 1.0F;
-  inline constexpr float toggleTravelSm = 11.0F;
+  inline constexpr float toggleTravelSm = 13.0F;
   inline constexpr float toggleThumbSizeMd = 16.0F;
   inline constexpr float toggleInsetMd = 1.0F;
-  inline constexpr float toggleTravelMd = 14.0F;
+  inline constexpr float toggleTravelMd = 16.0F;
   inline constexpr float toggleThumbSizeLg = 20.0F;
   inline constexpr float toggleInsetLg = 1.0F;
-  inline constexpr float toggleTravelLg = 16.0F;
+  inline constexpr float toggleTravelLg = 20.0F;
 
   // Slider geometry: a thin macOS track with a round white knob.
   inline constexpr float sliderDefaultWidth = 180.0F;
