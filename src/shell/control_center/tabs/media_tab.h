@@ -46,6 +46,7 @@ private:
   // White text and controls over the artwork flow (Apple Music style); the theme's otherwise.
   void applyOverlay(bool overlay);
   void footerHoverChanged(bool entered);
+  void footerFocusChanged(bool gained);
   void setControlsRevealed(bool revealed, bool animate);
   void clearArt(Renderer& renderer);
   void commitPendingSeek(double valueSeconds);

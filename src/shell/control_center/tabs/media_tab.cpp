@@ -64,6 +64,10 @@ namespace {
   }
 
 
+  // Hover-revealed transport controls linger briefly after the pointer leaves, then fade out.
+  constexpr auto kControlsHideDelay = std::chrono::milliseconds(300);
+  constexpr float kControlsFadeOutMs = 500.0F;
+
   // Apple Music's overlay: white symbols with a faint lift on hover, and a brighter fill for
   // toggles that are on and for play/pause.
   [[nodiscard]] Button::ButtonPalette overlayPalette(bool filled) {
@@ -485,8 +489,12 @@ std::unique_ptr<Flex> MediaTab::create() {
       continue;
     button->setOnEnter([this]() { footerHoverChanged(true); });
     button->setOnLeave([this]() { footerHoverChanged(false); });
-    button->setOnFocusChange([this](bool focused) { footerHoverChanged(focused); });
+    button->setOnFocusChange([this](bool focused) { footerFocusChanged(focused); });
   }
+  // A rebuilt tab (an Island-hosted panel rebuilds on every update) starts with fresh hover
+  // state; the dispatcher re-enters whatever the pointer is over.
+  m_footerHideTimer.stop();
+  m_footerHoverCount = 0;
   setControlsRevealed(false, false);
 
   nowCard->addChild(std::move(mediaStack));
@@ -733,17 +741,29 @@ void MediaTab::clearArt(Renderer& renderer) {
 
 void MediaTab::footerHoverChanged(bool entered) {
   // Moving from the text onto a revealed button leaves one and enters the other; count both and
-  // hide only once neither is hovered or focused, after a moment.
+  // hide a moment after neither is hovered. Pointer departure hides even a focused control, as a
+  // click leaves focus on the button it pressed.
   m_footerHoverCount = std::max(0, m_footerHoverCount + (entered ? 1 : -1));
   if (m_footerHoverCount > 0) {
     m_footerHideTimer.stop();
     setControlsRevealed(true, true);
     return;
   }
-  m_footerHideTimer.start(std::chrono::milliseconds(160), [this]() {
+  m_footerHideTimer.start(kControlsHideDelay, [this]() {
     if (m_footerHoverCount == 0)
       setControlsRevealed(false, true);
   });
+}
+
+void MediaTab::footerFocusChanged(bool gained) {
+  // Keyboard navigation onto a control reveals the row; leaving it hides the row unless the
+  // pointer is over it.
+  if (gained) {
+    m_footerHideTimer.stop();
+    setControlsRevealed(true, true);
+  } else if (m_footerHoverCount == 0) {
+    footerHoverChanged(false);
+  }
 }
 
 void MediaTab::setControlsRevealed(bool revealed, bool animate) {
@@ -766,7 +786,13 @@ void MediaTab::setControlsRevealed(bool revealed, bool animate) {
     apply(to);
     return;
   }
-  animations->animate(from, to, Motion::revealMs, Motion::reveal, apply, {}, m_footer);
+  // Reveal promptly; when the pointer leaves, the controls linger and fade out gently.
+  animations->animate(
+      from, to, revealed ? Motion::revealMs : kControlsFadeOutMs, revealed ? Motion::reveal : Easing::EaseInOutCubic,
+      apply, {}, m_footer
+  );
+  // Without pointer motion nothing else asks the panel for frames, which would stall the fade.
+  PanelManager::instance().requestFrameTick();
 }
 
 void MediaTab::applyOverlay(bool overlay) {
@@ -789,10 +815,13 @@ void MediaTab::applyOverlay(bool overlay) {
       button->clearCustomPalette();
   }
   if (m_progressSlider != nullptr) {
-    if (overlay)
-      m_progressSlider->setColorOverride(rgba(1.0F, 1.0F, 1.0F, 0.28F), rgba(1.0F, 1.0F, 1.0F, 0.92F));
-    else
+    if (overlay) {
+      // The fill takes the artwork's most vivid colour, as the Island's media progress does.
+      const auto accent = m_flowLayer.accent();
+      m_progressSlider->setColorOverride(rgba(1.0F, 1.0F, 1.0F, 0.28F), rgba(accent.r, accent.g, accent.b, 0.95F));
+    } else {
       m_progressSlider->setColorOverride(std::nullopt, std::nullopt);
+    }
   }
 }
 

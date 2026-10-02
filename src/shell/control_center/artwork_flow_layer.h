@@ -30,6 +30,7 @@ namespace control_center {
     bool load(Renderer& renderer, const std::string& path);
     void clear();
     [[nodiscard]] bool hasArtwork() const noexcept { return m_flow.hasArtwork(); }
+    [[nodiscard]] visuals::ArtworkFlow::Accent accent() const noexcept { return m_flow.accent(); }
     // Animates while `animate` and motion is enabled; otherwise holds the current frame.
     void setAnimating(bool animate);
     // Frees the texture; call when the panel closes.
