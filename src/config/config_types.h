@@ -97,6 +97,8 @@ struct IslandConfig {
   bool outerProgressRing = false;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
+  // A second running activity detaches into a round bubble beside the capsule, as on iPhone.
+  bool splitActivities = true;
   bool cycleActivities = false;
   int activityCycleSeconds = 5;
   int hoverOpenDelayMs = 110;
@@ -134,6 +136,7 @@ struct IslandMonitorOverride {
   std::optional<bool> outerProgressRing;
   std::optional<float> mediaArtworkSize;
   std::optional<IslandActivityPriority> activityPriority;
+  std::optional<bool> splitActivities;
   std::optional<bool> cycleActivities;
   std::optional<int> activityCycleSeconds;
   std::optional<int> hoverOpenDelayMs;
@@ -191,6 +194,8 @@ inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOv
     base.mediaArtworkSize = *override.mediaArtworkSize;
   if (override.activityPriority)
     base.activityPriority = *override.activityPriority;
+  if (override.splitActivities)
+    base.splitActivities = *override.splitActivities;
   if (override.cycleActivities)
     base.cycleActivities = *override.cycleActivities;
   if (override.activityCycleSeconds)

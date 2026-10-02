@@ -1179,6 +1179,7 @@ namespace settings {
       auto priority = enumSelect(kIslandActivityPriority, island.activityPriority);
       priority.preferredWidth = 280;
       islandSetting("activities", "activity_priority", std::move(priority));
+      islandSetting("activities", "split_activities", ToggleSetting{island.splitActivities});
       islandSetting("activities", "cycle_activities", ToggleSetting{island.cycleActivities});
       islandSetting("activities", "activity_cycle_seconds", SliderSetting{island.activityCycleSeconds, 1, 30, 1, true});
       islandSetting("hover-timing", "hover_open_delay_ms", SliderSetting{island.hoverOpenDelayMs, 0, 2000, 10, true});

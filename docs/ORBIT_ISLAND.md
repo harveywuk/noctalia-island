@@ -57,6 +57,13 @@ OSDs continue updating their service state in the background. When no panel is
 open, notifications and OSDs take priority. Hover shows downloads, media, or the
 calendar; otherwise an active countdown precedes downloads, media, and the idle clock.
 
+When two activities run at once, the Island splits as on iPhone: the capsule shows
+the first in the activity order and a round bubble beside it shows the next (album
+art for media, a progress ring for a timer or download). Clicking the bubble swaps
+the two until the activity it brought forward ends. Hovering or an alert tucks the
+bubble back under the capsule. Set `split_activities = false` to hide the second
+activity instead, or to cycle activities with `cycle_activities = true`.
+
 ## Download indicators
 
 Applications publishing `com.canonical.Unity.LauncherEntry.Update` progress appear
