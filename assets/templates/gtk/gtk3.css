@@ -55,3 +55,290 @@
 @define-color theme_unfocused_base_color @window_bg_color;
 @define-color theme_unfocused_selected_bg_color @accent_bg_color;
 @define-color theme_unfocused_selected_fg_color @accent_fg_color;
+
+/*
+* macOS-proportioned controls, matching the shell's own (src/ui/style.h): 6px control radius,
+* 32px buttons and fields, white knobs lifted by a soft shadow instead of an outline, a 4px
+* slider track, 16px checkboxes and radios, and 24px menu rows with an accent highlight.
+* GTK 3 always draws a switch twice as wide as its knob, so switches come out 42x22.
+*/
+@define-color noctalia_button_bg {{ mode | replace: "light", "#ffffff" | replace: "dark", "alpha(#ffffff, 0.24)" }};
+@define-color noctalia_button_edge alpha({{colors.outline.default.hex}}, {{ mode | replace: "light", "0.32" | replace: "dark", "0" }});
+
+/* Push buttons, pop-up buttons and fields: 32px tall, 6px corners. */
+button,
+combobox button,
+entry,
+spinbutton {
+    min-height: 24px;
+    border-radius: 6px;
+}
+
+button {
+    padding: 4px 12px;
+    font-weight: normal;
+}
+
+button.image-button {
+    padding: 4px 6px;
+    min-width: 24px;
+}
+
+button.circular {
+    border-radius: 9999px;
+}
+
+/* A plain bezel: white with a hairline edge in light mode, a raised grey in dark mode. macOS
+   buttons don't light up on hover; pressing dims the bezel. */
+button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd),
+button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):hover {
+    border-color: transparent;
+    background-image: none;
+    background-color: @noctalia_button_bg;
+    box-shadow: inset 0 0 0 1px @noctalia_button_edge, 0 1px 1px alpha(black, 0.12);
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+}
+
+button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):active,
+button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):checked {
+    background-image: image(alpha(@window_fg_color, 0.14));
+}
+
+button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):disabled {
+    background-color: alpha(@window_fg_color, 0.08);
+    box-shadow: inset 0 0 0 1px @noctalia_button_edge;
+}
+
+/* Title bar, toolbar and spin buttons stay borderless, as in Finder's toolbar. The :not() chain
+   matches the bezel rule above so these win on specificity. */
+headerbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd),
+.titlebar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd),
+toolbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd),
+spinbutton button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd),
+searchbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd),
+notebook button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd),
+spinbutton button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):disabled {
+    border-color: transparent;
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+}
+
+headerbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):hover,
+.titlebar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):hover,
+toolbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):hover,
+spinbutton button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):hover,
+searchbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):hover,
+notebook button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):hover {
+    background-color: alpha(@window_fg_color, 0.08);
+}
+
+headerbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):active,
+headerbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):checked,
+.titlebar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):active,
+.titlebar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):checked,
+toolbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):active,
+toolbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):checked,
+spinbutton button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):active,
+searchbar button:not(.flat):not(.suggested-action):not(.destructive-action):not(.osd):active {
+    background-color: alpha(@window_fg_color, 0.14);
+    background-image: none;
+}
+
+button.suggested-action,
+button.destructive-action {
+    border-color: transparent;
+    background-image: none;
+    box-shadow: 0 1px 1px alpha(black, 0.12);
+    text-shadow: none;
+}
+
+button.suggested-action {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+button.destructive-action {
+    background-color: @destructive_bg_color;
+    color: @destructive_fg_color;
+}
+
+button.suggested-action:active,
+button.destructive-action:active {
+    background-image: image(alpha(black, 0.18));
+}
+
+/* Text fields: a hairline box, with a 2px accent focus ring outside it. */
+entry,
+spinbutton:not(.vertical) {
+    padding-left: 8px;
+    padding-right: 8px;
+    box-shadow: none;
+}
+
+entry:focus,
+spinbutton:focus {
+    border-color: @accent_bg_color;
+    box-shadow: 0 0 0 1px alpha(@accent_bg_color, 0.5);
+}
+
+/* Switches: a round 20px white knob with a 1px inset, no outline on the track. */
+switch {
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    background-image: none;
+    background-color: alpha(@window_fg_color, 0.16);
+    background-clip: padding-box;
+    box-shadow: none;
+    font-size: 0;
+    color: transparent;
+}
+
+switch:checked {
+    border-color: transparent;
+    background-color: @accent_bg_color;
+}
+
+switch slider,
+switch:hover slider,
+switch:checked slider {
+    min-width: 20px;
+    min-height: 20px;
+    margin: 0;
+    border: none;
+    border-radius: 9999px;
+    background-image: none;
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px alpha(black, 0.4), 0 0 0 1px alpha(black, 0.06);
+}
+
+switch:active slider {
+    background-color: #f0f0f2;
+}
+
+switch:disabled {
+    opacity: 0.5;
+}
+
+/* Sliders: a 4px track, accent fill and a 20px white knob. */
+scale trough {
+    min-height: 4px;
+    border: none;
+    border-radius: 2px;
+    background-image: none;
+    background-color: alpha(@window_fg_color, 0.16);
+}
+
+scale.vertical trough {
+    min-width: 4px;
+    min-height: 0;
+}
+
+scale highlight,
+scale trough highlight {
+    border: none;
+    border-radius: 2px;
+    background-image: none;
+    background-color: @accent_bg_color;
+}
+
+scale slider,
+scale slider:hover {
+    min-width: 20px;
+    min-height: 20px;
+    margin: -8px;
+    border: none;
+    border-radius: 9999px;
+    background-image: none;
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px alpha(black, 0.4), 0 0 0 1px alpha(black, 0.06);
+}
+
+scale slider:active {
+    background-color: #f0f0f2;
+}
+
+/* Checkboxes and radios: 16px, a hairline edge when off, the accent with a white glyph when on. */
+check,
+radio {
+    min-width: 14px;
+    min-height: 14px;
+    margin: 0 6px 0 0;
+    border: 1px solid alpha({{colors.outline.default.hex}}, 0.5);
+    background-image: none;
+    background-color: alpha(@window_fg_color, 0.08);
+    box-shadow: none;
+}
+
+check {
+    border-radius: 4px;
+}
+
+radio {
+    border-radius: 9999px;
+}
+
+check:active,
+radio:active {
+    background-color: alpha(@window_fg_color, 0.14);
+}
+
+check:checked,
+check:indeterminate,
+radio:checked,
+radio:indeterminate {
+    border-color: @accent_bg_color;
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Menus: a 5px inset around 24px rows; the hovered row takes the accent, as on macOS. */
+menu,
+.menu,
+.context-menu {
+    padding: 5px;
+    border-radius: 8px;
+}
+
+menu menuitem,
+.menu menuitem,
+.context-menu menuitem {
+    min-height: 24px;
+    padding: 0 10px;
+    border-radius: 5px;
+}
+
+menu menuitem:hover,
+.menu menuitem:hover,
+.context-menu menuitem:hover {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+popover {
+    border-radius: 12px;
+}
+
+popover.menu,
+popover.background.menu {
+    padding: 5px;
+}
+
+popover.menu modelbutton {
+    min-height: 24px;
+    padding: 0 10px;
+    border-radius: 5px;
+}
+
+popover.menu modelbutton:hover {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Cards and grouped lists use the 12px module radius. */
+.card,
+list.boxed-list {
+    border-radius: 12px;
+}

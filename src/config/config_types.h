@@ -3,6 +3,7 @@
 #include "config/color_spec.h"
 #include "config/config_limits.h"
 #include "config/widget_setting_value.h"
+#include "core/font_defaults.h"
 #include "core/input/key_chord.h"
 #include "system/sysmon_threshold_profile.h"
 #include "ui/style.h"
@@ -1060,44 +1061,48 @@ struct ShadowDirectionOffset {
 };
 
 constexpr ShadowDirectionOffset shadowDirectionOffset(ShadowDirection dir) noexcept {
+  // Cast distance in logical px; with the larger blur this reads as a lifted macOS surface.
+  constexpr std::int32_t kShadowOffset = 6;
   switch (dir) {
   case ShadowDirection::Center:
     return {0, 0};
   case ShadowDirection::Down:
-    return {0, 2};
+    return {0, kShadowOffset};
   case ShadowDirection::Up:
-    return {0, -2};
+    return {0, -kShadowOffset};
   case ShadowDirection::Left:
-    return {-2, 0};
+    return {-kShadowOffset, 0};
   case ShadowDirection::Right:
-    return {2, 0};
+    return {kShadowOffset, 0};
   case ShadowDirection::DownLeft:
-    return {-2, 2};
+    return {-kShadowOffset, kShadowOffset};
   case ShadowDirection::DownRight:
-    return {2, 2};
+    return {kShadowOffset, kShadowOffset};
   case ShadowDirection::UpLeft:
-    return {-2, -2};
+    return {-kShadowOffset, -kShadowOffset};
   case ShadowDirection::UpRight:
-    return {2, -2};
+    return {kShadowOffset, -kShadowOffset};
   }
-  return {0, 2};
+  return {0, kShadowOffset};
 }
 
 enum class PanelTransparencyMode : std::uint8_t {
   Solid = 0,
   Soft = 1,
   Glass = 2,
+  Auto = 3, // Glass when the compositor offers background blur, otherwise Solid
 };
 
 constexpr EnumOption<PanelTransparencyMode> kPanelTransparencyModes[] = {
+    {PanelTransparencyMode::Auto, "auto", "settings.options.shell.panel-transparency.auto"},
     {PanelTransparencyMode::Solid, "solid", "settings.options.shell.panel-transparency.solid"},
     {PanelTransparencyMode::Soft, "soft", "settings.options.shell.panel-transparency.soft"},
     {PanelTransparencyMode::Glass, "glass", "settings.options.shell.panel-transparency.glass"},
 };
 
+// Expects a resolved mode (see ui::material::resolveMode); Auto is treated as Solid.
 [[nodiscard]] float
 panelCardOpacityForTransparencyMode(PanelTransparencyMode mode, float panelBackgroundOpacity) noexcept;
-[[nodiscard]] float detachedPanelBackgroundOpacityForTransparencyMode(PanelTransparencyMode mode) noexcept;
 
 enum class PanelPlacement : std::uint8_t {
   Attached = 0,
@@ -1610,13 +1615,13 @@ struct ShellConfig {
 
   struct ShadowConfig {
     ShadowDirection direction = ShadowDirection::Down;
-    float alpha = 0.55F;
+    float alpha = 0.35F;
 
     bool operator==(const ShadowConfig&) const = default;
   };
 
   struct PanelConfig {
-    PanelTransparencyMode transparencyMode = PanelTransparencyMode::Solid;
+    PanelTransparencyMode transparencyMode = PanelTransparencyMode::Auto;
     bool borders = true;                   // outline on floating panel surfaces
     bool shadow = true;                    // cast the global [shell.shadow] from panel surfaces
     bool listItemBackground = false;       // filled rounded background behind launcher/clipboard list items
@@ -1757,7 +1762,7 @@ struct ShellConfig {
   bool popupBorders = true;
   bool popupShadows = true;
   bool cardBorders = true;
-  std::string fontFamily = "sans-serif";
+  std::string fontFamily = font_defaults::kFamily;
   std::string lang; // empty = auto-detect from $LC_ALL/$LC_MESSAGES/$LANG
   std::string timeFormat = "{:%H:%M}";
   std::string dateFormat = "%A, %x";
@@ -1777,7 +1782,7 @@ struct ShellConfig {
   std::string avatarPath;
   bool settingsShowAdvanced = true;
   bool settingsExpandAllGroups = false;
-  bool settingsWindowTranslucent = false;
+  bool settingsWindowTranslucent = true; // follows panel transparency_mode; solid without compositor blur
   bool showLocation = true;
   bool appIconColorize = false;
   std::optional<ColorSpec> appIconColor;

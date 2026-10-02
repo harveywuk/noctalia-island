@@ -45,6 +45,7 @@ private:
 
   RectNode* m_track = nullptr;
   RectNode* m_fill = nullptr;
+  RectNode* m_thumbShadow = nullptr;
   RectNode* m_thumb = nullptr;
   InputArea* m_inputArea = nullptr;
 

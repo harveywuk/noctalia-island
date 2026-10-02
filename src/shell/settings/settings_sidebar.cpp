@@ -5,6 +5,7 @@
 #include "shell/settings/settings_registry.h"
 #include "ui/builders.h"
 #include "ui/controls/roving_list_nav.h"
+#include "ui/material.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
@@ -69,7 +70,7 @@ namespace settings {
       return ui::button({
           .text = std::move(text),
           .glyph = std::string(glyph),
-          .fontSize = Style::fontSizeCaption * scale,
+          .fontSize = Style::fontSizeBody * scale,
           .glyphSize = kPrimaryNavGlyphSize * scale,
           .contentAlign = ButtonContentAlign::Start,
           .variant = selected ? ButtonVariant::TabActive : ButtonVariant::Tab,
@@ -93,8 +94,8 @@ namespace settings {
       return ui::button({
           .text = std::move(text),
           .glyph = std::string(glyph),
-          .fontSize = Style::fontSizeCaption * scale,
-          .glyphSize = Style::fontSizeCaption * scale,
+          .fontSize = Style::fontSizeBody * scale,
+          .glyphSize = Style::fontSizeBody * scale,
           .contentAlign = ButtonContentAlign::Start,
           .variant = selected ? ButtonVariant::TabActive : ButtonVariant::Tab,
           .minHeight = Style::controlHeightSm * scale,
@@ -112,7 +113,7 @@ namespace settings {
     std::unique_ptr<Button> makeCreateButton(std::string text, float scale, std::function<void()> onClick) {
       return ui::button({
           .text = std::move(text),
-          .fontSize = Style::fontSizeCaption * scale,
+          .fontSize = Style::fontSizeBody * scale,
           .variant = ButtonVariant::Default,
           .minHeight = Style::controlHeightSm * scale,
           .paddingV = Style::spaceXs * scale,
@@ -125,7 +126,7 @@ namespace settings {
     std::unique_ptr<Button> makeCreateCancelButton(float scale, std::function<void()> onClick) {
       return ui::button({
           .glyph = "close",
-          .glyphSize = Style::fontSizeCaption * scale,
+          .glyphSize = Style::fontSizeBody * scale,
           .variant = ButtonVariant::Ghost,
           .minWidth = Style::controlHeightSm * scale,
           .minHeight = Style::controlHeightSm * scale,
@@ -163,7 +164,8 @@ namespace settings {
         .scrollbarVisible = true,
         .viewportPaddingH = 0.0F,
         .viewportPaddingV = 0.0F,
-        .fill = ctx.config.shell.settingsWindowTranslucent ? clearColorSpec() : colorSpecFromRole(ColorRole::Surface),
+        .fill = ui::material::settingsWindowOpacity(ctx.config.shell) < 1.0F ? clearColorSpec()
+                                                                             : colorSpecFromRole(ColorRole::Surface),
         .radius = Style::scaledRadiusXl(scale),
         .minWidth = kSidebarWidth * scale,
         .fillHeight = true,
@@ -336,8 +338,8 @@ namespace settings {
           ui::button({
               .text = i18n::tr("settings.entities.monitor-override.new"),
               .glyph = "add",
-              .fontSize = Style::fontSizeCaption * scale,
-              .glyphSize = Style::fontSizeCaption * scale,
+              .fontSize = Style::fontSizeBody * scale,
+              .glyphSize = Style::fontSizeBody * scale,
               .contentAlign = ButtonContentAlign::Start,
               .variant = ButtonVariant::Ghost,
               .minHeight = Style::controlHeightSm * scale,
@@ -365,7 +367,7 @@ namespace settings {
         ui::button({
             .text = i18n::tr("settings.entities.bar.new"),
             .glyph = "add",
-            .fontSize = Style::fontSizeCaption * scale,
+            .fontSize = Style::fontSizeBody * scale,
             .glyphSize = kPrimaryNavGlyphSize * scale,
             .contentAlign = ButtonContentAlign::Start,
             .variant = ButtonVariant::Ghost,
@@ -396,7 +398,7 @@ namespace settings {
           .out = &inputPtr,
           .value = *creatingBarName,
           .placeholder = i18n::tr("settings.entities.bar.id-placeholder"),
-          .fontSize = Style::fontSizeCaption * scale,
+          .fontSize = Style::fontSizeBody * scale,
           .controlHeight = Style::controlHeightSm * scale,
           .horizontalPadding = Style::spaceXs * scale,
           .width = 120.0F * scale,

@@ -134,6 +134,10 @@ struct Island::Instance {
   float targetWidth = 160;
   float targetHeight = 64;
   AnimationManager::Id morph = 0;
+  // The morph spring's current speed in points per second, carried into the next morph when
+  // a size change interrupts it so the capsule redirects without a jolt.
+  float widthVelocity = 0;
+  float heightVelocity = 0;
   bool panelHosted = false;
   bool inside = false;
   bool hovered = false;
@@ -204,7 +208,9 @@ namespace {
   constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
   // View changes crossfade the capsule's content.
   constexpr float kViewFadeOutMs = 150.0F;
-  constexpr float kViewFadeInMs = 240.0F;
+  // The incoming content fades in over half the expand spring's response, by which time the
+  // capsule has covered about 95% of its travel.
+  constexpr float kViewFadeInMs = Motion::islandExpand.responseMs / 2;
   // Extra space below expanded content; see the layout tail in Island::prepare.
   constexpr float kExpandedBottomInset = 8.0F;
 
@@ -1772,7 +1778,6 @@ void Island::prepare(Instance& inst) {
         const float stripX = (w - 7.0F * cellWidth) / 2.0F;
         const float calendarTop = cfg.hoverShowClock ? cfg.height : 0;
         const float stripY = calendarTop + 10.0F;
-        sectionCard(calendarTop, h - 2);
         const auto now = std::time(nullptr);
         std::tm tm{};
         localtime_r(&now, &tm);
@@ -1781,35 +1786,28 @@ void Island::prepare(Instance& inst) {
         tm.tm_isdst = -1;
         std::mktime(&tm);
         for (int day = 0; day < 7; ++day) {
+          // Orbit's strip fans out from today: each step away is smaller and more transparent.
           const bool today = day == 3;
-          auto color = islandRole(today ? ColorRole::OnSurface : ColorRole::OnSurfaceVariant);
+          const int distance = std::abs(day - 3);
+          const float grade = today ? 1.0F : 1.0F - static_cast<float>(distance - 1) * 0.07F;
+          auto color = today ? colorSpecFromRole(ColorRole::Primary) : islandRole(ColorRole::OnSurfaceVariant);
+          color.alpha *= std::max(0.2F, 1.0F - static_cast<float>(distance) * 0.27F);
           char dayName[64]{};
           std::strftime(dayName, sizeof(dayName), "%a", &tm);
           const bool abbreviated = cfg.calendarLabels == IslandCalendarLabels::Abbreviated
               || (today && cfg.calendarLabels == IslandCalendarLabels::TodayAbbreviated);
           char* shortName = g_utf8_substring(dayName, 0, abbreviated ? 3 : 1);
           const float x = stripX + static_cast<float>(day) * cellWidth;
-          const float dateY = stripY + dayHeight + 2.0F;
-          if (today) {
-            auto selection = std::make_unique<Box>();
-            // Apple marks today in red.
-            selection->setFill(islandTint(kAppleRed, ColorRole::Primary));
-            selection->setSize(28 * s, 28 * s);
-            selection->setRadius(Style::scaledRadius(14, s));
-            selection->setPosition((x + (cellWidth - 28) / 2) * s, (dateY - 3) * s);
-            selection->setHitTestVisible(false);
-            canvas->addChild(std::move(selection));
-          }
           auto* weekday = label(
               shortName, x, stripY, cellWidth, daySize, color, true, 1,
-              today ? FontWeight::SemiBold : FontWeight::Normal
+              today ? FontWeight::Bold : FontWeight::SemiBold
           );
           weekday->setPosition(x * s, stripY * s + (dayHeight * s - weekday->height()) / 2.0F);
           g_free(shortName);
           label(
-              std::to_string(tm.tm_mday), x, dateY, cellWidth, dateSize,
-              today ? (gCupertino ? islandRole(ColorRole::OnSurface) : islandRole(ColorRole::OnPrimary)) : foreground,
-              true, 1, today ? FontWeight::SemiBold : FontWeight::Normal
+              std::to_string(tm.tm_mday), x, stripY + dayHeight + 2.0F, cellWidth,
+              std::round(dateSize * grade * (today ? 1.25F : 1.0F)), color, true, 1,
+              today ? FontWeight::Bold : FontWeight::Medium
           );
           ++tm.tm_mday;
           tm.tm_isdst = -1;
@@ -2492,11 +2490,25 @@ void Island::prepare(Instance& inst) {
     inst.targetWidth = w;
     inst.targetHeight = h;
     const bool growing = w > oldW || h > oldH;
+    const Motion::Spring spring = growing ? Motion::islandExpand : Motion::islandCollapse;
+    const float durationMs = Motion::settleMs(spring);
+    // Each axis springs over its own travel, starting at the speed the last morph left it with.
+    const auto travelVelocity = [](float velocity, float travel) {
+      return std::abs(travel) > 0.5F ? velocity / travel : 0.0F;
+    };
+    const float widthStart = travelVelocity(inst.widthVelocity, w - oldW);
+    const float heightStart = travelVelocity(inst.heightVelocity, h - oldH);
     inst.morph = inst.animations.animate(
-        0, 1, growing ? Motion::resizeMs : Motion::dismissMs, growing ? Motion::reveal : Motion::dismiss,
-        [this, &inst, oldW, oldH, w, h](float value) {
-          inst.width = oldW + (w - oldW) * value;
-          inst.height = oldH + (h - oldH) * value;
+        0, 1, durationMs, Easing::Linear,
+        [this, &inst, spring, durationMs, widthStart, heightStart, oldW, oldH, w, h](float value) {
+          const auto across = Motion::spring(spring, value * durationMs, widthStart);
+          const auto down = Motion::spring(spring, value * durationMs, heightStart);
+          // Land exactly on the target; the spring's remaining motion is under 0.1% by then.
+          const bool settled = value >= 1.0F;
+          inst.width = settled ? w : oldW + (w - oldW) * across.position;
+          inst.height = settled ? h : oldH + (h - oldH) * down.position;
+          inst.widthVelocity = settled ? 0 : (w - oldW) * across.velocity;
+          inst.heightVelocity = settled ? 0 : (h - oldH) * down.velocity;
           geometry(inst);
         }
     );
@@ -2931,6 +2943,7 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     inst.suppressHover = false;
     inst.width = inst.targetWidth = width / inst.scale;
     inst.height = inst.targetHeight = height / inst.scale;
+    inst.widthVelocity = inst.heightVelocity = 0;
     inst.signature.clear();
     inst.surface->setSceneRoot(inst.root.get());
     inst.surface->setAnimationManager(&inst.animations);
