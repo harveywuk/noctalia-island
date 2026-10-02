@@ -192,23 +192,12 @@ float panelCardOpacityForTransparencyMode(PanelTransparencyMode mode, float pane
   const float backgroundOpacity = std::clamp(panelBackgroundOpacity, 0.0F, 1.0F);
   switch (mode) {
   case PanelTransparencyMode::Solid:
+  case PanelTransparencyMode::Auto:
     return 1.0F;
   case PanelTransparencyMode::Soft:
-    return std::clamp(backgroundOpacity + 0.08F, 0.82F, 0.92F);
+    return std::clamp(backgroundOpacity + 0.06F, 0.82F, 0.94F);
   case PanelTransparencyMode::Glass:
-    return std::clamp(backgroundOpacity + 0.10F, 0.62F, 0.75F);
-  }
-  return 1.0F;
-}
-
-float detachedPanelBackgroundOpacityForTransparencyMode(PanelTransparencyMode mode) noexcept {
-  switch (mode) {
-  case PanelTransparencyMode::Solid:
-    return 1.0F;
-  case PanelTransparencyMode::Soft:
-    return 0.80F;
-  case PanelTransparencyMode::Glass:
-    return 0.55F;
+    return std::clamp(backgroundOpacity + 0.08F, 0.62F, 0.86F);
   }
   return 1.0F;
 }

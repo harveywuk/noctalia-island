@@ -21,7 +21,7 @@ polkit_agent          = false
 password_style        = "default"    # default | random
 settings_show_advanced = true        # show advanced settings by default in Settings
 settings_expand_all_groups = false   # expand every group on Settings pages by default
-# settings_window_translucent = false  # translucent settings window background
+# settings_window_translucent = true   # settings window uses the panel transparency material
 show_location         = true         # hide weather location text in shell UI when false
 # app_icon_colorize   = false        # recolor application icons across the shell
 # app_icon_color      = "on_surface" # ColorSpec role or #hex when colorize is enabled
@@ -60,7 +60,7 @@ direction = "down"                  # center, up, down, left, right, up_left, up
 alpha     = 0.35                    # multiplied by each component's background opacity
 
 [shell.panel]
-transparency_mode     = "solid"     # solid | soft | glass; controls floating-panel opacity and card translucency
+transparency_mode     = "auto"      # auto | solid | soft | glass; auto = glass with compositor blur, else solid
 borders               = true        # panel shell outline and in-panel section cards
 shadow                = true        # cast the global [shell.shadow] from panel surfaces
 launcher_placement       = "floating" # attached | floating

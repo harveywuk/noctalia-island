@@ -946,6 +946,7 @@ _noctalia_sources = files(
   'src/ui/builders.cpp',
   'src/ui/ui_tree_reconciler.cpp',
   'src/ui/app_icon_colorization.cpp',
+  'src/ui/material.cpp',
   'src/ui/palette.cpp',
   'src/ui/popup_chrome.cpp',
   'src/ui/scroll_into_view.cpp',
