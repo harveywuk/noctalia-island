@@ -3089,6 +3089,10 @@
           "label": "Zobrazit při změně skladby",
           "description": "Krátce zobrazit automaticky skrytý Island během náhledu skladby."
         },
+        "media_gradient": {
+          "label": "Přechod z obalu",
+          "description": "Vyplnit ostrov plynulým přechodem z obalu během přehrávání."
+        },
         "media_artwork_size": {
           "label": "Velikost obalu",
           "description": "Velikost obalu v rozbaleném ovládání médií. Větší obal zvýší kartu."

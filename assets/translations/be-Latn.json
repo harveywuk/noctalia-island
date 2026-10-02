@@ -497,6 +497,10 @@
           "label": "Pakazvać pry zmienie treka",
           "description": "Nienadoŭha pakazvać aŭtamatyčna schavany Island padčas prahladu treka."
         },
+        "media_gradient": {
+          "label": "Hradyjent vokladki",
+          "description": "Zapaŭniać vostraŭ plyŭnym hradyjentam z vokladki padčas prajhravannia."
+        },
         "media_artwork_size": {
           "label": "Pamier vokładki",
           "description": "Pamier vokładki ŭ razhornutym kiravanni miedyja. Bolšaja vokładka robić kartku vyšejšaj."

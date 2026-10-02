@@ -3463,6 +3463,10 @@
           "label": "Megjelenítés számváltáskor",
           "description": "Egy automatikusan elrejtett Island rövid megjelenítése szám-előnézet közben."
         },
+        "media_gradient": {
+          "label": "Borító színátmenet",
+          "description": "A sziget kitöltése a borítóból készült áramló színátmenettel lejátszás közben."
+        },
         "media_artwork_size": {
           "label": "Borító mérete",
           "description": "A borító mérete a kibontott médiavezérlőkben. A nagyobb borító magasabbá teszi a kártyát."

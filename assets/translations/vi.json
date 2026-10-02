@@ -3372,6 +3372,10 @@
           "label": "Hiện khi đổi bài",
           "description": "Hiện nhanh Island đang tự ẩn trong lúc xem trước bài hát."
         },
+        "media_gradient": {
+          "label": "Dải màu ảnh bìa",
+          "description": "Tô đảo bằng dải màu chuyển động từ ảnh bìa khi phát nhạc."
+        },
         "media_artwork_size": {
           "label": "Kích thước ảnh bìa",
           "description": "Kích thước ảnh bìa trong điều khiển phương tiện mở rộng. Ảnh bìa lớn hơn làm thẻ cao hơn."

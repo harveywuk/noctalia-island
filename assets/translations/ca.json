@@ -3572,6 +3572,10 @@
           "label": "Mostra en canviar de pista",
           "description": "Mostra breument una Island amagada automàticament durant la previsualització d'una pista."
         },
+        "media_gradient": {
+          "label": "Degradat de la caràtula",
+          "description": "Omple l'illa amb un degradat en moviment de la caràtula mentre es reprodueix contingut."
+        },
         "media_artwork_size": {
           "label": "Mida de la caràtula",
           "description": "Mida de la caràtula als controls multimèdia ampliats. Les caràtules més grans fan la targeta més alta."

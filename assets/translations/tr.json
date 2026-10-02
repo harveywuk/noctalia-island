@@ -3599,6 +3599,10 @@
           "label": "Parça değişince göster",
           "description": "Parça önizlemesi sırasında otomatik gizlenen Island'ı kısa süre gösterir."
         },
+        "media_gradient": {
+          "label": "Kapak gradyanı",
+          "description": "Medya çalarken adayı kapaktan oluşturulan akan bir gradyanla doldur."
+        },
         "media_artwork_size": {
           "label": "Kapak boyutu",
           "description": "Genişletilmiş medya denetimlerindeki kapak boyutu. Büyük kapaklar kartı uzatır."

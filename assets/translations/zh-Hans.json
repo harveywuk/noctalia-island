@@ -3843,6 +3843,10 @@
           "label": "切换曲目时显示",
           "description": "曲目预览期间短暂显示自动隐藏的 Island。"
         },
+        "media_gradient": {
+          "label": "封面渐变",
+          "description": "播放媒体时，用来自封面的流动渐变填充灵动岛。"
+        },
         "media_artwork_size": {
           "label": "封面大小",
           "description": "展开的媒体控件中的封面大小。封面越大,卡片越高。"

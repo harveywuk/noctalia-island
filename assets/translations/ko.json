@@ -3622,6 +3622,10 @@
           "label": "트랙 변경 시 표시",
           "description": "트랙 미리보기 중 자동으로 숨겨진 Island를 잠시 표시합니다."
         },
+        "media_gradient": {
+          "label": "앨범 아트 그라데이션",
+          "description": "미디어 재생 중 아일랜드를 앨범 아트에서 만든 흐르는 그라데이션으로 채웁니다."
+        },
         "media_artwork_size": {
           "label": "앨범 아트 크기",
           "description": "확장된 미디어 컨트롤의 커버 크기입니다. 커버가 클수록 카드가 높아집니다."

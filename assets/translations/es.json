@@ -3786,6 +3786,10 @@
           "label": "Mostrar al cambiar de pista",
           "description": "Muestra brevemente una Island oculta automáticamente durante la vista previa de una pista."
         },
+        "media_gradient": {
+          "label": "Degradado de la carátula",
+          "description": "Rellenar la isla con un degradado en movimiento de la carátula durante la reproducción."
+        },
         "media_artwork_size": {
           "label": "Tamaño de la carátula",
           "description": "Tamaño de la carátula en los controles multimedia expandidos. Las carátulas más grandes hacen la tarjeta más alta."

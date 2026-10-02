@@ -94,6 +94,12 @@ void AudioVisualizer::setCentered(bool centered) {
   setStyle(next);
 }
 
+void AudioVisualizer::setRestAsDots(bool restAsDots) {
+  auto next = style();
+  next.restAsDots = restAsDots;
+  setStyle(next);
+}
+
 void AudioVisualizer::syncPalette() {
   auto next = style();
   next.color1 = resolveColorSpec(m_color1);

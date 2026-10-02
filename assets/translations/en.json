@@ -3843,6 +3843,10 @@
           "label": "Reveal on track changes",
           "description": "Briefly reveal an auto-hidden Island during a track preview."
         },
+        "media_gradient": {
+          "label": "Artwork gradient",
+          "description": "Fill the island with a flowing gradient from the artwork while media plays."
+        },
         "media_artwork_size": {
           "label": "Artwork size",
           "description": "Cover size in the expanded media controls. Larger covers make the card taller."

@@ -2841,6 +2841,10 @@
           "label": "Tonen bij trackwissel",
           "description": "Een automatisch verborgen Island kort tonen tijdens een trackvoorbeeld."
         },
+        "media_gradient": {
+          "label": "Albumhoesverloop",
+          "description": "Het eiland tijdens het afspelen vullen met een vloeiend verloop uit de albumhoes."
+        },
         "media_artwork_size": {
           "label": "Hoesgrootte",
           "description": "Grootte van de hoes in de uitgeklapte mediabediening. Grotere hoezen maken de kaart hoger."

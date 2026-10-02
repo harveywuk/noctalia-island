@@ -3843,6 +3843,10 @@
           "label": "Mostrar ao mudar de faixa",
           "description": "Mostra rapidamente uma Island oculta automaticamente durante a prévia de uma faixa."
         },
+        "media_gradient": {
+          "label": "Degradê da capa",
+          "description": "Preencher a ilha com um degradê em movimento da capa durante a reprodução."
+        },
         "media_artwork_size": {
           "label": "Tamanho da capa",
           "description": "Tamanho da capa nos controles de mídia expandidos. Capas maiores deixam o cartão mais alto."

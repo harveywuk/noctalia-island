@@ -3843,6 +3843,10 @@
           "label": "Mostra al cambio di brano",
           "description": "Mostra per poco un'Island nascosta automaticamente durante l'anteprima di un brano."
         },
+        "media_gradient": {
+          "label": "Sfumatura della copertina",
+          "description": "Riempi l'isola con una sfumatura in movimento della copertina durante la riproduzione."
+        },
         "media_artwork_size": {
           "label": "Dimensione della copertina",
           "description": "Dimensione della copertina nei controlli multimediali espansi. Copertine più grandi rendono la scheda più alta."

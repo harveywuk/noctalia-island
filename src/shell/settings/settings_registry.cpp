@@ -1195,6 +1195,7 @@ namespace settings {
           "media", "bluetooth_preview_seconds", SliderSetting{island.bluetoothPreviewSeconds, 0, 30, 1, true}
       );
       islandSetting("media", "reveal_on_track_change", ToggleSetting{island.revealOnTrackChange});
+      islandSetting("media", "media_gradient", ToggleSetting{island.mediaGradient});
       const auto previewMonitor = [&](const std::string& selected) {
         SelectSetting control;
         control.options = {

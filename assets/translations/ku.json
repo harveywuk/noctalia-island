@@ -1495,6 +1495,10 @@
           "label": "Dema stran diguhere nîşan bide",
           "description": "Di dema pêşdîtina stranê de Islanda bixweber veşartî demeke kurt nîşan bide."
         },
+        "media_gradient": {
+          "label": "Gradyana wêneyê",
+          "description": "Dema medya dilîze, giravê bi gradyaneke diherike ji wêneyê tije bike."
+        },
         "media_artwork_size": {
           "label": "Mezinahiya bergê",
           "description": "Mezinahiya bergê di kontrolên medyayê yên firehkirî de. Bergên mezintir kartê bilindtir dikin."

@@ -3206,6 +3206,10 @@
           "label": "Mostrar ao cambiar de pista",
           "description": "Mostra brevemente unha Island agochada automaticamente durante a vista previa dunha pista."
         },
+        "media_gradient": {
+          "label": "Degradado da portada",
+          "description": "Encher a illa cun degradado en movemento da portada durante a reprodución."
+        },
         "media_artwork_size": {
           "label": "Tamaño da portada",
           "description": "Tamaño da portada nos controis multimedia ampliados. As portadas máis grandes fan a tarxeta máis alta."

@@ -1584,6 +1584,10 @@
           "label": "切換曲目時顯示",
           "description": "曲目預覽期間短暫顯示自動隱藏的 Island。"
         },
+        "media_gradient": {
+          "label": "封面漸層",
+          "description": "播放媒體時，以來自封面的流動漸層填滿動態島。"
+        },
         "media_artwork_size": {
           "label": "封面大小",
           "description": "展開的媒體控制項中的封面大小。封面越大,卡片越高。"

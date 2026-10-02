@@ -3600,6 +3600,10 @@
           "label": "Bei Titelwechsel einblenden",
           "description": "Eine automatisch ausgeblendete Island während einer Titelvorschau kurz einblenden."
         },
+        "media_gradient": {
+          "label": "Cover-Verlauf",
+          "description": "Die Insel während der Wiedergabe mit einem fließenden Verlauf aus dem Cover füllen."
+        },
         "media_artwork_size": {
           "label": "Cover-Größe",
           "description": "Größe des Covers in der aufgeklappten Mediensteuerung. Größere Cover machen die Karte höher."

@@ -1434,6 +1434,10 @@
           "label": "Visa vid spårbyte",
           "description": "Visa en automatiskt dold Island en kort stund under en spårförhandsvisning."
         },
+        "media_gradient": {
+          "label": "Omslagsgradient",
+          "description": "Fyll ön med en flytande gradient från omslaget medan media spelas."
+        },
         "media_artwork_size": {
           "label": "Omslagsstorlek",
           "description": "Omslagets storlek i de expanderade mediereglagen. Större omslag gör kortet högre."

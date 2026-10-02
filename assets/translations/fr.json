@@ -3394,6 +3394,10 @@
           "label": "Afficher aux changements de piste",
           "description": "Afficher brièvement une Island masquée automatiquement pendant un aperçu de piste."
         },
+        "media_gradient": {
+          "label": "Dégradé de la pochette",
+          "description": "Remplir l’île d’un dégradé animé tiré de la pochette pendant la lecture."
+        },
         "media_artwork_size": {
           "label": "Taille de la pochette",
           "description": "Taille de la pochette dans les commandes multimédias déployées. Une pochette plus grande agrandit la carte."

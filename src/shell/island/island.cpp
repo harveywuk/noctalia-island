@@ -67,6 +67,8 @@ namespace {
         : m_spectrum(spectrum), m_surface(surface) {
       setCentered(true);
       setMirrored(false);
+      // Quiet passages rest as dots, as Apple's Now Playing waveform does, not a dashed line.
+      setRestAsDots(true);
       setValues(std::vector<float>(5, 0.0F));
       if (m_spectrum) {
         m_listener = m_spectrum->addChangeListener(5, [this] { m_surface.requestFrameTick(); });
@@ -1303,6 +1305,7 @@ void Island::prepare(Instance& inst) {
   // Playing media floods the capsule with its artwork, as Apple Music's player does; OSDs shown
   // meanwhile stay on it rather than dropping to the black capsule.
   if (gCupertino
+      && cfg.mediaGradient
       && playing
       && !artPath.empty()
       && (view == island::View::Media || view == island::View::Activity || view == island::View::Osd)) {
@@ -1774,7 +1777,7 @@ void Island::prepare(Instance& inst) {
         player->lengthUs > 0 ? static_cast<float>(player->positionUs) / static_cast<float>(player->lengthUs) : 0;
     inst.seekProgress = progress(inst.seeking ? inst.seekFraction : fraction, 27, 106 + mediaOffset, w - 54);
     // Cupertino tints the track's progress with its artwork's most vivid colour.
-    if (gCupertino && m_flowArt == artPath && m_flow.hasArtwork()) {
+    if (gCupertino && cfg.mediaGradient && m_flowArt == artPath && m_flow.hasArtwork()) {
       const auto accent = m_flow.accent();
       inst.seekProgress->setFill(islandFixed(rgba(accent.r, accent.g, accent.b), 1.0F));
     }

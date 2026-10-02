@@ -2781,6 +2781,10 @@
           "label": "Pokaż przy zmianie utworu",
           "description": "Krótko pokaż automatycznie ukrytą Island podczas podglądu utworu."
         },
+        "media_gradient": {
+          "label": "Gradient z okładki",
+          "description": "Wypełniaj wyspę płynnym gradientem z okładki podczas odtwarzania."
+        },
         "media_artwork_size": {
           "label": "Rozmiar okładki",
           "description": "Rozmiar okładki w rozwiniętym sterowaniu multimediami. Większe okładki zwiększają wysokość karty."

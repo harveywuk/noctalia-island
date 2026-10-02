@@ -3583,6 +3583,10 @@
           "label": "Vis ved sporbyte",
           "description": "Vis ei automatisk gøymd Island ei kort stund under førehandsvising av eit spor."
         },
+        "media_gradient": {
+          "label": "Omslagsgradient",
+          "description": "Fyll øya med ein flytande gradient frå omslaget medan media spelar."
+        },
         "media_artwork_size": {
           "label": "Storleik på omslag",
           "description": "Storleiken på omslaget i dei utvida mediekontrollane. Større omslag gjer kortet høgare."

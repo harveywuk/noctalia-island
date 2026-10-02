@@ -15,7 +15,7 @@ out.mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     base = pathlib.Path(tmp); runtime = base/'runtime'; runtime.mkdir(mode=0o700)
     cfg = base/'config/noctalia'; cfg.mkdir(parents=True)
-    (cfg/'config.toml').write_text('[island]\nenabled=true\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n')
+    (cfg/'config.toml').write_text('[island]\nenabled=true\nmedia_gradient=false\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n')
     if any(mode in sys.argv for mode in ('--hover-widgets-only','--hover-layout-only','--hover-editor-only')):
         plugin_root=base/'hover-plugins'; plugin=plugin_root/'hover';plugin.mkdir(parents=True)
         (plugin/'plugin.toml').write_text('id="test/hover"\nname="Hover Widget Test"\nversion="1.0.0"\nplugin_api=3\n[[widget]]\nid="widget"\nentry="widget.luau"\n')
@@ -56,6 +56,10 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             (target/'island-test.luau').write_text((REPO/'tests/fixtures/island_timer_probe.luau').read_text().replace('__POMODORO__','true' if name=='pomodoro' else 'false'))
         with (cfg/'config.toml').open('a') as f:
             f.write('\n[plugins]\nauto_update="none"\nenabled=["noctalia/timer","thepunkoff/pomodoro"]\n[[plugins.source]]\nname="timer-test"\nkind="path"\nlocation='+json.dumps(str(plugin_root))+'\nenabled=true\n')
+            f.write('\n[osd.kinds]\nlock_keys=false\n')
+    if '[osd.kinds]' not in (cfg/'config.toml').read_text():
+        # Lock-key LEDs are global even on a private display; keep real typing out of the checks.
+        with (cfg/'config.toml').open('a') as f:
             f.write('\n[osd.kinds]\nlock_keys=false\n')
     (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
     config = base/'umbriel.toml'; config.write_text('[output."HEADLESS-1"]\nmode="1280x720"\n')
@@ -228,7 +232,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         if '--island-timing-only' in sys.argv:
             move(1100,600);msg('theme-mode-set','dark')
             original=(cfg/'config.toml').read_text()
-            managed='\n[bar]\norder=["timing","default"]\n[bar.timing]\npresentation="island"\nenabled=true\n[bar.timing.island]\ntrack_preview_seconds=8\npaused_media_seconds=7\nbluetooth_preview_seconds=10\n[bar.timing.monitor.HEADLESS-1.island]\ntrack_preview_seconds=2\npaused_media_seconds=1\nbluetooth_preview_seconds=2\nreveal_on_track_change=false\n'
+            managed='\n[bar]\norder=["timing","default"]\n[bar.timing]\npresentation="island"\nenabled=true\n[bar.timing.island]\nmedia_gradient=false\ntrack_preview_seconds=8\npaused_media_seconds=7\nbluetooth_preview_seconds=10\n[bar.timing.monitor.HEADLESS-1.island]\ntrack_preview_seconds=2\npaused_media_seconds=1\nbluetooth_preview_seconds=2\nreveal_on_track_change=false\n'
             def configure(text):
                 (cfg/'config.toml').write_text(original+text);msg('config-reload');time.sleep(.7)
             def shot(name):
@@ -341,7 +345,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             media('Stop');time.sleep(.6)
             assert width(shot('stopped'))<200,'Stopped player left a stale indicator'
             path=cfg/'config.toml'
-            path.write_text(path.read_text()+'\n[bar.media]\npresentation="island"\nenabled=true\nauto_hide=true\n')
+            path.write_text(path.read_text()+'\n[bar.media]\npresentation="island"\nenabled=true\nauto_hide=true\n[bar.media.island]\nmedia_gradient=false\n')
             msg('config-reload');time.sleep(.8)
             hidden=shot('auto-hidden').crop((300,5,980,95))
             media('Play');media('Previous');time.sleep(.7)

@@ -167,6 +167,9 @@ void AudioSpectrumProgram::draw(
         ? std::clamp(values[static_cast<std::size_t>(valueIndex)], 0.0F, 1.0F)
         : 0.0F;
     float crossPixels = std::max(1.0F, std::floor(rawValue * crossAxisLen * crossPixelScale + 0.5F));
+    if (style.restAsDots) {
+      crossPixels = std::max(crossPixels, std::round(barThickness * crossPixelScale));
+    }
     if (style.centered && crossPixels > 1.0F) {
       crossPixels = std::max(2.0F, std::round(crossPixels * 0.5F) * 2.0F);
     }
