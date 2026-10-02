@@ -18,6 +18,7 @@ class Button;
 class ContextMenuPopup;
 class HttpClient;
 class Image;
+class InputArea;
 class Label;
 class MprisService;
 class RenderContext;
@@ -49,6 +50,8 @@ private:
   void applyOverlay(bool overlay);
   // Runs the flow animation while the tab is shown with artwork and motion is enabled.
   void syncFlowTimer();
+  void footerHoverChanged(bool entered);
+  void setControlsRevealed(bool revealed, bool animate);
   void clearArt(Renderer& renderer);
   void commitPendingSeek(double valueSeconds);
 
@@ -72,6 +75,14 @@ private:
   // The flowing artwork gradient, filling the Now Playing card behind its content.
   Image* m_backdrop = nullptr;
   Label* m_nowLabel = nullptr;
+  // Track text under the progress bar, with the transport controls overlaid and revealed on hover.
+  Flex* m_footer = nullptr;
+  InputArea* m_footerHover = nullptr;
+  Flex* m_trackText = nullptr;
+  Flex* m_controlsRow = nullptr;
+  Timer m_footerHideTimer;
+  int m_footerHoverCount = 0;
+  bool m_controlsRevealed = false;
   visuals::ArtworkFlow m_flow;
   std::vector<std::uint8_t> m_flowFrame;
   TextureHandle m_flowTexture{};

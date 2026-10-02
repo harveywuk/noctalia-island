@@ -75,6 +75,8 @@ public:
   void setOnPointerMotion(std::function<void(float localX, float localY)> callback);
   void setOnEnter(std::function<void()> callback);
   void setOnLeave(std::function<void()> callback);
+  // Called with true when keyboard focus arrives and false when it leaves.
+  void setOnFocusChange(std::function<void(bool)> callback);
   void setHoverSuppressed(bool suppressed);
   void setHoveredVisual(bool hovered);
   void setPressedVisual(bool pressed);
@@ -140,6 +142,7 @@ private:
   std::function<void(float, float)> m_onPointerMotion;
   std::function<void()> m_onEnter;
   std::function<void()> m_onLeave;
+  std::function<void(bool)> m_onFocusChange;
   ButtonVariant m_variant = ButtonVariant::Default;
   ButtonPalette m_palette;
   std::optional<ButtonPalette> m_customPalette;

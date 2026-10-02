@@ -15,6 +15,7 @@
 #include "shell/control_center/tab.h"
 #include "shell/panel/panel_manager.h"
 #include "ui/builders.h"
+#include "ui/motion.h"
 #include "ui/controls/context_menu.h"
 #include "ui/controls/context_menu_popup.h"
 
@@ -273,9 +274,9 @@ std::unique_ptr<Flex> MediaTab::create() {
   );
   mediaStack->addChild(std::move(artworkRow));
 
-  mediaStack->addChild(
-      ui::column(
-          {.align = FlexAlign::Stretch, .gap = Style::spaceSm * scale},
+  // Track text sits under the progress bar; hovering it reveals the transport controls in its place.
+  auto trackText = ui::column(
+          {.out = &m_trackText, .align = FlexAlign::Stretch, .gap = Style::spaceSm * scale},
           ui::label({
               .out = &m_trackTitle,
               .text = i18n::tr("control-center.media.nothing-playing"),
@@ -299,8 +300,7 @@ std::unique_ptr<Flex> MediaTab::create() {
               .textAlign = TextAlign::Center,
               .visible = false,
           })
-      )
-  );
+      );
 
   mediaStack->addChild(
       ui::slider({
@@ -463,7 +463,34 @@ std::unique_ptr<Flex> MediaTab::create() {
       .fillWidth = true,
   });
   controlsRow->addChild(std::move(controls));
-  mediaStack->addChild(std::move(controlsRow));
+
+  auto footer = ui::column({
+      .out = &m_footer,
+      .align = FlexAlign::Stretch,
+      .gap = 0.0F,
+      .minHeight = kMediaPlayPauseHeight * scale,
+  });
+  auto hoverArea = ui::inputArea({.out = &m_footerHover});
+  hoverArea->setParticipatesInLayout(false);
+  hoverArea->setOnEnter([this](const InputArea::PointerData&) { footerHoverChanged(true); });
+  hoverArea->setOnLeave([this]() { footerHoverChanged(false); });
+  footer->addChild(std::move(hoverArea));
+  // Hit testing returns the topmost node and looks for input areas among its ancestors, so the
+  // text must let the pointer through to the hover area beneath it.
+  trackText->setHitTestVisible(false);
+  footer->addChild(std::move(trackText));
+  controlsRow->setParticipatesInLayout(false);
+  m_controlsRow = controlsRow.get();
+  footer->addChild(std::move(controlsRow));
+  mediaStack->addChild(std::move(footer));
+  for (auto* button : {m_repeatButton, m_prevButton, m_playPauseButton, m_nextButton, m_shuffleButton}) {
+    if (button == nullptr)
+      continue;
+    button->setOnEnter([this]() { footerHoverChanged(true); });
+    button->setOnLeave([this]() { footerHoverChanged(false); });
+    button->setOnFocusChange([this](bool focused) { footerHoverChanged(focused); });
+  }
+  setControlsRevealed(false, false);
 
   nowCard->addChild(std::move(mediaStack));
   mediaColumn->addChild(std::move(nowCard));
@@ -580,6 +607,15 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
     m_backdrop->setRadius(Style::scaledRadiusXl(scale));
   }
 
+  if (m_footer != nullptr && m_controlsRow != nullptr && m_footerHover != nullptr) {
+    // The controls overlay the track text, centred in the footer; the hover area spans it.
+    m_footerHover->setPosition(0, 0);
+    m_footerHover->setSize(m_footer->width(), m_footer->height());
+    m_controlsRow->setSize(m_footer->width(), kMediaPlayPauseHeight * scale);
+    m_controlsRow->layout(renderer);
+    m_controlsRow->setPosition(0, std::max(0.0F, (m_footer->height() - m_controlsRow->height()) / 2));
+  }
+
   // The stack is capped at a comfortable width; centre it when the card is wider.
   m_mediaStack->setPosition(
       m_nowCard->paddingLeft() + std::max(0.0F, (cardInnerWidth - mediaWidth) / 2), m_mediaStack->y()
@@ -661,6 +697,13 @@ void MediaTab::onClose() {
   m_mediaColumn = nullptr;
   m_backdrop = nullptr;
   m_artwork = nullptr;
+  m_footerHideTimer.stop();
+  m_footerHoverCount = 0;
+  m_controlsRevealed = false;
+  m_footer = nullptr;
+  m_footerHover = nullptr;
+  m_trackText = nullptr;
+  m_controlsRow = nullptr;
   m_nowLabel = nullptr;
   if (m_flowTexture.id != 0
       && !PanelManager::instance().withRenderer([this](Renderer& renderer) {
@@ -722,6 +765,44 @@ void MediaTab::clearArt(Renderer& renderer) {
     m_backdrop->setVisible(false);
   }
   applyOverlay(false);
+}
+
+void MediaTab::footerHoverChanged(bool entered) {
+  // Moving from the text onto a revealed button leaves one and enters the other; count both and
+  // hide only once neither is hovered or focused, after a moment.
+  m_footerHoverCount = std::max(0, m_footerHoverCount + (entered ? 1 : -1));
+  if (m_footerHoverCount > 0) {
+    m_footerHideTimer.stop();
+    setControlsRevealed(true, true);
+    return;
+  }
+  m_footerHideTimer.start(std::chrono::milliseconds(160), [this]() {
+    if (m_footerHoverCount == 0)
+      setControlsRevealed(false, true);
+  });
+}
+
+void MediaTab::setControlsRevealed(bool revealed, bool animate) {
+  if (m_trackText == nullptr || m_controlsRow == nullptr) {
+    return;
+  }
+  m_controlsRevealed = revealed;
+  m_controlsRow->setHitTestVisible(revealed);
+  auto* animations = m_footer != nullptr ? m_footer->animationManager() : nullptr;
+  if (animations != nullptr) {
+    animations->cancelForOwner(m_footer);
+  }
+  const float from = m_controlsRow->opacity();
+  const float to = revealed ? 1.0F : 0.0F;
+  const auto apply = [this](float t) {
+    m_controlsRow->setOpacity(t);
+    m_trackText->setOpacity(1.0F - t);
+  };
+  if (!animate || animations == nullptr || !MotionService::instance().enabled()) {
+    apply(to);
+    return;
+  }
+  animations->animate(from, to, Motion::revealMs, Motion::reveal, apply, {}, m_footer);
 }
 
 void MediaTab::uploadFlow(Renderer& renderer) {

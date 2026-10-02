@@ -242,8 +242,18 @@ Button::Button() {
     }
   });
   area->setFocusable(true);
-  area->setOnFocusGain([this]() { applyVisualState(); });
-  area->setOnFocusLoss([this]() { applyVisualState(); });
+  area->setOnFocusGain([this]() {
+    applyVisualState();
+    if (m_onFocusChange) {
+      m_onFocusChange(true);
+    }
+  });
+  area->setOnFocusLoss([this]() {
+    applyVisualState();
+    if (m_onFocusChange) {
+      m_onFocusChange(false);
+    }
+  });
   area->setOnKeyDown([this](const InputArea::KeyData& key) {
     if (!key.pressed || !m_enabled || !m_onClick) {
       return;
@@ -378,6 +388,8 @@ void Button::setOnPointerMotion(std::function<void(float, float)> callback) {
   m_onPointerMotion = std::move(callback);
   refreshInputAreaEnabled();
 }
+
+void Button::setOnFocusChange(std::function<void(bool)> callback) { m_onFocusChange = std::move(callback); }
 
 void Button::setOnEnter(std::function<void()> callback) {
   m_onEnter = std::move(callback);
