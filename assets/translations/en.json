@@ -808,6 +808,18 @@
       "no-results": "No results found",
       "type-to-search": "Type to search…"
     },
+    "footer": {
+      "actions": "Actions",
+      "open": "Open",
+      "open-application": "Open Application"
+    },
+    "kinds": {
+      "application": "Application",
+      "command": "Command",
+      "file": "File",
+      "folder": "Folder",
+      "window": "Window"
+    },
     "origins": {
       "appimage": "AppImage",
       "flatpak": "Flatpak",
@@ -825,6 +837,9 @@
       },
       "emoji": {
         "title": "Emoji"
+      },
+      "files": {
+        "title": "Files"
       },
       "panel": {
         "builtin": {
@@ -852,7 +867,15 @@
         "title": "Windows"
       }
     },
-    "search-placeholder": "Search applications…"
+    "search-placeholder": "Search for apps, files and commands…",
+    "sections": {
+      "applications": "Applications",
+      "commands": "Commands",
+      "favourites": "Favourites",
+      "files": "Files",
+      "results": "Results",
+      "windows": "Windows"
+    }
   },
   "location": {
     "errors": {
@@ -2807,6 +2830,10 @@
           "description": "Also show emoji results in unprefixed search",
           "label": "Emoji in Global Search"
         },
+        "launcher-global-files": {
+          "description": "Also show files and folders from your home folder in unprefixed search",
+          "label": "Files in Global Search"
+        },
         "launcher-global-panels": {
           "description": "Also show panels in unprefixed search",
           "label": "Panels in Global Search"
@@ -2842,6 +2869,10 @@
         "launcher-prefix-emoji": {
           "description": "Trigger prefix for emoji search",
           "label": "Emoji Prefix"
+        },
+        "launcher-prefix-files": {
+          "description": "Trigger prefix for file search",
+          "label": "Files Prefix"
         },
         "launcher-prefix-panels": {
           "description": "Trigger prefix for panel search",

@@ -9,8 +9,9 @@
 
 namespace launcher {
   inline constexpr std::array kBuiltinProviders = {std::string_view("calculator"), std::string_view("emoji"),
-                                                   std::string_view("panels"),     std::string_view("session"),
-                                                   std::string_view("wallpaper"),  std::string_view("windows")};
+                                                   std::string_view("files"),      std::string_view("panels"),
+                                                   std::string_view("session"),    std::string_view("wallpaper"),
+                                                   std::string_view("windows")};
 } // namespace launcher
 
 struct LauncherCategory {
@@ -40,6 +41,11 @@ struct LauncherResult {
   std::string presentation;
   std::optional<std::string> query;
   double score = 0.0;
+  // Set by LauncherPanel on the first result of each list section (Results, Files, Favourites, …);
+  // the row draws it as a header above itself.
+  std::string section;
+  // Set by LauncherPanel: a short kind shown at the trailing edge (Application, File, …).
+  std::string kind;
   int recentlyUsedIndex = 0; // Higher is more recent. <=0 means no record or too old.
   bool pinned = false;       // Set by LauncherPanel for launcher-owned pinned applications.
 };

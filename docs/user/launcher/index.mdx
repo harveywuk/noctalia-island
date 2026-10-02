@@ -16,6 +16,12 @@ As you type, Noctalia queries all active **Launcher Providers**. Providers can e
 
 Type `/` by itself to show a lightweight overview of available prefixed providers. Activating one inserts its prefix into the launcher input.
 
+### Sections and the action bar
+
+Like Raycast, a global search lists everything it found under **Results**, ranked by relevance, with matching files after them under **Files**. With nothing typed, pinned apps appear under **Favourites** above the other applications. Prefixed searches keep a single list.
+
+The bar along the bottom names the selected result's kind and its keys: **Return** opens it, and for applications **Shift + Return** opens the actions menu.
+
 ### Usage-based boosting
 
 The launcher tracks how often you activate specific results (applications and wallpapers). Frequently used items receive a score boost, surfacing them at the top of the results list even with partial queries.
@@ -53,6 +59,15 @@ When `shell.launcher.app_grid` is enabled and every visible result is an applica
 - **Scoring**: Uses fuzzy matching with weights. Activation count boosts the score.
 - **Pinned apps**: Drag a pinned app onto another pinned app to reorder them. Pin markers appear in both the list and app-grid views.
 - **Terminal apps**: Entries with `Terminal=true` run inside a terminal. Prefer `export TERMINAL=wezterm` (or another emulator on `PATH`); do not put `-e` in `$TERMINAL`. See [Shell: launching apps](/noctalia/configuration/shell/#shell-settings) for discovery order and how this differs from `launch_apps_custom_command`.
+
+### Files
+
+Find files and folders in your home folder by name.
+
+- **Prefix**: `/file ` (also included in global search; turn it off with `[shell.launcher.providers.files] global = false`)
+- **Source**: Indexes your home folder on a background thread the first time you search, and again when the index is more than five minutes old. Hidden files and folders, dependency and build trees (`node_modules`, `target`, `build`, …) and anything more than six folders deep are skipped.
+- **Search**: Matches the query as part of a file or folder name; names that start with it rank first. Global search shows the best six, `/file` up to fifty.
+- **Functionality**: Activating a result opens it with `xdg-open`.
 
 ### Calculator
 
@@ -234,7 +249,7 @@ So `provider_prefix = "/"` with a trigger word of `emo` gives `/emo`. Changing `
 
 Each provider type gets its trigger word from a different place:
 
-- **Built-in providers** (Calculator, Emoji, Panels, Session, Wallpaper, Windows): `[shell.launcher.providers.<name>]`.
+- **Built-in providers** (Calculator, Emoji, Files, Panels, Session, Wallpaper, Windows): `[shell.launcher.providers.<name>]`.
 - **Dmenu providers**: the `prefix`/`global` keys on the entry's `[shell.launcher.dmenu.entry.<id>]` table.
 - **Plugin providers**: the `[[launcher_provider]]` manifest `prefix`, optionally overridden per-user via `[shell.launcher.providers."<pluginId>:<entry>"]`.
 

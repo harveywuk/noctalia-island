@@ -20,6 +20,7 @@ class LauncherResultAdapter;
 class LauncherAppGridAdapter;
 class Renderer;
 class Segmented;
+class Separator;
 class ScrollView;
 class VirtualGridView;
 class ConfigService;
@@ -84,6 +85,11 @@ private:
   void activateSelected();
   bool handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers);
   void applyEmptyState();
+  [[nodiscard]] std::unique_ptr<Node> buildFooter(float scale);
+  void syncFooter();
+  void assignSections();
+  [[nodiscard]] std::string sectionTitleFor(std::string_view providerId) const;
+  [[nodiscard]] std::string kindFor(const LauncherResult& result) const;
   void bindDetailResult();
   [[nodiscard]] bool shouldUseDetailPresentation() const;
   [[nodiscard]] bool startsWithLauncherPrefix(std::string_view text) const;
@@ -120,6 +126,13 @@ private:
   Label* m_detailSubtitle = nullptr;
   Label* m_detailBody = nullptr;
   Label* m_emptyLabel = nullptr;
+  Flex* m_footer = nullptr;
+  Label* m_footerKind = nullptr;
+  Label* m_footerPrimary = nullptr;
+  Flex* m_footerActions = nullptr;
+  Separator* m_footerActionsSeparator = nullptr;
+  // True when the results mix sources (no prefix or scope), so they are grouped into sections.
+  bool m_mixedResults = false;
   bool m_anyProviderLoading = false;
   std::unique_ptr<LauncherResultAdapter> m_listAdapter;
   std::unique_ptr<LauncherAppGridAdapter> m_gridAdapter;

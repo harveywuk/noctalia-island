@@ -41,6 +41,8 @@ namespace {
   constexpr std::size_t kGlobalOptInMinChars = 2;
   constexpr float kIconSizeDefault = 40.0F;
   constexpr float kIconSizeCompact = 28.0F;
+  constexpr float kListIconSizeDefault = 22.0F;
+  constexpr float kListIconSizeCompact = 22.0F;
   constexpr std::size_t kAppGridColumns = 5;
   constexpr std::string_view kApplicationsProviderId = "Applications";
   constexpr double kUsageScorePerCount = 0.1;
@@ -122,36 +124,43 @@ namespace {
     return (style.compact ? kIconSizeCompact : kIconSizeDefault) * style.scale;
   }
 
+  // Raycast rows are a single line with a small icon.
+  [[nodiscard]] float launcherListIconSize(const LauncherListStyle& style) {
+    return (style.compact ? kListIconSizeCompact : kListIconSizeDefault) * style.scale;
+  }
+
+  [[nodiscard]] float launcherListPaddingY(const LauncherListStyle& style) {
+    return (style.compact ? Style::spaceXs * 1.5F : Style::spaceSm) * style.scale;
+  }
+
+  // Room above the first row of a section for its caption.
+  [[nodiscard]] float launcherSectionHeaderHeight(const LauncherListStyle& style) {
+    return std::ceil((Style::fontSizeCaption * 1.35F + Style::spaceSm + Style::spaceXs) * style.scale);
+  }
+
   [[nodiscard]] float stableLabelHeight(const TextMetrics& metrics) { return std::round(metrics.bottom - metrics.top); }
 
   [[nodiscard]] float launcherTextStackHeight(Renderer& renderer, const LauncherListStyle& style) {
     const float bodySize = Style::fontSizeBody * style.scale;
-    float textHeight = stableLabelHeight(renderer.measureFont(bodySize, FontWeight::SemiBold));
-    if (!style.compact) {
-      const float captionSize = Style::fontSizeCaption * style.scale;
-      textHeight += stableLabelHeight(renderer.measureFont(captionSize, FontWeight::Normal));
-    }
-    return textHeight;
+    return stableLabelHeight(renderer.measureFont(bodySize, FontWeight::Medium));
   }
 
   [[nodiscard]] float launcherRowHeight(Renderer& renderer, const LauncherListStyle& style) {
-    const float paddingY = (style.compact ? Style::spaceXs * 0.5F : Style::spaceXs) * style.scale;
+    const float paddingY = launcherListPaddingY(style);
     const float textHeight = launcherTextStackHeight(renderer, style);
     if (!style.showIcons) {
       return std::ceil(textHeight + paddingY * 2.0F);
     }
-    return std::ceil(std::max(launcherIconSize(style), textHeight) + paddingY * 2.0F);
+    return std::ceil(std::max(launcherListIconSize(style), textHeight) + paddingY * 2.0F);
   }
 
   [[nodiscard]] float launcherRowHeightEstimate(const LauncherListStyle& style) {
-    const float paddingY = (style.compact ? Style::spaceXs * 0.5F : Style::spaceXs) * style.scale;
-    const float bodySize = Style::fontSizeBody * style.scale;
-    const float captionSize = Style::fontSizeCaption * style.scale;
-    const float textHeight = bodySize + (style.compact ? 0.0F : captionSize);
+    const float paddingY = launcherListPaddingY(style);
+    const float textHeight = Style::fontSizeBody * style.scale * 1.25F;
     if (!style.showIcons) {
       return std::ceil(textHeight + paddingY * 2.0F);
     }
-    return std::ceil(std::max(launcherIconSize(style), textHeight) + paddingY * 2.0F);
+    return std::ceil(std::max(launcherListIconSize(style), textHeight) + paddingY * 2.0F);
   }
 
   [[nodiscard]] float launcherAppGridLabelHeight(Renderer& renderer, const LauncherListStyle& style, float wrapWidth) {
@@ -199,9 +208,19 @@ namespace {
   public:
     LauncherResultRow(LauncherListStyle style, AsyncTextureCache* asyncTextures)
         : m_style(style), m_asyncTextures(asyncTextures) {
-      const float iconSize = launcherIconSize(m_style);
+      const float iconSize = launcherListIconSize(m_style);
       const float gap = (m_style.compact ? Style::spaceSm : Style::spaceMd) * m_style.scale;
-      const float paddingV = (m_style.compact ? Style::spaceXs * 0.5F : Style::spaceXs) * m_style.scale;
+      const float paddingV = launcherListPaddingY(m_style);
+      addChild(
+          ui::label({
+              .out = &m_sectionLabel,
+              .fontSize = Style::fontSizeCaption * m_style.scale,
+              .fontWeight = FontWeight::SemiBold,
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .maxLines = 1,
+              .visible = false,
+          })
+      );
       auto row = ui::row(
           {.out = &m_row,
            .align = FlexAlign::Center,
@@ -252,18 +271,19 @@ namespace {
         m_glyph->setVisible(false);
       });
 
+      // One line, Raycast style: the title, then its subtitle in a quieter colour.
       m_row->addChild(
-          ui::column(
+          ui::row(
               {
                   .out = &m_textCol,
-                  .align = FlexAlign::Start,
-                  .gap = 0.0F,
+                  .align = FlexAlign::Center,
+                  .gap = Style::spaceSm * m_style.scale,
                   .flexGrow = 1.0F,
               },
               ui::label({
                   .out = &m_title,
                   .fontSize = Style::fontSizeBody * m_style.scale,
-                  .fontWeight = FontWeight::SemiBold,
+                  .fontWeight = FontWeight::Medium,
                   .color = colorSpecFromRole(ColorRole::OnSurface),
                   .maxLines = 1,
                   .baselineMode = LabelBaselineMode::TextFixedHeight,
@@ -297,6 +317,16 @@ namespace {
               .visible = false,
           })
       );
+
+      m_row->addChild(
+          ui::label({
+              .out = &m_kindLabel,
+              .fontSize = Style::fontSizeCaption * m_style.scale,
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .maxLines = 1,
+              .visible = false,
+          })
+      );
     }
 
     void setListStyle(LauncherListStyle style) { m_style = style; }
@@ -308,13 +338,30 @@ namespace {
       m_hovered = hovered;
       m_iconPath = result.iconPath;
       m_fallbackGlyph = result.glyphName.empty() ? "app-window" : result.glyphName;
-      const float iconSize = launcherIconSize(m_style);
+      const float iconSize = launcherListIconSize(m_style);
       m_iconTargetSize = static_cast<int>(std::round(iconSize));
       m_badgeVisible = !result.badge.empty();
-      m_rowHeight = height;
+
+      // The grid sizes the tile to include the section header above the row.
+      const bool hasSection = !result.section.empty();
+      const float leading = hasSection ? std::min(height, launcherSectionHeaderHeight(m_style)) : 0.0F;
+      const float rowHeight = height - leading;
+      m_rowHeight = rowHeight;
 
       setSize(width, height);
-      m_row->setFrameSize(width, height);
+      m_row->setPosition(0.0F, leading);
+      m_row->setFrameSize(width, rowHeight);
+
+      m_sectionLabel->setVisible(hasSection);
+      if (hasSection) {
+        const float captionSize = Style::fontSizeCaption * m_style.scale;
+        const float labelHeight = stableLabelHeight(renderer.measureFont(captionSize, FontWeight::SemiBold));
+        m_sectionLabel->setText(result.section);
+        m_sectionLabel->setMaxWidth(std::max(0.0F, width - Style::spaceSm * m_style.scale * 2.0F));
+        m_sectionLabel->setPosition(
+            Style::spaceSm * m_style.scale, std::round(leading - Style::spaceXs * m_style.scale - labelHeight)
+        );
+      }
 
       m_badgeLabel->setVisible(false);
       m_badgeLabel->setParticipatesInLayout(false);
@@ -363,18 +410,38 @@ namespace {
       m_originGlyph->setVisible(hasOrigin);
       m_originGlyph->setParticipatesInLayout(hasOrigin);
       const float originWidth = hasOrigin ? Style::fontSizeBody * m_style.scale + gap : 0.0F;
-      const float textWidth = std::max(0.0F, width - leadingWidth - pinnedWidth - originWidth - horizontalPad);
-      m_title->setText(singleLinePreview(result.title));
+      const float captionSize = Style::fontSizeCaption * m_style.scale;
+      const bool hasKind = !result.kind.empty();
+      float kindWidth = 0.0F;
+      if (hasKind) {
+        m_kindLabel->setText(result.kind);
+        kindWidth = std::ceil(renderer.measureText(result.kind, captionSize).width) + gap;
+      }
+      m_kindLabel->setVisible(hasKind);
+      m_kindLabel->setParticipatesInLayout(hasKind);
+      const float textWidth =
+          std::max(0.0F, width - leadingWidth - pinnedWidth - originWidth - kindWidth - horizontalPad);
+      const std::string title = singleLinePreview(result.title);
+      const float titleWidth = std::min(
+          textWidth,
+          std::ceil(renderer.measureText(title, Style::fontSizeBody * m_style.scale, FontWeight::Medium).width)
+      );
+      m_title->setText(title);
       m_title->setMaxWidth(textWidth);
 
-      const bool showSubtitle = !m_style.compact && !result.subtitle.empty();
+      // The subtitle takes what the title leaves and drops out when that is too little to read.
+      const float subtitleWidth = textWidth - titleWidth - Style::spaceSm * m_style.scale;
+      const bool showSubtitle =
+          !m_style.compact && !result.subtitle.empty() && subtitleWidth >= Style::controlHeightLg * m_style.scale;
       if (!showSubtitle) {
         m_subtitle->setVisible(false);
+        m_subtitle->setParticipatesInLayout(false);
         m_subtitle->setText("");
       } else {
         m_subtitle->setVisible(true);
+        m_subtitle->setParticipatesInLayout(true);
         m_subtitle->setText(singleLinePreview(result.subtitle));
-        m_subtitle->setMaxWidth(textWidth);
+        m_subtitle->setMaxWidth(subtitleWidth);
       }
 
       applyVisualState();
@@ -396,7 +463,7 @@ namespace {
         ready = m_image->setSourceFile(renderer, m_iconPath, m_iconTargetSize, true);
       }
 
-      m_image->setSize(launcherIconSize(m_style), launcherIconSize(m_style));
+      m_image->setSize(launcherListIconSize(m_style), launcherListIconSize(m_style));
       m_image->setVisible(ready);
       m_glyph->setGlyph(m_fallbackGlyph);
       m_glyph->setVisible(!ready);
@@ -413,8 +480,9 @@ namespace {
 
   private:
     void applyVisualState() {
+      // Raycast marks the selection with a quiet grey fill and keeps the text colours.
       if (m_selected) {
-        m_row->setFill(colorSpecFromRole(ColorRole::Primary));
+        m_row->setFill(colorSpecFromRole(ColorRole::OnSurface, Style::pressedFillAlpha));
       } else if (m_hovered) {
         m_row->setFill(colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha));
       } else {
@@ -426,17 +494,15 @@ namespace {
         m_row->clearBorder();
       }
 
-      const auto activeRole = m_selected ? ColorRole::OnPrimary : ColorRole::OnSurface;
-      const bool active = m_selected || m_hovered;
-      const ColorSpec foreground = colorSpecFromRole(active ? activeRole : ColorRole::OnSurface);
-      const ColorSpec mutedForeground =
-          active ? colorSpecFromRole(activeRole, 0.7F) : colorSpecFromRole(ColorRole::OnSurfaceVariant);
+      const ColorSpec foreground = colorSpecFromRole(ColorRole::OnSurface);
+      const ColorSpec mutedForeground = colorSpecFromRole(ColorRole::OnSurfaceVariant);
       m_badgeLabel->setColor(foreground);
       m_glyph->setColor(foreground);
       m_title->setColor(foreground);
       m_subtitle->setColor(mutedForeground);
       m_pinnedGlyph->setColor(mutedForeground);
       m_originGlyph->setColor(mutedForeground);
+      m_kindLabel->setColor(mutedForeground);
     }
 
     LauncherListStyle m_style{};
@@ -452,6 +518,8 @@ namespace {
     Label* m_subtitle = nullptr;
     Glyph* m_pinnedGlyph = nullptr;
     Glyph* m_originGlyph = nullptr;
+    Label* m_sectionLabel = nullptr;
+    Label* m_kindLabel = nullptr;
     AsyncTextureCache* m_asyncTextures = nullptr;
     std::string m_iconPath;
     std::string m_fallbackGlyph;
@@ -704,6 +772,13 @@ public:
   void setOnReorder(ReorderCallback callback) { m_onReorder = std::move(callback); }
 
   [[nodiscard]] std::size_t itemCount() const override { return m_results == nullptr ? 0U : m_results->size(); }
+
+  [[nodiscard]] float itemLeadingSpace(std::size_t index) const override {
+    if (m_results == nullptr || index >= m_results->size() || (*m_results)[index].section.empty()) {
+      return 0.0F;
+    }
+    return launcherSectionHeaderHeight(m_style);
+  }
 
   [[nodiscard]] std::unique_ptr<Node> createTile() override {
     return std::make_unique<LauncherResultRow>(m_style, m_cache);
@@ -1063,16 +1138,24 @@ void LauncherPanel::create() {
       .gap = Style::spaceSm * scale,
   });
 
-  container->addChild(
+  // Raycast search bar: a large frameless field over a hairline.
+  auto searchBar = ui::row({
+      .align = FlexAlign::Center,
+      .gap = Style::spaceSm * scale,
+      .paddingH = Style::spaceXs * scale,
+  });
+  searchBar->addChild(
       ui::input({
           .out = &m_input,
           .placeholder = m_scopedPlaceholder.empty() ? i18n::tr("launcher.search-placeholder") : m_scopedPlaceholder,
           .fontSize = Style::fontSizeHeader * scale,
           .controlHeight = (Style::controlHeightLg + Style::spaceSm) * scale,
-          .horizontalPadding = Style::spaceMd * scale,
+          .horizontalPadding = Style::spaceXs * scale,
           .clearButtonEnabled = true,
           .lineEditing = true,
+          .frameVisible = false,
           .surfaceOpacity = panelCardOpacity(),
+          .flexGrow = 1.0F,
           .onChange =
               [this](const std::string& text) {
                 onInputChanged(text);
@@ -1086,6 +1169,14 @@ void LauncherPanel::create() {
               },
           .onSubmit = [this](const std::string& /*text*/) { activateSelected(); },
           .onKeyEvent = [this](std::uint32_t sym, std::uint32_t modifiers) { return handleKeyEvent(sym, modifiers); },
+      })
+  );
+  container->addChild(std::move(searchBar));
+  container->addChild(
+      ui::separator({
+          .color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+          .thickness = 1.0F,
+          .spacing = 0.0F,
       })
   );
 
@@ -1152,6 +1243,7 @@ void LauncherPanel::create() {
                 if (idx.has_value() && *idx < m_results.size()) {
                   m_selectedIndex = *idx;
                 }
+                syncFooter();
               },
           .configure = [](VirtualGridView& grid) { grid.setFillWidth(true); },
       })
@@ -1207,6 +1299,7 @@ void LauncherPanel::create() {
   );
 
   container->addChild(std::move(body));
+  container->addChild(buildFooter(scale));
 
   setRoot(std::move(container));
 
@@ -1566,6 +1659,7 @@ void LauncherPanel::onInputChanged(const std::string& text) {
 
   m_query = text;
   m_allResults.clear();
+  m_mixedResults = false;
 
   std::vector<LauncherCategory> newCategories;
   bool hasRecentlyUsed = false;
@@ -1638,6 +1732,7 @@ void LauncherPanel::onInputChanged(const std::string& text) {
     } else if (startsWithLauncherPrefix(text)) {
       m_allResults = providerOverviewResults(text);
     } else {
+      m_mixedResults = true;
       // Query default providers (empty prefix), plus prefixed providers that opt into global search.
       // Prefixed opt-in providers (e.g. Session) only contribute once the query is long enough,
       // so opening the launcher with no/short input does not flood it with their entries.
@@ -1943,6 +2038,7 @@ void LauncherPanel::applyActiveCategory() {
     }
     break;
   }
+  assignSections();
   m_selectedIndex = 0;
   refreshResults();
 }
@@ -1963,6 +2059,7 @@ void LauncherPanel::refreshResults() {
   }
   bindDetailResult();
   applyEmptyState();
+  syncFooter();
 }
 
 void LauncherPanel::applyEmptyState() {
@@ -2334,4 +2431,192 @@ bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
   }
 
   return false;
+}
+
+std::unique_ptr<Node> LauncherPanel::buildFooter(float scale) {
+  const float captionSize = Style::fontSizeCaption * scale;
+  const ColorSpec muted = colorSpecFromRole(ColorRole::OnSurfaceVariant);
+  const auto keycap = [&](Label** out, std::string text) {
+    auto cap = ui::row({
+        .align = FlexAlign::Center,
+        .paddingV = 1.0F * scale,
+        .paddingH = Style::spaceXs * 1.5F * scale,
+        .fill = colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha * 1.5F),
+        .radius = Style::radiusSm * scale,
+    });
+    cap->addChild(
+        ui::label({
+            .out = out,
+            .text = std::move(text),
+            .fontSize = Style::fontSizeMini * scale,
+            .fontWeight = FontWeight::Medium,
+            .color = muted,
+        })
+    );
+    return cap;
+  };
+  const auto hint = [&](Label** labelOut, std::string label) {
+    return ui::label({
+        .out = labelOut,
+        .text = std::move(label),
+        .fontSize = captionSize,
+        .fontWeight = FontWeight::Medium,
+        .color = colorSpecFromRole(ColorRole::OnSurface),
+    });
+  };
+
+  // Raycast-style action bar: what is selected on the left, its keys on the right.
+  auto footer = ui::column({
+      .out = &m_footer,
+      .align = FlexAlign::Stretch,
+      .gap = Style::spaceXs * 1.5F * scale,
+      .visible = false,
+      .participatesInLayout = false,
+  });
+  footer->addChild(
+      ui::separator({
+          .color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+          .thickness = 1.0F,
+          .spacing = 0.0F,
+      })
+  );
+  auto bar = ui::row({
+      .align = FlexAlign::Center,
+      .justify = FlexJustify::SpaceBetween,
+      .gap = Style::spaceSm * scale,
+      .paddingH = Style::spaceSm * scale,
+  });
+  bar->addChild(
+      ui::label({
+          .out = &m_footerKind,
+          .fontSize = captionSize,
+          .color = muted,
+          .maxLines = 1,
+          .flexGrow = 1.0F,
+      })
+  );
+  auto keys = ui::row({.align = FlexAlign::Center, .gap = Style::spaceXs * 1.5F * scale});
+  keys->addChild(hint(&m_footerPrimary, i18n::tr("launcher.footer.open")));
+  keys->addChild(keycap(nullptr, "↵"));
+  keys->addChild(
+      ui::separator({
+          .out = &m_footerActionsSeparator,
+          .color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+          .thickness = 1.0F,
+          .spacing = Style::spaceXs * scale,
+          .height = captionSize,
+      })
+  );
+  auto actions = ui::row({.out = &m_footerActions, .align = FlexAlign::Center, .gap = Style::spaceXs * 1.5F * scale});
+  actions->addChild(hint(nullptr, i18n::tr("launcher.footer.actions")));
+  // Shift+Return rather than Raycast's Cmd/Ctrl+K, which the field keeps for kill-to-end-of-line.
+  actions->addChild(keycap(nullptr, "Shift"));
+  actions->addChild(keycap(nullptr, "↵"));
+  keys->addChild(std::move(actions));
+  bar->addChild(std::move(keys));
+  footer->addChild(std::move(bar));
+  return footer;
+}
+
+void LauncherPanel::syncFooter() {
+  if (m_footer == nullptr || m_footerKind == nullptr) {
+    return;
+  }
+  const bool show = !m_results.empty() && !shouldUseDetailPresentation();
+  m_footer->setVisible(show);
+  m_footer->setParticipatesInLayout(show);
+  if (!show) {
+    return;
+  }
+  const LauncherResult& selected = m_results[std::min(m_selectedIndex, m_results.size() - 1)];
+  m_footerKind->setText(selected.kind.empty() ? sectionTitleFor(selected.providerId) : selected.kind);
+  const bool isApp = !selected.desktopEntryPath.empty();
+  m_footerPrimary->setText(i18n::tr(isApp ? "launcher.footer.open-application" : "launcher.footer.open"));
+  m_footerActions->setVisible(isApp);
+  m_footerActions->setParticipatesInLayout(isApp);
+  m_footerActionsSeparator->setVisible(isApp);
+  m_footerActionsSeparator->setParticipatesInLayout(isApp);
+}
+
+std::string LauncherPanel::sectionTitleFor(std::string_view providerId) const {
+  if (providerId == "Applications") {
+    return i18n::tr("launcher.sections.applications");
+  }
+  if (providerId == "Files") {
+    return i18n::tr("launcher.sections.files");
+  }
+  if (providerId == "Windows") {
+    return i18n::tr("launcher.sections.windows");
+  }
+  if (providerId == "Session" || providerId == "Panels") {
+    return i18n::tr("launcher.sections.commands");
+  }
+  for (const auto& provider : m_providers) {
+    if (provider->id() == providerId) {
+      return provider->displayName();
+    }
+  }
+  return std::string(providerId);
+}
+
+std::string LauncherPanel::kindFor(const LauncherResult& result) const {
+  if (!result.kind.empty()) {
+    return result.kind;
+  }
+  if (result.providerId == "Applications") {
+    return i18n::tr("launcher.kinds.application");
+  }
+  if (result.providerId == "Windows") {
+    return i18n::tr("launcher.kinds.window");
+  }
+  if (result.providerId == "Session" || result.providerId == "Panels") {
+    return i18n::tr("launcher.kinds.command");
+  }
+  return {};
+}
+
+void LauncherPanel::assignSections() {
+  for (LauncherResult& result : m_results) {
+    result.section.clear();
+    result.kind = kindFor(result);
+  }
+  if (!m_mixedResults || m_activeCategoryType != All || m_results.empty()) {
+    return;
+  }
+
+  if (StringUtils::isBlank(m_query)) {
+    // Nothing typed: pinned apps lead as Favourites, everything else follows as Applications.
+    const auto firstUnpinned = std::ranges::find_if(m_results, [](const LauncherResult& r) { return !r.pinned; });
+    if (firstUnpinned == m_results.begin()) {
+      m_results.front().section = sectionTitleFor(m_results.front().providerId);
+      return;
+    }
+    m_results.front().section = i18n::tr("launcher.sections.favourites");
+    if (firstUnpinned != m_results.end()) {
+      firstUnpinned->section = sectionTitleFor(firstUnpinned->providerId);
+    }
+    return;
+  }
+
+  // Raycast: one ranked list of results, with files after it in their own section.
+  std::vector<LauncherResult> ordered;
+  ordered.reserve(m_results.size());
+  for (LauncherResult& result : m_results) {
+    if (result.providerId != "Files") {
+      ordered.push_back(std::move(result));
+    }
+  }
+  const std::size_t fileStart = ordered.size();
+  for (LauncherResult& result : m_results) {
+    if (result.providerId == "Files") {
+      ordered.push_back(std::move(result));
+    }
+  }
+  if (fileStart > 0) {
+    ordered.front().section = i18n::tr("launcher.sections.results");
+  }
+  if (fileStart < ordered.size()) {
+    ordered[fileStart].section = i18n::tr("launcher.sections.files");
+  }
+  m_results = std::move(ordered);
 }
