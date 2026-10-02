@@ -25,6 +25,7 @@
 #include "shell/bar/widget_factory.h"
 #include "shell/island/island_activity.h"
 #include "shell/island/island_battery.h"
+#include "shell/island/island_capture_glow.h"
 #include "shell/island/island_progress_outline.h"
 #include "shell/island/island_state.h"
 #include "shell/island/island_style.h"
@@ -111,6 +112,7 @@ struct Island::Instance {
   std::unique_ptr<Node> root;
   Box* background = nullptr;
   island::ProgressOutline* progressOutline = nullptr;
+  island::CaptureGlow* captureGlow = nullptr;
   Node* content = nullptr;
   ScrollView* activityScroll = nullptr;
   island::View previousView = island::View::Rest;
@@ -947,6 +949,8 @@ void Island::geometry(Instance& inst) {
     inst.progressOutline->setPosition(x, y);
     inst.progressOutline->setGeometry(inst.width * s, inst.height * s, radius, s);
   }
+  if (inst.captureGlow)
+    inst.captureGlow->setGeometry(x, y, inst.width * s, inst.height * s, radius, s);
   if (inst.content) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
     // Conceal content until the expanding capsule has room to contain it.
@@ -1220,6 +1224,12 @@ void Island::prepare(Instance& inst) {
     );
   };
   updateOutline();
+  // Capture (microphone, camera, screen) and screen recording pulse red around the Island.
+  const auto updateCaptureGlow = [&] {
+    if (inst.captureGlow)
+      inst.captureGlow->update(!privacyList.empty() || recording, islandRole(ColorRole::Error));
+  };
+  updateCaptureGlow();
   if (signature == inst.signature && inst.root) {
     if ((recording && inst.recordingLabel)
         || !inst.timerUi.empty()
@@ -1289,6 +1299,9 @@ void Island::prepare(Instance& inst) {
   if (!inst.root) {
     inst.root = std::make_unique<Node>();
     inst.root->setAnimationManager(&inst.animations);
+    // Behind the capsule, so only the part of its halo outside the edge shows.
+    auto glow = std::make_unique<island::CaptureGlow>();
+    inst.captureGlow = static_cast<island::CaptureGlow*>(inst.root->addChild(std::move(glow)));
     auto box = std::make_unique<Box>();
     box->setFill(islandRole(ColorRole::Surface));
     box->setClipChildren(true);
@@ -1297,6 +1310,7 @@ void Island::prepare(Instance& inst) {
     auto outline = std::make_unique<island::ProgressOutline>();
     inst.progressOutline = static_cast<island::ProgressOutline*>(inst.root->addChild(std::move(outline)));
     updateOutline();
+    updateCaptureGlow();
     inst.surface->setSceneRoot(inst.root.get());
     inst.input.setSceneRoot(inst.root.get());
     inst.width = w;
@@ -1972,8 +1986,10 @@ void Island::prepare(Instance& inst) {
       }
     }
   }
-  // The expanded Island's icon row ends with the unread-notifications bell.
-  const bool rowBell = expandedView && showUnread;
+  // The expanded Island's icon row ends with the unread-notifications bell where the unread
+  // section itself is not shown (the Cupertino Island keeps it to the calendar view), unless
+  // the hover view's unread section is turned off.
+  const bool rowBell = expandedView && showUnread && cfg.hoverShowUnread && !showExtras;
   if (!privacyList.empty() || rowBell) {
     // Capture indicators are clickable icons in every view: compact, beside notifications and OSDs,
     // and as a centred row in the expanded Island. Hovering names the capturing app.

@@ -71,6 +71,13 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert abs(offset) <= 4, f'Microphone OSD off centre by {offset:.0f}px'
         time.sleep(5); compact = Image.open(shot('privacy-compact')).convert('RGB')
         left, right, top, bottom = island_box(compact)
+        # A red pulse rings the Island while capturing: reddish pixels just outside its edge.
+        def red_outside(image):
+            band = [image.getpixel((x, (top+bottom)//2)) for x in range(left-5, left)] + \
+                   [image.getpixel(((left+right)//2, y)) for y in range(bottom+1, bottom+6)]
+            return max(p[0] - max(p[1], p[2]) for p in band)
+        glow = [red_outside(Image.open(shot(f'privacy-glow-{i}')).convert('RGB')) for i in range(4) if not time.sleep(.6)]
+        assert max(glow) > 15, f'Capture glow missing around the Island: {glow}'
         columns = white_columns(compact, (left+right)//2, right, top, bottom)
         assert columns, 'Compact microphone indicator missing'
         start_x = columns[-1]
@@ -110,6 +117,20 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         time.sleep(1.2)
         words = run(['tesseract', str(shot('privacy-icon-click')), 'stdout', '--tessdata-dir', tessdata, '--psm', '11'])
         assert 'Output' in words, 'Microphone icon did not open the audio panel: '+words
+        # Escape closes a panel hosted on the Island.
+        kp = repo/'protocols/virtual-keyboard-unstable-v1.xml'
+        run(['wayland-scanner', 'client-header', str(kp), str(base/'keyboard-client.h')])
+        run(['wayland-scanner', 'private-code', str(kp), str(base/'keyboard-code.c')])
+        run(['cc', '-I'+str(base), str(repo/'tests/fixtures/island_keyboard.c'), str(base/'keyboard-code.c'),
+             '-lwayland-client', '-lxkbcommon', '-o', str(base/'keyboard')])
+        keyboard = subprocess.Popen([str(base/'keyboard')], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        time.sleep(.5)
+        keyboard.stdin.write('1\n'); keyboard.stdin.flush()  # KEY_ESC
+        assert keyboard.stdout.readline().strip() == 'ok'
+        time.sleep(1.2)
+        words = run(['tesseract', str(shot('privacy-panel-escaped')), 'stdout', '--tessdata-dir', tessdata, '--psm', '11'])
+        assert 'Output' not in words, 'Escape did not close the Island-hosted audio panel'
+        keyboard.terminate(); keyboard.wait(timeout=5)
         assert shell.poll() is None
         print(f'PASS: privacy capsule at ({cx},{cy}); see privacy-*.png', flush=True)
     finally:

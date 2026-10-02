@@ -4,8 +4,8 @@ A fake /proc (NOCTALIA_PRIVACY_PROC_ROOT) lists a "camtest" process holding /dev
 kitty window with that class stands in for the app. The compact Island must show the camera
 icon, name the app on hover, and raise its window when clicked; so must the expanded Island.
 With a microphone capture and an unread notification too, the compact Island keeps one
-indicator slot that cycles through all three, and the expanded Island ends its icon row with
-the unread bell, which opens the notifications panel.
+indicator slot that cycles through all three; the expanded calendar lists the two captures and
+leaves unread notifications to their own section.
 """
 import json
 import os
@@ -143,7 +143,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             time.sleep(1)
         assert len(set(patterns)) >= 3, f'Compact indicator slot did not cycle ({len(set(patterns))} glyphs)'
 
-        # Expanded, the icon row lists camera, microphone and the unread bell, rightmost.
+        # Expanded on the calendar, the icon row lists camera and microphone; unread notifications
+        # have their own section there, so the bell is left out.
         move((left+right)//2 - 60, (top+bottom)//2); time.sleep(1.5)
         expanded = Image.open(shot('bell-expanded')).convert('RGB')
         rows = [y for y in range(top+60, 500)
@@ -158,25 +159,17 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
                 runs.append([y, y])
         runs = [r for r in runs if r[1] - r[0] >= 8]
         assert runs, 'Expanded icon row missing'
-        rows = [runs[0][0]]; end_y = runs[0][1]
         clusters = []
         for x in range(mid-50, mid+50):
-            if any(min(expanded.getpixel((x, y))) > 200 for y in range(rows[0], end_y+1)):
+            if any(min(expanded.getpixel((x, y))) > 200 for y in range(runs[0][0], runs[0][1]+1)):
                 if clusters and x - clusters[-1][1] <= 2:
                     clusters[-1][1] = x
                 else:
                     clusters.append([x, x])
-        assert len(clusters) == 3, f'Expected camera, microphone and bell, found {len(clusters)} icons'
-        bx, by = sum(clusters[-1])//2, (rows[0]+end_y)//2
-        move(bx, by); time.sleep(1)
-        text = tooltip_words('bell-hover', bx, by)
-        assert 'unread' in text, 'Bell tooltip missing: '+text
-        click(); time.sleep(.5)
-        words = run(['tesseract', str(shot('bell-click')), 'stdout', '--tessdata-dir', tessdata, '--psm', '11'])
-        assert 'Unread test' in words, 'Bell did not open the notifications panel: '+words
+        assert len(clusters) == 2, f'Expected camera and microphone, found {len(clusters)} icons'
         assert shell.poll() is None
         print('PASS: webcam held outside PipeWire shows, names and raises its app (compact and expanded); '
-              'one compact slot cycles camera, microphone and unread bell; expanded bell opens notifications', flush=True)
+              'one compact slot cycles camera, microphone and unread bell', flush=True)
     finally:
         if capture is not None:
             capture.terminate(); capture.wait(timeout=5)

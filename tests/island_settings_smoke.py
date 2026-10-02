@@ -57,6 +57,9 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     config = base/'umbriel.toml'; config.write_text('[output."HEADLESS-1"]\nmode="1280x720"\n')
     env=dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(base/'config'), XDG_STATE_HOME=str(base/'state'), XDG_DATA_HOME=str(base/'data'), XDG_CACHE_HOME=str(base/'cache'), NOCTALIA_CONFIG_HOME=str(base/'config'), NOCTALIA_STATE_HOME=str(base/'state'), NOCTALIA_DATA_HOME=str(base/'data'), WLR_BACKENDS='headless', WLR_HEADLESS_OUTPUTS='1', WLR_LIBINPUT_NO_DEVICES='1', LIBGL_ALWAYS_SOFTWARE='1', XDG_VIDEOS_DIR=str(out))
     env['NOCTALIA_ASSETS_DIR']=str(REPO/'assets')
+    # Keep the host's webcam users (the /proc scan) out of the private session.
+    (base/'emptyproc').mkdir()
+    env['NOCTALIA_PRIVACY_PROC_ROOT']=str(base/'emptyproc')
     env['HOME']=str(base)
     env['DBUS_SYSTEM_BUS_ADDRESS']=env['DBUS_SESSION_BUS_ADDRESS']
     env.pop('WAYLAND_DISPLAY',None); env.pop('DISPLAY',None)
@@ -113,6 +116,34 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         binary=str(REPO/'build-rishot/noctalia'); shell=start([binary],'noctalia.log')
         wait(lambda:(runtime/f"noctalia-{env['WAYLAND_DISPLAY']}.sock").exists(),'shell start')
         def msg(*words): return run([binary,'msg',*words])
+        def find_box(word,name,min_x=0,min_y=0):
+            """(left, top, width, height) of the first OCR word containing `word` on a fresh screenshot."""
+            import csv,io
+            run(['grim',str(out/name)])
+            data=run(['tesseract',str(out/name),'stdout','--tessdata-dir',os.environ.get('NOCTALIA_TEST_TESSDATA',str(REPO/'build-rishot/test-data/tessdata')),
+                      '--psm','11','-c','tessedit_create_tsv=1'])
+            for row in csv.DictReader(io.StringIO(data),delimiter='\t',quoting=csv.QUOTE_NONE):
+                if word in (row.get('text') or '') and int(row['left'])>=min_x and int(row['top'])>=min_y:
+                    return int(row['left']),int(row['top']),int(row['width']),int(row['height'])
+            raise AssertionError(f'{word!r} not found in {name}')
+        def find_text(word,name,min_x=0):
+            """Centre of the first OCR word containing `word` (right of min_x) on a fresh screenshot."""
+            import csv,io
+            run(['grim',str(out/name)])
+            data=run(['tesseract',str(out/name),'stdout','--tessdata-dir',os.environ.get('NOCTALIA_TEST_TESSDATA',str(REPO/'build-rishot/test-data/tessdata')),
+                      '--psm','11','-c','tessedit_create_tsv=1'])
+            for row in csv.DictReader(io.StringIO(data),delimiter='\t',quoting=csv.QUOTE_NONE):
+                if word in (row.get('text') or '') and int(row['left'])>=min_x:
+                    return int(row['left'])+int(row['width'])//2,int(row['top'])+int(row['height'])//2
+            raise AssertionError(f'{word!r} not found in {name}')
+        def click_switch(label,name,min_x=420,xs=(1060,1110),below=50):
+            """Click the switch in the settings row titled `label`: the round knob right of the row."""
+            _,label_y=find_text(label,name,min_x=min_x)
+            image=Image.open(out/name).convert('RGB')
+            knob=[(x,y) for y in range(label_y-10,label_y+below) for x in range(*xs)
+                  if min(image.getpixel((x,y)))>225]
+            assert knob,f'No switch beside {label!r} in {name}'
+            move(sum(p[0] for p in knob)//len(knob),sum(p[1] for p in knob)//len(knob));click()
         def ready():
             assert shell.poll() is None, f'Shell exited: {shell.returncode}'
             try: return msg('theme-mode-get').strip() in ('dark', 'light')
@@ -199,8 +230,9 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
                 return Image.open(path).convert('RGB')
             def width(image):
                 left=right=640
-                while left>200 and max(image.getpixel((left-1,12)))<45:left-=1
-                while right<1080 and max(image.getpixel((right+1,12)))<45:right+=1
+                # Row 18 sits above the artwork but below the pill's rounded ends' steepest curve.
+                while left>200 and max(image.getpixel((left-1,18)))<45:left-=1
+                while right<1080 and max(image.getpixel((right+1,18)))<45:right+=1
                 return right-left+1
             def media(method):
                 return run(['gdbus','call','--session','--dest','org.mpris.MediaPlayer2.islandtest',
@@ -264,8 +296,9 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             def width(image):
                 # Measure the uninterrupted dark capsule above its text and artwork.
                 left=right=640
-                while left>200 and max(image.getpixel((left-1,12)))<45:left-=1
-                while right<1080 and max(image.getpixel((right+1,12)))<45:right+=1
+                # Row 18 sits above the artwork but below the pill's rounded ends' steepest curve.
+                while left>200 and max(image.getpixel((left-1,18)))<45:left-=1
+                while right<1080 and max(image.getpixel((right+1,18)))<45:right+=1
                 return right-left+1
             def media(method):
                 return run(['gdbus','call','--session','--dest','org.mpris.MediaPlayer2.islandtest',
@@ -396,8 +429,10 @@ play_sound=false
             assert not tall(shot('urgent-dnd')),'Urgent alert bypassed Do Not Disturb'
             msg('notification-dnd-set','off')
             msg('settings-open','notifications');time.sleep(.7);shot('settings')
-            move(635,273);click();time.sleep(.5)
-            move(1027,522);click();time.sleep(.5);shot('delivery-editor')
+            # Notification settings are grouped into sub-pages; the filter list is on Filtering.
+            move(*find_text('Filtering','notification-settings-groups.png',min_x=420));click();time.sleep(.5);shot('filtering')
+            _,hidden_y=find_text('hidden-app','notification-filters.png',min_x=420)
+            move(1042,hidden_y);click();time.sleep(.5);shot('delivery-editor')  # The row's settings gear.
             move(630,370);click();time.sleep(.3);shot('delivery-options')
             move(330,450);click();time.sleep(.6)
             saved=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
@@ -496,8 +531,10 @@ play_sound=false
             steam.terminate();steam.wait(timeout=6);time.sleep(2.5)
             configure(False);shot('disabled')
             # Exercise the actual toggle and persistence in Settings.
-            msg('settings-open','island');time.sleep(.8);move(495,273);click();time.sleep(.7);shot('settings')
-            move(1070,384);click();time.sleep(.8);shot('settings-enabled')
+            # The toggle is on the island settings' Layout sub-page; click its row's switch.
+            msg('settings-open','island');time.sleep(.8)
+            move(*find_text('Layout','progress-settings-groups.png',min_x=420));click();time.sleep(.7);shot('settings')
+            click_switch('Outer','progress-settings-layout.png');time.sleep(.8);shot('settings-enabled')
             data=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
             assert data['island']['outer_progress_ring'] is True, data
             assert shell.poll() is None
@@ -514,69 +551,83 @@ play_sound=false
                 move(x1,y1);command(pointer,'press');move(x1+12,y1+8);move(x2,y2)
                 time.sleep(.2);shot('dragging');command(pointer,'release');time.sleep(.8)
             msg('settings-open','island');time.sleep(1)
-            move(827,273);click();time.sleep(.7);shot('settings')
-            title=Image.open(out/'hover-editor-settings.png').convert('RGB').crop((400,347,465,367))
-            def editor_click(x,y):
-                # Rebuilding settings can scroll the focused control into view.
-                # Locate the section title so clicks follow the visible editor.
-                shot('position')
-                frame=Image.open(out/'hover-editor-position.png').convert('RGB')
-                for top in range(300,600):
-                    if ImageChops.difference(title,frame.crop((400,top,465,top+20))).getbbox() is None:
-                        move(x,y+top-347);click();return
-                raise AssertionError('Widgets editor title is not visible')
+            # Island settings are grouped into sub-pages; the editor is on Widgets, below the fold.
+            try: widgets=find_text('Widgets','hover-editor-groups.png',min_x=420)
+            except AssertionError:
+                move(760,500);command(pointer,'scroll 10');time.sleep(.6)
+                widgets=find_text('Widgets','hover-editor-groups.png',min_x=420)
+            move(*widgets);click();time.sleep(.7);shot('settings')
+            # Everything is located from the visible text: the three group headers, widget names
+            # and buttons. Within a group card the drag handle sits 16 px left of a widget's name,
+            # its gear and remove buttons 156 and 184 px right of the group header, and the arrow
+            # row 27 px below the name (up, down, left, right at +15, +41, +67, +93).
+            def column(name): return find_box(name,'hover-editor-columns.png',min_x=420)
+            def item(name,min_x=420):
+                left,top,width,height=find_box(name,'hover-editor-items.png',min_x=min_x,min_y=400)
+                return left-16,top+height//2
+            left_col,centre_col,right_col=column('Left'),column('Centre'),column('Right')
+            header_y=centre_col[1]+centre_col[3]//2
+            def press(word):
+                move(*find_text(word,'hover-editor-buttons.png',min_x=420));click()
             original=saved()
             # Drop outside the editor cancels without changing settings.
-            drag(425,538,1115,380)
+            drag(*item('test_button'),1140,380)
             assert saved()==original, 'Outside drop must not change the layout'
             # Move a custom widget into the centre lane after the plugin.
-            drag(425,538,740,573);shot('moved')
+            _,plugin_y=item('Hover')
+            drag(*item('test_button'),centre_col[0]+60,plugin_y+30);shot('moved')
             assert saved()['hover_widgets']==[], saved()
             assert saved()['hover_widgets_center']==['test/hover:widget','test_button'], saved()
             # Reorder within a group, then drop into the now-empty left group.
-            drag(657,640,750,565);shot('reordered')
+            _,plugin_y=item('Hover')
+            drag(*item('test_button'),centre_col[0]+60,plugin_y-8);shot('reordered')
             assert saved()['hover_widgets_center']==['test_button','test/hover:widget'], saved()
-            drag(657,576,500,575);shot('empty-drop')
+            drag(*item('test_button'),left_col[0]+60,header_y+40);shot('empty-drop')
             assert saved()['hover_widgets']==['test_button'], saved()
             assert saved()['hover_widgets_center']==['test/hover:widget'], saved()
             # Widget settings shortcuts must open an actual inspector for both kinds.
-            move(574,538);click();time.sleep(.8);shot('custom-settings');key(1);time.sleep(.5)
-            move(806,538);click();time.sleep(.8);shot('plugin-settings')
-            move(968,226);click();time.sleep(.6)
+            _,button_y=item('test_button')
+            move(left_col[0]+156,button_y);click();time.sleep(.8);shot('custom-settings');key(1);time.sleep(.5)
+            _,plugin_y=item('Hover')
+            move(centre_col[0]+156,plugin_y);click();time.sleep(.8);shot('plugin-settings')
+            # The inspector puts each switch below its description.
+            click_switch('Scroll','hover-editor-inspector.png',min_x=260,xs=(940,1000),below=70);time.sleep(.6)
             widget_data=tomllib.loads((base/'state/noctalia/settings.toml').read_text()).get('widget',{})
             assert widget_data['test/hover:widget']['enable_scroll'] is False, widget_data
-            move(986,146);click();time.sleep(.7)
-            move(1090,600);command(pointer,'scroll 20');time.sleep(.5);shot('after-inspector')
+            key(1);time.sleep(.7);shot('after-inspector')
             def layout_state():
                 data=saved()
                 return {**{key:data.get(key,[]) for key in ('hover_widgets','hover_widgets_center','hover_widgets_right')},
-                        **{key:data.get(key,True) for key in ('hover_show_clock','hover_show_calendar','hover_show_media','hover_show_downloads','hover_show_timers','hover_show_batteries','hover_show_unread')}}
+                        **{key:data.get(key,True) for key in ('hover_show_clock','hover_show_calendar','hover_show_media','hover_show_downloads','hover_show_timers','hover_show_batteries','hover_show_unread','hover_show_tray')}}
             before=layout_state()
             # Presets replace the hover choices together; undo restores custom and plugin references.
-            for x,name,groups in [(435,'minimal',[[],['clock'],[]]),(510,'media',[['volume'],['media'],['audio_visualizer']]),(600,'system',[['sysmon'],['network'],['battery']])]:
-                editor_click(x,428);time.sleep(.8);shot(name)
+            for word,name,groups in [('Minimal','minimal',[[],['clock'],[]]),('Media','media',[['volume'],['media'],['audio_visualizer']]),('System','system',[['sysmon'],['network'],['battery']])]:
+                press(word);time.sleep(.8);shot(name)
                 current=saved()
                 assert [current.get(key,[]) for key in ('hover_widgets','hover_widgets_center','hover_widgets_right')]==groups, (name,current)
                 assert current.get('enabled') is True and current.get('hover_show_calendar') is False
-                editor_click(730,428);time.sleep(.8);shot(name+'-undo')
+                press('Undo');time.sleep(.8);shot(name+'-undo')
                 assert layout_state()==before, (name,layout_state(),before)
                 assert tomllib.loads((base/'state/noctalia/settings.toml').read_text())['widget']['test/hover:widget']['enable_scroll'] is False
             # The shared picker appends to the selected group, including its existing items.
-            editor_click(837,503);time.sleep(.7);shot('picker')
-            move(550,267);click()
+            centre_col=column('Centre');header_y=centre_col[1]+centre_col[3]//2
+            move(centre_col[0]+188,header_y);click();time.sleep(.7);shot('picker')
+            move(*find_text('Search','hover-editor-picker-search.png'));click()
             for code in (46,38,24,46,37): key(code)  # clock
             time.sleep(.5);shot('picker-filtered');key(28);time.sleep(.8);shot('added-clock')
             assert saved()['hover_widgets_center']==['test/hover:widget','clock'], saved()
             # Arrow buttons provide the same moves as dragging.
-            editor_click(734,603);time.sleep(.8);shot('arrow-moved')
+            _,plugin_y=item('Hover')
+            move(centre_col[0]+93,plugin_y+27);click();time.sleep(.8);shot('arrow-moved')
             assert saved()['hover_widgets_center']==['clock'], saved()
             assert saved()['hover_widgets_right']==['right_button','test/hover:widget'], saved()
-            move(1090,600);command(pointer,'scroll 1');time.sleep(.5)
-            editor_click(1067,640);time.sleep(.8)
+            right_col=column('Right')
+            _,plugin_y=item('Hover',min_x=right_col[0]-30)
+            move(right_col[0]+184,plugin_y);click();time.sleep(.8)
             assert saved()['hover_widgets_right']==['right_button'], saved()
             # Plugin adds use the normal named-instance workflow and keep existing entries.
-            editor_click(1070,503);time.sleep(.7)
-            move(550,267);click()
+            move(right_col[0]+188,right_col[1]+right_col[3]//2);click();time.sleep(.7)
+            move(*find_text('Search','hover-editor-plugin-search.png'));click()
             for code in (35,24,47,18,19): key(code)  # hover
             time.sleep(.5);shot('plugin-picker-filtered');key(28);time.sleep(.8);shot('added-plugin')
             data=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
@@ -595,8 +646,11 @@ play_sound=false
                 (cfg/'config.toml').write_text(source.replace('[island]','[island]\n'+options))
                 time.sleep(1.2);move(640,40);time.sleep(.8);shot(name)
             def plugin_click(y):
+                # The expected row is a hint; sections above it change height, so click where OCR finds the widget.
                 before=plugin_state().get('clicks',0)
-                move(640,y);click()
+                try: x,y=find_text('Plugin','hover-layout-plugin.png',min_x=400)
+                except AssertionError: x=640
+                move(x,y);click()
                 wait(lambda:plugin_state().get('clicks',0)==before+1,'Centre plugin click')
             hidden='hover_show_clock=false\nhover_show_calendar=false\n'
             if '--settings-only' not in sys.argv:
@@ -659,7 +713,7 @@ play_sound=false
             assert plugin_state().get('clicks') == 1, 'Clock refreshes must retain the plugin runtime'
             move(615,165);click();wait(lambda:(base/'widget-clicked').exists(),'custom command widget click')
             move(660,165);click();time.sleep(1);shot('audio-panel')
-            key(1);move(1100,600);time.sleep(1)
+            msg('panel-close');move(1100,600);time.sleep(1)  # Island-hosted; Umbriel gives it no keyboard focus.
             before=plugin_state().get('ticks',0);time.sleep(.7)
             assert plugin_state().get('ticks',0)==before, 'Hidden widgets must stop their runtime'
             move(640,40);time.sleep(1);shot('reopened')
@@ -722,7 +776,7 @@ play_sound=false
             assert spectrum_count()==1
             msg('panel-open','control-center');time.sleep(1)
             assert spectrum_count()==0, 'A hosted panel must release the visualizer'
-            key(1);time.sleep(1)
+            msg('panel-close');time.sleep(1)  # Island-hosted; Umbriel gives it no keyboard focus.
             assert spectrum_count()==1, 'Returning from a panel must restore the visualizer'
             sound.terminate();sound.wait(timeout=5);time.sleep(3)
             quiet=shot('quiet')
@@ -882,13 +936,15 @@ play_sound=false
             msg('notification-clear-active');msg('notification-clear-history');time.sleep(.8)
             settings=cfg/'config.toml';original=settings.read_text()
             settings.write_text(original+'\n[shell.privacy]\nmic_filter_regex="Privacy Test mic"\n');msg('config-reload');time.sleep(1)
-            shot('filtered');assert differs('all','filtered'), 'Existing privacy filters must apply'
+            # The compact Island cycles one indicator, so check the expanded row, which lists every kind.
+            move(640,40);time.sleep(.8);shot('filtered-hover');move(1100,600);time.sleep(.8)
+            assert differs('all-hover','filtered-hover',(400,135,880,180)), 'Existing privacy filters must apply'
             settings.write_text(original);msg('config-reload');time.sleep(.8)
             camera.terminate();camera.wait(timeout=6);screen.terminate();screen.wait(timeout=6);time.sleep(2.5)
             # Compact mic icon opens Noctalia's existing audio tab.
             move(724,40);click();time.sleep(.8);shot('audio-controls')
             assert differs('mic-hover','audio-controls',(400,90,880,330)), 'Microphone click must open the audio panel'
-            key(1);move(1100,600)
+            msg('panel-close');move(1100,600)  # Island-hosted; Umbriel gives it no keyboard focus.
             mic.terminate();mic.wait(timeout=6);time.sleep(2.5);shot('stopped')
             assert not differs('idle','stopped'), 'Stopping captures must remove all indicators'
             assert shell.poll() is None
@@ -1033,11 +1089,14 @@ play_sound=false
         if '--keyboard-only' not in sys.argv:
             msg('settings-open','island')
             time.sleep(1)
-            run(['grim',str(out/'settings.png')])
-            move(1070,459);click();time.sleep(.5)
+            # Island settings are grouped into sub-pages; open General and flip "Reserve desktop space"
+            # at its row's switch. Matches are limited to the content pane, right of the sidebar.
+            move(*find_text('General','settings.png',min_x=420));click();time.sleep(.6)
+            click_switch('Reserve','settings-general.png');time.sleep(.5)
             saved=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
             assert saved['island']['reserve_space'] is False, saved
-            move(560,197);click();time.sleep(.5)
+            move(*find_text('Back','settings-general-saved.png',min_x=420));click();time.sleep(.6)
+            move(*find_text('Clock','settings-groups.png',min_x=420));click();time.sleep(.6)
             run(['grim',str(out/'clock-settings.png')])
             msg('settings-close')
             move(640,35); time.sleep(1)
@@ -1111,7 +1170,9 @@ play_sound=false
             # Source name shares the existing media-panel action.
             move(650,99);click();time.sleep(1)
             run(['grim',str(out/'media-panel.png')])
-            key(1);move(1100,600);time.sleep(.5)
+            # Umbriel gives the Island-hosted panel no keyboard focus, so close it over IPC; Escape on
+            # Hyprland is covered by the island privacy check.
+            msg('panel-close');move(1100,600);time.sleep(.5)
             long_body='\n'.join(f'Line {i:02}: A complete notification stays readable when expanded.' for i in range(1,61))+'\nEND OF FULL MESSAGE'
             run(['notify-send','-a','Island test','-t','0','Long notification',long_body])
             time.sleep(1)
@@ -1163,7 +1224,7 @@ play_sound=false
             click();time.sleep(1)
             run(['grim',str(out/'badge-history.png')])
             wait(lambda: all(entry['seen'] for entry in history_entries()),'Badge opens history and marks notifications seen')
-            key(1);move(1100,600);time.sleep(1)
+            msg('panel-close');move(1100,600);time.sleep(1)  # Island-hosted; see the media panel above.
             run(['grim',str(out/'badge-cleared.png')])
             cleared=Image.open(out/'badge-cleared.png').convert('RGB')
             assert ImageChops.difference(empty.crop((686,28,710,52)),cleared.crop((686,28,710,52))).getbbox() is None, 'Read badge must disappear'
@@ -1172,10 +1233,16 @@ play_sound=false
             time.sleep(1.5)
             move(640,40);time.sleep(1)
             run(['grim',str(out/'expanded-unread-count.png')])
-            move(640,156);click();time.sleep(1)
-            wait(lambda: all(entry['seen'] for entry in history_entries()),'Expanded unread-count row opens history')
+            # During playback the expanded Island ends with its icon row; the unread bell is its lowest glyph.
+            unread=Image.open(out/'expanded-unread-count.png').convert('RGB')
+            bell_rows=[y for y in range(100,400) if max(unread.getpixel((560,y)))<12
+                       and any(min(unread.getpixel((x,y)))>200 for x in range(632,648))]
+            assert bell_rows,'Expanded unread bell missing'
+            bell=[y for y in bell_rows if y>max(bell_rows)-20]
+            move(640,(min(bell)+max(bell))//2);click();time.sleep(1)
+            wait(lambda: all(entry['seen'] for entry in history_entries()),'Expanded unread bell opens history')
             # Polish pass at the normal artwork, clock and calendar sizes.
-            key(1);move(1100,600)
+            msg('panel-close');move(1100,600)
             text=path.read_text().replace('calendar_labels="initials"','calendar_labels="abbreviated"').replace('clock_offset=-12','clock_offset=0').replace('media_artwork_size=80','media_artwork_size=56')
             path.write_text(text);msg('config-reload');msg('theme-mode-set','dark')
             msg('notification-dnd-set','false');time.sleep(2.5)
@@ -1197,7 +1264,7 @@ play_sound=false
             run(['grim',str(out/'polish-media-paused.png')])
             move(650,55);click();time.sleep(.7)
             run(['grim',str(out/'polish-media-panel.png')])
-            key(1);move(1100,600);time.sleep(.7)
+            msg('panel-close');move(1100,600);time.sleep(.7)  # Island-hosted; see the media panel above.
             run(['grim',str(out/'polish-rest-after-panel.png')])
             assert ImageChops.difference(lower_crop('polish-rest.png'),lower_crop('polish-rest-after-panel.png')).getbbox() is None, 'Closing the panel must restore the compact island'
             run(['notify-send','-a','Polish test','-t','0','First card','Start a click here.']);time.sleep(.7)
