@@ -455,6 +455,8 @@
       "power-profile": "Perfil de energía",
       "time-to-empty": "{time} restante",
       "time-to-full": "{time} hasta completar",
+      "unavailable-detail": "Instala y activa UPower y power-profiles-daemon para ver aquí la batería y los modos de energía.",
+      "unavailable-title": "Información de energía no disponible",
       "unknown-device": "Dispositivo desconocido"
     },
     "screen-time": {

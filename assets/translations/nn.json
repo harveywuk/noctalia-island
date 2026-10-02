@@ -390,6 +390,8 @@
       "power-profile": "Straumprofil",
       "time-to-empty": "{time} att",
       "time-to-full": "{time} til fullt",
+      "unavailable-detail": "Installer og slå på UPower og power-profiles-daemon for å sjå batteri og straummodusar her.",
+      "unavailable-title": "Straumdata er ikkje tilgjengelege",
       "unknown-device": "Ukjend eining"
     },
     "screen-time": {

@@ -401,6 +401,8 @@
       "power-profile": "電源プロファイル",
       "time-to-empty": "残り{time}",
       "time-to-full": "満充電まで{time}",
+      "unavailable-detail": "ここにバッテリーと電源モードを表示するには、UPower と power-profiles-daemon をインストールして有効にしてください。",
+      "unavailable-title": "電源情報を利用できません",
       "unknown-device": "不明なデバイス"
     },
     "screen-time": {

@@ -291,6 +291,8 @@
       "peripherals": "Amûrên girêdayî",
       "time-to-empty": "{time} maye",
       "time-to-full": "{time} heya tijî dibe",
+      "unavailable-detail": "Ji bo ku pîl û modên hêzê li vir bibînî, UPower û power-profiles-daemon saz bike û çalak bike.",
+      "unavailable-title": "Agahiyên hêzê ne berdest in",
       "unknown-device": "Amûrên nenas"
     },
     "screen-time": {

@@ -456,6 +456,8 @@
       "power-profile": "电源配置",
       "time-to-empty": "剩余续航 {time}",
       "time-to-full": "距离充满 {time}",
+      "unavailable-detail": "安装并启用 UPower 和 power-profiles-daemon，即可在此查看电池和电源模式。",
+      "unavailable-title": "电源信息不可用",
       "unknown-device": "未知设备"
     },
     "screen-time": {

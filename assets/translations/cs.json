@@ -343,6 +343,8 @@
       "power-profile": "Profil výkonu",
       "time-to-empty": "Zbývá {time}",
       "time-to-full": "{time} do úplného nabití",
+      "unavailable-detail": "Nainstalujte a povolte UPower a power-profiles-daemon, aby se zde zobrazila baterie a režimy napájení.",
+      "unavailable-title": "Informace o napájení nejsou k dispozici",
       "unknown-device": "Neznámé zařízení"
     },
     "screen-time": {

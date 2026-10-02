@@ -456,6 +456,8 @@
       "power-profile": "Power Profile",
       "time-to-empty": "{time} remaining",
       "time-to-full": "{time} until full",
+      "unavailable-detail": "Install and enable UPower and power-profiles-daemon to see battery and power modes here.",
+      "unavailable-title": "Power information unavailable",
       "unknown-device": "Unknown device"
     },
     "screen-time": {

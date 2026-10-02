@@ -382,6 +382,8 @@
       "power-profile": "Chế độ năng lượng",
       "time-to-empty": "Hết pin sau {time}",
       "time-to-full": "Đầy pin sau {time}",
+      "unavailable-detail": "Cài đặt và bật UPower và power-profiles-daemon để xem pin và chế độ nguồn tại đây.",
+      "unavailable-title": "Không có thông tin nguồn điện",
       "unknown-device": "Thiết bị không xác định"
     },
     "screen-time": {

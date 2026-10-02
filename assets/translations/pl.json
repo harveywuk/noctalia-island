@@ -375,6 +375,8 @@
       },
       "health": "Życie baterii",
       "peripherals": "Połączone Urządzenia",
+      "unavailable-detail": "Zainstaluj i włącz UPower oraz power-profiles-daemon, aby zobaczyć tu baterię i tryby zasilania.",
+      "unavailable-title": "Informacje o zasilaniu niedostępne",
       "unknown-device": "Nieznane urządzenie"
     },
     "screen-time": {

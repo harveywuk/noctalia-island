@@ -394,6 +394,8 @@
       "power-profile": "نمط الطاقة",
       "time-to-empty": "متبقٍ {time}",
       "time-to-full": "{time} حتى اكتمال الشحن",
+      "unavailable-detail": "ثبّت UPower و power-profiles-daemon وفعّلهما لعرض البطارية وأوضاع الطاقة هنا.",
+      "unavailable-title": "معلومات الطاقة غير متاحة",
       "unknown-device": "جهاز غير معروف"
     },
     "screen-time": {

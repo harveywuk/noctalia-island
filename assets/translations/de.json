@@ -384,6 +384,8 @@
       "power-profile": "Energieprofil",
       "time-to-empty": "{time} verbleibend",
       "time-to-full": "{time} bis vollständig geladen",
+      "unavailable-detail": "Installiere und aktiviere UPower und power-profiles-daemon, um hier Akku und Energiemodi zu sehen.",
+      "unavailable-title": "Energieinformationen nicht verfügbar",
       "unknown-device": "Unbekanntes Gerät"
     },
     "screen-time": {

@@ -139,6 +139,13 @@ std::unique_ptr<Flex> PowerTab::create() {
   content->setAlign(FlexAlign::Stretch);
   content->setGap(Style::spaceMd * scale);
 
+  // Shown only while no other card has anything to show (no UPower devices, no profiles).
+  auto empty = control_center::makeEmptyState(
+      "bolt-off", i18n::tr("control-center.power.unavailable-title"),
+      i18n::tr("control-center.power.unavailable-detail"), scale, panelCardOpacity()
+  );
+  m_emptyCard = empty.get();
+  content->addChild(std::move(empty));
   buildStatusCard(*content, scale);
   buildProfilesCard(*content, scale);
   buildChargingCard(*content, scale);
@@ -418,6 +425,7 @@ void PowerTab::onClose() {
   m_healthLabel = nullptr;
   m_healthBar = nullptr;
   m_peripheralsCard = nullptr;
+  m_emptyCard = nullptr;
   m_peripheralsList = nullptr;
   m_peripheralRows.clear();
   m_lastPeripheralKey.clear();
@@ -429,8 +437,23 @@ void PowerTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
   }
   rebuildPeripherals();
   rebuildChargeLimits();
+  syncEmptyState();
   m_root->setSize(contentWidth, bodyHeight);
   m_root->layout(renderer);
+}
+
+void PowerTab::syncEmptyState() {
+  if (m_emptyCard == nullptr) {
+    return;
+  }
+  const auto shown = [](const Flex* card) { return card != nullptr && card->visible(); };
+  m_emptyCard->setVisible(
+      !shown(m_statusCard)
+      && !shown(m_profilesCard)
+      && !shown(m_chargingCard)
+      && !shown(m_healthCard)
+      && !shown(m_peripheralsCard)
+  );
 }
 
 void PowerTab::doUpdate(Renderer& /*renderer*/) {
@@ -439,6 +462,7 @@ void PowerTab::doUpdate(Renderer& /*renderer*/) {
   syncPowerProfiles();
   syncBatteryHealth();
   rebuildPeripherals();
+  syncEmptyState();
 }
 
 void PowerTab::rebuildChargeLimits() {

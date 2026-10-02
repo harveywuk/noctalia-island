@@ -362,6 +362,8 @@
       "power-profile": "Energiprofil",
       "time-to-empty": "{time} kvar",
       "time-to-full": "{time} tills fulladdad",
+      "unavailable-detail": "Installera och aktivera UPower och power-profiles-daemon för att se batteri och energilägen här.",
+      "unavailable-title": "Ströminformation är inte tillgänglig",
       "unknown-device": "Okänd enhet"
     },
     "screen-time": {

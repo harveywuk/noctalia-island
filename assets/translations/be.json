@@ -409,6 +409,8 @@
       "power-profile": "Профіль сілкавання",
       "time-to-empty": "Засталося {time}",
       "time-to-full": "{time} да поўнага зараду",
+      "unavailable-detail": "Усталюйце і ўключыце UPower і power-profiles-daemon, каб бачыць тут батарэю і рэжымы сілкавання.",
+      "unavailable-title": "Звесткі пра сілкаванне недаступныя",
       "unknown-device": "Невядомая прылада"
     },
     "screen-time": {

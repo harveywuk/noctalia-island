@@ -51,6 +51,7 @@ private:
 
   void doLayout(Renderer& renderer, float contentWidth, float bodyHeight) override;
   void doUpdate(Renderer& renderer) override;
+  void syncEmptyState();
 
   void buildStatusCard(Flex& root, float scale);
   void buildChargingCard(Flex& root, float scale);
@@ -112,6 +113,8 @@ private:
 
   // Peripheral batteries
   Flex* m_peripheralsCard = nullptr;
+  // "Power information unavailable", while every other card is hidden.
+  Flex* m_emptyCard = nullptr;
   Flex* m_peripheralsList = nullptr;
 
   struct PeripheralRow {

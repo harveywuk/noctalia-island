@@ -359,6 +359,8 @@
       "power-profile": "Energieprofiel",
       "time-to-empty": "{time} over",
       "time-to-full": "{time} tot opgeladen",
+      "unavailable-detail": "Installeer en schakel UPower en power-profiles-daemon in om hier de accu en energiemodi te zien.",
+      "unavailable-title": "Energie-informatie niet beschikbaar",
       "unknown-device": "Onbekend apparaat"
     },
     "screen-time": {

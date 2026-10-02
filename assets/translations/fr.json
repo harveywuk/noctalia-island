@@ -413,6 +413,8 @@
       "power-profile": "Mode d'alimentation",
       "time-to-empty": "{time} restantes",
       "time-to-full": "Plus que {time} avant la charge complète",
+      "unavailable-detail": "Installez et activez UPower et power-profiles-daemon pour voir ici la batterie et les modes d’alimentation.",
+      "unavailable-title": "Informations d’alimentation indisponibles",
       "unknown-device": "Appareil inconnu"
     },
     "screen-time": {

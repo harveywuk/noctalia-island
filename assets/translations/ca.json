@@ -367,6 +367,8 @@
       "power-profile": "Perfil d'energia",
       "time-to-empty": "{time} restant",
       "time-to-full": "{time} fins ple",
+      "unavailable-detail": "Instal·leu i activeu UPower i power-profiles-daemon per veure aquí la bateria i els modes d'energia.",
+      "unavailable-title": "Informació d'energia no disponible",
       "unknown-device": "Dispositiu desconegut"
     },
     "screen-time": {

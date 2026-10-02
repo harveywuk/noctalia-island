@@ -455,6 +455,8 @@
       "power-profile": "Режим питания",
       "time-to-empty": "Осталось {time}",
       "time-to-full": "Осталось до полной зарядки: {time}",
+      "unavailable-detail": "Установите и включите UPower и power-profiles-daemon, чтобы видеть здесь батарею и режимы питания.",
+      "unavailable-title": "Сведения о питании недоступны",
       "unknown-device": "Неизвестное устройство"
     },
     "screen-time": {

@@ -99,6 +99,10 @@
       "next": "Nastupny trek",
       "play": "Prajhrać",
       "pause": "Paŭza"
+    },
+    "power": {
+      "unavailable-detail": "Ustaliujcie i ŭklučycie UPower i power-profiles-daemon, kab bačyć tut batareju i režymy silkavannia.",
+      "unavailable-title": "Zviestki pra silkavannie niedastupnyja"
     }
   },
   "lockscreen": {

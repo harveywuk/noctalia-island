@@ -374,6 +374,8 @@
       "power-profile": "Energiaprofil",
       "time-to-empty": "{time} van hátra",
       "time-to-full": "{time} a teljes töltöttségig",
+      "unavailable-detail": "Telepítse és engedélyezze az UPower és a power-profiles-daemon szolgáltatást az akkumulátor és az energiamódok megjelenítéséhez.",
+      "unavailable-title": "Az energiaellátási adatok nem érhetők el",
       "unknown-device": "Ismeretlen eszköz"
     },
     "screen-time": {

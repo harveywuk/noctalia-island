@@ -384,6 +384,8 @@
       "power-profile": "פרופיל צריכת חשמל",
       "time-to-empty": "נותרו {time}",
       "time-to-full": "{time} עד לטעינה מלאה",
+      "unavailable-detail": "יש להתקין ולהפעיל את UPower ו־power-profiles-daemon כדי לראות כאן את הסוללה ומצבי החשמל.",
+      "unavailable-title": "מידע על צריכת חשמל אינו זמין",
       "unknown-device": "התקן לא ידוע"
     },
     "screen-time": {
