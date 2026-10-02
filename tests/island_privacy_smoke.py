@@ -61,7 +61,14 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         capture = subprocess.Popen(['parec', '--device=privacy-mic', '--client-name=Privacy test',
                                     '--stream-name=Privacy capture'], env=env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(.7); shot('privacy-preview')
+        time.sleep(.7)
+        # "Microphone Active" sits centred in the Island, its icon and text as one group.
+        preview = Image.open(shot('privacy-preview')).convert('RGB')
+        pl, pr, pt, pb = island_box(preview)
+        bright = [x for x in range(pl, pr) for y in range(pt, pt+64) if min(preview.getpixel((x, y))) > 200]
+        assert bright, 'Microphone OSD missing'
+        offset = (min(bright)+max(bright))/2 - (pl+pr)/2
+        assert abs(offset) <= 4, f'Microphone OSD off centre by {offset:.0f}px'
         time.sleep(5); compact = Image.open(shot('privacy-compact')).convert('RGB')
         left, right, top, bottom = island_box(compact)
         columns = white_columns(compact, (left+right)//2, right, top, bottom)

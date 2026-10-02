@@ -1717,7 +1717,8 @@ void Island::prepare(Instance& inst) {
         m_mpris->setPosition(bus, static_cast<std::int64_t>(static_cast<double>(length) * seekFraction));
       };
     }
-  } else if (view == island::View::Osd && m_osd && m_osd->kind == OsdKind::LockKeys) {
+  } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::LockKeys || !m_osd->showProgress)) {
+    // Status messages without a level centre their icon and text as one group.
     constexpr float iconSize = 26.0F;
     constexpr float gap = 12.0F;
     const float maxTextWidth = std::max(1.0F, w - 40 - iconSize - gap);
@@ -1730,17 +1731,17 @@ void Island::prepare(Instance& inst) {
     auto* value = label(m_osd->value, x + iconSize + gap, 0, textWidth, 15);
     value->setPosition(value->x(), (h * s - value->height()) / 2);
   } else if (view == island::View::Osd && m_osd) {
-    glyph(m_osd->icon, 20, 19, 26);
-    if (m_osd->kind == OsdKind::Volume && m_osd->showProgress) {
+    // Icon and level span the Island with equal margins, so the group sits centred.
+    glyph(m_osd->icon, 20, (h - 26) / 2, 26);
+    if (m_osd->kind == OsdKind::Volume) {
       const float barHeight = cfg.volumeBarHeight;
       if (cfg.volumeShowPercentage)
         label(m_osd->value, 60, 12, w - 80, 15);
       const float barCenter = cfg.volumeShowPercentage ? 44.0F : h / 2.0F;
-      progress(m_osd->progress, 60, barCenter - barHeight / 2.0F, w - 85, barHeight);
+      progress(m_osd->progress, 60, barCenter - barHeight / 2.0F, w - 80, barHeight);
     } else {
-      label(m_osd->value, 60, m_osd->showProgress ? 12 : 22, w - 80, 15);
-      if (m_osd->showProgress)
-        progress(m_osd->progress, 60, 43, w - 85);
+      label(m_osd->value, 60, 12, w - 80, 15);
+      progress(m_osd->progress, 60, 43, w - 80);
     }
   } else if (view == island::View::Notification && m_notification) {
     const auto n = *m_notification;

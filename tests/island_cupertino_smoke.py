@@ -100,7 +100,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             hover(); shot(mode+'-bluetooth-hover')
             properties(battery, IsPresent=True, Type=2, State=1, Percentage=45.0, Serial='island-style-laptop')
             shot(mode+'-charging-batteries')
-            leave(); properties(bluetooth, Percentage=5); shot(mode+'-low-battery'); hover()
+            leave(); properties(bluetooth, Percentage=5); shot(mode+'-low-battery')
 
             capture = subprocess.Popen(['parec', '--device=island-style-mic', '--client-name=Island privacy test',
                                         '--stream-name=Island capture'], env=env, stdout=subprocess.DEVNULL,
