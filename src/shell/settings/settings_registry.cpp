@@ -3291,26 +3291,6 @@ namespace settings {
         &ShellConfig::PanelConfig::sessionPlacement, &ShellConfig::PanelConfig::sessionPosition
     ));
     entries.push_back(makeEntry(
-        SettingsSection::Power, "session-panel", tr("settings.schema.power.session-grid.label"),
-        tr("settings.schema.power.session-grid.description"), {"shell", "session", "grid"},
-        ToggleSetting{.checked = cfg.shell.session.grid}, "session panel grid layout rows columns"
-    ));
-    {
-      auto e = makeEntry(
-          SettingsSection::Power, "session-panel", tr("settings.schema.power.session-grid-columns.label"),
-          tr("settings.schema.power.session-grid-columns.description"), {"shell", "session", "grid_columns"},
-          StepperSetting{
-              .value = static_cast<int>(cfg.shell.session.gridColumns),
-              .minValue = static_cast<int>(noctalia::config::schema::kSessionGridColumnsRange.min.value()),
-              .maxValue = static_cast<int>(noctalia::config::schema::kSessionGridColumnsRange.max.value()),
-              .step = static_cast<int>(noctalia::config::schema::kSessionGridColumnsRange.step.value()),
-          },
-          "session panel grid columns per row"
-      );
-      e.visibleWhen = [](const Config& c) { return c.shell.session.grid; };
-      entries.push_back(std::move(e));
-    }
-    entries.push_back(makeEntry(
         SettingsSection::Power, "session-panel", tr("settings.schema.power.session-show-shortcuts.label"),
         tr("settings.schema.power.session-show-shortcuts.description"), {"shell", "session", "show_shortcuts"},
         ToggleSetting{.checked = cfg.shell.session.showShortcuts}, "session panel show shortcuts"

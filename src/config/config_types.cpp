@@ -102,27 +102,32 @@ bool isValidPluginSourceName(std::string_view name) {
 }
 
 std::vector<SessionPanelActionConfig> defaultSessionPanelActions() {
+  // The Apple menu's order: Sleep, Restart…, Shut Down…, then Lock Screen and Log Out….
+  // Restart, Shut Down and Log Out ask first, with macOS's one-minute countdown.
+  constexpr double kConfirmSeconds = 60.0;
   return {
       SessionPanelActionConfig{
-          .action = "lock",
+          .action = "lock_and_suspend",
           .shortcut = KeyChord{.sym = XKB_KEY_1},
       },
       SessionPanelActionConfig{
-          .action = "logout",
-          .shortcut = KeyChord{.sym = XKB_KEY_2},
-      },
-      SessionPanelActionConfig{
-          .action = "lock_and_suspend",
-          .shortcut = KeyChord{.sym = XKB_KEY_3},
-      },
-      SessionPanelActionConfig{
           .action = "reboot",
-          .shortcut = KeyChord{.sym = XKB_KEY_4},
+          .shortcut = KeyChord{.sym = XKB_KEY_2},
+          .countdownSeconds = kConfirmSeconds,
       },
       SessionPanelActionConfig{
           .action = "shutdown",
-          .variant = SessionActionButtonVariant::Destructive,
+          .shortcut = KeyChord{.sym = XKB_KEY_3},
+          .countdownSeconds = kConfirmSeconds,
+      },
+      SessionPanelActionConfig{
+          .action = "lock",
+          .shortcut = KeyChord{.sym = XKB_KEY_4},
+      },
+      SessionPanelActionConfig{
+          .action = "logout",
           .shortcut = KeyChord{.sym = XKB_KEY_5},
+          .countdownSeconds = kConfirmSeconds,
       },
   };
 }

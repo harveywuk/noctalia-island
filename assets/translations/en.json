@@ -1047,12 +1047,36 @@
   "session": {
     "actions": {
       "custom": "Custom",
-      "lock": "Lock",
-      "lock-and-suspend": "Lock & Suspend",
+      "lock": "Lock Screen",
+      "lock-and-suspend": "Sleep",
       "logout": "Log Out",
-      "reboot": "Reboot",
+      "reboot": "Restart",
       "shutdown": "Shut Down",
-      "suspend": "Suspend"
+      "suspend": "Sleep Without Locking"
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "custom-body": "If you do nothing, “{label}” will run automatically in {count} second.",
+      "custom-body-plural": "If you do nothing, “{label}” will run automatically in {count} seconds.",
+      "custom-title": "Are you sure you want to run “{label}” now?",
+      "lock-body": "If you do nothing, the screen will lock automatically in {count} second.",
+      "lock-body-plural": "If you do nothing, the screen will lock automatically in {count} seconds.",
+      "lock-title": "Are you sure you want to lock the screen now?",
+      "logout-body": "If you do nothing, you will be logged out automatically in {count} second.",
+      "logout-body-plural": "If you do nothing, you will be logged out automatically in {count} seconds.",
+      "logout-title": "Are you sure you want to quit all apps and log out now?",
+      "reboot-body": "If you do nothing, the computer will restart automatically in {count} second.",
+      "reboot-body-plural": "If you do nothing, the computer will restart automatically in {count} seconds.",
+      "reboot-title": "Are you sure you want to restart your computer now?",
+      "shutdown-body": "If you do nothing, the computer will shut down automatically in {count} second.",
+      "shutdown-body-plural": "If you do nothing, the computer will shut down automatically in {count} seconds.",
+      "shutdown-title": "Are you sure you want to shut down your computer now?",
+      "suspend-body": "If you do nothing, the computer will go to sleep automatically in {count} second.",
+      "suspend-body-plural": "If you do nothing, the computer will go to sleep automatically in {count} seconds.",
+      "suspend-title": "Are you sure you want to put your computer to sleep now?"
+    },
+    "menu": {
+      "logout-user": "Log Out {name}"
     },
     "errors": {
       "lock-body": "The session lock protocol is not available.",
@@ -3869,8 +3893,8 @@
       "command-label": "Shell command",
       "command-placeholder": "Optional bash command, leave empty for built-in behavior",
       "command-required-placeholder": "Shell command to run",
-      "countdown-seconds-description": "Wait this many seconds before running. Activate again to confirm immediately. 0 runs at once.",
-      "countdown-seconds-label": "Countdown (seconds)",
+      "countdown-seconds-description": "Ask first, with an alert that runs the action after this many seconds. 0 runs it at once.",
+      "countdown-seconds-label": "Confirm countdown (seconds)",
       "glyph-label": "Glyph",
       "glyph-picker-title": "Action glyph",
       "kind-section-label": "Behavior",
