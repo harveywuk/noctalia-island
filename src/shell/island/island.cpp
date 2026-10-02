@@ -1972,12 +1972,15 @@ void Island::prepare(Instance& inst) {
       }
     }
   }
-  if (!privacyList.empty()) {
+  // The expanded Island's icon row ends with the unread-notifications bell.
+  const bool rowBell = expandedView && showUnread;
+  if (!privacyList.empty() || rowBell) {
     // Capture indicators are clickable icons in every view: compact, beside notifications and OSDs,
     // and as a centred row in the expanded Island. Hovering names the capturing app.
+    const float rowWidth = static_cast<float>(privacyList.size() + (rowBell ? 1 : 0)) * 24 + 8;
     const float x = compactView
         ? w - (showUnread ? (view == island::View::Activity ? 48 : 38) : 14) - (showBattery ? 42 : 0) - privacyWidth
-        : (w - privacyWidth + 8) / 2;
+        : (w - rowWidth + 8) / 2;
     const float y = compactView ? (cfg.height - 24) / 2 : h;
     for (std::size_t i = 0; i < privacyList.size(); ++i) {
       const auto& activity = privacyList[i];
@@ -2071,6 +2074,20 @@ void Island::prepare(Instance& inst) {
             });
         });
       }
+    }
+    if (rowBell) {
+      const float bellX = x + static_cast<float>(privacyList.size()) * 24;
+      auto* bell = control(
+          bellX, y, 24, 24, "", "bell", i18n::trp("notifications.unread-count", unreadCount), 16, true,
+          [panel] { panel("notifications"); }, 10, 0
+      );
+      // As with the capture icons, the click goes through the Island's own action handling.
+      bell->inputArea()->setAcceptedButtons(0);
+      action(bellX, y, 24, 24, "unread-bell", [panel] { panel("notifications"); });
+      auto bellPalette =
+          (gCupertino ? islandButtonPalette(ButtonVariant::Ghost) : Button::defaultPalette(ButtonVariant::Ghost));
+      bellPalette.normal.label = islandRole(ColorRole::Primary);
+      bell->setCustomPalette(std::move(bellPalette));
     }
     if (!compactView)
       h += 32;
