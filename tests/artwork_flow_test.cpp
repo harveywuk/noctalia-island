@@ -45,7 +45,17 @@ int main() {
   flow.render(20.0F, again);
   TEST_CHECK(again == later);
 
+  // The accent is the artwork's vivid colour, lifted to read on black: red or blue here.
+  const auto accent = flow.accent();
+  TEST_CHECK((accent.r > 0.8F && accent.b < 0.3F) || (accent.b > 0.8F && accent.r < 0.3F));
+
+  // Greyscale artwork has no accent: white.
+  std::vector<std::uint8_t> grey(size * size * 4, 128);
+  TEST_CHECK(flow.setArtwork(grey, size, size));
+  TEST_CHECK(flow.accent().r == 1.0F && flow.accent().g == 1.0F && flow.accent().b == 1.0F);
+
   flow.clear();
   TEST_CHECK(!flow.hasArtwork());
+  TEST_CHECK(flow.accent().r == 1.0F);
   return 0;
 }

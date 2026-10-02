@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shell/control_center/artwork_flow_layer.h"
 #include "config/config_types.h"
 #include "core/timer_manager.h"
 #include "render/core/thumbnail_service.h"
@@ -84,6 +85,7 @@ private:
   void syncShortcuts();
   void syncHeaderActions();
   bool resizeMediaArtToCard();
+  void applyMediaOverlay(bool overlay);
   void onPanelCardOpacityChanged(float opacity) override;
 
   MprisService* m_mpris = nullptr;
@@ -149,6 +151,11 @@ private:
   Flex* m_mediaArtSlot = nullptr;
   Glyph* m_mediaArtFallback = nullptr;
   Image* m_mediaArt = nullptr;
+  // The artwork flow behind the media tile, with its text turned white over it.
+  Image* m_mediaBackdrop = nullptr;
+  control_center::ArtworkFlowLayer m_mediaFlow;
+  bool m_mediaPlaying = false;
+  bool m_mediaOverlay = false;
   std::string m_loadedMediaArtUrl;
   std::unordered_set<std::string> m_pendingArtDownloads;
   std::shared_ptr<void> m_aliveGuard = std::make_shared<int>(0);

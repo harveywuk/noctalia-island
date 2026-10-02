@@ -22,6 +22,17 @@ namespace visuals {
     // Renders the scene at `seconds` into `out` as kWidth x kHeight opaque RGBA8.
     void render(float seconds, std::vector<std::uint8_t>& out) const;
 
+    // The artwork's most vivid colour, brightened enough to read on black, as 0..1 RGB; white
+    // without artwork or when the artwork is greyscale.
+    struct Accent {
+      float r = 1, g = 1, b = 1;
+    };
+    [[nodiscard]] Accent accent() const noexcept { return m_accent; }
+
+    // True when NOCTALIA_FREEZE_ARTWORK_FLOW is set: callers keep the flow still, so screenshot
+    // tests can compare content drawn over it.
+    [[nodiscard]] static bool frozen();
+
   private:
     struct Rgb {
       float r = 0, g = 0, b = 0;
@@ -32,6 +43,7 @@ namespace visuals {
     int m_width = 0;
     int m_height = 0;
     Rgb m_average;
+    Accent m_accent;
   };
 
 } // namespace visuals

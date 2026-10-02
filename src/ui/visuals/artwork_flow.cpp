@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 
 namespace visuals {
 
@@ -56,13 +57,39 @@ namespace visuals {
     }
     const float count = static_cast<float>(m_source.size());
     m_average = {sum.r / count, sum.g / count, sum.b / count};
+
+    // Accent: the pixel with the highest chroma-weighted brightness, as HSV saturation x value.
+    float best = 0.0F;
+    Rgb vivid{1.0F, 1.0F, 1.0F};
+    for (const auto& c : m_source) {
+      const float hi = std::max({c.r, c.g, c.b});
+      const float lo = std::min({c.r, c.g, c.b});
+      const float score = hi > 0 ? (hi - lo) / hi * hi : 0.0F;
+      if (score > best) {
+        best = score;
+        vivid = c;
+      }
+    }
+    m_accent = {1.0F, 1.0F, 1.0F};
+    if (best >= 0.18F) {
+      // Lift dark accents so they stay legible as a fill on black.
+      const float hi = std::max({vivid.r, vivid.g, vivid.b});
+      const float lift = hi < 0.85F ? 0.85F / hi : 1.0F;
+      m_accent = {std::min(1.0F, vivid.r * lift), std::min(1.0F, vivid.g * lift), std::min(1.0F, vivid.b * lift)};
+    }
     return true;
+  }
+
+  bool ArtworkFlow::frozen() {
+    static const bool value = std::getenv("NOCTALIA_FREEZE_ARTWORK_FLOW") != nullptr;
+    return value;
   }
 
   void ArtworkFlow::clear() {
     m_source.clear();
     m_width = m_height = 0;
     m_average = {};
+    m_accent = {};
   }
 
   ArtworkFlow::Rgb ArtworkFlow::sample(float u, float v) const {

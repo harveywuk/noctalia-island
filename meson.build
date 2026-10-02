@@ -894,6 +894,7 @@ _noctalia_sources = files(
   'src/time/time_format.cpp',
   'src/time/time_service.cpp',
   'src/ui/visuals/artwork_flow.cpp',
+  'src/shell/control_center/artwork_flow_layer.cpp',
   'src/ui/visuals/audio_visualizer.cpp',
   'src/ui/visuals/fancy_audio_visualizer.cpp',
   'src/ui/controls/box.cpp',

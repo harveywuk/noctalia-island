@@ -37,6 +37,38 @@ namespace control_center {
     );
   }
 
+  std::unique_ptr<Flex> makeEmptyState(
+      const std::string& glyph, const std::string& title, const std::string& detail, float scale, float fillOpacity
+  ) {
+    auto card = ui::column({.configure = [scale, fillOpacity](Flex& section) {
+      applySectionCardStyle(section, scale, fillOpacity);
+      section.setAlign(FlexAlign::Center);
+      section.setPadding(Style::spaceLg * scale);
+    }});
+    card->addChild(ui::glyph({
+        .glyph = glyph,
+        .glyphSize = 32.0F * scale,
+        .color = colorSpecFromRole(ColorRole::OnSurfaceVariant, 0.7F),
+    }));
+    card->addChild(ui::label({
+        .text = title,
+        .fontSize = Style::fontSizeBody * scale,
+        .fontWeight = FontWeight::SemiBold,
+        .color = colorSpecFromRole(ColorRole::OnSurface),
+        .textAlign = TextAlign::Center,
+    }));
+    if (!detail.empty()) {
+      card->addChild(ui::label({
+          .text = detail,
+          .fontSize = Style::fontSizeCaption * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          .maxLines = 3,
+          .textAlign = TextAlign::Center,
+      }));
+    }
+    return card;
+  }
+
   std::unique_ptr<Flex> makeCardHeaderRow(const std::string& title, float scale) {
     return ui::row(
         {.align = FlexAlign::Center, .gap = Style::spaceSm * scale, .minHeight = Style::controlHeightSm * scale},

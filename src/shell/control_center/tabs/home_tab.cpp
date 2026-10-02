@@ -454,6 +454,12 @@ std::unique_ptr<Flex> HomeTab::create() {
           })
       )
   );
+  // The artwork flow fills the tile behind its content while something with artwork plays.
+  auto mediaBackdrop = ui::image({.out = &m_mediaBackdrop, .fit = ImageFit::Cover, .visible = false});
+  mediaBackdrop->setParticipatesInLayout(false);
+  mediaBackdrop->setHitTestVisible(false);
+  mediaCard->addChild(std::move(mediaBackdrop));
+  m_mediaFlow.attach(m_mediaBackdrop);
   mediaCard->addChild(std::move(mediaContent));
 
   // Clicking anywhere on the media card opens the media tab.
@@ -1117,6 +1123,11 @@ void HomeTab::layoutCardOverlays() {
     area->setSize(card->width(), card->height());
   };
   cover(m_mediaCard, m_mediaCardArea);
+  if (m_mediaCard != nullptr && m_mediaBackdrop != nullptr) {
+    m_mediaBackdrop->setPosition(0.0F, 0.0F);
+    m_mediaBackdrop->setSize(m_mediaCard->width(), m_mediaCard->height());
+    m_mediaBackdrop->setRadius(Style::scaledRadiusXl(contentScale()));
+  }
   cover(m_dateTimeCard, m_dateTimeCardArea);
   cover(m_userCard, m_userCardKeyboardArea);
 
@@ -1383,6 +1394,7 @@ void HomeTab::onFrameTick(float /*deltaMs*/) {}
 void HomeTab::setActive(bool active) {
   const bool becameActive = active && !m_active;
   m_active = active;
+  m_mediaFlow.setAnimating(m_active && m_mediaPlaying);
   if (!active) {
     m_progressTimer.stop();
     m_clockTimer.stop();
@@ -1437,6 +1449,10 @@ void HomeTab::onClose() {
   m_bottomRow = nullptr;
   m_dateTimeCard = nullptr;
   m_mediaCard = nullptr;
+  m_mediaFlow.release();
+  m_mediaBackdrop = nullptr;
+  m_mediaPlaying = false;
+  m_mediaOverlay = false;
   m_mediaText = nullptr;
   m_userCard = nullptr;
   m_userMain = nullptr;
@@ -1628,6 +1644,8 @@ void HomeTab::sync(Renderer& renderer) {
       if (m_mediaArt != nullptr) {
         m_mediaArt->clear(renderer);
         m_mediaArt->setVisible(false);
+        m_mediaFlow.clear();
+        m_mediaPlaying = false;
       }
       m_loadedMediaArtUrl.clear();
       PanelManager::instance().requestLayout();
@@ -1650,6 +1668,8 @@ void HomeTab::sync(Renderer& renderer) {
         if (m_mediaArt != nullptr) {
           m_mediaArt->clear(renderer);
           m_mediaArt->setVisible(false);
+          m_mediaFlow.clear();
+          m_mediaPlaying = false;
         }
         m_loadedMediaArtUrl.clear();
         PanelManager::instance().requestLayout();
@@ -1732,6 +1752,9 @@ void HomeTab::sync(Renderer& renderer) {
             } else {
               m_mediaArt->clear(renderer);
             }
+            if (!loaded || !m_mediaFlow.load(renderer, artPath)) {
+              m_mediaFlow.clear();
+            }
             m_mediaArt->setVisible(loaded);
             m_mediaArtFallback->setVisible(!loaded);
             m_loadedMediaArtUrl = loaded ? artUrl : std::string{};
@@ -1739,6 +1762,7 @@ void HomeTab::sync(Renderer& renderer) {
           }
         }
         std::string statusText;
+        m_mediaPlaying = active->playbackStatus == "Playing";
         if (active->playbackStatus == "Playing") {
           statusText = i18n::tr("control-center.home.media.playing");
           m_mediaStatus->setColor(colorSpecFromRole(ColorRole::Primary));
@@ -1759,6 +1783,34 @@ void HomeTab::sync(Renderer& renderer) {
       }
     }
   }
+  m_mediaFlow.setAnimating(m_active && m_mediaPlaying);
+  applyMediaOverlay(m_mediaFlow.hasArtwork());
+}
+
+void HomeTab::applyMediaOverlay(bool overlay) {
+  // White text over the artwork flow, as on the media card; the theme's otherwise.
+  const auto white = [](float alpha) { return fixedColorSpec(rgba(1.0F, 1.0F, 1.0F, alpha)); };
+  const auto colour = [&](Label* label, float alpha) {
+    if (label != nullptr && overlay)
+      label->setColor(white(alpha));
+  };
+  if (overlay == m_mediaOverlay && !overlay)
+    return;
+  m_mediaOverlay = overlay;
+  if (!overlay) {
+    if (m_mediaTrack != nullptr)
+      m_mediaTrack->setColor(colorSpecFromRole(ColorRole::OnSurface));
+    if (m_mediaArtist != nullptr)
+      m_mediaArtist->setColor(colorSpecFromRole(ColorRole::OnSurfaceVariant));
+    if (m_mediaProgress != nullptr)
+      m_mediaProgress->setColor(colorSpecFromRole(ColorRole::Secondary));
+    // The status colour follows playback state and is restored by the next sync.
+    return;
+  }
+  colour(m_mediaTrack, 1.0F);
+  colour(m_mediaArtist, 0.78F);
+  colour(m_mediaStatus, 0.7F);
+  colour(m_mediaProgress, 0.6F);
 }
 
 void HomeTab::warnOnOversizedAvatarSource(const std::string& path) {

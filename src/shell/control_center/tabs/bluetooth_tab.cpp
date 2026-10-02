@@ -788,13 +788,9 @@ void BluetoothTab::rebuildDeviceList(Renderer& renderer) {
   }
 
   if (m_service == nullptr) {
-    m_list->addChild(
-        ui::label({
-            .text = i18n::tr("control-center.bluetooth.unavailable"),
-            .fontSize = Style::fontSizeCaption * scale,
-            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-        })
-    );
+    m_list->addChild(control_center::makeEmptyState(
+        "bluetooth-off", i18n::tr("control-center.bluetooth.unavailable"), "", scale, panelCardOpacity()
+    ));
     m_list->layout(renderer);
     return;
   }
@@ -901,26 +897,19 @@ void BluetoothTab::rebuildDeviceList(Renderer& renderer) {
   }
 
   if (!s.powered) {
-    m_list->addChild(
-        ui::label({
-            .text = s.rfkillSoftBlocked ? i18n::tr("control-center.bluetooth.rfkill-blocked")
-                                        : i18n::tr("control-center.bluetooth.off"),
-            .fontSize = Style::fontSizeBody * scale,
-            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-        })
-    );
+    m_list->addChild(control_center::makeEmptyState(
+        "bluetooth-off",
+        s.rfkillSoftBlocked ? i18n::tr("control-center.bluetooth.rfkill-blocked") : i18n::tr("control-center.bluetooth.off"),
+        "", scale, panelCardOpacity()
+    ));
     m_list->layout(renderer);
     return;
   }
 
   if (devices.empty()) {
-    m_list->addChild(
-        ui::label({
-            .text = i18n::tr("control-center.bluetooth.no-devices"),
-            .fontSize = Style::fontSizeBody * scale,
-            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-        })
-    );
+    m_list->addChild(control_center::makeEmptyState(
+        "bluetooth", i18n::tr("control-center.bluetooth.no-devices"), "", scale, panelCardOpacity()
+    ));
     m_list->layout(renderer);
     return;
   }

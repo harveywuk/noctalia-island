@@ -1769,6 +1769,11 @@ void Island::prepare(Instance& inst) {
     const float fraction =
         player->lengthUs > 0 ? static_cast<float>(player->positionUs) / static_cast<float>(player->lengthUs) : 0;
     inst.seekProgress = progress(inst.seeking ? inst.seekFraction : fraction, 27, 106 + mediaOffset, w - 54);
+    // Cupertino tints the track's progress with its artwork's most vivid colour.
+    if (gCupertino && m_flowArt == artPath && m_flow.hasArtwork()) {
+      const auto accent = m_flow.accent();
+      inst.seekProgress->setFill(islandFixed(rgba(accent.r, accent.g, accent.b), 1.0F));
+    }
     inst.mediaPosition = label(
         std::format("{}:{:02}", displayPosition / 60, displayPosition % 60), 27, 118 + mediaOffset, 65,
         Style::fontSizeMini, inst.seeking ? islandRole(ColorRole::Primary) : muted
@@ -2439,7 +2444,10 @@ void Island::showFlow(Instance& inst, bool show) {
   }
   // The caller has made this surface's context current.
   m_flow.render(
-      std::chrono::duration<float>(std::chrono::steady_clock::now() - m_flowStart).count(), m_flowFrame
+      visuals::ArtworkFlow::frozen()
+          ? 0.0F
+          : std::chrono::duration<float>(std::chrono::steady_clock::now() - m_flowStart).count(),
+      m_flowFrame
   );
   auto& textures = inst.surface->renderTarget().renderer().textureManager();
   if (inst.flowTexture.id == 0)
@@ -2454,7 +2462,7 @@ void Island::showFlow(Instance& inst, bool show) {
   inst.flowImage->setExternalTexture(inst.surface->renderTarget().renderer(), inst.flowTexture);
   inst.flowImage->setVisible(true);
   inst.flowImage->markPaintDirty();
-  if (!m_flowTimer.active() && MotionService::instance().enabled())
+  if (!m_flowTimer.active() && MotionService::instance().enabled() && !visuals::ArtworkFlow::frozen())
     m_flowTimer.startRepeating(std::chrono::milliseconds(33), [this] { tickFlow(); });
 }
 

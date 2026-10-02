@@ -1374,13 +1374,10 @@ void NetworkTab::rebuildApList(Renderer& renderer) {
   }
 
   if (m_network == nullptr) {
-    m_list->addChild(
-        ui::label({
-            .text = i18n::tr("control-center.network.unavailable-title"),
-            .fontSize = Style::fontSizeBody * scale,
-            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-        })
-    );
+    m_list->addChild(control_center::makeEmptyState(
+        "world-off", i18n::tr("control-center.network.unavailable-title"),
+        i18n::tr("control-center.network.unavailable-detail"), scale, panelCardOpacity()
+    ));
   } else {
     const float opacity = panelCardOpacity();
 

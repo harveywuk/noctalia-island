@@ -2,9 +2,8 @@
 
 #include "core/timer_manager.h"
 #include "dbus/mpris/mpris_service.h"
-#include "render/core/texture_handle.h"
+#include "shell/control_center/artwork_flow_layer.h"
 #include "shell/control_center/tab.h"
-#include "ui/visuals/artwork_flow.h"
 
 #include <chrono>
 #include <cstdint>
@@ -44,12 +43,8 @@ private:
   void doUpdate(Renderer& renderer) override;
   void refresh(Renderer& renderer);
   void refreshContent(Renderer& renderer);
-  // Draws the artwork flow at the current time into its texture and shows it behind the card.
-  void uploadFlow(Renderer& renderer);
   // White text and controls over the artwork flow (Apple Music style); the theme's otherwise.
   void applyOverlay(bool overlay);
-  // Runs the flow animation while the tab is shown with artwork and motion is enabled.
-  void syncFlowTimer();
   void footerHoverChanged(bool entered);
   void setControlsRevealed(bool revealed, bool animate);
   void clearArt(Renderer& renderer);
@@ -83,12 +78,7 @@ private:
   Timer m_footerHideTimer;
   int m_footerHoverCount = 0;
   bool m_controlsRevealed = false;
-  visuals::ArtworkFlow m_flow;
-  std::vector<std::uint8_t> m_flowFrame;
-  TextureHandle m_flowTexture{};
-  float m_flowSeconds = 0.0F;
-  std::chrono::steady_clock::time_point m_flowLastTick;
-  Timer m_flowTimer;
+  control_center::ArtworkFlowLayer m_flowLayer;
   bool m_overlay = false;
   Flex* m_artworkRow = nullptr;
   Flex* m_nowCard = nullptr;

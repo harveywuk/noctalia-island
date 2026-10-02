@@ -20,6 +20,12 @@ namespace control_center {
   // controls appended by the caller. Used for titled group cards.
   std::unique_ptr<Flex> makeCardHeaderRow(const std::string& title, float scale = 1.0F);
 
+  // A card for a tab with nothing to list (service missing, radio off, no devices): a large
+  // muted symbol over a centred title and optional detail line.
+  std::unique_ptr<Flex> makeEmptyState(
+      const std::string& glyph, const std::string& title, const std::string& detail, float scale, float fillOpacity
+  );
+
 } // namespace control_center
 
 class Tab {

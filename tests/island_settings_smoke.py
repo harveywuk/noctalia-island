@@ -64,6 +64,8 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     # Keep the host's webcam users (the /proc scan) out of the private session.
     (base/'emptyproc').mkdir()
     env['NOCTALIA_PRIVACY_PROC_ROOT']=str(base/'emptyproc')
+    # Hold the artwork gradient still so pixel comparisons over media cards stay stable.
+    env['NOCTALIA_FREEZE_ARTWORK_FLOW']='1'
     env['HOME']=str(base)
     env['DBUS_SYSTEM_BUS_ADDRESS']=env['DBUS_SESSION_BUS_ADDRESS']
     env.pop('WAYLAND_DISPLAY',None); env.pop('DISPLAY',None)
