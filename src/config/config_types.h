@@ -311,8 +311,6 @@ struct BarConfig {
   // Inside outline for the bar background; attached panels inherit the resolved values.
   ColorSpec border = colorSpecFromRole(ColorRole::Outline);
   float borderWidth = 0.0F;
-  // Faint hairline around the dock's glass, as on macOS; drawn when border_width is 0.
-  bool hairlineBorder = true;
   std::int32_t radius = static_cast<std::int32_t>(Style::radiusXl);
   std::int32_t radiusTopLeft = static_cast<std::int32_t>(Style::radiusXl);
   std::int32_t radiusTopRight = static_cast<std::int32_t>(Style::radiusXl);
@@ -848,6 +846,8 @@ struct DockConfig {
   // Inside outline for the dock background.
   ColorSpec border = colorSpecFromRole(ColorRole::Outline);
   float borderWidth = 0.0F;
+  // Faint hairline around the dock's glass, as on macOS; drawn when border_width is 0.
+  bool hairlineBorder = true;
   // Defaults float a fully rounded dock above the screen edge, like macOS.
   std::int32_t radius = static_cast<std::int32_t>(Style::radiusXl); // dock background corner radius
   std::int32_t radiusTopLeft = static_cast<std::int32_t>(Style::radiusXl);
