@@ -73,51 +73,49 @@ namespace island {
     std::array<PrivacyFilter, 3> m_filters;
   };
 
-  // Compact views give capture indicators a single slot, cycling through the active kinds.
+  // Compact views give their indicators (capture kinds, unread notifications) a single slot,
+  // cycling through whichever are active.
   class PrivacyRotation {
   public:
     using Clock = std::chrono::steady_clock;
     static constexpr auto kInterval = std::chrono::seconds(5);
 
-    // The activity to show now. A newly started capture is shown at once; `hold` (the pointer
-    // is on the icon) keeps the current one so its tooltip and click target stay put.
-    const PrivacyActivity* pick(const std::vector<PrivacyActivity>& list, Clock::time_point now, bool hold = false) {
-      if (list.empty()) {
-        m_shown.reset();
-        m_kinds.clear();
-        return nullptr;
+    // Index into `ids` of the indicator to show now. A newly active one is shown at once;
+    // `hold` (the pointer is on the slot) keeps the current one so its tooltip and click target
+    // stay put.
+    std::optional<std::size_t> pick(const std::vector<std::string>& ids, Clock::time_point now, bool hold = false) {
+      if (ids.empty()) {
+        m_shown.clear();
+        m_ids.clear();
+        return std::nullopt;
       }
-      std::vector<PrivacyCaptureKind> kinds;
-      for (const auto& activity : list)
-        kinds.push_back(activity.kind);
-      const auto index = [&](PrivacyCaptureKind kind) {
-        return static_cast<std::size_t>(std::ranges::find(kinds, kind) - kinds.begin());
+      const auto index = [&](const std::string& id) {
+        return static_cast<std::size_t>(std::ranges::find(ids, id) - ids.begin());
       };
-      std::optional<PrivacyCaptureKind> added;
-      for (const auto kind : kinds)
-        if (!std::ranges::contains(m_kinds, kind))
-          added = kind;
-      m_kinds = kinds;
-      if (added && !hold) {
+      std::optional<std::string> added;
+      for (const auto& id : ids)
+        if (!std::ranges::contains(m_ids, id))
+          added = id;
+      m_ids = ids;
+      if (added && !hold)
         show(*added, now);
-      } else if (!m_shown || index(*m_shown) == kinds.size()) {
-        show(kinds.front(), now);
-      } else if (hold) {
+      else if (index(m_shown) == ids.size())
+        show(ids.front(), now);
+      else if (hold)
         m_shownAt = now;
-      } else if (now - m_shownAt >= kInterval) {
-        show(kinds[(index(*m_shown) + 1) % kinds.size()], now);
-      }
-      return &list[index(*m_shown)];
+      else if (now - m_shownAt >= kInterval)
+        show(ids[(index(m_shown) + 1) % ids.size()], now);
+      return index(m_shown);
     }
 
   private:
-    void show(PrivacyCaptureKind kind, Clock::time_point now) {
-      m_shown = kind;
+    void show(const std::string& id, Clock::time_point now) {
+      m_shown = id;
       m_shownAt = now;
     }
 
-    std::optional<PrivacyCaptureKind> m_shown;
+    std::string m_shown;
     Clock::time_point m_shownAt;
-    std::vector<PrivacyCaptureKind> m_kinds;
+    std::vector<std::string> m_ids;
   };
 } // namespace island

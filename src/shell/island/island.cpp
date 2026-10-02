@@ -1029,16 +1029,10 @@ void Island::prepare(Instance& inst) {
   const auto batteryList =
       !recording && (compactView || expandedView) ? batteries(cfg, inst.output) : std::vector<island::Battery>{};
   const bool showBattery = compactView && !batteryList.empty() && batteryList.front().compact();
-  auto privacyList = privacy();
-  // Outside the expanded Island capture indicators share one slot, cycling every few seconds.
-  if (const auto* shown = inst.privacyRotation.pick(privacyList, island::PrivacyRotation::Clock::now(), inst.badgeHovered);
-      shown != nullptr && !expandedView)
-    privacyList = {*shown};
-  const float privacyWidth = privacyList.empty() ? 0 : static_cast<float>(privacyList.size()) * 24 + 8;
   const auto unreadCount = m_notifications
       ? std::ranges::count_if(m_notifications->history(), [](const auto& entry) { return !entry.seen; })
       : 0;
-  const bool showUnread = unreadCount > 0
+  bool showUnread = unreadCount > 0
       && !recording
       && (view == island::View::Rest
           || view == island::View::Activity
@@ -1049,6 +1043,25 @@ void Island::prepare(Instance& inst) {
           || view == island::View::Timers
           || view == island::View::TimerActivity);
   constexpr float badgeWidth = 24.0F;
+  auto privacyList = privacy();
+  // Outside the expanded Island capture indicators share one slot, cycling every few seconds;
+  // in compact views the unread-notifications bell joins that slot rather than taking its own.
+  bool slotBell = false;
+  if (!expandedView && !privacyList.empty()) {
+    std::vector<std::string> ids;
+    for (const auto& activity : privacyList)
+      ids.emplace_back(activity.icon());
+    if (compactView && showUnread)
+      ids.emplace_back("notifications");
+    const auto shown = *inst.privacyRotation.pick(ids, island::PrivacyRotation::Clock::now(), inst.badgeHovered);
+    slotBell = shown == privacyList.size();
+    privacyList = {privacyList[slotBell ? 0 : shown]};
+    if (compactView)
+      showUnread = false;
+  } else if (privacyList.empty()) {
+    (void)inst.privacyRotation.pick({}, island::PrivacyRotation::Clock::now());
+  }
+  const float privacyWidth = privacyList.empty() ? 0 : static_cast<float>(privacyList.size()) * 24 + 8;
   // A gesture belongs to the track and card where it started.
   if (inst.seeking
       && (view != island::View::Media
@@ -1141,6 +1154,8 @@ void Island::prepare(Instance& inst) {
       );
   for (const auto& activity : privacyList)
     signature += std::format("|privacy:{}:{}", static_cast<int>(activity.kind), activity.appNames());
+  if (slotBell)
+    signature += "|slot-bell";
   if (showBattery || expandedView)
     for (const auto& battery : batteryList)
       signature += std::format(
@@ -1966,9 +1981,15 @@ void Island::prepare(Instance& inst) {
         continue;
       }
       auto* icon = control(
-          x + static_cast<float>(i) * 24, y, 24, 24, "", activity.icon(),
-          i18n::tr(activity.labelKey()) + ": " + activity.appNames(), 16, true,
-          [this, &inst, panel, kind = activity.kind, binaries = activity.binaries] {
+          x + static_cast<float>(i) * 24, y, 24, 24, "", slotBell ? "bell" : activity.icon(),
+          slotBell ? i18n::tr("notifications.unread-history")
+                   : i18n::tr(activity.labelKey()) + ": " + activity.appNames(),
+          16, true,
+          [this, &inst, panel, slotBell, kind = activity.kind, binaries = activity.binaries] {
+            if (slotBell) {
+              panel("notifications");
+              return;
+            }
             if (kind == PrivacyCaptureKind::Microphone) {
               panel("audio");
               return;
@@ -2500,8 +2521,11 @@ island::Size Island::panelReturnSize() const {
   const auto batteryList = batteries(cfg, output);
   const bool unread =
       m_notifications && std::ranges::any_of(m_notifications->history(), [](const auto& item) { return !item.seen; });
-  size.width = island::batteryWidth(size.width, view, !batteryList.empty() && batteryList.front().compact(), unread);
   const auto privacyList = privacy();
+  // The unread bell shares the privacy slot when both are active.
+  size.width = island::batteryWidth(
+      size.width, view, !batteryList.empty() && batteryList.front().compact(), unread && privacyList.empty()
+  );
   if (!privacyList.empty()) {
     if (view == island::View::Rest
         || view == island::View::Activity

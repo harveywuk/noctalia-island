@@ -37,27 +37,26 @@ int main() {
   state.captures.clear();
   TEST_CHECK(summary.snapshot(state, config).empty());
 
-  // One slot cycles through active kinds every five seconds.
+  // One slot cycles through active indicators every five seconds.
   using namespace std::chrono_literals;
   island::PrivacyRotation rotation;
   const island::PrivacyRotation::Clock::time_point t0{};
-  std::vector<island::PrivacyActivity> list{{PrivacyCaptureKind::Microphone, {"Call"}},
-                                            {PrivacyCaptureKind::Camera, {"Call"}}};
-  TEST_CHECK(rotation.pick({}, t0) == nullptr);
-  TEST_CHECK(rotation.pick(list, t0)->kind == PrivacyCaptureKind::Camera); // Newest first.
-  TEST_CHECK(rotation.pick(list, t0 + 4s)->kind == PrivacyCaptureKind::Camera);
-  TEST_CHECK(rotation.pick(list, t0 + 5s)->kind == PrivacyCaptureKind::Microphone);
-  TEST_CHECK(rotation.pick(list, t0 + 10s)->kind == PrivacyCaptureKind::Camera);
+  std::vector<std::string> ids{"microphone", "camera"};
+  const auto shown = [&](auto at, bool hold = false) { return ids[*rotation.pick(ids, t0 + at, hold)]; };
+  TEST_CHECK(!rotation.pick({}, t0));
+  TEST_CHECK(shown(0s) == "camera"); // Newest first.
+  TEST_CHECK(shown(4s) == "camera");
+  TEST_CHECK(shown(5s) == "microphone");
+  TEST_CHECK(shown(10s) == "camera");
   // Hovering holds the current icon, and the interval restarts on leaving.
-  TEST_CHECK(rotation.pick(list, t0 + 16s, true)->kind == PrivacyCaptureKind::Camera);
-  TEST_CHECK(rotation.pick(list, t0 + 20s)->kind == PrivacyCaptureKind::Camera);
-  TEST_CHECK(rotation.pick(list, t0 + 21s)->kind == PrivacyCaptureKind::Microphone);
-  // A capture that starts is shown at once; one that stops falls back to what remains.
-  list.push_back({PrivacyCaptureKind::Screen, {"Recorder"}});
-  TEST_CHECK(rotation.pick(list, t0 + 22s)->kind == PrivacyCaptureKind::Screen);
-  list.pop_back();
-  TEST_CHECK(rotation.pick(list, t0 + 23s)->kind == PrivacyCaptureKind::Microphone);
-  list.erase(list.begin());
-  TEST_CHECK(rotation.pick(list, t0 + 24s)->kind == PrivacyCaptureKind::Camera);
+  TEST_CHECK(shown(16s, true) == "camera");
+  TEST_CHECK(shown(20s) == "camera");
+  TEST_CHECK(shown(21s) == "microphone");
+  // An indicator that appears is shown at once; one that goes falls back to what remains.
+  ids.push_back("notifications");
+  TEST_CHECK(shown(22s) == "notifications");
+  TEST_CHECK(shown(27s) == "microphone");
+  ids.erase(ids.begin());
+  TEST_CHECK(shown(28s) == "camera");
   return 0;
 }

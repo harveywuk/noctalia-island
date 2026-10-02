@@ -3,7 +3,8 @@
 A fake /proc (NOCTALIA_PRIVACY_PROC_ROOT) lists a "camtest" process holding /dev/video0, and a
 kitty window with that class stands in for the app. The compact Island must show the camera
 icon, name the app on hover, and raise its window when clicked; so must the expanded Island.
-With a microphone capture too, the compact Island keeps one indicator slot that alternates.
+With a microphone capture and an unread notification too, the compact Island keeps one
+indicator slot that cycles through all three.
 """
 import json
 import os
@@ -126,8 +127,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         capture = subprocess.Popen(['parec', '--device=privacy-mic', '--client-name=Privacy test'], env=env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(7)  # Past the capture preview.
+        run(['notify-send', '-t', '2000', 'Unread test', 'Waits in history unseen.'])
+        time.sleep(8)  # Past the notification preview.
         patterns = []
-        for index in range(12):
+        for index in range(18):
             frame = Image.open(shot(f'camera-rotation-{index}')).convert('RGB')
             fl, fr, ft, fb = (lambda xs, ys: (min(xs), max(xs), min(ys), max(ys)))(
                 [x for x in range(frame.width) if max(frame.getpixel((x, 20))) < 12],
@@ -137,10 +140,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             patterns.append(tuple(min(frame.getpixel((x, y))) > 200
                                   for x in range(ix-8, ix+8) for y in range(iy-8, iy+8)))
             time.sleep(1)
-        assert len(set(patterns)) >= 2, 'Compact privacy indicator did not alternate'
+        assert len(set(patterns)) >= 3, f'Compact indicator slot did not cycle ({len(set(patterns))} glyphs)'
         assert shell.poll() is None
         print('PASS: webcam held outside PipeWire shows, names and raises its app (compact and expanded); '
-              'one compact slot alternates with the microphone', flush=True)
+              'one compact slot cycles camera, microphone and unread bell', flush=True)
     finally:
         if capture is not None:
             capture.terminate(); capture.wait(timeout=5)
