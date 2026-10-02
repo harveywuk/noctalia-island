@@ -702,6 +702,7 @@ _noctalia_sources = files(
   'src/shell/island/island.cpp',
   'src/shell/island/island_widget_host.cpp',
   'src/dbus/downloads/download_progress_service.cpp',
+  'src/dbus/launcher/launcher_badge_service.cpp',
   'src/system/steam_activity.cpp',
   'src/shell/tooltip/tooltip_manager.cpp',
   'src/shell/hot_corners/hot_corners.cpp',
