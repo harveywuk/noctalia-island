@@ -423,7 +423,7 @@ void SessionPanel::onOpen(std::string_view context) {
   m_reopenContext = std::string(context);
   applyStage();
   if (m_stage == Stage::Confirm) {
-    PanelManager::instance().requestFrameTick();
+    PanelManager::instance().requestAnimationFrameForPanel("session");
   }
 }
 
@@ -494,7 +494,7 @@ void SessionPanel::showConfirm(std::size_t index) {
   m_reopenContext = std::string(kConfirmContextPrefix) + std::to_string(index);
   applyStage();
   PanelManager::instance().requestLayout();
-  PanelManager::instance().requestFrameTick();
+  PanelManager::instance().requestAnimationFrameForPanel("session");
   PanelManager::instance().refresh();
 }
 
@@ -636,7 +636,7 @@ void SessionPanel::onFrameTick(float deltaMs) {
     PanelManager::instance().requestLayout();
     PanelManager::instance().refresh();
   }
-  PanelManager::instance().requestFrameTick();
+  PanelManager::instance().requestAnimationFrameForPanel("session");
 }
 
 bool SessionPanel::handleGlobalKey(std::uint32_t sym, std::uint32_t modifiers, bool pressed, bool preedit) {
