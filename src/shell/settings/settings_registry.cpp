@@ -4,6 +4,7 @@
 #include "config/schema/config_schema.h"
 #include "config/schema/ranges.h"
 #include "core/files/directory_scanner.h"
+#include "core/font_defaults.h"
 #include "core/log.h"
 #include "core/process/process.h"
 #include "i18n/i18n.h"
@@ -802,12 +803,12 @@ namespace settings {
     ));
     {
       SettingControl fontFamilyControl =
-          TextSetting{.value = cfg.shell.fontFamily, .placeholder = "sans-serif", .browseFileExtensions = {}};
+          TextSetting{.value = cfg.shell.fontFamily, .placeholder = font_defaults::kFamily, .browseFileExtensions = {}};
       if (!env.fontFamilies.empty()) {
         fontFamilyControl = SearchPickerSetting{
             .options = env.fontFamilies,
             .selectedValue = cfg.shell.fontFamily,
-            .placeholder = "sans-serif",
+            .placeholder = font_defaults::kFamily,
             .emptyText = tr("ui.controls.search-picker.empty"),
             .preferredHeight = 280.0F,
         };

@@ -46,7 +46,7 @@ input_borders         = true            # draw outlines around text fields and o
 popup_borders         = true            # draw outlines around popups and dropdowns (dialogs always have outlines)
 card_borders          = true            # draw outlines around section cards inside panels and settings
 popup_shadows         = true            # draw drop shadows behind popups and dropdowns
-font_family           = "sans-serif"    # Pango family string; Fontconfig handles fallback
+font_family           = "SF Pro Text, SF Pro, Inter, sans-serif"  # Pango family list; first installed family wins
 lang                  = ""              # empty = auto-detect; otherwise BCP-47 or POSIX locale
 time_format           = "{:%H:%M}"      # default time format for shell UI without its own setting
 date_format           = "%A, %x"        # default date format for shell UI without its own setting
@@ -87,7 +87,7 @@ speed   = 1.0   # 1.0 = normal, 0.5 = 2× slower, 2.0 = 2× faster
 
 [shell.shadow]
 direction = "down"  # center, up, down, left, right, up_left, up_right, down_left, down_right
-alpha     = 0.55    # multiplied by each component's background opacity
+alpha     = 0.35    # multiplied by each component's background opacity
 
 [shell.panel]
 transparency_mode     = "solid"  # solid | soft | glass; controls floating panel opacity and card translucency
@@ -217,7 +217,7 @@ pipe_command         = ""                          # annotator/uploader, e.g. "s
 
 Notes:
 - `avatar_path` controls the avatar Noctalia shows in shell UI such as the Control Center Home tab. When AccountsService is reachable, Noctalia also updates your user's `IconFile` there so other consumers such as Noctalia Greeter can reuse the same avatar. If **accountsservice** is missing or disabled, the shell still uses `avatar_path`, but login greeters that depend on AccountsService will not see that image.
-- `font_family` sets the primary Pango family for all shell text. Can be a concrete family like `Inter` or a generic like `sans-serif`.
+- `font_family` sets the Pango family for all shell text. Can be a concrete family like `Inter`, a generic like `sans-serif`, or a comma-separated list where the first installed family is used. The default prefers SF Pro when it is installed (it is not bundled), then Inter, then the system sans-serif.
 - `time_format` and `date_format` are fallbacks for shell-owned displays such as the home tab, calendar tab, and lock screen. Widget-specific clock formats still use their own widget settings. See [Date format tokens](/noctalia/configuration/date-format-tokens/).
 - `shell.keyboard_layout.custom_labels` maps exact compositor layout names to aliases used consistently by keyboard-layout widgets, the keyboard-layout OSD, the lock screen, and the Control Center shortcut. Unmatched or empty aliases use each surface's normal compact or full label. Configure under **Settings → Shell → Keyboard Layout**.
 - `offline_mode` prevents the shell from making any outgoing HTTP requests (weather, community palettes, community templates, album art, remote notification icons, currency exchange rates). Distro packagers can default to `true` to comply with policies requiring explicit user consent for network access.

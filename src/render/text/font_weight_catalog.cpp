@@ -7,6 +7,7 @@
 #include <fontconfig/fontconfig.h>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -79,20 +80,42 @@ namespace text {
         return nullptr;
       }
 
-      FcPattern* pattern = FcPatternBuild(nullptr, FC_FAMILY, FcTypeString, family.c_str(), nullptr);
-      if (pattern == nullptr) {
+      // The family may be a comma-separated preference list, as Pango accepts. The first
+      // installed family wins, the same one Pango will render with.
+      std::vector<std::string> families;
+      for (std::string_view part : StringUtils::split(family, ',')) {
+        std::string name = StringUtils::trim(std::string(part));
+        if (!name.empty()) {
+          families.push_back(std::move(name));
+        }
+      }
+      if (families.empty()) {
         return nullptr;
       }
 
-      FcFontSet* fonts = listFontsForFamilyPattern(pattern, objectSet);
-      if (fonts != nullptr && fonts->nfont > 0) {
-        FcPatternDestroy(pattern);
-        return fonts;
+      for (const std::string& name : families) {
+        FcPattern* exact = FcPatternBuild(nullptr, FC_FAMILY, FcTypeString, name.c_str(), nullptr);
+        if (exact == nullptr) {
+          continue;
+        }
+        FcFontSet* fonts = listFontsForFamilyPattern(exact, objectSet);
+        FcPatternDestroy(exact);
+        if (fonts != nullptr && fonts->nfont > 0) {
+          return fonts;
+        }
+        if (fonts != nullptr) {
+          FcFontSetDestroy(fonts);
+        }
       }
-      if (fonts != nullptr) {
-        FcFontSetDestroy(fonts);
+
+      FcPattern* pattern = FcPatternCreate();
+      if (pattern == nullptr) {
+        return nullptr;
       }
-      fonts = nullptr;
+      for (const std::string& name : families) {
+        FcPatternAddString(pattern, FC_FAMILY, reinterpret_cast<const FcChar8*>(name.c_str()));
+      }
+      FcFontSet* fonts = nullptr;
 
       // Generic aliases such as sans-serif need pattern substitution, but FcMatchFont
       // collapses the pattern to a single face and must not run before FcFontList.

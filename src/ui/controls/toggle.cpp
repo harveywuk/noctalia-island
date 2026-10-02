@@ -16,7 +16,11 @@ Toggle::Toggle() {
   setAlign(FlexAlign::Center);
   setDirection(FlexDirection::Horizontal);
   setMirrorInRtl(false);
-  setBorder(colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), Style::borderWidth);
+
+  // Drawn under the thumb and kept out of layout, so the padding-driven thumb position is unchanged.
+  auto thumbShadow = std::make_unique<RectNode>();
+  m_thumbShadow = static_cast<RectNode*>(addChild(std::move(thumbShadow)));
+  m_thumbShadow->setParticipatesInLayout(false);
 
   auto thumb = std::make_unique<RectNode>();
   m_thumb = static_cast<RectNode*>(addChild(std::move(thumb)));
@@ -64,7 +68,7 @@ void Toggle::setChecked(bool checked) {
     float from = m_checked ? 0.0F : 1.0F;
     float to = m_checked ? 1.0F : 0.0F;
     m_animId = animationManager()->animate(
-        from, to, Style::animFast, Easing::EaseOutCubic, [this](float t) { applyAnimatedState(t); },
+        from, to, Style::animNormal, Easing::EaseOutCubic, [this](float t) { applyAnimatedState(t); },
         [this]() { m_animId = 0; }, this
     );
     // Mark dirty so the surface's frame loop restarts and ticks the animation
@@ -135,6 +139,7 @@ bool Toggle::pressed() const noexcept { return m_inputArea != nullptr && m_input
 
 void Toggle::doLayout(Renderer& renderer) {
   Flex::doLayout(renderer);
+  placeThumbShadow();
 
   if (m_inputArea != nullptr) {
     m_inputArea->setPosition(0.0F, 0.0F);
@@ -168,6 +173,7 @@ void Toggle::applySize() {
   }
 
   m_thumb->setFrameSize(m_thumbSize, m_thumbSize);
+  m_thumbShadow->setFrameSize(m_thumbSize, m_thumbSize);
   setRadius((m_thumbSize + (m_inset * 2.0F)) * 0.5F);
 }
 
@@ -175,33 +181,36 @@ void Toggle::applyState() { applyAnimatedState(m_checked ? 1.0F : 0.0F); }
 
 void Toggle::applyAnimatedState(float t) {
   m_animationProgress = t;
+  // macOS switches have no outline: an off track is a faint fill, an on track the accent.
   const Color trackColor =
-      lerpColor(withAlpha(colorForRole(ColorRole::OnSurface), 0.2F), colorForRole(ColorRole::Primary), t);
-  const Color thumbColor = hex("#FAFAFC");
+      lerpColor(withAlpha(colorForRole(ColorRole::OnSurface), 0.16F), colorForRole(ColorRole::Primary), t);
+  const Color thumbColor = hex("#FFFFFF");
   const float thumbX = m_inset + m_travel * (Style::rtl() ? 1.0F - t : t);
-  ColorSpec borderColor = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha);
-
-  if (m_enabled) {
-    if (m_inputArea != nullptr && m_inputArea->focused()) {
-      borderColor = focusRingColorSpec();
-    } else if (hovered()) {
-      borderColor = colorSpecFromRole(ColorRole::Hover);
-    } else if (m_checked) {
-      borderColor = colorSpecFromRole(ColorRole::Primary);
-    }
-  }
+  const bool focused = m_enabled && m_inputArea != nullptr && m_inputArea->focused();
 
   setFill(trackColor);
-  setBorder(borderColor, m_inputArea != nullptr && m_inputArea->focused() ? Style::focusRingWidth : Style::borderWidth);
+  if (focused) {
+    setBorder(focusRingColorSpec(), Style::focusRingWidth);
+  } else {
+    clearBorder();
+  }
   m_thumb->setPosition(thumbX, m_inset);
 
   auto thumbStyle = m_thumb->style();
   thumbStyle.fillMode = FillMode::Solid;
   thumbStyle.radius = m_thumbSize * 0.5F;
   thumbStyle.softness = 1.0F;
-  thumbStyle.borderWidth = 0.0F;
+  thumbStyle.borderWidth = Style::knobEdgeWidth * m_scale;
+  thumbStyle.border = rgba(0.0F, 0.0F, 0.0F, Style::knobEdgeAlpha);
   thumbStyle.fill = thumbColor;
   m_thumb->setStyle(thumbStyle);
+
+  auto shadowStyle = thumbStyle;
+  shadowStyle.borderWidth = 0.0F;
+  shadowStyle.fill = rgba(0.0F, 0.0F, 0.0F, Style::knobShadowAlpha);
+  shadowStyle.softness = Style::knobShadowSoftness * m_scale;
+  m_thumbShadow->setStyle(shadowStyle);
+  placeThumbShadow();
 
   // Padding keeps Flex size consistent regardless of thumb position
   const float rightPad = m_inset + m_travel - (thumbX - m_inset);
@@ -211,5 +220,11 @@ void Toggle::applyAnimatedState(float t) {
     setOpacity(1.0F);
   } else {
     setOpacity(0.55F);
+  }
+}
+
+void Toggle::placeThumbShadow() {
+  if (m_thumbShadow != nullptr && m_thumb != nullptr) {
+    m_thumbShadow->setPosition(m_thumb->x(), m_thumb->y() + Style::knobShadowOffsetY * m_scale);
   }
 }

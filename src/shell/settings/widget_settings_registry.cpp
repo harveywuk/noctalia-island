@@ -1,5 +1,6 @@
 #include "shell/settings/widget_settings_registry.h"
 
+#include "core/font_defaults.h"
 #include "i18n/i18n.h"
 #include "scripting/plugin_i18n.h"
 #include "scripting/plugin_panel_shell.h"
@@ -1120,7 +1121,7 @@ namespace settings {
   std::optional<WidgetSettingSpec>
   findWidgetSettingSpec(std::string_view widgetType, std::string_view settingKey, const WidgetConfig* config) {
     const std::string key(settingKey);
-    for (const auto& spec : widgetSettingSpecs(widgetType, config, "sans-serif")) {
+    for (const auto& spec : widgetSettingSpecs(widgetType, config, font_defaults::kFamily)) {
       if (spec.schema.key == key) {
         return spec;
       }
@@ -1137,7 +1138,7 @@ namespace settings {
       }
 
       auto fields = projection->schemaFields();
-      auto common = commonWidgetSettingSpecs("sans-serif", false);
+      auto common = commonWidgetSettingSpecs(font_defaults::kFamily, false);
       applyCommonOverrides(common, projection->commonOverrides(), type);
       std::ranges::transform(common, std::back_inserter(fields), [](const WidgetSettingSpec& spec) {
         return spec.schema;
@@ -1152,7 +1153,7 @@ namespace settings {
       return std::move(*fields);
     }
     noctalia::config::schema::WidgetSettingSchema out;
-    for (const auto& spec : widgetSettingSpecs(type, nullptr, "sans-serif", false)) {
+    for (const auto& spec : widgetSettingSpecs(type, nullptr, font_defaults::kFamily, false)) {
       out.push_back(spec.schema);
     }
     return out;
@@ -1175,7 +1176,7 @@ namespace settings {
       );
       // Generic bar-widget settings (scale, color, anchor, capsule_*, gestures, ...) are applied to
       // plugin widgets at runtime too, so keep this schema in sync with widgetSettingSpecs().
-      for (const auto& spec : commonWidgetSettingSpecs("sans-serif", false)) {
+      for (const auto& spec : commonWidgetSettingSpecs(font_defaults::kFamily, false)) {
         out.push_back(spec.schema);
       }
       return out;
@@ -1183,7 +1184,7 @@ namespace settings {
     if (auto fields = typedWidgetSettingSchema(type)) {
       return std::move(*fields);
     }
-    for (const auto& spec : widgetSettingSpecs(type, config, "sans-serif", false)) {
+    for (const auto& spec : widgetSettingSpecs(type, config, font_defaults::kFamily, false)) {
       out.push_back(spec.schema);
     }
     return out;

@@ -1,5 +1,6 @@
 #include "render/text/cairo_text_renderer.h"
 
+#include "core/font_defaults.h"
 #include "core/log.h"
 #include "render/backend/render_backend.h"
 #include "render/core/texture_manager.h"
@@ -351,7 +352,7 @@ void CairoTextRenderer::abandonGlyphTextures() noexcept {
 
 void CairoTextRenderer::setFontFamily(std::string family) {
   if (family.empty()) {
-    family = "sans-serif";
+    family = font_defaults::kFamily;
   }
   if (m_fontFamily == family) {
     return;
