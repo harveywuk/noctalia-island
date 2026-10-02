@@ -56,6 +56,9 @@ namespace {
     return playbackStatus == "Playing" ? "media-pause" : "media-play";
   }
 
+  // Decoded this small, the card backdrop scales up as a soft wash of the artwork's colours.
+  constexpr int kBackdropDecodeSize = 24;
+
   [[nodiscard]] int mediaTabArtDecodeSize(float scale) {
     // Match the widest artwork layout bound (see mediaWidth in doLayout).
     return static_cast<int>(std::round(kMediaUnit * 11.0F * scale));
@@ -223,6 +226,10 @@ std::unique_ptr<Flex> MediaTab::create() {
           },
       })
   );
+  auto backdrop = ui::image({.out = &m_backdrop, .fit = ImageFit::Cover});
+  backdrop->setParticipatesInLayout(false);
+  backdrop->setHitTestVisible(false);
+  nowCard->addChild(std::move(backdrop));
   nowCard->addChild(std::move(nowHeader));
 
   auto mediaStack = ui::column({
@@ -536,6 +543,20 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
     m_mediaStack->layout(renderer);
   }
 
+  if (m_backdrop != nullptr) {
+    // The card's own surface colour over the artwork keeps its text readable in either theme,
+    // lighter at the top where the artwork shows through and denser behind the controls.
+    const auto surface = [](float alpha) { return colorForRole(ColorRole::SurfaceVariant, alpha); };
+    m_backdrop->setScrim({
+        .direction = GradientDirection::Vertical,
+        .stops = {{{0.0F, surface(0.45F)}, {0.45F, surface(0.6F)}, {0.75F, surface(0.78F)}, {1.0F, surface(0.88F)}}},
+        .enabled = true,
+    });
+    m_backdrop->setPosition(0, 0);
+    m_backdrop->setSize(m_nowCard->width(), m_nowCard->height());
+    m_backdrop->setRadius(Style::scaledRadiusXl(scale));
+  }
+
   // The stack is capped at a comfortable width; centre it when the card is wider.
   m_mediaStack->setPosition(
       m_nowCard->paddingLeft() + std::max(0.0F, (cardInnerWidth - mediaWidth) / 2), m_mediaStack->y()
@@ -593,6 +614,7 @@ void MediaTab::onClose() {
   m_rootLayout = nullptr;
   m_mediaColumn = nullptr;
   m_artwork = nullptr;
+  m_backdrop = nullptr;
   m_artworkRow = nullptr;
   m_nowCard = nullptr;
   m_mediaStack = nullptr;
@@ -637,6 +659,9 @@ bool MediaTab::dismissTransientUi() {
 void MediaTab::clearArt(Renderer& renderer) {
   if (m_artwork != nullptr) {
     m_artwork->clear(renderer);
+  }
+  if (m_backdrop != nullptr) {
+    m_backdrop->clear(renderer);
   }
 }
 
@@ -825,6 +850,8 @@ void MediaTab::refresh(Renderer& renderer) {
       } else {
         kLog.debug(R"(artwork loaded url="{}" path="{}")", resolvedArtUrl, artPath);
         loaded = true;
+        if (m_backdrop != nullptr && !m_backdrop->setSourceFile(renderer, artPath, kBackdropDecodeSize, false, true))
+          m_backdrop->clear(renderer);
       }
 
       // Only lock this URL once we actually have an image.
