@@ -123,6 +123,9 @@ struct Island::Instance {
   TextureHandle flowTexture{};
   bool flowShown = false;
   Node* content = nullptr;
+  // View crossfades: the outgoing content fading out, and the incoming content's fade-in factor.
+  Node* outgoing = nullptr;
+  float contentFade = 1.0F;
   ScrollView* activityScroll = nullptr;
   island::View previousView = island::View::Rest;
   float scale = 1;
@@ -199,6 +202,9 @@ namespace {
   constexpr Color kAppleGreen = rgba(0.188F, 0.82F, 0.345F);
   constexpr Color kAppleBlue = rgba(0.039F, 0.518F, 1.0F);
   constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
+  // View changes crossfade the capsule's content.
+  constexpr float kViewFadeOutMs = 150.0F;
+  constexpr float kViewFadeInMs = 240.0F;
   // Extra space below expanded content; see the layout tail in Island::prepare.
   constexpr float kExpandedBottomInset = 8.0F;
 
@@ -975,7 +981,7 @@ void Island::geometry(Instance& inst) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
     // Conceal content until the expanding capsule has room to contain it.
     const float gap = std::max(std::abs(inst.width - inst.targetWidth), std::abs(inst.height - inst.targetHeight));
-    inst.content->setOpacity(std::clamp(1 - gap / 55, 0.0F, 1.0F));
+    inst.content->setOpacity(std::clamp(1 - gap / 55, 0.0F, 1.0F) * inst.contentFade);
     inst.content->setHitTestVisible(inst.content->opacity() > 0.1F);
   }
   const std::array<int, 4> inputRegion{
@@ -1371,6 +1377,7 @@ void Island::prepare(Instance& inst) {
   const auto keyboardFocus = inst.input.captureTabFocus();
   const float activityOffset =
       inst.activityScroll && inst.previousView == view ? inst.activityScroll->scrollOffset() : 0;
+  const bool viewChanged = inst.previousView != view;
   inst.previousView = view;
   inst.activityScroll = nullptr;
   inst.badgeHovered = false;
@@ -1385,8 +1392,12 @@ void Island::prepare(Instance& inst) {
   if (inst.visualizer && showVisualizer)
     retainedVisualizer = inst.content->removeChild(inst.visualizer);
   inst.visualizer = nullptr;
-  if (inst.content)
-    inst.background->removeChild(inst.content);
+  if (inst.content) {
+    auto previous = inst.background->removeChild(inst.content);
+    // Switching views crossfades: the old content fades out over the new one fading in.
+    if (viewChanged && previous && MotionService::instance().enabled())
+      crossfadeOut(inst, std::move(previous));
+  }
   auto content = std::make_unique<Node>();
   content->setSize(w * s, h * s);
   inst.content = content.get();
@@ -2491,6 +2502,41 @@ void Island::prepare(Instance& inst) {
     );
   }
   geometry(inst);
+}
+
+void Island::crossfadeOut(Instance& inst, std::unique_ptr<Node> previous) {
+  if (inst.outgoing != nullptr)
+    (void)inst.background->removeChild(inst.outgoing);
+  previous->setHitTestVisible(false);
+  // Behind the incoming content, which is added after it.
+  inst.outgoing = inst.background->addChild(std::move(previous));
+  Node* outgoing = inst.outgoing;
+  const float startOpacity = outgoing->opacity();
+  inst.animations.animate(
+      0, 1, kViewFadeOutMs, Easing::EaseOutCubic,
+      [outgoing, startOpacity](float t) { outgoing->setOpacity(startOpacity * (1 - t)); },
+      [this, &inst, outgoing] {
+        if (inst.outgoing != outgoing)
+          return;
+        inst.outgoing = nullptr;
+        // Detach outside the animation tick; the instance or ghost may be gone by then.
+        DeferredCall::callLater([this, instance = &inst, outgoing] {
+          for (auto& ptr : m_instances) {
+            if (ptr.get() != instance || ptr->background == nullptr)
+              continue;
+            const auto& children = ptr->background->children();
+            if (std::ranges::any_of(children, [outgoing](const auto& child) { return child.get() == outgoing; }))
+              (void)ptr->background->removeChild(outgoing);
+          }
+        });
+      },
+      outgoing
+  );
+  inst.contentFade = 0;
+  inst.animations.animate(0, 1, kViewFadeInMs, Easing::EaseOutCubic, [this, &inst](float t) {
+    inst.contentFade = t;
+    geometry(inst);
+  });
 }
 
 void Island::showFlow(Instance& inst, bool show) {

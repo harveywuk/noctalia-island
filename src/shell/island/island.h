@@ -19,6 +19,7 @@
 #include <vector>
 
 class MprisService;
+class Node;
 class CompositorPlatform;
 class WidgetFactory;
 class IpcService;
@@ -83,6 +84,7 @@ private:
   void releaseKeyboard(Instance&);
   // The flowing artwork gradient behind the capsule while media plays (Cupertino look).
   void showFlow(Instance&, bool show);
+  void crossfadeOut(Instance&, std::unique_ptr<Node> previous);
   void tickFlow();
   void releaseFlow(Instance&);
   void collapseAfterLeave(Instance&, std::chrono::milliseconds delay);
