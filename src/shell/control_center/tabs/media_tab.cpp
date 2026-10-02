@@ -41,7 +41,6 @@ namespace {
   constexpr float kMediaNowCardMinHeight = kMediaUnit * 11 + Style::spaceSm * 2;
   constexpr float kMediaControlsHeight = kMediaUnit + Style::spaceXs;
   constexpr float kMediaPlayPauseHeight = kMediaUnit + Style::spaceSm;
-  constexpr float kMediaArtworkMinHeight = kMediaUnit * 4;
   constexpr auto kNoActivePlayerGrace = std::chrono::milliseconds(2000);
   constexpr auto kTransientPositionRegressionWindow = std::chrono::milliseconds(1500);
   constexpr std::int64_t kTransientPositionRegressionFloorUs = 5'000'000;
@@ -56,12 +55,10 @@ namespace {
     return playbackStatus == "Playing" ? "media-pause" : "media-play";
   }
 
-  // Decoded this small, the card backdrop scales up as a soft wash of the artwork's colours.
-  constexpr int kBackdropDecodeSize = 24;
-
   [[nodiscard]] int mediaTabArtDecodeSize(float scale) {
-    // Match the widest artwork layout bound (see mediaWidth in doLayout).
-    return static_cast<int>(std::round(kMediaUnit * 11.0F * scale));
+    // The artwork fills the Now Playing card; decode for its widest layout, with headroom for
+    // fractional scales.
+    return static_cast<int>(std::round(kMediaUnit * 18.0F * scale * 1.5F));
   }
 
   std::string repeatGlyph(const std::string& loopStatus) { return loopStatus == "Track" ? "repeat-once" : "repeat"; }
@@ -239,16 +236,12 @@ std::unique_ptr<Flex> MediaTab::create() {
       .flexGrow = 1.0F,
   });
 
-  auto artworkRow = ui::row(
-      {.out = &m_artworkRow, .align = FlexAlign::Center, .justify = FlexJustify::Center, .gap = 0.0F, .flexGrow = 1.0F},
-      ui::image({
-          .out = &m_artwork,
-          .fit = ImageFit::Cover,
-          .radius = Style::scaledRadiusXl(scale),
-          .width = kArtworkSize * scale,
-          .height = kArtworkSize * scale,
-      })
-  );
+  // Open space where the artwork, filling the card behind it, shows unobscured.
+  auto artworkRow = ui::row({
+      .out = &m_artworkRow,
+      .minHeight = kArtworkSize * scale,
+      .flexGrow = 1.0F,
+  });
   mediaStack->addChild(std::move(artworkRow));
 
   mediaStack->addChild(
@@ -490,7 +483,7 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
     m_artworkRow->setMinWidth(mediaWidth);
   }
 
-  if (m_artwork != nullptr) {
+  {
     const float sideButtonSize = kMediaControlsHeight * scale;
     const float playPauseButtonSize = kMediaPlayPauseHeight * scale;
     const float sideGlyphSize = Style::fontSizeTitle * scale;
@@ -529,27 +522,14 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
 
   m_mediaStack->layout(renderer);
 
-  if (m_artwork != nullptr && m_artworkRow != nullptr) {
-    const float artWidth =
-        std::max(1.0F, m_artworkRow->width() - (m_artworkRow->paddingLeft() + m_artworkRow->paddingRight()));
-    const float artHeight = std::max(
-        kMediaArtworkMinHeight * scale,
-        m_artworkRow->height() - (m_artworkRow->paddingTop() + m_artworkRow->paddingBottom())
-    );
-    // Media art is always presented as a square (album-art convention).
-    const float side = std::min(artWidth, artHeight);
-    m_artwork->setSize(side, side);
-    m_artwork->setRadius(Style::scaledRadiusXl(scale));
-    m_mediaStack->layout(renderer);
-  }
-
   if (m_backdrop != nullptr) {
-    // The card's own surface colour over the artwork keeps its text readable in either theme,
-    // lighter at the top where the artwork shows through and denser behind the controls.
+    // The card's own surface colour over the artwork keeps its text readable in either theme:
+    // a light veil under the header, clear through the middle, and dense behind the title,
+    // progress and controls.
     const auto surface = [](float alpha) { return colorForRole(ColorRole::SurfaceVariant, alpha); };
     m_backdrop->setScrim({
         .direction = GradientDirection::Vertical,
-        .stops = {{{0.0F, surface(0.45F)}, {0.45F, surface(0.6F)}, {0.75F, surface(0.78F)}, {1.0F, surface(0.88F)}}},
+        .stops = {{{0.0F, surface(0.6F)}, {0.18F, surface(0.0F)}, {0.5F, surface(0.55F)}, {1.0F, surface(0.92F)}}},
         .enabled = true,
     });
     m_backdrop->setPosition(0, 0);
@@ -613,7 +593,6 @@ void MediaTab::onClose() {
   m_active = false;
   m_rootLayout = nullptr;
   m_mediaColumn = nullptr;
-  m_artwork = nullptr;
   m_backdrop = nullptr;
   m_artworkRow = nullptr;
   m_nowCard = nullptr;
@@ -657,9 +636,6 @@ bool MediaTab::dismissTransientUi() {
 }
 
 void MediaTab::clearArt(Renderer& renderer) {
-  if (m_artwork != nullptr) {
-    m_artwork->clear(renderer);
-  }
   if (m_backdrop != nullptr) {
     m_backdrop->clear(renderer);
   }
@@ -838,20 +814,18 @@ void MediaTab::refresh(Renderer& renderer) {
         m_aliveGuard
     );
 
-    if (m_artwork != nullptr
-        && (!resolvedArtUrl.empty() && (resolvedArtUrl != m_lastArtPath || !m_artwork->hasImage()))) {
+    if (m_backdrop != nullptr
+        && (!resolvedArtUrl.empty() && (resolvedArtUrl != m_lastArtPath || !m_backdrop->hasImage()))) {
       bool loaded = false;
       if (artPath.empty()) {
         kLog.debug("artwork unresolved url=\"{}\"", resolvedArtUrl);
         clearArt(renderer);
-      } else if (!m_artwork->setSourceFile(renderer, artPath, mediaTabArtDecodeSize(contentScale()), true, true)) {
+      } else if (!m_backdrop->setSourceFile(renderer, artPath, mediaTabArtDecodeSize(contentScale()), true)) {
         kLog.warn(R"(artwork load failed url="{}" path="{}")", resolvedArtUrl, artPath);
         clearArt(renderer);
       } else {
         kLog.debug(R"(artwork loaded url="{}" path="{}")", resolvedArtUrl, artPath);
         loaded = true;
-        if (m_backdrop != nullptr && !m_backdrop->setSourceFile(renderer, artPath, kBackdropDecodeSize, false, true))
-          m_backdrop->clear(renderer);
       }
 
       // Only lock this URL once we actually have an image.
@@ -860,7 +834,7 @@ void MediaTab::refresh(Renderer& renderer) {
       if (loaded) {
         PanelManager::instance().requestLayout();
       }
-    } else if (m_artwork != nullptr && resolvedArtUrl.empty()) {
+    } else if (m_backdrop != nullptr && resolvedArtUrl.empty()) {
       clearArt(renderer);
       m_lastArtPath.clear();
     }

@@ -59,8 +59,7 @@ private:
 
   Flex* m_rootLayout = nullptr;
   Flex* m_mediaColumn = nullptr;
-  Image* m_artwork = nullptr;
-  // The artwork again, decoded tiny so it scales up soft, filling the Now Playing card.
+  // The artwork, filling the Now Playing card behind its content.
   Image* m_backdrop = nullptr;
   Flex* m_artworkRow = nullptr;
   Flex* m_nowCard = nullptr;
