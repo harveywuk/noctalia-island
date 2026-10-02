@@ -13,8 +13,9 @@
 
 namespace {
 
-  constexpr float kMenuPadding = 6.0F;
-  constexpr float kItemHeight = Style::controlHeightSm;
+  // macOS menus: a 5px inset around 22px rows, a touch taller here for the shell's text sizes.
+  constexpr float kMenuPadding = 5.0F;
+  constexpr float kItemHeight = 24.0F;
   constexpr float kSeparatorHeight = 10.0F;
   constexpr float kItemGap = 0.0F;
   // macOS menus set their items at body size (13px).

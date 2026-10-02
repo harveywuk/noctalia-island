@@ -38,6 +38,18 @@ List available built-in and configured template IDs:
 noctalia theme --list-templates
 ```
 
+### GTK and Qt Controls
+
+The `gtk3` and `gtk4` templates also give GTK apps the shell's macOS-proportioned controls: 32px
+buttons and fields with 6px corners, white-knob switches and sliders, 16px checkboxes and radios, and
+24px menu rows that highlight in the accent colour.
+
+The `qt` template only sets colours. For Qt control shapes, also enable `kvantum`. It builds a
+`Noctalia` Kvantum theme from the KvMojave theme that ships with Kvantum, recolours it to the palette,
+selects it in `~/.config/Kvantum/kvantum.kvconfig`, and sets `style=kvantum` in existing
+`qt5ct.conf` and `qt6ct.conf` files. It needs Kvantum installed for your Qt version. Disabling it
+restores the previous Kvantum theme and qtct style.
+
 ## Community Templates
 
 Community templates are fetched from `https://api.noctalia.dev/templates` and cached locally:
