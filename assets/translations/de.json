@@ -3532,6 +3532,10 @@
           "label": "Ungelesene Mitteilungen",
           "description": "Anzahl ungelesener Mitteilungen und Verlaufsverknüpfung in der Hover-Ansicht anzeigen."
         },
+        "hover_show_tray": {
+          "label": "Systemleiste",
+          "description": "Symbole der Systemleiste in der Hover-Ansicht anzeigen."
+        },
         "enabled": {
           "label": "Dynamic Island aktivieren",
           "description": "Uhr, Mediensteuerung, Mitteilungen und Lautstärke in der Island anzeigen."

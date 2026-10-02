@@ -3775,6 +3775,10 @@
           "label": "Notificações não lidas",
           "description": "Mostrar a contagem de não lidas e o atalho do histórico na visualização ao passar o cursor."
         },
+        "hover_show_tray": {
+          "label": "Bandeja do sistema",
+          "description": "Mostrar os ícones da bandeja de aplicativos na visualização ao passar o cursor."
+        },
         "enabled": {
           "label": "Ativar a Dynamic Island",
           "description": "Mostrar relógio, controles de mídia, notificações e volume na Island."

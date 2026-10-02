@@ -32,7 +32,9 @@ public:
   void initialize(WaylandConnection& wayland, ConfigService* config, TrayService* tray, RenderContext* renderContext);
   void onTrayChanged();
 
-  void toggleForItem(const std::string& itemId, float contentScale = 1.0F);
+  // `barPosition` is the edge the menu opens from (the Island hosts its tray as "top"); empty
+  // means that of the bar holding the tray widget.
+  void toggleForItem(const std::string& itemId, float contentScale = 1.0F, const std::string& barPosition = {});
   void close();
   void onFontChanged();
   void onThemeChanged();
@@ -96,6 +98,7 @@ private:
   zwlr_layer_surface_v1* m_keyboardBarLayerSurface = nullptr;
   wl_surface* m_keyboardBarWlSurface = nullptr;
   float m_contentScale = 1.0F;
+  std::string m_barPosition;
   bool m_visible = false;
   std::string m_lastClosedItemId;
   std::chrono::steady_clock::time_point m_lastCloseTime;

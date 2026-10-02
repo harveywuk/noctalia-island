@@ -59,7 +59,8 @@ struct TrayMenuEntry {
 class TrayService {
 public:
   using ChangeCallback = std::function<void()>;
-  using MenuToggleCallback = std::function<void(const std::string&, float)>;
+  // Item id, content scale, and the edge of the bar (or Island) the menu opens from.
+  using MenuToggleCallback = std::function<void(const std::string&, float, const std::string&)>;
 
   explicit TrayService(SessionBus& bus);
   ~TrayService();
@@ -69,7 +70,7 @@ public:
   void start();
   void setChangeCallback(ChangeCallback callback);
   void setMenuToggleCallback(MenuToggleCallback callback);
-  void requestMenuToggle(const std::string& itemId, float contentScale = 1.0F) const;
+  void requestMenuToggle(const std::string& itemId, float contentScale = 1.0F, const std::string& barPosition = {}) const;
   [[nodiscard]] std::size_t itemCount() const noexcept;
   [[nodiscard]] std::vector<TrayItemInfo> items() const;
   [[nodiscard]] bool itemUsesDBusMenu(const std::string& itemId) const;

@@ -2773,6 +2773,10 @@
           "label": "Ongelezen meldingen",
           "description": "Aantal ongelezen en snelkoppeling naar de geschiedenis in de hoverweergave tonen."
         },
+        "hover_show_tray": {
+          "label": "Systeemvak",
+          "description": "Pictogrammen uit het systeemvak tonen in de hoverweergave."
+        },
         "enabled": {
           "label": "Dynamic Island inschakelen",
           "description": "Klok, mediabediening, meldingen en volume in de Island tonen."

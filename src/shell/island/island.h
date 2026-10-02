@@ -9,6 +9,7 @@
 #include "shell/island/island_state.h"
 #include "shell/osd/osd_overlay.h"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -63,6 +64,8 @@ public:
   std::function<void(wl_output*, const std::string&)> openPanel;
   // Raises a window of the first app found among lower-case executable names; false if none.
   std::function<bool(const std::vector<std::string>&)> focusApp;
+  // True while a menu opened from the Island is showing; the Island stays expanded meanwhile.
+  std::function<bool()> holdExpanded;
   std::function<void()> closeHostedPanel;
   std::optional<IslandPanelSurface>
   acquirePanelSurface(wl_output* output, bool exactOutput = false, std::string_view barName = {});
@@ -76,6 +79,7 @@ private:
   void updateVisibility(Instance&);
   bool trackPreview(const IslandConfig&, wl_output*) const;
   void releaseKeyboard(Instance&);
+  void collapseAfterLeave(Instance&, std::chrono::milliseconds delay);
   void dismissNotification();
   void updateNotificationPreview();
   void destroySurfaces();

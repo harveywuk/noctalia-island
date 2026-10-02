@@ -788,7 +788,7 @@ void TrayWidget::rebuild(Renderer& renderer) {
         }
       } else if (data.button == BTN_RIGHT) {
         if (m_tray->itemUsesDBusMenu(itemId)) {
-          m_tray->requestMenuToggle(itemId, m_contentScale);
+          m_tray->requestMenuToggle(itemId, m_contentScale, m_barPosition);
         } else {
           (void)m_tray->openContextMenu(itemId, x, y);
         }

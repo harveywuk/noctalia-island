@@ -1366,6 +1366,10 @@
           "label": "Olästa aviseringar",
           "description": "Visa antal olästa och genväg till historiken i hovringsvyn."
         },
+        "hover_show_tray": {
+          "label": "Systemfält",
+          "description": "Visa ikoner från systemfältet i hovringsvyn."
+        },
         "enabled": {
           "label": "Aktivera Dynamic Island",
           "description": "Visa klocka, mediereglage, aviseringar och volym i Island."

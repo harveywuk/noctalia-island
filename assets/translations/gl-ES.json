@@ -3138,6 +3138,10 @@
           "label": "Notificacións sen ler",
           "description": "Mostrar o reconto sen ler e o atallo ao historial na vista ao pasar o cursor."
         },
+        "hover_show_tray": {
+          "label": "Bandexa do sistema",
+          "description": "Amosar as iconas da bandexa de aplicacións na vista ao pasar o rato."
+        },
         "enabled": {
           "label": "Activar a Dynamic Island",
           "description": "Mostrar o reloxo, os controis multimedia, as notificacións e o volume na Island."

@@ -3531,6 +3531,10 @@
           "label": "Okunmamış bildirimler",
           "description": "Üzerine gelme görünümünde okunmamış sayısını ve geçmiş kısayolunu göster."
         },
+        "hover_show_tray": {
+          "label": "Sistem tepsisi",
+          "description": "Uygulama tepsisi simgelerini üzerine gelme görünümünde göster."
+        },
         "enabled": {
           "label": "Dynamic Island'ı etkinleştir",
           "description": "Saati, medya denetimlerini, bildirimleri ve ses düzeyini Island'da göster."

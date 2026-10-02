@@ -21,7 +21,12 @@ IslandWidgetHost::IslandWidgetHost(
   bar.name = barName;
   bar.position = "top";
   bar.scale = scale;
-  const std::array lists{&island.hoverWidgets, &island.hoverWidgetsCenter, &island.hoverWidgetsRight};
+  // The system tray joins the centre group unless a list already places it.
+  auto center = island.hoverWidgetsCenter;
+  const auto hasTray = [](const std::vector<std::string>& list) { return std::ranges::contains(list, "tray"); };
+  if (island.hoverShowTray && !hasTray(island.hoverWidgets) && !hasTray(center) && !hasTray(island.hoverWidgetsRight))
+    center.push_back("tray");
+  const std::array<const std::vector<std::string>*, 3> lists{&island.hoverWidgets, &center, &island.hoverWidgetsRight};
   for (std::size_t group = 0; group < lists.size(); ++group) {
     for (const auto& name : *lists[group]) {
       const auto found = config.widgets.find(name);

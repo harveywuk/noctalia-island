@@ -56,7 +56,7 @@ int main() {
       for (const auto& widget : group)
         assert(isBuiltInWidgetType(widget));
     const auto changes = hoverLayoutOverrides(layout);
-    assert(changes.size() == 10);
+    assert(changes.size() == 11);
     for (const auto& [path, value] : changes) {
       assert(path.size() == 2 && path[0] == "island" && path[1].starts_with("hover_"));
       assert(noctalia::config::schema::isKnownConfigPath(path));

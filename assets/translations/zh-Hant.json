@@ -1516,6 +1516,10 @@
           "label": "未讀通知",
           "description": "在懸停檢視中顯示未讀數量與歷史捷徑。"
         },
+        "hover_show_tray": {
+          "label": "系統匣",
+          "description": "在懸停檢視中顯示應用程式系統匣圖示。"
+        },
         "enabled": {
           "label": "啟用動態島",
           "description": "在動態島中顯示時鐘、媒體控制、通知與音量。"

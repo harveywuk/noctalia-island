@@ -750,6 +750,7 @@ void Application::initNotificationAndOsd() {
     if (m_panelManager.isIslandOpen())
       m_panelManager.closePanel(false);
   };
+  m_island.holdExpanded = [this] { return m_trayMenu.isOpen(); };
   m_island.focusApp = [this](const std::vector<std::string>& binaries) {
     for (const auto& binary : binaries) {
       const auto windows = m_compositorPlatform.windowsForApp(binary, binary);

@@ -3775,6 +3775,10 @@
           "label": "未读通知",
           "description": "在悬停视图中显示未读数和历史快捷方式。"
         },
+        "hover_show_tray": {
+          "label": "系统托盘",
+          "description": "在悬停视图中显示应用托盘图标。"
+        },
         "enabled": {
           "label": "启用灵动岛",
           "description": "在灵动岛中显示时钟、媒体控制、通知和音量。"

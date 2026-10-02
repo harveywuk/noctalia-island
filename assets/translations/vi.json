@@ -3304,6 +3304,10 @@
           "label": "Thông báo chưa đọc",
           "description": "Hiện số chưa đọc và lối tắt lịch sử trong chế độ xem khi di chuột."
         },
+        "hover_show_tray": {
+          "label": "Khay hệ thống",
+          "description": "Hiển thị biểu tượng khay ứng dụng trong chế độ xem khi di chuột."
+        },
         "enabled": {
           "label": "Bật Dynamic Island",
           "description": "Hiện đồng hồ, điều khiển đa phương tiện, thông báo và âm lượng trong Island."

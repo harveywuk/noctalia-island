@@ -3775,6 +3775,10 @@
           "label": "Unread notifications",
           "description": "Show the unread count and history shortcut in the hover view."
         },
+        "hover_show_tray": {
+          "label": "System tray",
+          "description": "Show app tray icons in the hover view."
+        },
         "enabled": {
           "label": "Enable dynamic island",
           "description": "Show the clock, media controls, notifications, and volume in the island."

@@ -3326,6 +3326,10 @@
           "label": "Notifications non lues",
           "description": "Afficher le nombre de non-lues et le raccourci vers l’historique dans la vue au survol."
         },
+        "hover_show_tray": {
+          "label": "Zone de notification",
+          "description": "Afficher les icônes de la zone de notification dans la vue au survol."
+        },
         "enabled": {
           "label": "Activer la Dynamic Island",
           "description": "Afficher l’horloge, les commandes multimédias, les notifications et le volume dans l’Island."

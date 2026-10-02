@@ -3504,6 +3504,10 @@
           "label": "Notificacions sense llegir",
           "description": "Mostra el recompte sense llegir i la drecera a l'historial a la vista en passar-hi el cursor."
         },
+        "hover_show_tray": {
+          "label": "Safata del sistema",
+          "description": "Mostra les icones de la safata d'aplicacions a la vista en passar el ratolí."
+        },
         "enabled": {
           "label": "Activa la Dynamic Island",
           "description": "Mostra el rellotge, els controls multimèdia, les notificacions i el volum a la Island."

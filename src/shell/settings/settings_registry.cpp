@@ -1235,6 +1235,7 @@ namespace settings {
       islandSetting("hover-sections", "hover_show_timers", ToggleSetting{island.hoverShowTimers});
       islandSetting("hover-sections", "hover_show_batteries", ToggleSetting{island.hoverShowBatteries});
       islandSetting("hover-sections", "hover_show_unread", ToggleSetting{island.hoverShowUnread});
+      islandSetting("hover-sections", "hover_show_tray", ToggleSetting{island.hoverShowTray});
     };
     const bool managedIsland = std::ranges::any_of(cfg.bars, [](const auto& bar) {
       return bar.presentation == BarPresentation::Island

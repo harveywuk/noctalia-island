@@ -276,6 +276,7 @@ hover_show_downloads = true
 hover_show_timers = true
 hover_show_batteries = true
 hover_show_unread = true
+hover_show_tray = true
 ```
 
 ## Build

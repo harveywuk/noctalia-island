@@ -2205,7 +2205,10 @@ void Island::prepare(Instance& inst) {
   if (expandedView
       && showExtras
       && m_widgetFactory
-      && (!cfg.hoverWidgets.empty() || !cfg.hoverWidgetsCenter.empty() || !cfg.hoverWidgetsRight.empty())) {
+      && (cfg.hoverShowTray
+          || !cfg.hoverWidgets.empty()
+          || !cfg.hoverWidgetsCenter.empty()
+          || !cfg.hoverWidgetsRight.empty())) {
     if (!retainedWidgets) {
       retainedWidgets = std::make_unique<IslandWidgetHost>(
           *m_widgetFactory, m_config->config(), inst.output, s, &inst.animations, &m_widgetActions,
@@ -2287,6 +2290,21 @@ void Island::prepare(Instance& inst) {
     );
   }
   geometry(inst);
+}
+
+void Island::collapseAfterLeave(Instance& inst, std::chrono::milliseconds delay) {
+  inst.leave.start(delay, [this, &inst] {
+    // A menu opened from the Island (a tray item's) keeps it expanded until the menu closes.
+    if (holdExpanded && holdExpanded()) {
+      collapseAfterLeave(inst, std::chrono::milliseconds(200));
+      return;
+    }
+    if (inst.inside)
+      return;
+    inst.hovered = false;
+    inst.heldMedia = false;
+    refresh();
+  });
 }
 
 void Island::releaseKeyboard(Instance& inst) {
@@ -2403,11 +2421,7 @@ bool Island::onPointerEvent(const PointerEvent& event) {
           && m_notification->timeout > 0
           && std::ranges::none_of(m_instances, [](const auto& other) { return other->inside || other->keyboardMode; }))
         m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
-      inst.leave.start(std::chrono::milliseconds(inst.config.hoverCloseDelayMs), [this, &inst] {
-        inst.hovered = false;
-        inst.heldMedia = false;
-        refresh();
-      });
+      collapseAfterLeave(inst, std::chrono::milliseconds(inst.config.hoverCloseDelayMs));
       refresh();
     } else if (event.type == PointerEvent::Type::Motion) {
       if (!inst.seeking) {
@@ -2424,6 +2438,14 @@ bool Island::onPointerEvent(const PointerEvent& event) {
           static_cast<float>(event.sx), static_cast<float>(event.sy), event.axis, event.axisSource, event.axisValue,
           event.axisDiscrete, event.axisValue120, event.axisLines, event.axisGestureSerial
       );
+    } else if (event.type == PointerEvent::Type::Button && event.button != BTN_LEFT && inst.content) {
+      // Other buttons reach controls that accept them (tray menus, widget gestures); the
+      // Island's own actions are left-click only.
+      if (!inst.seeking && inst.content->opacity() > 0.1F)
+        (void)inst.input.pointerButton(
+            static_cast<float>(event.sx), static_cast<float>(event.sy), event.button, event.pressed, event.serial,
+            event.time, event.touch
+        );
     } else if (event.type == PointerEvent::Type::Button && event.button == BTN_LEFT && inst.content) {
       // A newly rebuilt card may still be concealed during the size transition.
       if (inst.content->opacity() <= 0.1F) {

@@ -3515,6 +3515,10 @@
           "label": "Ulesne varsel",
           "description": "Vis talet på ulesne og snarvegen til historikken i svevevisinga."
         },
+        "hover_show_tray": {
+          "label": "Systemfelt",
+          "description": "Vis ikon frå systemfeltet i svevevisinga."
+        },
         "enabled": {
           "label": "Slå på Dynamic Island",
           "description": "Vis klokke, mediekontrollar, varsel og lydstyrke i Island."

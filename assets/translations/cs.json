@@ -3021,6 +3021,10 @@
           "label": "Nepřečtená oznámení",
           "description": "Zobrazit počet nepřečtených a zkratku do historie v zobrazení při najetí."
         },
+        "hover_show_tray": {
+          "label": "Systémová lišta",
+          "description": "Zobrazit ikony aplikací ze systémové lišty v zobrazení při najetí."
+        },
         "enabled": {
           "label": "Zapnout Dynamic Island",
           "description": "Zobrazovat v Island hodiny, ovládání médií, oznámení a hlasitost."

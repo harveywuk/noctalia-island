@@ -259,7 +259,7 @@ void TrayMenu::onTrayChanged() {
   }
 }
 
-void TrayMenu::toggleForItem(const std::string& itemId, float contentScale) {
+void TrayMenu::toggleForItem(const std::string& itemId, float contentScale, const std::string& barPosition) {
   if (itemId.empty()) {
     close();
     return;
@@ -283,6 +283,7 @@ void TrayMenu::toggleForItem(const std::string& itemId, float contentScale) {
 
   m_activeItemId = itemId;
   m_contentScale = std::max(0.1F, contentScale);
+  m_barPosition = barPosition;
 
   // Some dbusmenu servers only materialize menu rows after receiving "opened".
   // Emit this before the first fetch so we don't render a persistent empty menu.
@@ -701,7 +702,13 @@ void TrayMenu::ensureSurface() {
       menuWidth(), static_cast<float>(surfaceHeightPx()), popupShadowConfig(m_config), Style::popupShadowsEnabled()
   );
   PopupPlacement placement{};
-  if (const auto bar = resolveTrayBarConfig(m_config, m_wayland, output); bar.has_value()) {
+  auto bar = resolveTrayBarConfig(m_config, m_wayland, output);
+  if (!m_barPosition.empty()) {
+    if (!bar)
+      bar = BarConfig{};
+    bar->position = m_barPosition;
+  }
+  if (bar.has_value()) {
     placement = popupPlacementForBar(*bar, anchorX, anchorY, contentScale());
     anchorX = placement.anchorX;
     anchorY = placement.anchorY;

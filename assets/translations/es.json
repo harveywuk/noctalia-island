@@ -3718,6 +3718,10 @@
           "label": "Notificaciones sin leer",
           "description": "Mostrar el recuento sin leer y el acceso al historial en la vista al pasar el cursor."
         },
+        "hover_show_tray": {
+          "label": "Bandeja del sistema",
+          "description": "Mostrar los iconos de la bandeja de aplicaciones en la vista al pasar el cursor."
+        },
         "enabled": {
           "label": "Activar Dynamic Island",
           "description": "Mostrar el reloj, los controles multimedia, las notificaciones y el volumen en la Island."

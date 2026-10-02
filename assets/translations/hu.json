@@ -3395,6 +3395,10 @@
           "label": "Olvasatlan értesítések",
           "description": "Az olvasatlanok száma és az előzmények parancsikonja a rámutatási nézetben."
         },
+        "hover_show_tray": {
+          "label": "Tálca",
+          "description": "Az alkalmazások tálcaikonjainak megjelenítése a rámutatási nézetben."
+        },
         "enabled": {
           "label": "Dynamic Island bekapcsolása",
           "description": "Óra, médiavezérlők, értesítések és hangerő megjelenítése az Islandben."

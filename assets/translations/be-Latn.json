@@ -429,6 +429,10 @@
           "label": "Niepračytanyja apaviaščenni",
           "description": "Pakazvać kolkasć niepračytanych i cetlik historyi pry naviadzienni."
         },
+        "hover_show_tray": {
+          "label": "Sistemny trej",
+          "description": "Pakazvać znački prahram u trei ŭ režymie naviadziennia."
+        },
         "enabled": {
           "label": "Uklučyć Dynamic Island",
           "description": "Pakazvać u Island hadzinnik, kiravannie prajhravanniem, apaviaščenni i hučnasć."

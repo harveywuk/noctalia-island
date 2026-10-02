@@ -1611,8 +1611,10 @@ void Application::initEarlySessionBusAndTray() {
         *m_trayService, m_configService.config(), m_configService.config().osd.kinds.keyboardLayout
     );
   });
-  m_trayService->setMenuToggleCallback([this](const std::string& itemId, float contentScale) {
-    m_trayMenu.toggleForItem(itemId, contentScale);
+  m_trayService->setMenuToggleCallback([this](
+                                           const std::string& itemId, float contentScale, const std::string& barPosition
+                                       ) {
+    m_trayMenu.toggleForItem(itemId, contentScale, barPosition);
   });
   startTrayService();
 }

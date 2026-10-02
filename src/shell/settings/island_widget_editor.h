@@ -17,14 +17,14 @@ namespace settings {
   inline constexpr std::array<std::string_view, 3> kHoverWidgetKeys{
       "hover_widgets", "hover_widgets_center", "hover_widgets_right"
   };
-  inline constexpr std::array<std::string_view, 7> kHoverSectionKeys{"hover_show_clock",  "hover_show_calendar",
-                                                                     "hover_show_media",  "hover_show_downloads",
-                                                                     "hover_show_timers", "hover_show_batteries",
-                                                                     "hover_show_unread"};
+  inline constexpr std::array<std::string_view, 8> kHoverSectionKeys{
+      "hover_show_clock",  "hover_show_calendar",  "hover_show_media",  "hover_show_downloads",
+      "hover_show_timers", "hover_show_batteries", "hover_show_unread", "hover_show_tray"
+  };
   using HoverWidgetGroups = std::array<std::vector<std::string>, 3>;
   struct HoverLayout {
     HoverWidgetGroups groups;
-    std::array<bool, 7> sections;
+    std::array<bool, 8> sections;
     std::vector<std::string> scope;
     bool operator==(const HoverLayout&) const = default;
   };
@@ -33,7 +33,7 @@ namespace settings {
     return {
         {cfg.hoverWidgets, cfg.hoverWidgetsCenter, cfg.hoverWidgetsRight},
         {cfg.hoverShowClock, cfg.hoverShowCalendar, cfg.hoverShowMedia, cfg.hoverShowDownloads, cfg.hoverShowTimers,
-         cfg.hoverShowBatteries, cfg.hoverShowUnread}
+         cfg.hoverShowBatteries, cfg.hoverShowUnread, cfg.hoverShowTray}
     };
   }
 
@@ -90,7 +90,7 @@ namespace settings {
   }
 
   inline HoverLayout hoverLayoutPreset(std::size_t preset) {
-    HoverLayout layout{{}, {false, false, false, false, false, false, false}};
+    HoverLayout layout{{}, {false, false, false, false, false, false, false, false}};
     if (preset == 0) { // Minimal
       layout.groups[1] = {"clock"};
     } else if (preset == 1) { // Media
@@ -104,6 +104,7 @@ namespace settings {
       layout.groups[2] = {"battery"};
       layout.sections[3] = true;
       layout.sections[5] = true;
+      layout.sections[7] = true; // System tray.
     }
     return layout;
   }

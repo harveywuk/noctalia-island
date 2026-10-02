@@ -80,6 +80,7 @@ struct IslandConfig {
   bool hoverShowTimers = true;
   bool hoverShowBatteries = true;
   bool hoverShowUnread = true;
+  bool hoverShowTray = true;
   bool enabled = false;
   std::vector<std::string> monitors;
   float height = 64.0F;
@@ -120,6 +121,7 @@ struct IslandMonitorOverride {
   std::optional<bool> hoverShowTimers;
   std::optional<bool> hoverShowBatteries;
   std::optional<bool> hoverShowUnread;
+  std::optional<bool> hoverShowTray;
   std::optional<float> height;
   std::optional<float> clockSize;
   std::optional<bool> clockSeconds;
@@ -164,6 +166,8 @@ inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOv
     base.hoverShowBatteries = *override.hoverShowBatteries;
   if (override.hoverShowUnread)
     base.hoverShowUnread = *override.hoverShowUnread;
+  if (override.hoverShowTray)
+    base.hoverShowTray = *override.hoverShowTray;
   if (override.height)
     base.height = *override.height;
   if (override.clockSize)

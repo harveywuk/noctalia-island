@@ -1427,6 +1427,10 @@
           "label": "Agahdariyên nexwendî",
           "description": "Hejmara nexwendî û kurterêya dîrokê di nêrîna nîşankirinê de nîşan bide."
         },
+        "hover_show_tray": {
+          "label": "Tepsiya pergalê",
+          "description": "Îkonên tepsiya sepanan di dîtina hoverê de nîşan bide."
+        },
         "enabled": {
           "label": "Dynamic Island çalak bike",
           "description": "Demjimêr, kontrolên medyayê, agahdarî û dengê di Island de nîşan bide."

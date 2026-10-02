@@ -2713,6 +2713,10 @@
           "label": "Nieprzeczytane powiadomienia",
           "description": "Pokazuj liczbę nieprzeczytanych i skrót do historii w widoku po najechaniu."
         },
+        "hover_show_tray": {
+          "label": "Zasobnik systemowy",
+          "description": "Pokazuj ikony aplikacji z zasobnika w widoku po najechaniu."
+        },
         "enabled": {
           "label": "Włącz Dynamic Island",
           "description": "Pokazuj zegar, sterowanie multimediami, powiadomienia i głośność w Island."

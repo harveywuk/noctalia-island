@@ -3775,6 +3775,10 @@
           "label": "Notifiche non lette",
           "description": "Mostra il numero di non lette e la scorciatoia alla cronologia nella vista al passaggio."
         },
+        "hover_show_tray": {
+          "label": "Area di notifica",
+          "description": "Mostra le icone dell'area di notifica nella vista al passaggio del mouse."
+        },
         "enabled": {
           "label": "Attiva Dynamic Island",
           "description": "Mostra orologio, controlli multimediali, notifiche e volume nell'Island."
