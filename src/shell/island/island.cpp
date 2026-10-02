@@ -134,6 +134,10 @@ struct Island::Instance {
   float targetWidth = 160;
   float targetHeight = 64;
   AnimationManager::Id morph = 0;
+  // The morph spring's current speed in points per second, carried into the next morph when
+  // a size change interrupts it so the capsule redirects without a jolt.
+  float widthVelocity = 0;
+  float heightVelocity = 0;
   bool panelHosted = false;
   bool inside = false;
   bool hovered = false;
@@ -204,7 +208,9 @@ namespace {
   constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
   // View changes crossfade the capsule's content.
   constexpr float kViewFadeOutMs = 150.0F;
-  constexpr float kViewFadeInMs = 240.0F;
+  // The incoming content fades in over half the expand spring's response, by which time the
+  // capsule has covered about 95% of its travel.
+  constexpr float kViewFadeInMs = Motion::islandExpand.responseMs / 2;
   // Extra space below expanded content; see the layout tail in Island::prepare.
   constexpr float kExpandedBottomInset = 8.0F;
 
@@ -2492,11 +2498,25 @@ void Island::prepare(Instance& inst) {
     inst.targetWidth = w;
     inst.targetHeight = h;
     const bool growing = w > oldW || h > oldH;
+    const Motion::Spring spring = growing ? Motion::islandExpand : Motion::islandCollapse;
+    const float durationMs = Motion::settleMs(spring);
+    // Each axis springs over its own travel, starting at the speed the last morph left it with.
+    const auto travelVelocity = [](float velocity, float travel) {
+      return std::abs(travel) > 0.5F ? velocity / travel : 0.0F;
+    };
+    const float widthStart = travelVelocity(inst.widthVelocity, w - oldW);
+    const float heightStart = travelVelocity(inst.heightVelocity, h - oldH);
     inst.morph = inst.animations.animate(
-        0, 1, growing ? Motion::resizeMs : Motion::dismissMs, growing ? Motion::reveal : Motion::dismiss,
-        [this, &inst, oldW, oldH, w, h](float value) {
-          inst.width = oldW + (w - oldW) * value;
-          inst.height = oldH + (h - oldH) * value;
+        0, 1, durationMs, Easing::Linear,
+        [this, &inst, spring, durationMs, widthStart, heightStart, oldW, oldH, w, h](float value) {
+          const auto across = Motion::spring(spring, value * durationMs, widthStart);
+          const auto down = Motion::spring(spring, value * durationMs, heightStart);
+          // Land exactly on the target; the spring's remaining motion is under 0.1% by then.
+          const bool settled = value >= 1.0F;
+          inst.width = settled ? w : oldW + (w - oldW) * across.position;
+          inst.height = settled ? h : oldH + (h - oldH) * down.position;
+          inst.widthVelocity = settled ? 0 : (w - oldW) * across.velocity;
+          inst.heightVelocity = settled ? 0 : (h - oldH) * down.velocity;
           geometry(inst);
         }
     );
@@ -2931,6 +2951,7 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     inst.suppressHover = false;
     inst.width = inst.targetWidth = width / inst.scale;
     inst.height = inst.targetHeight = height / inst.scale;
+    inst.widthVelocity = inst.heightVelocity = 0;
     inst.signature.clear();
     inst.surface->setSceneRoot(inst.root.get());
     inst.surface->setAnimationManager(&inst.animations);
