@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 enum class Urgency : uint8_t {
@@ -34,6 +35,9 @@ using Clock = std::chrono::steady_clock;
 using TimePoint = Clock::time_point;
 using WallClock = std::chrono::system_clock;
 using WallTimePoint = WallClock::time_point;
+
+// Category of the shell's "Screenshot saved" notification; the Island shows its image as a thumbnail.
+inline constexpr std::string_view kScreenshotNotificationCategory = "x-noctalia.screenshot";
 
 struct NotificationImageData {
   std::int32_t width = 0;

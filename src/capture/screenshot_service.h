@@ -181,7 +181,9 @@ private:
   [[nodiscard]] std::filesystem::path outputDirectory(const OutputOptions& options) const;
   [[nodiscard]] std::filesystem::path
   makeScreenshotPath(const OutputOptions& options, const std::string& labelBase, int suffix = 0) const;
-  void notifySaved(const std::filesystem::path& path);
+  // Posts "Screenshot saved" with a thumbnail and Open, Markup and Show in Folder actions.
+  void notifySaved(const std::filesystem::path& path, const ScreencopyImage& image);
+  void onSavedNotificationAction(std::uint32_t id, const std::string& actionKey, const std::string& activationToken);
   void notifyError(const std::string& message);
   void rememberRegion(const LogicalRect& region);
   [[nodiscard]] std::optional<LogicalRect> loadRememberedRegion() const;
@@ -209,4 +211,6 @@ private:
   bool m_freezeCaptureActive = false;
   SoundPlayer* m_soundPlayer = nullptr;
   Island* m_islandHost = nullptr;
+  // Recent "Screenshot saved" notifications and the files their actions open.
+  std::vector<std::pair<std::uint32_t, std::filesystem::path>> m_savedNotifications;
 };

@@ -491,7 +491,14 @@ uint32_t NotificationManager::addInternal(
 }
 
 void NotificationManager::setInternalActionCallback(ActionInvokeCallback callback) {
-  m_internalActionCallback = std::move(callback);
+  m_internalActionCallbacks.clear();
+  addInternalActionCallback(std::move(callback));
+}
+
+void NotificationManager::addInternalActionCallback(ActionInvokeCallback callback) {
+  if (callback) {
+    m_internalActionCallbacks.push_back(std::move(callback));
+  }
 }
 
 void NotificationManager::setActionInvokeCallback(ActionInvokeCallback callback) {
@@ -540,8 +547,8 @@ bool NotificationManager::invokeAction(
 
   // Internal notifications have no D-Bus owner, so their actions are dispatched in-process instead.
   if (notification->origin == NotificationOrigin::Internal) {
-    if (m_internalActionCallback) {
-      m_internalActionCallback(id, actionKey, activationToken);
+    for (const auto& callback : m_internalActionCallbacks) {
+      callback(id, actionKey, activationToken);
     }
   } else if (m_actionInvokeCallback) {
     m_actionInvokeCallback(id, actionKey, activationToken);
