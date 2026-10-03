@@ -28,6 +28,10 @@ The bar along the bottom names the selected result's kind and its keys: **Return
 - **Tab** autocompletes the selected result: a provider row from the `/` overview puts its prefix in the field, a search quicklink puts its keyword in (`gh `), and a fallback row carries your query into that provider.
 - **Esc** inside a provider view you reached from the root search (for example after typing `/clip`) goes back to the root search; **Esc** at the root, or in a view the launcher opened with (the clipboard shortcut), closes the launcher.
 
+### Arguments
+
+Commands that take arguments (a script command with `@raycast.argument1`, a search quicklink picked without a query, **Translate** in AI) show them inline, like Raycast: **Tab** on the command, or **Return** while a required argument is still empty, opens an argument bar under the search field with the command on the left and a pill per argument. The search field edits the highlighted argument; **Tab** / **Shift + Tab** (or **Down** / **Up**) move between them, **Return** runs the command once every required argument has a value, and **Esc** puts your search back. Typing the arguments after the title (`deploy staging`, `gh noctalia`) still works.
+
 ### Action panel
 
 **Shift + Return** (or a right click) opens the action panel over the bottom-right of the results, like Raycast's ⌘K panel: the primary action first with its **↵** hint, then the result's own actions (the first of which **Ctrl + Return** runs directly; for example **Quit Application** and **Copy Name** for a running application, **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. While the panel is open the search field filters the actions; **Up** / **Down** move, **Return** runs, **Esc** or **Shift + Return** closes it and brings the search back.
@@ -187,7 +191,7 @@ Paste saved text by name or keyword.
 - **Source**: `[shell.launcher.snippets.<id>]` in your config, plus snippets made in the launcher (kept in `~/.local/state/noctalia/launcher_snippets.json`).
 - **Creating**: Run **Create Snippet** (first in `/snip`, or search "create snippet") to fill in a name, the text and an optional keyword. Type `\n` for a new line. **Save as Snippet** in clipboard history opens the same form with the copied text filled in, and **Edit Snippet…** changes one made here.
 - **Placeholders**: `{date}`, `{time}`, `{datetime}`, `{day}`, `{weekday}`, `{month}`, `{year}`, `{clipboard}` and `{uuid}` are filled in when the snippet is pasted, as in Raycast. `{cursor}` is accepted and removed; the launcher can't place the caret in another app.
-- **Limits**: Snippets are pasted from the launcher; they don't expand automatically as you type in other apps.
+- **Expansion while typing**: With `shell.launcher.snippet_expansion = true` (**Settings → Launcher → Expand Snippets While Typing**), typing a snippet's keyword in any app replaces it with the snippet's text, as in Raycast: the keyword is erased with Backspace through the virtual keyboard and the text pasted. Wayland has no way to watch the keyboard, so, like espanso, the shell reads the keyboards under `/dev/input`; your user must be in the `input` group (`sudo usermod -aG input $USER`, then log in again). Keys decode with the compositor's keymap, a word ends at Return, arrows or any Ctrl/Alt/Super chord, and nothing expands while a shell panel has the keyboard. Keywords should be at least two characters and are matched exactly, so a leading symbol (`;sig`, `:addr`) avoids accidents.
 
 ### Script commands
 
@@ -196,7 +200,7 @@ Run your own scripts from the launcher, using Raycast's script command format.
 - **Prefix**: `/script ` (also in global search)
 - **Source**: Executable files in `~/.config/noctalia/scripts` and any folders in `shell.launcher.script_directories`.
 - **Metadata**: Comment lines such as `# @raycast.title`, `@raycast.description`, `@raycast.packageName`, `@raycast.icon` and `@raycast.mode` (`silent`, `compact` or `fullOutput`) are read from the top of the file; `@noctalia.` works too. Raycast script commands work unchanged.
-- **Arguments**: Text typed after the title is passed to the script (`deploy staging`).
+- **Arguments**: `@raycast.argument1` … `argument3` become inline fields in the argument bar (Tab on the command); text typed after the title is passed too (`deploy staging`).
 - **Output**: `compact` shows the last line of output as a notification, `fullOutput` shows all of it, and a failing script reports its error. Actions: **Edit Script** and **Show in Folder**.
 
 ### Time zones
@@ -255,7 +259,18 @@ The capture half of Raycast's Floating Notes: jot something down without leaving
 
 - **Prefix**: `/note ` (also in global search as `note …`)
 - **File**: `shell.launcher.notes_file`, or `~/Documents/Notes.md` (falling back to `~/Notes.md`). Each note is a Markdown list item with a time stamp, so the file reads well anywhere.
-- **Functionality**: `note call the dentist` offers **Save note**; `/note` lists the latest notes newest first with a preview, **Copy Note**, **Delete Note** and **Open Notes File**. The floating note window itself is not part of the shell.
+- **Functionality**: `note call the dentist` offers **Save note**; `/note` lists the latest notes newest first with a preview, **Copy Note**, **Delete Note** and **Open Notes File**.
+- **Floating Notes**: **Floating Notes** (first in `/note`, or search for it, or `noctalia msg panel-open floating-notes`) opens a small note window that stays over your apps while you open other panels or the launcher. It edits the notes file in place and saves as you type; **Esc** or the close button puts it away. `shell.launcher.floating_notes_position` moves it (default `bottom_right`).
+
+### AI
+
+Raycast's AI, answered by a local model through [Ollama](https://ollama.com); nothing leaves your machine unless you point `shell.launcher.ai.url` elsewhere.
+
+- **Prefix**: `/ai ` (also in global search: **Ask AI** sits with the fallbacks under "Use … with")
+- **Setup**: Install Ollama, run `ollama serve` and pull a model (`ollama pull llama3.2`). `/ai › Choose Model` lists the installed models and remembers your pick; `shell.launcher.ai.model` pins one.
+- **Quick AI**: Type a question and **Return** on **Ask AI**. The answer streams into the launcher as Markdown; **Return** copies it (and pastes it, per `auto_paste`), the action panel offers **Stop Writing**, **Regenerate** and **Copy Question**. **Esc** goes back to the search; the same question shows its answer again.
+- **AI Commands**: **Improve Writing**, **Fix Spelling and Grammar**, **Make Shorter**, **Make Longer**, **Change Tone to Professional / Casual / Friendly / Confident**, **Summarize**, **Explain This in Simple Terms**, **Explain Code Step by Step** and **Translate** (asks for the language in the argument bar) run their prompt over the text on the clipboard, since Wayland doesn't expose the selection of another app: copy the text, run the command, then paste the result over it. The prompts follow the community Ollama extension for Raycast.
+- **States**: An unreachable server, no installed models and offline mode each show a status row saying what to do.
 
 ### Window management
 

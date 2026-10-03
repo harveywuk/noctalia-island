@@ -38,6 +38,7 @@
 #include "i18n/i18n.h"
 #include "i18n/i18n_service.h"
 #include "ipc/ipc_arg_parse.h"
+#include "launcher/ai_provider.h"
 #include "launcher/app_provider.h"
 #include "launcher/clipboard_provider.h"
 #include "launcher/date_provider.h"
@@ -81,7 +82,9 @@
 #include "shell/clipboard/clipboard_paste.h"
 #include "shell/control_center/control_center_panel.h"
 #include "shell/greeter/greeter_appearance_sync.h"
+#include "shell/launcher/floating_notes_panel.h"
 #include "shell/launcher/launcher_panel.h"
+#include "shell/launcher/snippet_expander.h"
 #include "shell/notification/notification_center_panel.h"
 #include "shell/panel/plugin_panel.h"
 #include "shell/polkit/polkit_panel.h"
@@ -657,6 +660,22 @@ void Application::initPanelManagerAndPanels() {
     launcherPanel->addProvider(std::make_unique<FileProvider>(&m_clipboardService));
     m_launcherSnippets = std::make_shared<SnippetStore>();
     m_launcherQuicklinks = std::make_shared<QuicklinkStore>();
+    m_snippetExpander = std::make_unique<SnippetExpander>(
+        &m_configService, m_launcherSnippets.get(), &m_virtualKeyboardService, &m_clipboardService
+    );
+    m_snippetExpander->setKeymapSource([this]() { return m_wayland.keyboardKeymapData(); });
+    m_snippetExpander->setSuspendedSource([this]() { return m_wayland.hasKeyboardFocus(); });
+    m_launcherSnippets->setChangedCallback([this]() {
+      if (m_snippetExpander != nullptr) {
+        m_snippetExpander->refreshKeywords();
+      }
+    });
+    m_configService.addReloadCallback([this]() {
+      if (m_snippetExpander != nullptr) {
+        m_snippetExpander->apply();
+      }
+    });
+    m_snippetExpander->apply();
     launcherPanel->addProvider(
         std::make_unique<ClipboardProvider>(&m_clipboardService, &m_configService, m_launcherSnippets.get())
     );
@@ -673,8 +692,11 @@ void Application::initPanelManagerAndPanels() {
     launcherPanel->addProvider(std::make_unique<TimerProvider>(&m_ipcService));
     launcherPanel->addProvider(std::make_unique<ProcessProvider>());
     launcherPanel->addProvider(std::make_unique<DefineProvider>(&m_clipboardService, &m_configService, &m_httpClient));
+    launcherPanel->addProvider(std::make_unique<AiProvider>(&m_clipboardService, &m_configService, &m_httpClient));
     launcherPanel->addProvider(std::make_unique<ScreenshotProvider>(&m_clipboardService, &m_configService));
-    launcherPanel->addProvider(std::make_unique<NotesProvider>(&m_clipboardService, &m_configService));
+    auto notesProvider = std::make_unique<NotesProvider>(&m_clipboardService, &m_configService);
+    notesProvider->setOpenFloatingNotesCallback([this]() { m_panelManager.togglePanel("floating-notes"); });
+    launcherPanel->addProvider(std::move(notesProvider));
     launcherPanel->setCopyTextCallback([this](std::string text) {
       (void)m_clipboardService.copyText(std::move(text));
     });
@@ -771,6 +793,7 @@ void Application::initPanelManagerAndPanels() {
       )
   );
   m_panelManager.registerPanel("tray-drawer", std::make_unique<TrayDrawerPanel>(m_trayService.get(), &m_configService));
+  m_panelManager.registerPanel("floating-notes", std::make_unique<FloatingNotesPanel>(&m_configService));
   m_panelManager.registerPanel("polkit", std::make_unique<PolkitPanel>(&m_configService, [this]() {
                                  return m_polkitAgent.get();
                                }));

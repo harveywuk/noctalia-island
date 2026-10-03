@@ -520,6 +520,8 @@ double WaylandConnection::lastPointerX() const noexcept { return m_seatHandler.l
 double WaylandConnection::lastPointerY() const noexcept { return m_seatHandler.lastPointerY(); }
 WaylandSeat::InputSource WaylandConnection::lastInputSource() const noexcept { return m_seatHandler.lastInputSource(); }
 std::string WaylandConnection::currentKeyboardLayoutName() const { return m_seatHandler.currentLayoutName(); }
+std::string WaylandConnection::keyboardKeymapData() const { return m_seatHandler.keymapData(); }
+bool WaylandConnection::hasKeyboardFocus() const noexcept { return m_seatHandler.lastKeyboardSurface() != nullptr; }
 std::vector<std::string> WaylandConnection::keyboardLayoutNames() const { return m_seatHandler.layoutNames(); }
 WaylandSeat::LockKeysState WaylandConnection::keyboardLockKeysState() const { return m_seatHandler.lockKeysState(); }
 std::uint32_t WaylandConnection::lastInputSerial() const noexcept { return m_seatHandler.lastSerial(); }

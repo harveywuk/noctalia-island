@@ -1710,6 +1710,15 @@ struct ShellConfig {
       bool operator==(const DmenuConfig&) const = default;
     } dmenu;
 
+    // Local AI (Raycast's AI, served by Ollama): the server and the model that answers.
+    struct AiConfig {
+      std::string url = "http://127.0.0.1:11434";
+      // Empty: the model picked under /ai › Choose Model, else the first installed one.
+      std::string model;
+
+      bool operator==(const AiConfig&) const = default;
+    } ai;
+
     struct PanelsConfig {
       // Panel ids the panel provider never lists. Setting this in config.toml
       // replaces the default outright, same as every other list config here.
@@ -1727,6 +1736,10 @@ struct ShellConfig {
     std::vector<std::string> fallbacks{"files"};
     // Markdown file quick notes are appended to; empty means ~/Documents/Notes.md (or ~/Notes.md).
     std::string notesFile;
+    // Screen position of the Floating Notes window (one of kPanelPositions); empty means bottom_right.
+    std::string floatingNotesPosition;
+    // Expand snippet keywords typed in other apps (reads the keyboards under /dev/input; needs the `input` group).
+    bool snippetExpansion = false;
     // Quicklinks and snippets from config. With no quicklinks configured a small built-in set is used.
     std::vector<LauncherQuicklinkConfig> quicklinks;
     std::vector<LauncherSnippetConfig> snippets;

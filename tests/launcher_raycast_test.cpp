@@ -2,6 +2,7 @@
 // URL templates, snippet placeholders, script command metadata, time zone parsing, form validation,
 // and the alias, quicklink and snippet stores.
 
+#include "launcher/ai_provider.h"
 #include "launcher/alias_store.h"
 #include "launcher/clipboard_provider.h"
 #include "launcher/date_provider.h"
@@ -14,6 +15,7 @@
 #include "launcher/quicklink_store.h"
 #include "launcher/screenshot_provider.h"
 #include "launcher/script_provider.h"
+#include "launcher/snippet_matcher.h"
 #include "launcher/snippet_provider.h"
 #include "launcher/snippet_store.h"
 #include "launcher/time_provider.h"
@@ -169,6 +171,85 @@ namespace {
     TEST_CHECK(SnippetProvider::validate(nullptr, &reloaded, "saved:" + reloaded.snippets()[0].id, "thx").empty());
     TEST_CHECK(SnippetProvider::validate(nullptr, &reloaded, {}, "new").empty());
     fs::remove(path);
+  }
+
+  void testSnippetMatcher() {
+    SnippetMatcher matcher;
+    matcher.setKeywords(
+        {{";sig", "a"}, {"brb", "b"}, {"x", "too short"}, {"two words", "spaces"}, {"ab", "c"}, {"xab", "d"}}
+    );
+    for (const char* ch : {"h", "i", " ", ";", "s", "i"}) {
+      TEST_CHECK(!matcher.feed(ch).has_value());
+    }
+    const auto sig = matcher.feed("g");
+    TEST_CHECK(sig.has_value() && sig->snippetId == "a");
+    TEST_CHECK(matcher.buffer().empty()); // a match resets the word
+    // Backspace drops the last code point; a word break drops the word.
+    (void)matcher.feed("b");
+    (void)matcher.feed("r");
+    (void)matcher.feed("é");
+    matcher.backspace();
+    TEST_CHECK(matcher.buffer() == "br");
+    const auto brb = matcher.feed("b");
+    TEST_CHECK(brb.has_value() && brb->snippetId == "b");
+    (void)matcher.feed("b");
+    matcher.reset();
+    TEST_CHECK(!matcher.feed("r").has_value());
+    TEST_CHECK(!matcher.feed("b").has_value());
+    // The longest keyword wins when several end the buffer.
+    matcher.reset();
+    (void)matcher.feed("x");
+    (void)matcher.feed("a");
+    const auto longest = matcher.feed("b");
+    TEST_CHECK(longest.has_value() && longest->snippetId == "d");
+    TEST_CHECK(SnippetMatcher::codePoints("héllo") == 5);
+    TEST_CHECK(SnippetMatcher::codePoints(";sig") == 4);
+  }
+
+  void testArguments() {
+    // A search quicklink picked without a query takes one in the argument bar.
+    const auto links = QuicklinkProvider::builtinQuicklinks();
+    bool sawArgument = false;
+    for (const auto& result : QuicklinkProvider::match(links, "duck", false)) {
+      if (result.id == "link:duckduckgo") {
+        sawArgument =
+            result.arguments.size() == 1 && result.arguments[0].required && !result.arguments[0].placeholder.empty();
+      }
+    }
+    TEST_CHECK(sawArgument);
+    // With a query typed after the keyword there is nothing left to ask for.
+    for (const auto& result : QuicklinkProvider::match(links, "ddg noctalia", false)) {
+      if (result.id == "link:duckduckgo") {
+        TEST_CHECK(result.arguments.empty() && result.query.has_value());
+      }
+    }
+  }
+
+  void testAi() {
+    const auto models =
+        AiProvider::parseModels(R"({"models":[{"name":"llama3.2:latest","size":1},{"name":"qwen2.5-coder:7b"}]})");
+    TEST_CHECK(models.size() == 2 && models[0] == "llama3.2:latest" && models[1] == "qwen2.5-coder:7b");
+    TEST_CHECK(AiProvider::parseModels("nope").empty());
+    const auto token = AiProvider::parseStreamLine(
+        R"({"model":"llama3.2","message":{"role":"assistant","content":"Hel"},"done":false})"
+    );
+    TEST_CHECK(token.has_value() && token->content == "Hel" && !token->done && token->error.empty());
+    const auto last = AiProvider::parseStreamLine(R"({"message":{"content":""},"done":true,"total_duration":1})");
+    TEST_CHECK(last.has_value() && last->done);
+    const auto error = AiProvider::parseStreamLine(R"({"error":"model 'x' not found"})");
+    TEST_CHECK(error.has_value() && error->error == "model 'x' not found" && error->done);
+    TEST_CHECK(!AiProvider::parseStreamLine("   ").has_value());
+    TEST_CHECK(
+        AiProvider::fillPrompt("Translate into {language}.\n{text}", "hi", "French") == "Translate into French.\nhi"
+    );
+    bool translateTakesLanguage = false;
+    for (const auto& command : AiProvider::commands()) {
+      TEST_CHECK(command.prompt.contains("{text}"));
+      if (command.id == "translate") {
+        translateTakesLanguage = command.takesLanguage && command.prompt.contains("{language}");
+      }
+    }
+    TEST_CHECK(translateTakesLanguage);
   }
 
   void testScripts() {
@@ -481,6 +562,9 @@ int main() {
   testQuicklinks();
   testQuicklinkForms();
   testSnippets();
+  testSnippetMatcher();
+  testArguments();
+  testAi();
   testScripts();
   testTime();
   testWindowManagement();

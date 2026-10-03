@@ -147,6 +147,8 @@ public:
   [[nodiscard]] double lastPointerX() const noexcept { return m_lastPointerX; }
   [[nodiscard]] double lastPointerY() const noexcept { return m_lastPointerY; }
   [[nodiscard]] std::string currentLayoutName() const;
+  // The compositor's keymap text as received from wl_keyboard.keymap; empty before the first one.
+  [[nodiscard]] const std::string& keymapData() const noexcept { return m_xkbKeymapData; }
   [[nodiscard]] std::vector<std::string> layoutNames() const;
   [[nodiscard]] LockKeysState lockKeysState() const;
   [[nodiscard]] InputSource lastInputSource() const noexcept { return m_lastInputSource; }

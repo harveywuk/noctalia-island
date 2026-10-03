@@ -19,6 +19,8 @@ namespace {
 
   constexpr std::string_view kAddId = "add";
   constexpr std::string_view kOpenId = "open";
+  constexpr std::string_view kFloatingId = "floating";
+  constexpr double kFloatingScore = 7000.0;
   constexpr std::string_view kNotePrefix = "note:";
   constexpr std::size_t kMaxListed = 50;
   constexpr double kAddScore = 8500.0;
@@ -47,6 +49,17 @@ namespace {
   }
 
 } // namespace
+
+LauncherResult NotesProvider::floatingResult(double score) {
+  LauncherResult row;
+  row.id = std::string(kFloatingId);
+  row.title = i18n::tr("launcher.notes.floating");
+  row.subtitle = i18n::tr("launcher.notes.floating-subtitle");
+  row.glyphName = "note";
+  row.kind = i18n::tr("launcher.kinds.command");
+  row.score = score;
+  return row;
+}
 
 NotesProvider::NotesProvider(ClipboardService* clipboard, ConfigService* config, std::filesystem::path file)
     : m_clipboard(clipboard), m_config(config), m_file(std::move(file)) {}
@@ -172,6 +185,14 @@ std::vector<LauncherResult> NotesProvider::noteResults(std::string_view filter) 
 std::vector<LauncherResult> NotesProvider::query(std::string_view text) const {
   const std::string capture = captureText(text, false);
   if (capture.empty()) {
+    // "Floating Notes" is a command of its own at the root search.
+    const std::string needle = StringUtils::toLower(StringUtils::trim(text));
+    if (needle.size() >= 3 && m_openFloatingNotes) {
+      const double match = FuzzyMatch::score(needle, StringUtils::toLower(i18n::tr("launcher.notes.floating")));
+      if (FuzzyMatch::isMatch(match)) {
+        return {floatingResult(match)};
+      }
+    }
     return {};
   }
   LauncherResult add;
@@ -199,6 +220,9 @@ std::vector<LauncherResult> NotesProvider::queryPrefixed(std::string_view text) 
     add.score = kAddScore;
     results.insert(results.begin(), std::move(add));
   } else {
+    if (m_openFloatingNotes) {
+      results.insert(results.begin(), floatingResult(kFloatingScore));
+    }
     LauncherResult open;
     open.id = std::string(kOpenId);
     open.title = i18n::tr("launcher.notes.open");
@@ -212,6 +236,13 @@ std::vector<LauncherResult> NotesProvider::queryPrefixed(std::string_view text) 
 }
 
 bool NotesProvider::activate(const LauncherResult& result) {
+  if (result.id == kFloatingId) {
+    if (m_openFloatingNotes) {
+      m_openFloatingNotes();
+      return true;
+    }
+    return false;
+  }
   if (result.id == kAddId) {
     return append(file(), result.query.value_or(std::string()));
   }
@@ -228,7 +259,7 @@ std::string NotesProvider::primaryActionLabel(const LauncherResult& result) cons
   if (result.id == kAddId) {
     return i18n::tr("launcher.actions.save-note");
   }
-  if (result.id == kOpenId) {
+  if (result.id == kOpenId || result.id == kFloatingId) {
     return i18n::tr("launcher.actions.open");
   }
   return i18n::tr("launcher.actions.copy-note");

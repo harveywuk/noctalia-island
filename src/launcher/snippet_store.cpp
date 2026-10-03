@@ -93,4 +93,7 @@ void SnippetStore::save() const {
   }
   std::ofstream file(m_path, std::ios::trunc);
   file << json.dump(2) << '\n';
+  if (m_changed) {
+    m_changed();
+  }
 }

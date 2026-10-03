@@ -54,6 +54,7 @@ namespace settings {
     };
 
     constexpr auto kLauncherProviderSettings = std::to_array<LauncherProviderSettingSpec>({
+        {.name = "ai", .prefixPlaceholder = "ai", .globalByDefault = true},
         {.name = "calculator", .prefixPlaceholder = "calc", .globalByDefault = true},
         {.name = "clipboard", .prefixPlaceholder = "clip"},
         {.name = "date", .prefixPlaceholder = "date", .globalByDefault = true},
@@ -1649,6 +1650,25 @@ namespace settings {
         SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-categories.label"),
         tr("settings.schema.panels.launcher-categories.description"), {"shell", "launcher", "categories"},
         ToggleSetting{cfg.shell.launcher.categories}, "launcher categories filter"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-url.label"),
+        tr("settings.schema.panels.launcher-ai-url.description"), {"shell", "launcher", "ai", "url"},
+        TextSetting{
+            .value = cfg.shell.launcher.ai.url, .placeholder = "http://127.0.0.1:11434", .browseFileExtensions = {}
+        },
+        "launcher ai ollama url server local model"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-model.label"),
+        tr("settings.schema.panels.launcher-ai-model.description"), {"shell", "launcher", "ai", "model"},
+        TextSetting{.value = cfg.shell.launcher.ai.model, .placeholder = "llama3.2", .browseFileExtensions = {}},
+        "launcher ai ollama model name"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-snippet-expansion.label"),
+        tr("settings.schema.panels.launcher-snippet-expansion.description"), {"shell", "launcher", "snippet_expansion"},
+        ToggleSetting{cfg.shell.launcher.snippetExpansion}, "launcher snippet expansion keyword typing"
     ));
     entries.push_back(makeEntry(
         SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-show-icons.label"),

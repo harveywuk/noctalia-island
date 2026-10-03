@@ -49,7 +49,6 @@ public:
   [[nodiscard]] static std::string
   expand(std::string_view text, std::chrono::system_clock::time_point now, std::string_view clipboardText);
 
-private:
   struct Entry {
     std::string id;
     std::string name;
@@ -57,8 +56,10 @@ private:
     std::string text;
     bool saved = false;
   };
-
+  // Every snippet: config ones first, then the saved ones. Also feeds snippet expansion.
   [[nodiscard]] static std::vector<Entry> collect(const ConfigService* config, SnippetStore* store);
+
+private:
   [[nodiscard]] std::vector<Entry> entries() const;
   [[nodiscard]] std::optional<LauncherResult> createCommand(std::string_view text, bool listAll) const;
   [[nodiscard]] std::optional<Entry> entryFor(std::string_view resultId) const;

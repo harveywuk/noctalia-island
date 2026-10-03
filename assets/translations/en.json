@@ -849,7 +849,12 @@
       "copy-image": "Copy Image",
       "save-note": "Save Note",
       "copy-note": "Copy Note",
-      "delete-note": "Delete Note"
+      "delete-note": "Delete Note",
+      "ask-ai": "Ask AI",
+      "use-model": "Use Model",
+      "stop-writing": "Stop Writing",
+      "regenerate": "Regenerate",
+      "copy-question": "Copy Question"
     },
     "aliases": {
       "footer": "Return saves the alias, Esc cancels",
@@ -963,7 +968,10 @@
       "date": "Date",
       "definition": "Definition",
       "screenshot": "Screenshot",
-      "note": "Note"
+      "note": "Note",
+      "ai": "AI",
+      "ai-command": "AI Command",
+      "model": "Model"
     },
     "origins": {
       "appimage": "AppImage",
@@ -1015,7 +1023,8 @@
           "setup-wizard": "Setup Wizard",
           "test": "Test Panel",
           "tray-drawer": "Tray Drawer",
-          "wallpaper": "Wallpaper"
+          "wallpaper": "Wallpaper",
+          "floating-notes": "Floating Notes"
         },
         "title": "Panels"
       },
@@ -1065,11 +1074,15 @@
       },
       "notes": {
         "title": "Quick Notes"
+      },
+      "ai": {
+        "title": "AI"
       }
     },
     "quicklinks": {
       "search-for": "Search {name} for “{query}”",
-      "search-web": "Search the Web"
+      "search-web": "Search the Web",
+      "query": "Query"
     },
     "scripts": {
       "exit-code": "Exited with code {code}",
@@ -1357,7 +1370,56 @@
     "notes": {
       "add": "Save note: {text}",
       "open": "Open Notes File",
-      "preview-title": "New note"
+      "preview-title": "New note",
+      "floating": "Floating Notes",
+      "floating-subtitle": "A small note window that stays over your apps"
+    },
+    "arguments": {
+      "placeholder": "Argument",
+      "optional": "{name} (optional)",
+      "footer": "Tab for the next argument, Esc to cancel"
+    },
+    "floating-notes": {
+      "title": "Floating Notes",
+      "placeholder": "Jot something down…",
+      "open-file": "Open Notes File",
+      "close": "Close",
+      "editing": "Editing…",
+      "saved-to": "Saved to {file}",
+      "save-failed": "The notes file could not be written"
+    },
+    "ai": {
+      "ask": "Ask AI: {question}",
+      "no-model": "No model yet. Install one with “ollama pull llama3.2”",
+      "copy-text-first": "Copy some text first; the command runs on the clipboard",
+      "on-clipboard": "On the clipboard: {text}",
+      "language": "Language",
+      "offline": "AI is off in offline mode",
+      "unreachable": "Ollama isn’t answering at {url}",
+      "unreachable-subtitle": "Start it with “ollama serve”, or set shell.launcher.ai.url",
+      "no-models": "Ollama has no models installed",
+      "no-models-subtitle": "Pull one with “ollama pull llama3.2”",
+      "thinking": "Thinking…",
+      "writing": "writing",
+      "failed": "The model couldn’t answer: {error}",
+      "no-client": "No network client",
+      "choose-model": "Choose Model",
+      "current-model": "Current model",
+      "use-model": "Use this model",
+      "commands": {
+        "improve": "Improve Writing",
+        "fix": "Fix Spelling and Grammar",
+        "shorter": "Make Shorter",
+        "longer": "Make Longer",
+        "professional": "Change Tone to Professional",
+        "casual": "Change Tone to Casual",
+        "friendly": "Change Tone to Friendly",
+        "confident": "Change Tone to Confident",
+        "summarize": "Summarize",
+        "explain": "Explain This in Simple Terms",
+        "code": "Explain Code Step by Step",
+        "translate": "Translate"
+      }
     }
   },
   "location": {
@@ -3619,6 +3681,26 @@
         "launcher-global-screenshots": {
           "label": "Screenshots in Global Search",
           "description": "Also list screenshots in unprefixed search"
+        },
+        "launcher-snippet-expansion": {
+          "label": "Expand Snippets While Typing",
+          "description": "Replace a snippet’s keyword with its text as you type in any app. Reads the keyboards under /dev/input, so your user must be in the input group."
+        },
+        "launcher-prefix-ai": {
+          "label": "AI Prefix",
+          "description": "Trigger prefix for Quick AI and the AI commands"
+        },
+        "launcher-global-ai": {
+          "label": "AI in Global Search",
+          "description": "Offer “Ask AI” under the fallbacks of unprefixed search"
+        },
+        "launcher-ai-url": {
+          "label": "Ollama URL",
+          "description": "Where the local AI server listens; the default is Ollama on this machine"
+        },
+        "launcher-ai-model": {
+          "label": "AI Model",
+          "description": "The model that answers; leave blank to pick one under /ai › Choose Model"
         }
       },
       "power": {

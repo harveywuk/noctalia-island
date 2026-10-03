@@ -23,6 +23,7 @@
 #include "ui/builders.h"
 #include "ui/controls/image.h"
 #include "ui/controls/label.h"
+#include "ui/controls/markdown_view.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/controls/separator.h"
 #include "ui/palette.h"
@@ -143,7 +144,9 @@ namespace {
     return preview;
   }
 
-  [[nodiscard]] bool isDetailPresentation(const LauncherResult& result) { return result.presentation == "detail"; }
+  [[nodiscard]] bool isDetailPresentation(const LauncherResult& result) {
+    return result.presentation == "detail" || result.presentation == "markdown";
+  }
 
   [[nodiscard]] std::string providerOverviewId(std::string_view prefix) {
     std::string id(kProviderOverviewResultPrefix);
@@ -1274,6 +1277,44 @@ void LauncherPanel::create() {
       })
   );
 
+  // The argument bar: the picked command and a pill per argument, hidden until a command asks.
+  auto argumentBar = ui::row({
+      .out = &m_argumentBar,
+      .align = FlexAlign::Center,
+      .gap = Style::spaceSm * scale,
+      .paddingV = Style::spaceXs * scale,
+      .paddingH = Style::spaceSm * scale,
+      .visible = false,
+      .participatesInLayout = false,
+  });
+  argumentBar->addChild(
+      ui::glyph({
+          .out = &m_argumentGlyph,
+          .glyph = "terminal-2",
+          .glyphSize = Style::baseGlyphSize * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+      })
+  );
+  argumentBar->addChild(
+      ui::label({
+          .out = &m_argumentTitle,
+          .fontSize = Style::fontSizeBody * scale,
+          .fontWeight = FontWeight::Medium,
+          .color = colorSpecFromRole(ColorRole::OnSurface),
+          .maxLines = 1,
+          .ellipsize = TextEllipsize::End,
+      })
+  );
+  argumentBar->addChild(
+      ui::row({
+          .out = &m_argumentFields,
+          .align = FlexAlign::Center,
+          .gap = Style::spaceXs * scale,
+          .flexGrow = 1.0F,
+      })
+  );
+  container->addChild(std::move(argumentBar));
+
   container->addChild(
       ui::segmented({
           .out = &m_categoryFilter,
@@ -1389,6 +1430,12 @@ void LauncherPanel::create() {
           .flexGrow = 1.0F,
       })
   );
+  // Markdown answers (AI) render here instead of the plain label.
+  auto detailMarkdown = std::make_unique<MarkdownView>();
+  m_detailMarkdown = detailMarkdown.get();
+  m_detailMarkdown->setVisible(false);
+  m_detailMarkdown->setParticipatesInLayout(false);
+  detailContent->addChild(std::move(detailMarkdown));
   listColumn->addChild(std::move(detailScroll));
 
   listColumn->addChild(
@@ -1779,6 +1826,14 @@ bool LauncherPanel::isContextActive(std::string_view context) const {
 }
 
 void LauncherPanel::onClose() {
+  m_argumentResult.reset();
+  m_argumentIndex = 0;
+  m_argumentReturnQuery.clear();
+  m_argumentPills.clear();
+  m_argumentBar = nullptr;
+  m_argumentGlyph = nullptr;
+  m_argumentTitle = nullptr;
+  m_argumentFields = nullptr;
   m_actionPanelOpen = false;
   m_actionEntries.clear();
   m_actionVisible.clear();
@@ -1845,6 +1900,7 @@ void LauncherPanel::onClose() {
   m_detailScroll = nullptr;
   m_detailSubtitle = nullptr;
   m_detailBody = nullptr;
+  m_detailMarkdown = nullptr;
   m_emptyLabel = nullptr;
   clearReleasedRoot();
 }
@@ -1940,6 +1996,13 @@ void LauncherPanel::onInputChanged(const std::string& text) {
     m_actionFilter = text;
     m_actionSelected = 0;
     refreshActionPanel();
+    return;
+  }
+  if (m_argumentResult.has_value()) {
+    if (m_argumentIndex < m_argumentResult->arguments.size()) {
+      m_argumentResult->arguments[m_argumentIndex].value = text;
+    }
+    refreshArgumentBar();
     return;
   }
   const auto desktopVersion = desktopEntriesVersion();
@@ -2439,6 +2502,10 @@ bool LauncherPanel::completeSelected() {
     setQuery(std::move(text));
     return true;
   }
+  if (!result.arguments.empty()) {
+    beginArguments(result);
+    return true;
+  }
   const LauncherProvider* provider = providerFor(result.providerId);
   if (provider == nullptr) {
     return false;
@@ -2452,7 +2519,7 @@ bool LauncherPanel::completeSelected() {
 }
 
 bool LauncherPanel::popToRoot() {
-  if (!m_scopedProviderId.empty() || m_form.has_value() || m_aliasTarget.has_value()) {
+  if (!m_scopedProviderId.empty() || m_form.has_value() || m_aliasTarget.has_value() || m_argumentResult.has_value()) {
     return false;
   }
   // The provider view a query is in: the longest provider prefix it starts with, or the bare
@@ -2576,8 +2643,21 @@ void LauncherPanel::bindDetailResult() {
   m_detailSubtitle->setVisible(hasSubtitle);
   m_detailSubtitle->setParticipatesInLayout(hasSubtitle);
   m_detailSubtitle->setText(singleLinePreview(result.subtitle));
-  m_detailBody->setText(result.title.empty() ? result.id : result.title);
-  m_detailScroll->setScrollOffset(0.0F);
+  const bool markdown = result.presentation == "markdown" && m_detailMarkdown != nullptr;
+  if (markdown) {
+    m_detailMarkdown->setMarkdown(result.title.empty() ? result.id : result.title, contentScale());
+  } else {
+    m_detailBody->setText(result.title.empty() ? result.id : result.title);
+  }
+  m_detailBody->setVisible(!markdown);
+  m_detailBody->setParticipatesInLayout(!markdown);
+  if (m_detailMarkdown != nullptr) {
+    m_detailMarkdown->setVisible(markdown);
+    m_detailMarkdown->setParticipatesInLayout(markdown);
+  }
+  if (!markdown) {
+    m_detailScroll->setScrollOffset(0.0F);
+  }
 }
 
 LauncherProvider* LauncherPanel::providerFor(std::string_view providerId) const {
@@ -2937,7 +3017,11 @@ std::vector<LauncherPanel::ActionEntry> LauncherPanel::actionEntriesFor(const La
 }
 
 bool LauncherPanel::openActionsMenu(std::size_t index, float /*anchorX*/, float /*anchorY*/) {
-  if (index >= m_results.size() || m_aliasTarget.has_value() || m_form.has_value() || m_actionPanel == nullptr) {
+  if (index >= m_results.size()
+      || m_aliasTarget.has_value()
+      || m_form.has_value()
+      || m_argumentResult.has_value()
+      || m_actionPanel == nullptr) {
     return false;
   }
   if (m_actionPanelOpen) {
@@ -3006,11 +3090,245 @@ void LauncherPanel::closeActionPanel(bool restoreQuery) {
 }
 
 bool LauncherPanel::dismissTransientUi() {
-  if (!m_actionPanelOpen) {
+  if (m_actionPanelOpen) {
+    closeActionPanel(true);
+    return true;
+  }
+  if (m_argumentResult.has_value()) {
+    endArguments(true);
+    return true;
+  }
+  return false;
+}
+
+bool LauncherPanel::needsArguments(const LauncherResult& result) {
+  return std::ranges::any_of(result.arguments, [](const LauncherArgument& argument) {
+    return argument.required && StringUtils::isBlank(argument.value);
+  });
+}
+
+void LauncherPanel::beginArguments(const LauncherResult& result, std::size_t field) {
+  if (result.arguments.empty() || m_argumentBar == nullptr || m_input == nullptr) {
+    return;
+  }
+  if (!m_argumentResult.has_value()) {
+    m_argumentReturnQuery = m_query;
+  }
+  m_argumentResult = result;
+  if (m_categoryFilter != nullptr) {
+    setCategoryFilterVisible(false);
+  }
+  if (m_argumentGlyph != nullptr) {
+    (void)m_argumentGlyph->setGlyph(result.glyphName.empty() ? "terminal-2" : result.glyphName);
+  }
+  if (m_argumentTitle != nullptr) {
+    m_argumentTitle->setText(singleLinePreview(result.title));
+  }
+  m_argumentBar->setVisible(true);
+  m_argumentBar->setParticipatesInLayout(true);
+  showArgument(field);
+}
+
+void LauncherPanel::endArguments(bool restoreQuery) {
+  if (!m_argumentResult.has_value()) {
+    return;
+  }
+  m_argumentResult.reset();
+  m_argumentIndex = 0;
+  m_argumentPills.clear();
+  if (m_argumentFields != nullptr) {
+    std::vector<Node*> pills;
+    for (const auto& child : m_argumentFields->children()) {
+      pills.push_back(child.get());
+    }
+    for (Node* pill : pills) {
+      (void)m_argumentFields->removeChild(pill);
+    }
+  }
+  if (m_argumentBar != nullptr) {
+    m_argumentBar->setVisible(false);
+    m_argumentBar->setParticipatesInLayout(false);
+  }
+  const std::string query = std::move(m_argumentReturnQuery);
+  m_argumentReturnQuery.clear();
+  if (m_input != nullptr) {
+    m_input->setPlaceholder(
+        m_scopedPlaceholder.empty() ? i18n::tr("launcher.search-placeholder") : m_scopedPlaceholder
+    );
+    // The results never changed while the bar was up; only the field's text goes back.
+    m_input->setValue(singleLinePreview(query));
+  }
+  if (restoreQuery) {
+    m_query = query;
+    syncFooter();
+    if (m_container != nullptr) {
+      m_container->markLayoutDirty();
+    }
+  }
+}
+
+void LauncherPanel::showArgument(std::size_t index) {
+  if (!m_argumentResult.has_value() || m_input == nullptr) {
+    return;
+  }
+  const auto& arguments = m_argumentResult->arguments;
+  m_argumentIndex = std::min(index, arguments.size() - 1);
+  const LauncherArgument& argument = arguments[m_argumentIndex];
+  m_input->setPlaceholder(
+      argument.placeholder.empty() ? i18n::tr("launcher.arguments.placeholder") : argument.placeholder
+  );
+  m_input->setValue(argument.value);
+  m_input->selectAll();
+  refreshArgumentBar();
+  syncFooter();
+}
+
+void LauncherPanel::refreshArgumentBar() {
+  if (!m_argumentResult.has_value() || m_argumentFields == nullptr) {
+    return;
+  }
+  const float scale = contentScale();
+  const auto& arguments = m_argumentResult->arguments;
+  if (m_argumentPills.size() != arguments.size()) {
+    m_argumentPills.clear();
+    std::vector<Node*> stale;
+    for (const auto& child : m_argumentFields->children()) {
+      stale.push_back(child.get());
+    }
+    for (Node* node : stale) {
+      (void)m_argumentFields->removeChild(node);
+    }
+    for (std::size_t i = 0; i < arguments.size(); ++i) {
+      ArgumentPill slot;
+      auto pill = ui::row({
+          .out = &slot.pill,
+          .align = FlexAlign::Center,
+          .paddingV = 2.0F * scale,
+          .paddingH = Style::spaceSm * scale,
+          .radius = Style::radiusSm * scale,
+          .minHeight = (Style::controlHeightSm - Style::spaceXs) * scale,
+      });
+      pill->addChild(
+          ui::label({
+              .out = &slot.label,
+              .fontSize = Style::fontSizeCaption * scale,
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .maxLines = 1,
+              .ellipsize = TextEllipsize::End,
+          })
+      );
+      auto area = ui::inputArea({
+          .cursorShape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER,
+          .participatesInLayout = false,
+          .onClick = [this, i](const InputArea::PointerData&) {
+            if (m_argumentResult.has_value() && i < m_argumentResult->arguments.size()) {
+              showArgument(i);
+            }
+          },
+      });
+      area->setFocusable(false);
+      area->setTabStop(false);
+      area->setZIndex(2);
+      pill->addChild(std::move(area));
+      m_argumentFields->addChild(std::move(pill));
+      m_argumentPills.push_back(slot);
+    }
+  }
+  for (std::size_t i = 0; i < arguments.size() && i < m_argumentPills.size(); ++i) {
+    const LauncherArgument& argument = arguments[i];
+    const ArgumentPill& slot = m_argumentPills[i];
+    const bool active = i == m_argumentIndex;
+    const bool filled = !StringUtils::isBlank(argument.value);
+    std::string text = filled
+        ? singleLinePreview(argument.value)
+        : (argument.placeholder.empty() ? i18n::tr("launcher.arguments.placeholder") : argument.placeholder);
+    if (!argument.required && !filled) {
+      text = i18n::tr("launcher.arguments.optional", "name", text);
+    }
+    slot.label->setText(text);
+    slot.label->setColor(
+        active ? colorSpecFromRole(ColorRole::Primary)
+               : colorSpecFromRole(filled ? ColorRole::OnSurface : ColorRole::OnSurfaceVariant)
+    );
+    slot.pill->setFill(
+        colorSpecFromRole(active ? ColorRole::Primary : ColorRole::OnSurface, active ? 0.14F : Style::hoverFillAlpha)
+    );
+    slot.pill->setBorder(
+        active ? colorSpecFromRole(ColorRole::Primary, 0.6F)
+               : colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+        Style::borderWidth
+    );
+  }
+  if (m_container != nullptr) {
+    m_container->markLayoutDirty();
+  }
+}
+
+bool LauncherPanel::argumentKey(std::uint32_t sym, std::uint32_t modifiers) {
+  if (!m_argumentResult.has_value()) {
     return false;
   }
-  closeActionPanel(true);
-  return true;
+  const bool back = (sym == XKB_KEY_Tab && (modifiers & KeyMod::Shift) != 0)
+      || sym == XKB_KEY_ISO_Left_Tab
+      || KeybindMatcher::matches(KeybindAction::Up, sym, modifiers);
+  const bool forward =
+      (sym == XKB_KEY_Tab && modifiers == 0) || KeybindMatcher::matches(KeybindAction::Down, sym, modifiers);
+  const std::size_t count = m_argumentResult->arguments.size();
+  if (back) {
+    showArgument(m_argumentIndex == 0 ? count - 1 : m_argumentIndex - 1);
+    return true;
+  }
+  if (forward) {
+    showArgument(m_argumentIndex + 1 >= count ? 0 : m_argumentIndex + 1);
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Cancel, sym, modifiers)) {
+    endArguments(true);
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers)) {
+    runWithArguments();
+    return true;
+  }
+  // Shift/Ctrl+Return and the actions menu don't apply while arguments are being typed.
+  if (KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers & ~(KeyMod::Shift | KeyMod::Ctrl))) {
+    return true;
+  }
+  return false;
+}
+
+void LauncherPanel::runWithArguments() {
+  if (!m_argumentResult.has_value()) {
+    return;
+  }
+  const auto& arguments = m_argumentResult->arguments;
+  for (std::size_t i = 0; i < arguments.size(); ++i) {
+    if (arguments[i].required && StringUtils::isBlank(arguments[i].value)) {
+      showArgument(i); // Return on an empty required argument stays on it
+      return;
+    }
+  }
+  LauncherResult result = *m_argumentResult;
+  for (auto& argument : result.arguments) {
+    argument.value = StringUtils::trim(argument.value);
+  }
+  endArguments(false);
+  dispatchActivation(result);
+}
+
+void LauncherPanel::dispatchActivation(const LauncherResult& result) {
+  // Dispatch only to the provider that produced this result. Providers can use
+  // overlapping id shapes, so probing every provider risks side effects.
+  for (auto& provider : m_providers) {
+    if (provider->id() != std::string_view(result.providerId)) {
+      continue;
+    }
+    if (!provider->activate(result)) {
+      return;
+    }
+    finishActivation(*provider, result.id, provider->supportsAutoPaste());
+    return;
+  }
 }
 
 float LauncherPanel::actionPanelHeight(float scale) const {
@@ -3037,7 +3355,11 @@ void LauncherPanel::refreshActionPanel() {
   if (m_actionSelected >= m_actionVisible.size()) {
     m_actionSelected = m_actionVisible.empty() ? 0 : m_actionVisible.size() - 1;
   }
-  m_actionTitle->setText(singleLinePreview(m_actionResult.title));
+  // A Markdown answer's title is the whole answer; its subtitle says what was asked.
+  m_actionTitle->setText(singleLinePreview(
+      m_actionResult.presentation == "markdown" && !m_actionResult.subtitle.empty() ? m_actionResult.subtitle
+                                                                                    : m_actionResult.title
+  ));
   // Scroll the visible window so the selection always has a row.
   const std::size_t windowStart = m_actionSelected >= kActionPanelRows ? m_actionSelected - kActionPanelRows + 1 : 0;
   for (std::size_t slotIndex = 0; slotIndex < m_actionRows.size(); ++slotIndex) {
@@ -3238,25 +3560,19 @@ void LauncherPanel::activateSelected() {
     return;
   }
 
-  // Dispatch only to the provider that produced this result. Providers can use
-  // overlapping id shapes, so probing every provider risks side effects.
-  for (auto& provider : m_providers) {
-    if (provider->id() != std::string_view(result.providerId)) {
-      continue;
-    }
-
-    if (!provider->activate(result)) {
-      return;
-    }
-
-    finishActivation(*provider, result.id, provider->supportsAutoPaste());
+  if (needsArguments(result)) {
+    beginArguments(result);
     return;
   }
+  dispatchActivation(result);
 }
 
 bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
   if (m_actionPanelOpen) {
     return actionPanelKey(sym, modifiers);
+  }
+  if (m_argumentResult.has_value()) {
+    return argumentKey(sym, modifiers);
   }
   const bool gridNav = m_usingAppGrid && m_grid != nullptr;
   const int columns = gridNav ? static_cast<int>(std::max<std::size_t>(1, m_grid->layoutColumnCount())) : 1;
@@ -3506,6 +3822,15 @@ void LauncherPanel::syncFooter() {
     return;
   }
   const LauncherResult& selected = m_results[std::min(m_selectedIndex, m_results.size() - 1)];
+  if (m_argumentResult.has_value()) {
+    m_footerKind->setText(i18n::tr("launcher.arguments.footer"));
+    m_footerPrimary->setText(primaryActionLabelFor(*m_argumentResult));
+    m_footerActions->setVisible(false);
+    m_footerActions->setParticipatesInLayout(false);
+    m_footerActionsSeparator->setVisible(false);
+    m_footerActionsSeparator->setParticipatesInLayout(false);
+    return;
+  }
   if (selected.providerId == kAliasEditorProviderId) {
     m_footerKind->setText(i18n::tr("launcher.aliases.footer"));
     m_footerPrimary->setText(i18n::tr("launcher.actions.save-alias"));

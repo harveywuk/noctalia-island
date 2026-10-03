@@ -1758,6 +1758,14 @@ namespace noctalia::config::schema {
       return s;
     }
 
+    const Schema<ShellConfig::LauncherConfig::AiConfig>& shellLauncherAiSchema() {
+      static const Schema<ShellConfig::LauncherConfig::AiConfig> s = {
+          field(&ShellConfig::LauncherConfig::AiConfig::url, "url"),
+          field(&ShellConfig::LauncherConfig::AiConfig::model, "model"),
+      };
+      return s;
+    }
+
     const Schema<ShellConfig::LauncherConfig::DmenuConfig>& shellLauncherDmenuSchema() {
       static const Schema<ShellConfig::LauncherConfig::DmenuConfig> s = {
           namedMap<ShellConfig::LauncherConfig::DmenuConfig, DmenuEntryConfig>(
@@ -1861,6 +1869,7 @@ namespace noctalia::config::schema {
           field(&ShellConfig::LauncherConfig::providerPrefix, "provider_prefix"),
           enumField(&ShellConfig::LauncherConfig::autoPaste, "auto_paste", kClipboardAutoPasteModes),
           subTable(&ShellConfig::LauncherConfig::dmenu, "dmenu", shellLauncherDmenuSchema()),
+          subTable(&ShellConfig::LauncherConfig::ai, "ai", shellLauncherAiSchema()),
           subTable(&ShellConfig::LauncherConfig::panels, "panels", shellLauncherPanelsSchema()),
           namedMap<ShellConfig::LauncherConfig, LauncherProviderConfig>(
               &ShellConfig::LauncherConfig::providers, "providers", launcherProviderSchema(),
@@ -1872,6 +1881,8 @@ namespace noctalia::config::schema {
           field(&ShellConfig::LauncherConfig::webSearchUrl, "web_search_url"),
           field(&ShellConfig::LauncherConfig::fallbacks, "fallbacks"),
           field(&ShellConfig::LauncherConfig::notesFile, "notes_file"),
+          field(&ShellConfig::LauncherConfig::floatingNotesPosition, "floating_notes_position"),
+          field(&ShellConfig::LauncherConfig::snippetExpansion, "snippet_expansion"),
           namedMap<ShellConfig::LauncherConfig, LauncherQuicklinkConfig>(
               &ShellConfig::LauncherConfig::quicklinks, "quicklinks", launcherQuicklinkSchema(),
               [](LauncherQuicklinkConfig& elem, std::string_view name) { elem.id = std::string(name); },

@@ -258,6 +258,9 @@ public:
   [[nodiscard]] double lastPointerY() const noexcept;
   [[nodiscard]] WaylandSeat::InputSource lastInputSource() const noexcept;
   [[nodiscard]] std::string currentKeyboardLayoutName() const;
+  [[nodiscard]] std::string keyboardKeymapData() const;
+  // True while one of this client's surfaces holds the keyboard focus.
+  [[nodiscard]] bool hasKeyboardFocus() const noexcept;
   [[nodiscard]] std::vector<std::string> keyboardLayoutNames() const;
   [[nodiscard]] WaylandSeat::LockKeysState keyboardLockKeysState() const;
   [[nodiscard]] std::uint32_t lastInputSerial() const noexcept;

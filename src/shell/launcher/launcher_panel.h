@@ -20,6 +20,7 @@ class Image;
 class Input;
 class Label;
 class LauncherResultAdapter;
+class MarkdownView;
 class LauncherAppGridAdapter;
 class Renderer;
 class Segmented;
@@ -144,6 +145,22 @@ private:
   [[nodiscard]] float actionPanelHeight(float scale) const;
   void layoutActionPanel(Renderer& renderer, float width, float height);
   [[nodiscard]] bool dismissTransientUi() override;
+  // Raycast's command arguments: once a command that takes arguments is picked (Tab, or Return
+  // while a required one is empty), its fields show in a bar under the search field and the
+  // field edits them one at a time; Return runs the command with the values.
+  struct ArgumentPill {
+    Flex* pill = nullptr;
+    Label* label = nullptr;
+  };
+  [[nodiscard]] static bool needsArguments(const LauncherResult& result);
+  void beginArguments(const LauncherResult& result, std::size_t field = 0);
+  void endArguments(bool restoreQuery);
+  void showArgument(std::size_t index);
+  void refreshArgumentBar();
+  [[nodiscard]] bool argumentKey(std::uint32_t sym, std::uint32_t modifiers);
+  void runWithArguments();
+  // Runs `result` through the provider that produced it and closes on success.
+  void dispatchActivation(const LauncherResult& result);
   // Runs the first extra action of the selected result (Ctrl+Return, Raycast's secondary action).
   bool runSecondaryAction();
   void runProviderAction(const LauncherResult& result, std::string_view actionId);
@@ -220,6 +237,7 @@ private:
   ScrollView* m_detailScroll = nullptr;
   Label* m_detailSubtitle = nullptr;
   Label* m_detailBody = nullptr;
+  MarkdownView* m_detailMarkdown = nullptr;
   Label* m_emptyLabel = nullptr;
   Flex* m_footer = nullptr;
   Label* m_footerKind = nullptr;
@@ -266,6 +284,14 @@ private:
   Flex* m_actionList = nullptr;
   Label* m_actionEmpty = nullptr;
   std::vector<ActionRow> m_actionRows;
+  std::optional<LauncherResult> m_argumentResult;
+  std::size_t m_argumentIndex = 0;
+  std::string m_argumentReturnQuery;
+  Flex* m_argumentBar = nullptr;
+  Glyph* m_argumentGlyph = nullptr;
+  Label* m_argumentTitle = nullptr;
+  Flex* m_argumentFields = nullptr;
+  std::vector<ArgumentPill> m_argumentPills;
   Signal<>::ScopedConnection m_appIconColorizeConn;
   std::function<void(const LauncherProvider&)> m_onCopiedActivation;
   std::function<void(std::string)> m_copyText;

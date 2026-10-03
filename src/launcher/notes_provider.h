@@ -3,6 +3,7 @@
 #include "launcher/launcher_provider.h"
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,6 +40,9 @@ public:
   LauncherActionOutcome runAction(const LauncherResult& result, std::string_view actionId) override;
   [[nodiscard]] std::optional<LauncherPreview> preview(const LauncherResult& result) const override;
 
+  // Opens (toggles) the Floating Notes window; wired by the application.
+  void setOpenFloatingNotesCallback(std::function<void()> callback) { m_openFloatingNotes = std::move(callback); }
+
   [[nodiscard]] std::filesystem::path file() const;
   // Appends a note line ("- [2026-10-03 19:40] text"); exposed for tests.
   static bool append(const std::filesystem::path& file, std::string_view text);
@@ -48,8 +52,10 @@ public:
 
 private:
   [[nodiscard]] std::vector<LauncherResult> noteResults(std::string_view filter) const;
+  [[nodiscard]] static LauncherResult floatingResult(double score);
 
   ClipboardService* m_clipboard = nullptr;
   ConfigService* m_config = nullptr;
   std::filesystem::path m_file;
+  std::function<void()> m_openFloatingNotes;
 };
