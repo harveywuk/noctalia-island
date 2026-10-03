@@ -76,4 +76,4 @@ Every PR below is merged into `feature/orbit-island`. The merged branch builds, 
 
 - Build: `just configure && just build`. Turn the Island on in config; it's off by default.
 - Ubuntu 24.04 needs WirePlumber 0.5, sdbus-c++ 2.x, current stb headers and g++-14 built or installed by hand; the stock packages are too old. The shell itself builds against libwayland 1.22 again.
-- Launcher screenshots from the headless Sway surveys of the Raycast passes (root search, action panel, Island timer, Kill Process, calculator history) are in [assets/launcher-raycast](assets/launcher-raycast/).
+- Launcher screenshots from the headless Sway surveys of the Raycast passes (root search, action panel, Island timer, Kill Process, calculator history, Dictionary, Screenshots, Quick Notes) are in [assets/launcher-raycast](assets/launcher-raycast/).
