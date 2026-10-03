@@ -1,7 +1,9 @@
 #include "launcher/launcher_util.h"
 
 #include "core/process/process.h"
+#include "util/string_utils.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <format>
@@ -98,6 +100,16 @@ namespace launcher_util {
     }
     return value < 10.0 ? std::format("{:.1f} {}", value, kUnits[unit])
                         : std::format("{:.0f} {}", std::round(value), kUnits[unit]);
+  }
+
+  bool wordsMatch(std::string_view needle, std::string_view haystack) {
+    const auto words = StringUtils::splitWhitespace(haystack);
+    for (const auto& part : StringUtils::splitWhitespace(needle)) {
+      if (std::ranges::none_of(words, [&part](const std::string& word) { return word.starts_with(part); })) {
+        return false;
+      }
+    }
+    return true;
   }
 
 } // namespace launcher_util

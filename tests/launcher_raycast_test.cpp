@@ -1,16 +1,18 @@
 // Covers the launcher's Raycast features that work without a running shell: quicklink matching,
-// URL templates, snippet placeholders, script command metadata, time zone parsing, and the alias and
-// snippet stores.
+// URL templates, snippet placeholders, script command metadata, time zone parsing, form validation,
+// and the alias, quicklink and snippet stores.
 
 #include "launcher/alias_store.h"
 #include "launcher/launcher_util.h"
 #include "launcher/quicklink_provider.h"
+#include "launcher/quicklink_store.h"
 #include "launcher/script_provider.h"
 #include "launcher/snippet_provider.h"
 #include "launcher/snippet_store.h"
 #include "launcher/time_provider.h"
 #include "tests/test_check.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <string>
@@ -31,6 +33,54 @@ namespace {
     TEST_CHECK(launcher_util::formatByteSize(512) == "512 B");
     TEST_CHECK(launcher_util::formatByteSize(1500) == "1.5 KB");
     TEST_CHECK(launcher_util::formatByteSize(34'000'000) == "34 MB");
+    TEST_CHECK(launcher_util::wordsMatch("dark mo", "toggle dark mode appearance"));
+    TEST_CHECK(!launcher_util::wordsMatch("sig", "toggle night light"));
+  }
+
+  void testQuicklinkForms() {
+    TEST_CHECK(QuicklinkProvider::normalizeUrl("github.com/search?q={query}") == "https://github.com/search?q={query}");
+    TEST_CHECK(QuicklinkProvider::normalizeUrl(" http://localhost:8080 ") == "http://localhost:8080");
+    TEST_CHECK(QuicklinkProvider::normalizeUrl("mailto:me@example.com") == "mailto:me@example.com");
+    TEST_CHECK(QuicklinkProvider::normalizeUrl("not a link").empty());
+    TEST_CHECK(QuicklinkProvider::normalizeUrl("https://").empty());
+
+    const auto builtins = QuicklinkProvider::builtinQuicklinks();
+    TEST_CHECK(QuicklinkProvider::validate(builtins, {}, "example.com", "ex").empty());
+    // "gh" belongs to GitHub, unless GitHub itself is being edited.
+    TEST_CHECK(!QuicklinkProvider::validate(builtins, {}, "example.com", "GH").empty());
+    TEST_CHECK(QuicklinkProvider::validate(builtins, "github", "github.com", "gh").empty());
+    TEST_CHECK(!QuicklinkProvider::validate(builtins, {}, "example.com", "two words").empty());
+    TEST_CHECK(!QuicklinkProvider::validate(builtins, {}, "", "").empty());
+
+    const fs::path path = fs::temp_directory_path() / ("noctalia-quicklinks-" + std::to_string(::getpid()) + ".json");
+    fs::remove(path);
+    {
+      QuicklinkStore store(path.string());
+      const std::string id =
+          store.put({.id = {}, .name = "Docs", .url = "https://docs.example.com", .keyword = "d", .glyph = {}});
+      TEST_CHECK(!id.empty());
+      TEST_CHECK(
+          store.put({.id = id, .name = "Docs 2", .url = "https://docs.example.com", .keyword = "d", .glyph = {}}) == id
+      );
+      // Saving a built-in's id replaces that built-in.
+      store.put(
+          {.id = "github",
+           .name = "GitHub Code",
+           .url = "https://github.com/search?type=code&q={query}",
+           .keyword = "gh",
+           .glyph = {}}
+      );
+      TEST_CHECK(store.quicklinks().size() == 2);
+    }
+    QuicklinkStore reloaded(path.string());
+    TEST_CHECK(reloaded.quicklinks().size() == 2);
+    const auto merged = QuicklinkProvider::effectiveQuicklinks(nullptr, &reloaded);
+    TEST_CHECK(merged.size() == builtins.size() + 1);
+    const auto github = std::ranges::find(merged, std::string("github"), &LauncherQuicklinkConfig::id);
+    TEST_CHECK(github != merged.end() && github->name == "GitHub Code");
+    TEST_CHECK(reloaded.remove("github"));
+    TEST_CHECK(!reloaded.remove("github"));
+    fs::remove(path);
   }
 
   void testQuicklinks() {
@@ -71,12 +121,19 @@ namespace {
       const std::string first = store.add("Address", "1 Infinite Loop");
       const std::string second = store.add("Sign-off", "Thanks,\nHarvey");
       TEST_CHECK(first != second);
+      TEST_CHECK(store.update(second, "Sign-off", "Thanks,\nHarvey", "thx"));
+      TEST_CHECK(!store.update("missing", "x", "y", "z"));
       TEST_CHECK(store.remove(first));
       TEST_CHECK(!store.remove(first));
     }
     SnippetStore reloaded(path.string());
     TEST_CHECK(reloaded.snippets().size() == 1);
     TEST_CHECK(reloaded.snippets()[0].text == "Thanks,\nHarvey");
+    TEST_CHECK(reloaded.snippets()[0].keyword == "thx");
+    // A keyword already in use is refused, except by the snippet being edited.
+    TEST_CHECK(!SnippetProvider::validate(nullptr, &reloaded, {}, "THX").empty());
+    TEST_CHECK(SnippetProvider::validate(nullptr, &reloaded, "saved:" + reloaded.snippets()[0].id, "thx").empty());
+    TEST_CHECK(SnippetProvider::validate(nullptr, &reloaded, {}, "new").empty());
     fs::remove(path);
   }
 
@@ -190,6 +247,7 @@ echo "$1"
 int main() {
   testUrls();
   testQuicklinks();
+  testQuicklinkForms();
   testSnippets();
   testScripts();
   testTime();

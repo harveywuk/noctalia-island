@@ -530,6 +530,7 @@ _noctalia_sources = files(
   'src/launcher/panel_provider.cpp',
   'src/launcher/plugin_launcher_provider.cpp',
   'src/launcher/quicklink_provider.cpp',
+  'src/launcher/quicklink_store.cpp',
   'src/launcher/script_provider.cpp',
   'src/launcher/session_provider.cpp',
   'src/launcher/snippet_provider.cpp',

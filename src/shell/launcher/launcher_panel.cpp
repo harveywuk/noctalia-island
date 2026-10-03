@@ -54,6 +54,36 @@ namespace {
   constexpr std::string_view kProviderOverviewProviderId = "__launcher_provider_overview__";
   constexpr std::string_view kProviderOverviewResultPrefix = "provider:";
   constexpr std::string_view kAliasEditorProviderId = "__launcher_alias_editor__";
+  constexpr std::string_view kFormProviderId = "__launcher_form__";
+  constexpr std::string_view kFormSubmitId = "submit";
+
+  // Multiline form values are shown and typed in the single-line field with "\n" for a newline.
+  [[nodiscard]] std::string escapeNewlines(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char c : text) {
+      if (c == '\n') {
+        out += "\\n";
+      } else if (c != '\r') {
+        out.push_back(c);
+      }
+    }
+    return out;
+  }
+
+  [[nodiscard]] std::string unescapeNewlines(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+      if (text[i] == '\\' && i + 1 < text.size() && text[i + 1] == 'n') {
+        out.push_back('\n');
+        ++i;
+      } else {
+        out.push_back(text[i]);
+      }
+    }
+    return out;
+  }
   // An alias typed exactly puts its result above everything else, the calculator included.
   constexpr double kAliasScore = 1e9;
 
@@ -1146,6 +1176,9 @@ void LauncherPanel::addProvider(std::unique_ptr<LauncherProvider> provider) {
   provider->setResultsChangedCallback([this]() { onProviderResultsChanged(); });
   provider->setQueryRequestedCallback([this](std::string query) { setQuery(std::move(query)); });
   LauncherProvider* providerPtr = provider.get();
+  provider->setFormRequestedCallback([this, providerPtr](LauncherForm form) {
+    beginForm(std::move(form), providerPtr);
+  });
   provider->setActivationDoneCallback([this, providerPtr](const std::string& resultId, bool copied) {
     finishActivation(*providerPtr, resultId, copied);
   });
@@ -1582,6 +1615,8 @@ void LauncherPanel::onOpen(std::string_view context) {
     m_aliases.setConfigAliases(m_config->config().shell.launcher.aliases);
   }
   m_aliasTarget.reset();
+  m_form.reset();
+  m_formProvider = nullptr;
 
   // Pick up apps installed since the last scan (notably Nix profile swaps that
   // inotify cannot observe). Cheap stat-only check; only rescans on real change.
@@ -1629,6 +1664,8 @@ void LauncherPanel::onClose() {
   m_results.clear();
   m_allResults.clear();
   m_aliasTarget.reset();
+  m_form.reset();
+  m_formProvider = nullptr;
   m_previewProvider = nullptr;
   m_previewKey.clear();
   m_pendingPreviewImagePath.clear();
@@ -1772,6 +1809,11 @@ void LauncherPanel::onInputChanged(const std::string& text) {
   m_allResults.clear();
   m_mixedResults = false;
   m_previewProvider = nullptr;
+
+  if (m_form.has_value()) {
+    buildFormRows(text);
+    return;
+  }
 
   if (m_aliasTarget.has_value()) {
     // "Set Alias…": the field takes the alias; one row says what Return will do.
@@ -2368,6 +2410,121 @@ void LauncherPanel::endAliasEdit() {
   setQuery({});
 }
 
+void LauncherPanel::beginForm(LauncherForm form, LauncherProvider* provider) {
+  if (form.fields.empty()) {
+    return;
+  }
+  m_aliasTarget.reset();
+  m_formReturnQuery = m_form.has_value() ? m_formReturnQuery : m_query;
+  m_form = std::move(form);
+  m_formProvider = provider;
+  m_formError.clear();
+  m_formField = 0;
+  m_currentCategories.clear();
+  if (m_categoryFilter != nullptr) {
+    setCategoryFilterVisible(false);
+  }
+  showFormField(0);
+}
+
+void LauncherPanel::endForm(bool saved) {
+  if (!m_form.has_value()) {
+    return;
+  }
+  // After a save, list the provider's items so the new one shows; a cancel goes back to the search.
+  std::string query = m_formReturnQuery;
+  if (saved && m_formProvider != nullptr && !m_formProvider->prefix().empty()) {
+    query = std::string(m_formProvider->prefix()) + " ";
+  }
+  m_form.reset();
+  m_formProvider = nullptr;
+  m_formError.clear();
+  m_formReturnQuery.clear();
+  m_currentCategories.clear();
+  if (m_input != nullptr) {
+    m_input->setPlaceholder(
+        m_scopedPlaceholder.empty() ? i18n::tr("launcher.search-placeholder") : m_scopedPlaceholder
+    );
+  }
+  setQuery(query);
+}
+
+void LauncherPanel::showFormField(std::size_t index) {
+  if (!m_form.has_value()) {
+    return;
+  }
+  m_formField = std::min(index, m_form->fields.size());
+  if (m_input != nullptr) {
+    const bool onField = m_formField < m_form->fields.size();
+    m_input->setPlaceholder(onField ? m_form->fields[m_formField].placeholder : std::string());
+  }
+  // The submit row keeps the field empty; typing there goes nowhere.
+  if (m_formField < m_form->fields.size()) {
+    const auto& field = m_form->fields[m_formField];
+    setQuery(field.multiline ? escapeNewlines(field.value) : field.value);
+  } else {
+    setQuery({});
+  }
+}
+
+void LauncherPanel::buildFormRows(const std::string& text) {
+  if (m_formField < m_form->fields.size()) {
+    auto& field = m_form->fields[m_formField];
+    const std::string value = field.multiline ? unescapeNewlines(text) : text;
+    if (value != field.value) {
+      field.value = value;
+      m_formError.clear();
+    }
+  }
+  for (std::size_t i = 0; i < m_form->fields.size(); ++i) {
+    const auto& field = m_form->fields[i];
+    LauncherResult row;
+    row.id = "field:" + std::to_string(i);
+    row.providerId = std::string(kFormProviderId);
+    row.title = field.label;
+    row.subtitle = field.multiline ? escapeNewlines(field.value) : field.value;
+    row.kind = field.required ? i18n::tr("launcher.forms.required") : i18n::tr("launcher.forms.optional");
+    row.glyphName = i == m_formField ? "pencil" : (field.value.empty() ? "circle" : "circle-check");
+    m_allResults.push_back(std::move(row));
+  }
+  LauncherResult submit;
+  submit.id = std::string(kFormSubmitId);
+  submit.providerId = std::string(kFormProviderId);
+  submit.title = m_form->submitLabel;
+  submit.subtitle = m_formError;
+  submit.glyphName = m_form->glyph.empty() ? "device-floppy" : m_form->glyph;
+  m_allResults.push_back(std::move(submit));
+
+  m_activeCategoryType = All;
+  m_anyProviderLoading = false;
+  applyActiveCategory();
+  m_selectedIndex = std::min(m_formField, m_results.size() - 1);
+  if (m_grid != nullptr) {
+    m_grid->setSelectedIndex(m_selectedIndex);
+  }
+  syncFooter();
+}
+
+void LauncherPanel::submitForm() {
+  if (!m_form.has_value()) {
+    return;
+  }
+  for (std::size_t i = 0; i < m_form->fields.size(); ++i) {
+    const auto& field = m_form->fields[i];
+    if (field.required && StringUtils::isBlank(field.value)) {
+      m_formError = i18n::tr("launcher.forms.errors.required", "field", field.label);
+      showFormField(i);
+      return;
+    }
+  }
+  m_formError = m_form->submit ? m_form->submit(m_form->fields) : std::string();
+  if (!m_formError.empty()) {
+    showFormField(m_form->fields.size());
+    return;
+  }
+  endForm(true);
+}
+
 void LauncherPanel::runProviderAction(const LauncherResult& result, std::string_view actionId) {
   LauncherProvider* provider = providerFor(result.providerId);
   if (provider == nullptr) {
@@ -2657,6 +2814,16 @@ void LauncherPanel::activateSelected() {
   }
 
   const auto& result = m_results[m_selectedIndex];
+  if (result.providerId == kFormProviderId && m_form.has_value()) {
+    if (result.id == kFormSubmitId) {
+      submitForm();
+    } else if (m_selectedIndex != m_formField) {
+      showFormField(m_selectedIndex); // a click on another field
+    } else {
+      showFormField(m_formField + 1); // Return: the next field, then the submit row
+    }
+    return;
+  }
   if (result.providerId == kAliasEditorProviderId) {
     if (m_aliasTarget.has_value()) {
       const std::string alias = AliasStore::normalize(m_query);
@@ -2742,6 +2909,36 @@ bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
     m_categoryFilter->setSelectedIndex(next);
     return true;
   };
+
+  if (m_form.has_value()) {
+    const bool back = (sym == XKB_KEY_Tab && (modifiers & KeyMod::Shift) != 0)
+        || sym == XKB_KEY_ISO_Left_Tab
+        || KeybindMatcher::matches(KeybindAction::Up, sym, modifiers);
+    const bool forward =
+        (sym == XKB_KEY_Tab && modifiers == 0) || KeybindMatcher::matches(KeybindAction::Down, sym, modifiers);
+    if (back) {
+      if (m_formField > 0) {
+        showFormField(m_formField - 1);
+      }
+      return true;
+    }
+    if (forward) {
+      showFormField(m_formField + 1);
+      return true;
+    }
+    if (KeybindMatcher::matches(KeybindAction::Cancel, sym, modifiers)) {
+      endForm(false);
+      return true;
+    }
+    if (KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers)) {
+      activateSelected();
+      return true;
+    }
+    // Shift/Ctrl+Return and the actions menu don't apply inside a form.
+    if (KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers & ~(KeyMod::Shift | KeyMod::Ctrl))) {
+      return true;
+    }
+  }
 
   if (sym == XKB_KEY_F6 && (modifiers & ~(KeyMod::Shift)) == 0) {
     return cycleCategory((modifiers & KeyMod::Shift) != 0);
@@ -2904,11 +3101,17 @@ void LauncherPanel::syncFooter() {
   if (selected.providerId == kAliasEditorProviderId) {
     m_footerKind->setText(i18n::tr("launcher.aliases.footer"));
     m_footerPrimary->setText(i18n::tr("launcher.actions.save-alias"));
+  } else if (selected.providerId == kFormProviderId && m_form.has_value()) {
+    m_footerKind->setText(i18n::tr("launcher.forms.footer"));
+    m_footerPrimary->setText(
+        selected.id == kFormSubmitId ? m_form->submitLabel : i18n::tr("launcher.forms.next-field")
+    );
   } else {
     m_footerKind->setText(selected.kind.empty() ? sectionTitleFor(selected.providerId) : selected.kind);
     m_footerPrimary->setText(primaryActionLabelFor(selected));
   }
-  const bool actions = selected.providerId != kAliasEditorProviderId && hasActions(selected);
+  const bool actions =
+      selected.providerId != kAliasEditorProviderId && selected.providerId != kFormProviderId && hasActions(selected);
   m_footerActions->setVisible(actions);
   m_footerActions->setParticipatesInLayout(actions);
   m_footerActionsSeparator->setVisible(actions);
@@ -2956,6 +3159,10 @@ void LauncherPanel::assignSections() {
   for (LauncherResult& result : m_results) {
     result.section.clear();
     result.kind = kindFor(result);
+  }
+  if (m_form.has_value() && !m_results.empty()) {
+    m_results.front().section = m_form->title;
+    return;
   }
   if (!m_mixedResults || m_activeCategoryType != All || m_results.empty()) {
     return;

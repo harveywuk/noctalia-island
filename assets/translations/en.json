@@ -784,8 +784,11 @@
       "copy-to-clipboard": "Copy to Clipboard",
       "copy-url": "Copy URL",
       "delete-entry": "Delete Entry",
+      "delete-quicklink": "Delete Quicklink",
       "delete-snippet": "Delete Snippet",
+      "edit-quicklink": "Edit Quicklink…",
       "edit-script": "Edit Script",
+      "edit-snippet": "Edit Snippet…",
       "move-to-trash": "Move to Trash",
       "open": "Open",
       "open-in-browser": "Open in Browser",
@@ -857,6 +860,41 @@
       "actions": "Actions",
       "open": "Open",
       "open-application": "Open Application"
+    },
+    "forms": {
+      "create-quicklink": "Create Quicklink",
+      "create-snippet": "Create Snippet",
+      "create-snippet-help": "Save text you paste often. Give it a keyword to find it in a couple of keystrokes. {date}, {time} and {clipboard} are filled in when it’s pasted.",
+      "edit-quicklink": "Edit Quicklink",
+      "edit-snippet": "Edit Snippet",
+      "errors": {
+        "invalid-url": "Enter a web address, like https://example.com",
+        "keyword-spaces": "A keyword can’t contain spaces",
+        "keyword-taken": "“{keyword}” is already used by {name}",
+        "required": "{field} is required"
+      },
+      "fields": {
+        "keyword": "Keyword",
+        "link": "Link",
+        "name": "Name",
+        "text": "Text"
+      },
+      "footer": "Return for the next field, Esc to cancel",
+      "next-field": "Next Field",
+      "optional": "Optional",
+      "placeholders": {
+        "quicklink-keyword": "Optional keyword to type before a search, like gh",
+        "quicklink-name": "Quicklink name, like GitHub",
+        "quicklink-url": "Link, with {query} where the search goes",
+        "snippet-keyword": "Optional keyword that finds this snippet",
+        "snippet-name": "Snippet name, like Email signature",
+        "snippet-text": "Text to paste. Type \\n for a new line; {date}, {time} and {clipboard} work"
+      },
+      "quicklink-keywords": "new add link bookmark url",
+      "required": "Required",
+      "save-quicklink": "Save Quicklink",
+      "save-snippet": "Save Snippet",
+      "snippet-keywords": "new add text template"
     },
     "hotkey": {
       "copied": "Hotkey command copied",

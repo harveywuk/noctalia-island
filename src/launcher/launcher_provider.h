@@ -89,6 +89,27 @@ struct LauncherPreview {
   std::vector<std::pair<std::string, std::string>> metadata;
 };
 
+// A Raycast-style form shown in place of the results (Create Quicklink, Edit Snippet, …). The
+// search field edits one field at a time; Return moves to the next field and finally submits.
+struct LauncherFormField {
+  std::string id;
+  std::string label;
+  std::string placeholder;
+  std::string value;
+  bool required = false;
+  // Newlines are typed and shown as "\n" in the single-line search field.
+  bool multiline = false;
+};
+
+struct LauncherForm {
+  std::string title;
+  std::string submitLabel;
+  std::string glyph;
+  std::vector<LauncherFormField> fields;
+  // Saves the form. Returns an error to show under the submit row, or an empty string when saved.
+  std::function<std::string(const std::vector<LauncherFormField>&)> submit;
+};
+
 class LauncherProvider {
 public:
   virtual ~LauncherProvider() = default;
@@ -143,6 +164,9 @@ public:
   // Plugin-backed providers can request that the open launcher input be replaced,
   // e.g. to implement autocomplete.
   virtual void setQueryRequestedCallback(std::function<void(std::string)> /*callback*/) {}
+
+  // Providers with create/edit commands ask the launcher to show a form through this.
+  virtual void setFormRequestedCallback(std::function<void(LauncherForm)> /*callback*/) {}
 
   // Async (plugin-backed) providers defer the launcher close until their activation
   // handler resolves: if it rewrote the query the panel stays open, otherwise the

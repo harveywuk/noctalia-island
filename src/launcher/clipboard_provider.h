@@ -12,6 +12,10 @@ class ClipboardProvider : public LauncherProvider {
 public:
   ClipboardProvider(ClipboardService* clipboard, ConfigService* config, SnippetStore* snippets);
 
+  void setFormRequestedCallback(std::function<void(LauncherForm)> callback) override {
+    m_requestForm = std::move(callback);
+  }
+
   [[nodiscard]] std::string_view defaultPrefix() const override { return "clip"; }
   [[nodiscard]] std::string_view id() const override { return "Clipboard"; }
   [[nodiscard]] std::string displayName() const override;
@@ -35,4 +39,5 @@ private:
   ClipboardService* m_clipboard = nullptr;
   ConfigService* m_config = nullptr;
   SnippetStore* m_snippets = nullptr;
+  std::function<void(LauncherForm)> m_requestForm;
 };
