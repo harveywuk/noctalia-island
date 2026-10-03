@@ -1652,6 +1652,12 @@ namespace settings {
         ToggleSetting{cfg.shell.launcher.categories}, "launcher categories filter"
     ));
     entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-provider.label"),
+        tr("settings.schema.panels.launcher-ai-provider.description"), {"shell", "launcher", "ai", "provider"},
+        asSegmented(enumSelect(kAiProviderKinds, cfg.shell.launcher.ai.provider)),
+        "launcher ai provider ollama openai anthropic online local"
+    ));
+    entries.push_back(makeEntry(
         SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-url.label"),
         tr("settings.schema.panels.launcher-ai-url.description"), {"shell", "launcher", "ai", "url"},
         TextSetting{
@@ -1664,6 +1670,15 @@ namespace settings {
         tr("settings.schema.panels.launcher-ai-model.description"), {"shell", "launcher", "ai", "model"},
         TextSetting{.value = cfg.shell.launcher.ai.model, .placeholder = "llama3.2", .browseFileExtensions = {}},
         "launcher ai ollama model name"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-key-command.label"),
+        tr("settings.schema.panels.launcher-ai-key-command.description"),
+        {"shell", "launcher", "ai", "api_key_command"},
+        TextSetting{
+            .value = cfg.shell.launcher.ai.apiKeyCommand, .placeholder = "pass show openai", .browseFileExtensions = {}
+        },
+        "launcher ai api key command secret password manager"
     ));
     entries.push_back(makeEntry(
         SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-snippet-expansion.label"),

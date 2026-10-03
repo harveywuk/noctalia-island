@@ -1011,6 +1011,19 @@ constexpr EnumOption<SessionActionButtonVariant> kSessionActionButtonVariants[] 
     {SessionActionButtonVariant::Ghost, "ghost", "settings.session-actions.variant.ghost"},
 };
 
+// The service behind the launcher's AI (shell.launcher.ai.provider).
+enum class AiProviderKind : std::uint8_t {
+  Ollama,    // a local Ollama server
+  OpenAi,    // OpenAI, or any OpenAI-compatible API (OpenRouter, Groq, Mistral, LM Studio, …)
+  Anthropic, // the Anthropic Messages API
+};
+
+constexpr EnumOption<AiProviderKind> kAiProviderKinds[] = {
+    {AiProviderKind::Ollama, "ollama", "settings.options.launcher.ai-provider.ollama"},
+    {AiProviderKind::OpenAi, "openai", "settings.options.launcher.ai-provider.openai"},
+    {AiProviderKind::Anthropic, "anthropic", "settings.options.launcher.ai-provider.anthropic"},
+};
+
 enum class ClipboardAutoPasteMode : std::uint8_t {
   Off = 0,
   Auto = 1,
@@ -1710,11 +1723,17 @@ struct ShellConfig {
       bool operator==(const DmenuConfig&) const = default;
     } dmenu;
 
-    // Local AI (Raycast's AI, served by Ollama): the server and the model that answers.
+    // The launcher's AI (Raycast's AI): which service answers, where it is and with which model.
     struct AiConfig {
-      std::string url = "http://127.0.0.1:11434";
-      // Empty: the model picked under /ai › Choose Model, else the first installed one.
+      AiProviderKind provider = AiProviderKind::Ollama;
+      // Empty: the service's usual address (Ollama on this machine, api.openai.com, api.anthropic.com).
+      std::string url;
+      // Empty: the model picked under /ai › Choose Model, else the first listed, else the service's default.
       std::string model;
+      // Online services need a key: this, or the output of api_key_command (`pass show openai`),
+      // or the service's usual environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY).
+      std::string apiKey;
+      std::string apiKeyCommand;
 
       bool operator==(const AiConfig&) const = default;
     } ai;

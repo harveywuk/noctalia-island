@@ -1760,8 +1760,11 @@ namespace noctalia::config::schema {
 
     const Schema<ShellConfig::LauncherConfig::AiConfig>& shellLauncherAiSchema() {
       static const Schema<ShellConfig::LauncherConfig::AiConfig> s = {
+          enumField(&ShellConfig::LauncherConfig::AiConfig::provider, "provider", kAiProviderKinds),
           field(&ShellConfig::LauncherConfig::AiConfig::url, "url"),
           field(&ShellConfig::LauncherConfig::AiConfig::model, "model"),
+          field(&ShellConfig::LauncherConfig::AiConfig::apiKey, "api_key"),
+          field(&ShellConfig::LauncherConfig::AiConfig::apiKeyCommand, "api_key_command"),
       };
       return s;
     }

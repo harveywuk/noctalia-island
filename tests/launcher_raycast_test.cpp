@@ -226,19 +226,77 @@ namespace {
   }
 
   void testAi() {
-    const auto models =
-        AiProvider::parseModels(R"({"models":[{"name":"llama3.2:latest","size":1},{"name":"qwen2.5-coder:7b"}]})");
+    using Kind = AiProvider::Kind;
+    const auto models = AiProvider::parseModels(
+        Kind::Ollama, R"({"models":[{"name":"llama3.2:latest","size":1},{"name":"qwen2.5-coder:7b"}]})"
+    );
     TEST_CHECK(models.size() == 2 && models[0] == "llama3.2:latest" && models[1] == "qwen2.5-coder:7b");
-    TEST_CHECK(AiProvider::parseModels("nope").empty());
+    TEST_CHECK(AiProvider::parseModels(Kind::Ollama, "nope").empty());
+    const auto online =
+        AiProvider::parseModels(Kind::OpenAi, R"({"object":"list","data":[{"id":"gpt-4o-mini"},{"id":"gpt-4.1"}]})");
+    TEST_CHECK(online.size() == 2 && online[0] == "gpt-4.1" && online[1] == "gpt-4o-mini"); // sorted
+    const auto anthropic = AiProvider::parseModels(
+        Kind::Anthropic, R"({"data":[{"id":"claude-sonnet-5-5","display_name":"Claude Sonnet 5.5"}]})"
+    );
+    TEST_CHECK(anthropic.size() == 1 && anthropic[0] == "claude-sonnet-5-5");
+
     const auto token = AiProvider::parseStreamLine(
-        R"({"model":"llama3.2","message":{"role":"assistant","content":"Hel"},"done":false})"
+        Kind::Ollama, R"({"model":"llama3.2","message":{"role":"assistant","content":"Hel"},"done":false})"
     );
     TEST_CHECK(token.has_value() && token->content == "Hel" && !token->done && token->error.empty());
-    const auto last = AiProvider::parseStreamLine(R"({"message":{"content":""},"done":true,"total_duration":1})");
+    const auto last =
+        AiProvider::parseStreamLine(Kind::Ollama, R"({"message":{"content":""},"done":true,"total_duration":1})");
     TEST_CHECK(last.has_value() && last->done);
-    const auto error = AiProvider::parseStreamLine(R"({"error":"model 'x' not found"})");
+    const auto error = AiProvider::parseStreamLine(Kind::Ollama, R"({"error":"model 'x' not found"})");
     TEST_CHECK(error.has_value() && error->error == "model 'x' not found" && error->done);
-    TEST_CHECK(!AiProvider::parseStreamLine("   ").has_value());
+    TEST_CHECK(!AiProvider::parseStreamLine(Kind::Ollama, "   ").has_value());
+
+    const auto openai = AiProvider::parseStreamLine(
+        Kind::OpenAi, R"(data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":null}]})"
+    );
+    TEST_CHECK(openai.has_value() && openai->content == "Hi" && !openai->done);
+    const auto openaiStop =
+        AiProvider::parseStreamLine(Kind::OpenAi, R"(data: {"choices":[{"delta":{},"finish_reason":"stop"}]})");
+    TEST_CHECK(openaiStop.has_value() && openaiStop->content.empty() && openaiStop->done);
+    const auto openaiDone = AiProvider::parseStreamLine(Kind::OpenAi, "data: [DONE]");
+    TEST_CHECK(openaiDone.has_value() && openaiDone->done);
+    TEST_CHECK(!AiProvider::parseStreamLine(Kind::OpenAi, ": keep-alive").has_value());
+    const auto openaiError = AiProvider::parseStreamLine(
+        Kind::OpenAi, R"({"error":{"message":"Incorrect API key","type":"invalid_request_error"}})"
+    );
+    TEST_CHECK(openaiError.has_value() && openaiError->error == "Incorrect API key");
+
+    TEST_CHECK(!AiProvider::parseStreamLine(Kind::Anthropic, "event: content_block_delta").has_value());
+    const auto claude = AiProvider::parseStreamLine(
+        Kind::Anthropic,
+        R"(data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}})"
+    );
+    TEST_CHECK(claude.has_value() && claude->content == "Hello" && !claude->done);
+    const auto claudeStop = AiProvider::parseStreamLine(Kind::Anthropic, R"(data: {"type":"message_stop"})");
+    TEST_CHECK(claudeStop.has_value() && claudeStop->done);
+    const auto claudeError = AiProvider::parseStreamLine(
+        Kind::Anthropic, R"(data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}})"
+    );
+    TEST_CHECK(claudeError.has_value() && claudeError->error == "Overloaded" && claudeError->done);
+
+    const HttpRequest chat =
+        AiProvider::chatRequest(Kind::OpenAi, "https://openrouter.ai/api/v1/", "sk-test", "gpt-4o-mini", "hi");
+    TEST_CHECK(chat.method == "POST" && chat.url == "https://openrouter.ai/api/v1/chat/completions");
+    TEST_CHECK(std::ranges::find(chat.headers, "Authorization: Bearer sk-test") != chat.headers.end());
+    TEST_CHECK(chat.body.contains("\"stream\":true") && chat.body.contains("\"model\":\"gpt-4o-mini\""));
+    const HttpRequest claudeChat = AiProvider::chatRequest(Kind::Anthropic, "", "sk-ant", "claude-sonnet-5-5", "hi");
+    TEST_CHECK(claudeChat.url == "/messages");
+    TEST_CHECK(std::ranges::find(claudeChat.headers, "x-api-key: sk-ant") != claudeChat.headers.end());
+    TEST_CHECK(std::ranges::find(claudeChat.headers, "anthropic-version: 2023-06-01") != claudeChat.headers.end());
+    TEST_CHECK(claudeChat.body.contains("\"max_tokens\""));
+    const HttpRequest tags = AiProvider::modelsRequest(Kind::Ollama, "http://127.0.0.1:11434", "");
+    TEST_CHECK(tags.url == "http://127.0.0.1:11434/api/tags" && tags.headers.empty());
+    TEST_CHECK(
+        AiProvider::modelsRequest(Kind::OpenAi, AiProvider::defaultUrl(Kind::OpenAi), "k").url
+        == "https://api.openai.com/v1/models"
+    );
+    TEST_CHECK(AiProvider::keyEnvironmentVariable(Kind::Anthropic) == "ANTHROPIC_API_KEY");
+
     TEST_CHECK(
         AiProvider::fillPrompt("Translate into {language}.\n{text}", "hi", "French") == "Translate into French.\nhi"
     );

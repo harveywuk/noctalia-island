@@ -1395,7 +1395,7 @@
       "on-clipboard": "On the clipboard: {text}",
       "language": "Language",
       "offline": "AI is off in offline mode",
-      "unreachable": "Ollama isn’t answering at {url}",
+      "unreachable": "{service} isn’t answering at {url}",
       "unreachable-subtitle": "Start it with “ollama serve”, or set shell.launcher.ai.url",
       "no-models": "Ollama has no models installed",
       "no-models-subtitle": "Pull one with “ollama pull llama3.2”",
@@ -1419,7 +1419,12 @@
         "explain": "Explain This in Simple Terms",
         "code": "Explain Code Step by Step",
         "translate": "Translate"
-      }
+      },
+      "no-key": "No API key for {service}",
+      "no-key-subtitle": "Set shell.launcher.ai.api_key or api_key_command, or export {variable}",
+      "key-rejected": "{service} rejected the API key",
+      "key-rejected-subtitle": "Check shell.launcher.ai.api_key, api_key_command or the environment variable",
+      "unreachable-online-subtitle": "Check the network, shell.launcher.ai.url and the service’s status page"
     }
   },
   "location": {
@@ -2372,6 +2377,13 @@
         "calendar-initials": "Single letters",
         "calendar-today": "Abbreviate today only",
         "calendar-abbreviated": "Abbreviate every day"
+      },
+      "launcher": {
+        "ai-provider": {
+          "ollama": "Ollama",
+          "openai": "OpenAI-compatible",
+          "anthropic": "Anthropic"
+        }
       }
     },
     "plugins": {
@@ -3695,12 +3707,20 @@
           "description": "Offer “Ask AI” under the fallbacks of unprefixed search"
         },
         "launcher-ai-url": {
-          "label": "Ollama URL",
-          "description": "Where the local AI server listens; the default is Ollama on this machine"
+          "label": "AI Server URL",
+          "description": "Where the service listens; leave blank for its usual address (Ollama on this machine, api.openai.com, api.anthropic.com)"
         },
         "launcher-ai-model": {
           "label": "AI Model",
           "description": "The model that answers; leave blank to pick one under /ai › Choose Model"
+        },
+        "launcher-ai-provider": {
+          "label": "AI Service",
+          "description": "Ollama on this machine, an OpenAI-compatible API (OpenAI, OpenRouter, Groq, Mistral, LM Studio) or Anthropic"
+        },
+        "launcher-ai-key-command": {
+          "label": "API Key Command",
+          "description": "A command that prints the API key for an online service (pass show openai), so the key stays out of config.toml; the service’s environment variable also works"
         }
       },
       "power": {

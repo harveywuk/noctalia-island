@@ -264,13 +264,14 @@ The capture half of Raycast's Floating Notes: jot something down without leaving
 
 ### AI
 
-Raycast's AI, answered by a local model through [Ollama](https://ollama.com); nothing leaves your machine unless you point `shell.launcher.ai.url` elsewhere.
+Raycast's AI, answered by the service in `[shell.launcher.ai]`: a local model through [Ollama](https://ollama.com) by default, so nothing leaves your machine, or an online service when you set `provider = "openai"` (OpenAI, and anything speaking its API: OpenRouter, Groq, Mistral, LM Studio, …) or `provider = "anthropic"`.
 
 - **Prefix**: `/ai ` (also in global search: **Ask AI** sits with the fallbacks under "Use … with")
-- **Setup**: Install Ollama, run `ollama serve` and pull a model (`ollama pull llama3.2`). `/ai › Choose Model` lists the installed models and remembers your pick; `shell.launcher.ai.model` pins one.
+- **Setup (local)**: Install Ollama, run `ollama serve` and pull a model (`ollama pull llama3.2`). `/ai › Choose Model` lists the installed models and remembers your pick; `shell.launcher.ai.model` pins one.
+- **Setup (online)**: Set `provider` and give it a key: `api_key` in the config, `api_key_command` (a command whose output is the key, such as `pass show openai`, so the key stays out of `config.toml`), or the service's usual environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). `url` defaults to the service's API; point it at `https://openrouter.ai/api/v1`, `https://api.groq.com/openai/v1`, a local LM Studio and so on for other OpenAI-compatible services. `Choose Model` lists the service's models and remembers the pick per service; without one, `gpt-4o-mini` or `claude-sonnet-5-5` answers. Online requests carry only the prompt (your question, or the clipboard text for a command), and `[shell].offline_mode` blocks them like every other request.
 - **Quick AI**: Type a question and **Return** on **Ask AI**. The answer streams into the launcher as Markdown; **Return** copies it (and pastes it, per `auto_paste`), the action panel offers **Stop Writing**, **Regenerate** and **Copy Question**. **Esc** goes back to the search; the same question shows its answer again.
 - **AI Commands**: **Improve Writing**, **Fix Spelling and Grammar**, **Make Shorter**, **Make Longer**, **Change Tone to Professional / Casual / Friendly / Confident**, **Summarize**, **Explain This in Simple Terms**, **Explain Code Step by Step** and **Translate** (asks for the language in the argument bar) run their prompt over the text on the clipboard, since Wayland doesn't expose the selection of another app: copy the text, run the command, then paste the result over it. The prompts follow the community Ollama extension for Raycast.
-- **States**: An unreachable server, no installed models and offline mode each show a status row saying what to do.
+- **States**: An unreachable server, a missing or rejected API key, no installed models and offline mode each show a status row saying what to do.
 
 ### Window management
 

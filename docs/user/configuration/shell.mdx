@@ -130,8 +130,11 @@ floating_notes_position = "bottom_right"  # where the Floating Notes window sits
 snippet_expansion = false  # expand snippet keywords typed in other apps (reads /dev/input; needs the input group)
 
 [shell.launcher.ai]
-url   = "http://127.0.0.1:11434"  # the Ollama server that answers Quick AI and the AI commands
-model = ""                        # a model name to pin; empty = the pick from /ai › Choose Model, else the first installed
+provider = "ollama"      # "ollama" (local, default), "openai" (OpenAI or any OpenAI-compatible API), or "anthropic"
+url      = ""            # the service's address; empty = Ollama on this machine, api.openai.com or api.anthropic.com
+model    = ""            # a model name to pin; empty = the pick from /ai › Choose Model, else the first listed
+api_key  = ""            # online services only; prefer api_key_command or OPENAI_API_KEY / ANTHROPIC_API_KEY
+api_key_command = ""     # a command that prints the key, e.g. "pass show openai"
 script_directories = []  # extra folders of script commands (~/.config/noctalia/scripts is always read)
 
 [shell.launcher.providers.calculator]
@@ -305,7 +308,7 @@ Notes:
 - `shell.launcher.show_app_actions` includes searchable `.desktop` actions alongside application results. Action rows show the action name with the parent application underneath and launch that action directly. Disabled by default; application actions remain available from an application's right-click menu.
 - `shell.launcher.sort_by_usage` boosts frequently launched apps toward the top of results and exposes a **Recently Used** category filter. Disable it for strictly alphabetical ordering within each provider.
 - `shell.launcher.pinned` is an ordered list of desktop entry IDs shown first when the launcher opens without a query. Launcher pins are independent from `dock.pinned` and each taskbar widget's `pinned` list.
-- `shell.launcher.quicklinks`, `snippets`, `aliases`, `web_search_url`, `fallbacks`, `notes_file`, `floating_notes_position`, `snippet_expansion`, `ai.url`, `ai.model` and `script_directories` configure the Raycast-style providers; see [Launcher](/noctalia/launcher/). A quicklink with the same id as a built-in one (`google`, `duckduckgo`, `github`, `youtube`, `wikipedia`, `archwiki`, `maps`) replaces it. Aliases set from the launcher's actions menu are stored in the state folder, and config aliases win over them.
+- `shell.launcher.quicklinks`, `snippets`, `aliases`, `web_search_url`, `fallbacks`, `notes_file`, `floating_notes_position`, `snippet_expansion`, `ai.provider`, `ai.url`, `ai.model`, `ai.api_key`, `ai.api_key_command` and `script_directories` configure the Raycast-style providers; see [Launcher](/noctalia/launcher/). A quicklink with the same id as a built-in one (`google`, `duckduckgo`, `github`, `youtube`, `wikipedia`, `archwiki`, `maps`) replaces it. Aliases set from the launcher's actions menu are stored in the state folder, and config aliases win over them.
 - `shell.launcher.fetch_exchange_rates` refreshes currency exchange rates in the background from libqalculate's third-party online sources (enabled by default). Disable it to opt out of those requests; the last cached rates are still used for conversion. Refresh is also skipped when `[shell].offline_mode` is enabled.
 - `shell.launcher.auto_paste` controls virtual-keyboard paste after copy-style activations (calculator, emoji, copy-mode dmenu). Providers that copy opt in with `supportsAutoPaste`. Same values as `shell.clipboard_auto_paste` (`off` | `auto` | `ctrl_v` | `ctrl_shift_v` | `shift_insert`). Default `auto`.
 - Reset stored launcher usage data from **Settings → Panels → Launcher → Reset Usage Data** (clears `usage_counts.json`, `recently_used.json` and `recent_results.json`, the history behind the Suggestions section, while Noctalia is running).

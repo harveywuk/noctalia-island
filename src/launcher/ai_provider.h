@@ -1,10 +1,12 @@
 #pragma once
 
+#include "config/config_types.h"
 #include "launcher/launcher_provider.h"
 #include "net/http_client.h"
 
 #include <chrono>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,14 +15,20 @@
 class ClipboardService;
 class ConfigService;
 
-// Raycast's AI, served by a local Ollama (shell.launcher.ai.url): Quick AI from the root search
-// ("Ask AI" under the fallbacks, or /ai), the answer streaming into the launcher as Markdown, and
-// AI Commands (Improve Writing, Fix Spelling, Summarize, Translate, …) that run a prompt over the
-// clipboard text. Return copies the answer (and pastes it, per auto_paste). Models come from
-// /api/tags; the pick is kept in the state directory. Nothing leaves the machine unless the URL
-// points elsewhere.
+// Raycast's AI in the launcher: Quick AI from the root search ("Ask AI" under the fallbacks, or
+// /ai), the answer streaming into the launcher as Markdown, and AI Commands (Improve Writing, Fix
+// Spelling, Summarize, Translate, …) that run a prompt over the clipboard text. Return copies the
+// answer (and pastes it, per auto_paste).
+//
+// The model comes from the service in shell.launcher.ai.provider: a local Ollama (the default,
+// nothing leaves the machine), an OpenAI-compatible API (OpenAI, OpenRouter, Groq, Mistral, LM
+// Studio, …) or Anthropic. Online services need an API key from `api_key`, `api_key_command` or
+// the service's usual environment variable. Models come from the service's list endpoint; the
+// pick is kept per service in the state directory.
 class AiProvider : public LauncherProvider {
 public:
+  using Kind = AiProviderKind;
+
   struct Command {
     std::string id;
     std::string titleKey;
@@ -60,18 +68,32 @@ public:
   // Fills a command's prompt; exposed for tests.
   [[nodiscard]] static std::string
   fillPrompt(std::string_view prompt, std::string_view text, std::string_view language = {});
-  // Model names from an /api/tags response; exposed for tests.
-  [[nodiscard]] static std::vector<std::string> parseModels(std::string_view json);
-  // The text of one /api/chat stream line, and whether it was the last; exposed for tests.
+
+  // The service's base URL when `url` is left empty, and its default model when nothing is listed.
+  [[nodiscard]] static std::string defaultUrl(Kind kind);
+  [[nodiscard]] static std::string defaultModel(Kind kind);
+  // The environment variable the service's own tools read the key from.
+  [[nodiscard]] static std::string_view keyEnvironmentVariable(Kind kind);
+  // The requests for each service; exposed for tests.
+  [[nodiscard]] static HttpRequest modelsRequest(Kind kind, std::string_view baseUrl, std::string_view apiKey);
+  [[nodiscard]] static HttpRequest chatRequest(
+      Kind kind, std::string_view baseUrl, std::string_view apiKey, std::string_view model, std::string_view prompt
+  );
+  // Model names from the service's list response; exposed for tests.
+  [[nodiscard]] static std::vector<std::string> parseModels(Kind kind, std::string_view json);
+  // One line of the service's stream (NDJSON for Ollama, SSE "data:" lines for the others), and
+  // whether it was the last; nullopt for lines that carry nothing (events, blanks). Exposed for tests.
   struct StreamLine {
     std::string content;
     std::string error;
     bool done = false;
   };
-  [[nodiscard]] static std::optional<StreamLine> parseStreamLine(std::string_view line);
-  // The Ollama base URL from config, without a trailing slash.
+  [[nodiscard]] static std::optional<StreamLine> parseStreamLine(Kind kind, std::string_view line);
+
+  [[nodiscard]] Kind kind() const;
+  // The service's base URL from config, without a trailing slash.
   [[nodiscard]] std::string baseUrl() const;
-  // The model that answers: the config one, else the saved pick, else the first installed.
+  // The model that answers: the config one, else the saved pick, else the first listed, else the default.
   [[nodiscard]] std::string model() const;
 
 private:
@@ -87,12 +109,15 @@ private:
     HttpClient::StreamId stream = 0;
   };
 
+  [[nodiscard]] std::string apiKey() const;
+  [[nodiscard]] bool needsKey() const;
   void refreshModels(bool force) const;
   void ask(std::string view, std::string heading, std::string prompt);
   void stopStream();
   void savePick(const std::string& name);
-  void loadPick() const;
+  void loadPicks() const;
   [[nodiscard]] std::string clipboardInput() const;
+  [[nodiscard]] std::string serviceName() const;
   [[nodiscard]] LauncherResult commandRow(const Command& command, double score) const;
   [[nodiscard]] LauncherResult askRow(std::string_view question, double score, bool fallback) const;
   [[nodiscard]] std::vector<LauncherResult> answerRows() const;
@@ -105,9 +130,14 @@ private:
   std::function<void()> m_onChanged;
   std::function<void(std::string)> m_requestQuery;
   mutable std::vector<std::string> m_models;
+  mutable Kind m_modelsKind = Kind::Ollama;
+  mutable std::string m_modelsUrl;
   mutable bool m_modelsLoading = false;
   mutable bool m_modelsFailed = false;
+  mutable long m_modelsStatus = 0;
   mutable std::chrono::steady_clock::time_point m_modelsFetched{};
-  mutable std::optional<std::string> m_pick;
+  mutable std::optional<std::map<std::string, std::string>> m_picks; // service name → model
+  mutable std::optional<std::string> m_commandKey;                   // api_key_command's output, once
+  mutable std::string m_commandKeySource;
   std::optional<Session> m_session;
 };
