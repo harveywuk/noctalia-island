@@ -1,9 +1,11 @@
 #pragma once
 
 #include "render/animation/animation.h"
+#include "render/animation/animation_manager.h"
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <numbers>
 
 namespace Motion {
@@ -28,10 +30,17 @@ namespace Motion {
   inline constexpr Spring islandExpand{.responseMs = 450, .damping = 0.75F};
   inline constexpr Spring islandCollapse{.responseMs = 360, .damping = 0.86F};
 
-  // How long a spring runs before its remaining motion is under 0.1% of the travel.
-  inline float settleMs(Spring spring) {
+  // Panels and their popovers open and close on the Island's springs, so the shell moves as one.
+  inline constexpr Spring panelOpen = islandExpand;
+  inline constexpr Spring panelClose = islandCollapse;
+  // A closing surface is destroyed when its spring ends, so it may stop once 1% of the travel is
+  // left instead of waiting out the last fraction of a pixel.
+  inline constexpr float closeTolerance = 0.01F;
+
+  // How long a spring runs before its remaining motion is under tolerance (0.1% by default) of the travel.
+  inline float settleMs(Spring spring, float tolerance = 0.001F) {
     const float omega = 2.0F * std::numbers::pi_v<float> / (spring.responseMs / 1000.0F);
-    return std::log(1000.0F) / (std::min(spring.damping, 1.0F) * omega) * 1000.0F;
+    return std::log(1.0F / tolerance) / (std::min(spring.damping, 1.0F) * omega) * 1000.0F;
   }
 
   struct SpringSample {
@@ -75,6 +84,22 @@ namespace Motion {
       return 0;
     const float hop = t < 0.6F ? t / 0.6F : (t - 0.6F) / 0.4F;
     return 4.0F * hop * (1.0F - hop) * (t < 0.6F ? 1.0F : 0.35F);
+  }
+
+  // Animates from `from` to `to` along a spring that starts at rest, and lands exactly on `to`.
+  // The setter may see values slightly past `to` while the spring overshoots.
+  inline AnimationManager::Id animateSpring(
+      AnimationManager& animations, float from, float to, Spring spring, std::function<void(float)> setter,
+      std::function<void()> onComplete = {}, const void* owner = nullptr, float tolerance = 0.001F
+  ) {
+    const float durationMs = settleMs(spring, tolerance);
+    return animations.animate(
+        0, 1, durationMs, Easing::Linear,
+        [from, to, spring, durationMs, setter = std::move(setter)](float t) {
+          setter(t >= 1.0F ? to : from + (to - from) * Motion::spring(spring, t * durationMs).position);
+        },
+        std::move(onComplete), owner
+    );
   }
 
 } // namespace Motion

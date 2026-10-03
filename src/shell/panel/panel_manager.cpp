@@ -310,6 +310,9 @@ namespace {
     if (panelId == "polkit") {
       return pc.polkitPosition;
     }
+    if (panelId == "notification-center") {
+      return "center_right";
+    }
     return "auto";
   }
 
@@ -538,10 +541,19 @@ void PanelManager::unregisterPanel(const std::string& id) {
   m_panels.erase(it);
 }
 
-void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest request) {
+std::string PanelManager::routedPanelId(const std::string& panelId, PanelOpenRequest& request) const {
+  if (panelId == "control-center" && request.context == "notifications" && m_panels.contains("notification-center")) {
+    request.context = {};
+    return "notification-center";
+  }
+  return panelId;
+}
+
+void PanelManager::openPanel(const std::string& requestedPanelId, PanelOpenRequest request) {
   if (m_inTransition) {
     return;
   }
+  const std::string panelId = routedPanelId(requestedPanelId, request);
 
   if (request.output == nullptr && m_platform != nullptr) {
     request.output = m_platform->focusedInteractiveOutput(std::chrono::milliseconds(1200));
@@ -605,7 +617,7 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
   const std::string_view islandAnchor = m_config != nullptr && !m_config->config().shell.panelAnchorBar.empty()
       ? std::string_view(m_config->config().shell.panelAnchorBar)
       : request.sourceBarName;
-  if (openIslandPanel(request.output, islandAnchor))
+  if (m_activePanel->islandHostable() && openIslandPanel(request.output, islandAnchor))
     return;
 
   auto barConfigOpt =
@@ -1470,8 +1482,8 @@ void PanelManager::closePanel(bool animateClose) {
       m_islandSurface->width = m_islandWidth;
       m_islandSurface->height = m_islandHeight;
       const float contentOpacity = m_contentNode ? m_contentNode->opacity() : 0;
-      m_animations.animate(
-          1.0F, 0.0F, Motion::dismissMs, Motion::dismiss,
+      Motion::animateSpring(
+          m_animations, 1.0F, 0.0F, Motion::panelClose,
           [this, contentOpacity](float v) {
             const auto target = m_islandHost->panelReturnSize();
             m_islandCollapsedWidth = target.width * m_islandSurface->scale;
@@ -1487,12 +1499,12 @@ void PanelManager::closePanel(bool animateClose) {
                 destroyPanel();
             });
           },
-          m_sceneRoot.get()
+          m_sceneRoot.get(), Motion::closeTolerance
       );
     } else if (m_attachedToBar && m_attachedRevealClipNode != nullptr) {
       m_animations.cancelForOwner(m_attachedRevealClipNode);
-      m_animations.animate(
-          m_attachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
+      Motion::animateSpring(
+          m_animations, m_attachedRevealProgress, 0.0F, Motion::panelClose,
           [this](float v) { applyAttachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
@@ -1501,12 +1513,12 @@ void PanelManager::closePanel(bool animateClose) {
               }
             });
           },
-          m_attachedRevealClipNode
+          m_attachedRevealClipNode, Motion::closeTolerance
       );
     } else {
       m_animations.cancelForOwner(m_sceneRoot.get());
-      m_animations.animate(
-          m_detachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
+      Motion::animateSpring(
+          m_animations, m_detachedRevealProgress, 0.0F, Motion::panelClose,
           [this](float v) { applyDetachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
@@ -1515,7 +1527,7 @@ void PanelManager::closePanel(bool animateClose) {
               }
             });
           },
-          m_sceneRoot.get()
+          m_sceneRoot.get(), Motion::closeTolerance
       );
     }
     m_surface->requestRedraw();
@@ -1600,7 +1612,8 @@ void PanelManager::destroyPanel() {
   }
 }
 
-void PanelManager::togglePanel(const std::string& panelId, PanelOpenRequest request) {
+void PanelManager::togglePanel(const std::string& requestedPanelId, PanelOpenRequest request) {
+  const std::string panelId = routedPanelId(requestedPanelId, request);
   if (m_persistentHost.hasPanel(panelId)) {
     if (m_persistentHost.isOpen(panelId)) {
       m_persistentHost.close(panelId);
@@ -2302,8 +2315,10 @@ void PanelManager::startAttachedOpenAnimation() {
   }
 
   m_attachedOpenAnimationPending = false;
-  m_animations.animate(
-      m_attachedRevealProgress, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyAttachedReveal(v); }, {},
+  // The reveal is clamped at fully open, so the spring settles against the bar instead of
+  // overshooting away from it.
+  Motion::animateSpring(
+      m_animations, m_attachedRevealProgress, 1.0F, Motion::panelOpen, [this](float v) { applyAttachedReveal(v); }, {},
       m_attachedRevealClipNode
   );
 }
@@ -2721,8 +2736,8 @@ void PanelManager::buildScene(std::uint32_t width, std::uint32_t height) {
       m_attachedOpenAnimationPending = true;
     } else {
       applyDetachedReveal(0.0F);
-      m_animations.animate(
-          0.0F, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyDetachedReveal(v); }, {},
+      Motion::animateSpring(
+          m_animations, 0.0F, 1.0F, Motion::panelOpen, [this](float v) { applyDetachedReveal(v); }, {},
           m_sceneRoot.get()
       );
     }

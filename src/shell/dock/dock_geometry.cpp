@@ -43,7 +43,7 @@ namespace shell::dock {
     }
 
     [[nodiscard]] float dockHoverZoomBadgeOverhang(const DockConfig& cfg) noexcept {
-      if (!cfg.showInstanceCount) {
+      if (!cfg.showInstanceCount && !cfg.showBadges) {
         return 0.0F;
       }
       const float peak = dockHoverZoomPeakScale(cfg);

@@ -5,6 +5,17 @@
       "downloads": "Downloads",
       "timers": "Timers"
     },
+    "status": {
+      "dnd": "Do Not Disturb",
+      "charging": "Charging",
+      "on": "On",
+      "off": "Off"
+    },
+    "split": {
+      "media": "Show Now Playing",
+      "downloads": "Show downloads",
+      "timers": "Show timer"
+    },
     "timer": {
       "title": "Timer",
       "pomodoro": "Pomodoro",
@@ -61,6 +72,7 @@
       "authenticate": "Authenticate",
       "authenticating": "Authenticating…",
       "default-message": "Authentication required",
+      "enter-password": "Enter your password to allow this.",
       "invalid-password": "Invalid password",
       "password-placeholder": "Password",
       "title": "Authentication Required"
@@ -417,6 +429,8 @@
     },
     "notifications": {
       "clear-all": "Clear all notifications",
+      "clear-all-short": "Clear All",
+      "clear-group": "Clear {app} notifications",
       "dnd-off": "Turn Do Not Disturb Off",
       "dnd-on": "Turn Do Not Disturb On",
       "empty-body": "Recent notifications will show here.",
@@ -429,6 +443,7 @@
       },
       "filter-empty-body": "No notifications match this filter.",
       "filter-empty-title": "Nothing here",
+      "show-less": "Show less",
       "untitled": "Untitled notification"
     },
     "power": {
@@ -890,7 +905,8 @@
     "collapse": "Collapse notification",
     "actions": {
       "fallback": "Action",
-      "open": "Open"
+      "open": "Open",
+      "options": "Options"
     },
     "inline-reply": {
       "button": "Reply",
@@ -972,6 +988,7 @@
       "off": "Caffeine Off",
       "on": "Caffeine On"
     },
+    "charging": "Charging",
     "dnd": {
       "off": "DND Off",
       "on": "DND On"
@@ -1050,12 +1067,33 @@
   "session": {
     "actions": {
       "custom": "Custom",
-      "lock": "Lock",
-      "lock-and-suspend": "Lock & Suspend",
+      "lock": "Lock Screen",
+      "lock-and-suspend": "Sleep",
       "logout": "Log Out",
-      "reboot": "Reboot",
+      "reboot": "Restart",
       "shutdown": "Shut Down",
-      "suspend": "Suspend"
+      "suspend": "Sleep Without Locking"
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "custom-body": "If you do nothing, “{label}” will run automatically in {count} second.",
+      "custom-body-plural": "If you do nothing, “{label}” will run automatically in {count} seconds.",
+      "custom-title": "Are you sure you want to run “{label}” now?",
+      "lock-body": "If you do nothing, the screen will lock automatically in {count} second.",
+      "lock-body-plural": "If you do nothing, the screen will lock automatically in {count} seconds.",
+      "lock-title": "Are you sure you want to lock the screen now?",
+      "logout-body": "If you do nothing, you will be logged out automatically in {count} second.",
+      "logout-body-plural": "If you do nothing, you will be logged out automatically in {count} seconds.",
+      "logout-title": "Are you sure you want to quit all apps and log out now?",
+      "reboot-body": "If you do nothing, the computer will restart automatically in {count} second.",
+      "reboot-body-plural": "If you do nothing, the computer will restart automatically in {count} seconds.",
+      "reboot-title": "Are you sure you want to restart your computer now?",
+      "shutdown-body": "If you do nothing, the computer will shut down automatically in {count} second.",
+      "shutdown-body-plural": "If you do nothing, the computer will shut down automatically in {count} seconds.",
+      "shutdown-title": "Are you sure you want to shut down your computer now?",
+      "suspend-body": "If you do nothing, the computer will go to sleep automatically in {count} second.",
+      "suspend-body-plural": "If you do nothing, the computer will go to sleep automatically in {count} seconds.",
+      "suspend-title": "Are you sure you want to put your computer to sleep now?"
     },
     "errors": {
       "lock-body": "The session lock protocol is not available.",
@@ -2427,6 +2465,10 @@
           "label": "Hide Delay (ms)",
           "description": "Wait after the pointer leaves before hiding; returning cancels the delay"
         },
+        "hairline-border": {
+          "label": "Hairline Edge",
+          "description": "Draw a faint edge around the dock's glass when Border Width is 0"
+        },
         "magnification-scale": {
           "description": "Maximum icon scale multiplier at the pointer center (1.0 disables magnification)",
           "label": "Magnification Scale"
@@ -2454,6 +2496,10 @@
         "show-dots": {
           "description": "Show a dot below apps that are running",
           "label": "Show Dots"
+        },
+        "show-badges": {
+          "description": "Show red badges with the unread counts that apps report",
+          "label": "Show Badges"
         },
         "show-instance-count": {
           "description": "Show a badge with the number of open instances",
@@ -3378,6 +3424,10 @@
           "description": "Show an OSD popup when the caffeine (idle inhibitor) state changes",
           "label": "Caffeine"
         },
+        "osd-kinds-charging": {
+          "description": "Show an OSD popup when a charger is plugged in",
+          "label": "Charging"
+        },
         "osd-kinds-dnd": {
           "description": "Show an OSD popup when Do Not Disturb is toggled",
           "label": "Do Not Disturb"
@@ -3737,9 +3787,13 @@
           "label": "Activity order",
           "description": "Show the first active item in this order. Cycling follows the same order and skips inactive items."
         },
+        "split_activities": {
+          "label": "Split activities",
+          "description": "Show a second activity in a small bubble beside the Island. Click the bubble to swap the two."
+        },
         "cycle_activities": {
           "label": "Cycle activities",
-          "description": "Rotate compact activities. Pause while hovering, using a panel, hidden, or showing an alert."
+          "description": "Rotate compact activities when they are not split. Pause while hovering, using a panel, hidden, or showing an alert."
         },
         "activity_cycle_seconds": {
           "label": "Cycle interval (seconds)",
@@ -3873,8 +3927,8 @@
       "command-label": "Shell command",
       "command-placeholder": "Optional bash command, leave empty for built-in behavior",
       "command-required-placeholder": "Shell command to run",
-      "countdown-seconds-description": "Wait this many seconds before running. Activate again to confirm immediately. 0 runs at once.",
-      "countdown-seconds-label": "Countdown (seconds)",
+      "countdown-seconds-description": "Ask first, with an alert that runs the action after this many seconds. 0 runs it at once.",
+      "countdown-seconds-label": "Confirm countdown (seconds)",
       "glyph-label": "Glyph",
       "glyph-picker-title": "Action glyph",
       "kind-section-label": "Behavior",
@@ -5968,9 +6022,15 @@
       "days-ago-plural": "{count} days ago",
       "hours-ago": "{count} hr ago",
       "hours-ago-plural": "{count} hr ago",
+      "hours-ago-short": "{count}h ago",
+      "hours-ago-short-plural": "{count}h ago",
       "just-now": "just now",
       "minutes-ago": "{count} min ago",
-      "minutes-ago-plural": "{count} min ago"
+      "minutes-ago-plural": "{count} min ago",
+      "minutes-ago-short": "{count}m ago",
+      "minutes-ago-short-plural": "{count}m ago",
+      "now": "now",
+      "yesterday": "Yesterday"
     },
     "units": {
       "day": "{count} day",

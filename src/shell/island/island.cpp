@@ -18,6 +18,7 @@
 #include "render/core/texture_manager.h"
 #include "render/render_context.h"
 #include "render/scene/countdown_ring_node.h"
+#include "render/scene/input_area.h"
 #include "render/scene/input_dispatcher.h"
 #include "render/scene/node.h"
 #include "scripting/plugin_registry.h"
@@ -142,6 +143,18 @@ struct Island::Instance {
   bool inside = false;
   bool hovered = false;
   bool badgeHovered = false;
+  // Split Island: a second running activity in a round bubble beside the capsule, as on iPhone.
+  // The bubble sits behind the capsule and slides out from under its right end.
+  Box* splitBubble = nullptr;
+  InputArea* splitArea = nullptr;
+  Node* splitContent = nullptr;
+  island::Activity splitActivity = island::Activity::None;
+  std::string splitSignature;
+  std::function<void(float)> splitProgress;
+  // 0 tucked under the capsule, 1 fully apart.
+  float splitReveal = 0;
+  AnimationManager::Id splitMorph = 0;
+  bool splitHovered = false;
   island::PrivacyRotation privacyRotation;
   // Icon last shown in the compact indicator slot, to animate the change to the next one.
   std::string slotIcon;
@@ -206,6 +219,8 @@ namespace {
   constexpr Color kAppleGreen = rgba(0.188F, 0.82F, 0.345F);
   constexpr Color kAppleBlue = rgba(0.039F, 0.518F, 1.0F);
   constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
+  // Focus modes, Do Not Disturb among them, are indigo.
+  constexpr Color kAppleIndigo = rgba(0.369F, 0.361F, 0.902F);
   // View changes crossfade the capsule's content.
   constexpr float kViewFadeOutMs = 150.0F;
   // The incoming content fades in over half the expand spring's response, by which time the
@@ -213,6 +228,12 @@ namespace {
   constexpr float kViewFadeInMs = Motion::islandExpand.responseMs / 2;
   // Extra space below expanded content; see the layout tail in Island::prepare.
   constexpr float kExpandedBottomInset = 8.0F;
+  // The split bubble buds out with a slight overshoot and tucks back without one.
+  constexpr float kSplitOutMs = 420.0F;
+  constexpr float kSplitInMs = 220.0F;
+
+  // The gap between the capsule and the split bubble scales with the Island's height.
+  [[nodiscard]] float splitGap(float height) { return std::round(height * 0.16F); }
 
   [[nodiscard]] ColorSpec islandFixed(Color color, float alpha) {
     ColorSpec spec = fixedColorSpec(color);
@@ -735,7 +756,8 @@ void Island::refresh() {
     const auto& cfg = inst->config;
     inst->compactActivity.update(
         {player && m_mediaActivity.compact(now, cfg.pausedMediaSeconds), downloadActive, timerActive},
-        cfg.activityPriority, cfg.cycleActivities, cfg.activityCycleSeconds,
+        // Split activities are all in view, so they never cycle.
+        cfg.activityPriority, cfg.cycleActivities && !cfg.splitActivities, cfg.activityCycleSeconds,
         inst->inside
             || inst->hovered
             || inst->keyboardMode
@@ -966,8 +988,32 @@ void Island::geometry(Instance& inst) {
   if (!inst.root)
     return;
   const float s = inst.scale;
+  // The capsule stays centred, where panels open from and collapse back to; the split bubble
+  // hangs off its right end.
+  const float bubble = inst.config.height;
+  const float spacing = splitGap(bubble);
+  const float splitWidth = std::max(0.0F, inst.splitReveal) * (spacing + bubble);
   const float x = (static_cast<float>(inst.surface->width()) - inst.width * s) / 2;
   const float y = (8 - (inst.height + 12) * (1 - inst.visibility)) * s;
+  if (inst.splitBubble) {
+    // Out from under the capsule's right end, with a little growth as it separates.
+    const float reveal = inst.splitReveal;
+    const float diameter = bubble * (0.72F + 0.28F * std::min(1.0F, std::max(0.0F, reveal)));
+    const float centre = inst.width - bubble / 2 + (spacing + bubble) * reveal;
+    inst.splitBubble->setVisible(reveal > 0.001F);
+    inst.splitBubble->setPosition(x + (centre - diameter / 2) * s, y + (bubble - diameter) * s / 2);
+    inst.splitBubble->setSize(diameter * s, diameter * s);
+    inst.splitBubble->setRadius(diameter * s / 2);
+    if (inst.splitArea) {
+      inst.splitArea->setSize(diameter * s, diameter * s);
+      inst.splitArea->setHitTestVisible(reveal > 0.5F);
+    }
+    if (inst.splitContent) {
+      // The content is laid out for the full bubble; keep it centred while the bubble grows.
+      inst.splitContent->setPosition((diameter - bubble) * s / 2, (diameter - bubble) * s / 2);
+      inst.splitContent->setOpacity(std::clamp((reveal - 0.4F) / 0.6F, 0.0F, 1.0F));
+    }
+  }
   inst.background->setPosition(x, y);
   inst.background->setSize(inst.width * s, inst.height * s);
   const float radius = island::surfaceRadius(inst.height * s, s, gCupertino);
@@ -991,7 +1037,7 @@ void Island::geometry(Instance& inst) {
     inst.content->setHitTestVisible(inst.content->opacity() > 0.1F);
   }
   const std::array<int, 4> inputRegion{
-      static_cast<int>(std::floor(x)), 0, static_cast<int>(std::ceil(inst.width * s)),
+      static_cast<int>(std::floor(x)), 0, static_cast<int>(std::ceil((inst.width + splitWidth) * s)),
       inst.wantsVisible ? static_cast<int>(std::ceil((inst.height + 8) * s)) : 3
   };
   if (inst.inputRegion != inputRegion) {
@@ -1060,6 +1106,19 @@ void Island::prepare(Instance& inst) {
       || view == island::View::Downloads
       || view == island::View::Timers;
   const bool showSwitcher = expandedView && inst.activities.switching && availableActivities.count() > 0;
+  // Split Island: with two activities running, the compact capsule shows one and a bubble beside
+  // it the other, rather than the activity order hiding the second.
+  const auto primaryActivity = view == island::View::Activity ? island::Activity::Media
+      : view == island::View::DownloadActivity                ? island::Activity::Downloads
+      : view == island::View::TimerActivity                   ? island::Activity::Timers
+                                                              : island::Activity::None;
+  const auto splitActivity = cfg.splitActivities && !recording && primaryActivity != island::Activity::None
+      ? island::secondaryActivity(
+            {player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
+             !downloads.empty(), timerActive},
+            island::activityOrder(cfg.activityPriority), primaryActivity
+        )
+      : island::Activity::None;
   // Cupertino focuses an expanded activity on that activity alone, like Apple's Dynamic
   // Island; batteries, unread history and hover widgets stay in the idle (calendar) view.
   // Privacy indicators always show.
@@ -1137,7 +1196,9 @@ void Island::prepare(Instance& inst) {
         + m_notification->summary
         + m_notification->body
         + actionSignature
-        + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed");
+        + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed")
+        + formatNotificationTime(m_notification->receivedWallClock.value_or(WallClock::now()))
+        + (inst.hovered ? "hovered" : "");
     break;
   case island::View::Osd:
     signature += std::format(
@@ -1262,6 +1323,111 @@ void Island::prepare(Instance& inst) {
       inst.captureGlow->update(!privacyList.empty() || recording, islandRole(ColorRole::Error));
   };
   updateCaptureGlow();
+  const auto updateSplit = [&] {
+    if (!inst.splitBubble)
+      return;
+    const float s = inst.scale;
+    const float d = cfg.height;
+    std::optional<float> fraction;
+    if (splitActivity == island::Activity::Timers)
+      fraction = timers.front().fraction();
+    else if (splitActivity == island::Activity::Downloads
+             && std::ranges::all_of(downloads, [](const auto& item) { return item.determinate; })) {
+      float total = 0;
+      for (const auto& item : downloads)
+        total += static_cast<float>(item.progress);
+      fraction = total / static_cast<float>(downloads.size());
+    }
+    // A retracting bubble keeps its last content until it is tucked away.
+    if (splitActivity != island::Activity::None) {
+      std::string bubbleSignature = std::format("{}|{}|{}|{}", static_cast<int>(splitActivity), d, s, gCupertino);
+      if (splitActivity == island::Activity::Media)
+        bubbleSignature += "|" + artPath;
+      else if (splitActivity == island::Activity::Timers)
+        bubbleSignature += "|" + timers.front().plugin + "|" + timers.front().icon;
+      else
+        bubbleSignature += std::format("|{}", fraction.has_value());
+      if (bubbleSignature != inst.splitSignature) {
+        m_renderContext->makeCurrent(inst.surface->renderTarget());
+        inst.splitSignature = bubbleSignature;
+        inst.splitProgress = {};
+        if (inst.splitContent)
+          (void)inst.splitArea->removeChild(inst.splitContent);
+        auto content = std::make_unique<Node>();
+        content->setSize(d * s, d * s);
+        content->setHitTestVisible(false);
+        const auto centred = [&](std::unique_ptr<Node> node) {
+          node->setPosition((d * s - node->width()) / 2, (d * s - node->height()) / 2);
+          return content->addChild(std::move(node));
+        };
+        const auto symbol = [&](const std::string& name, ColorSpec color) {
+          auto node = std::make_unique<Glyph>();
+          node->setGlyph(name);
+          node->setGlyphSize(std::round(d * 0.28F) * s);
+          node->setColor(color);
+          node->measure(renderer);
+          centred(std::move(node));
+        };
+        bool artShown = false;
+        if (splitActivity == island::Activity::Media && !artPath.empty()) {
+          // Apple's minimal Now Playing view: the album art, round, filling most of the bubble.
+          const float size = std::round(d * 0.62F);
+          auto image = std::make_unique<Image>();
+          image->setSize(size * s, size * s);
+          image->setRadius(size * s / 2);
+          image->setFit(ImageFit::Cover);
+          if (image->setSourceFile(renderer, artPath, static_cast<int>(std::ceil(size * s * 2.0F)), true, true)) {
+            centred(std::move(image));
+            artShown = true;
+          }
+        }
+        if (splitActivity == island::Activity::Media && !artShown)
+          symbol("music", islandRole(ColorRole::OnSurface));
+        if (splitActivity == island::Activity::Timers || splitActivity == island::Activity::Downloads) {
+          // A progress ring around the activity's symbol, in its activity colour.
+          const bool timer = splitActivity == island::Activity::Timers;
+          const auto tint = timer ? islandTint(kAppleOrange, ColorRole::Primary)
+                                  : islandTint(kAppleBlue, ColorRole::Primary);
+          auto ring = std::make_unique<DownloadRing>(std::round(d * 0.62F) * s, 2.5F * s, fraction, tint);
+          auto* ringPtr = ring.get();
+          centred(std::move(ring));
+          if (fraction)
+            inst.splitProgress = [ringPtr](float value) { ringPtr->setProgress(value); };
+          symbol(timer ? timers.front().icon : "download", tint);
+        }
+        inst.splitContent = inst.splitArea->addChild(std::move(content));
+        inst.splitArea->setTooltip(i18n::tr(
+            splitActivity == island::Activity::Media       ? "island.split.media"
+                : splitActivity == island::Activity::Timers ? "island.split.timers"
+                                                            : "island.split.downloads"
+        ));
+      }
+      if (inst.splitProgress && fraction)
+        inst.splitProgress(*fraction);
+    }
+    const bool shown = splitActivity != island::Activity::None;
+    const bool wasShown = inst.splitActivity != island::Activity::None;
+    inst.splitActivity = splitActivity;
+    if (shown == wasShown)
+      return;
+    inst.animations.cancel(inst.splitMorph);
+    inst.splitMorph = 0;
+    if (!MotionService::instance().enabled()) {
+      inst.splitReveal = shown ? 1.0F : 0.0F;
+      geometry(inst);
+      return;
+    }
+    const float from = inst.splitReveal;
+    inst.splitMorph = inst.animations.animate(
+        from, shown ? 1.0F : 0.0F, shown ? kSplitOutMs : kSplitInMs, shown ? Easing::EaseOutBack : Motion::dismiss,
+        [this, &inst](float value) {
+          inst.splitReveal = value;
+          geometry(inst);
+        },
+        [&inst] { inst.splitMorph = 0; }
+    );
+  };
+  updateSplit();
   if (signature == inst.signature && inst.root) {
     if ((recording && inst.recordingLabel)
         || !inst.timerUi.empty()
@@ -1354,6 +1520,36 @@ void Island::prepare(Instance& inst) {
     // Behind the capsule, so only the part of its halo outside the edge shows.
     auto glow = std::make_unique<island::CaptureGlow>();
     inst.captureGlow = static_cast<island::CaptureGlow*>(inst.root->addChild(std::move(glow)));
+    // Behind the capsule too, so the split bubble slides out from under it.
+    auto bubble = std::make_unique<Box>();
+    bubble->setFill(islandRole(ColorRole::Surface));
+    bubble->setClipChildren(true);
+    bubble->setVisible(false);
+    auto area = std::make_unique<InputArea>();
+    area->setHitShape(InputArea::HitShape::Circle);
+    area->setOnEnter([&inst](const InputArea::PointerData&) {
+      // Reaching for the bubble must not expand the capsule beside it.
+      inst.splitHovered = true;
+      inst.enter.stop();
+    });
+    area->setOnLeave([this, &inst] {
+      inst.splitHovered = false;
+      if (inst.inside && !inst.hovered && !inst.suppressHover)
+        inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
+            inst.hovered = true;
+            refresh();
+          }
+        });
+    });
+    area->setOnClick([this, &inst](const InputArea::PointerData&) {
+      if (inst.splitActivity == island::Activity::None)
+        return;
+      inst.compactActivity.promote(inst.splitActivity);
+      refresh();
+    });
+    inst.splitArea = static_cast<InputArea*>(bubble->addChild(std::move(area)));
+    inst.splitBubble = static_cast<Box*>(inst.root->addChild(std::move(bubble)));
     auto box = std::make_unique<Box>();
     box->setFill(islandRole(ColorRole::Surface));
     box->setClipChildren(true);
@@ -1373,6 +1569,7 @@ void Island::prepare(Instance& inst) {
     inst.input.setSceneRoot(inst.root.get());
     inst.width = w;
     inst.height = h;
+    updateSplit();
   }
   // Critical notifications: a full red outline in the theme look; a quieter one on black.
   if (view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical)
@@ -1882,6 +2079,35 @@ void Island::prepare(Instance& inst) {
         m_mpris->setPosition(bus, static_cast<std::int64_t>(static_cast<double>(length) * seekFraction));
       };
     }
+  } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::Dnd || m_osd->kind == OsdKind::Charging)) {
+    // Status pills, as the iPhone announces a Focus or a charger: a tinted symbol and title lead,
+    // and the state (On, Off or the charge level) sits at the far end in the same tint.
+    const bool charging = m_osd->kind == OsdKind::Charging;
+    const bool on = charging || !m_osd->inactive;
+    const Color tint = charging ? kAppleGreen : kAppleIndigo;
+    const ColorRole role = charging ? ColorRole::Secondary : ColorRole::Primary;
+    constexpr float badgeSize = 34.0F;
+    const float badgeX = 16.0F;
+    const std::string icon = charging ? "bolt" : on ? "moon" : "moon-off";
+    if (on)
+      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, tint, role);
+    else
+      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, rgba(1.0F, 1.0F, 1.0F), ColorRole::OnSurfaceVariant);
+    const auto state = charging ? std::format("{}%", std::lround(m_osd->progress * 100))
+                                : i18n::tr(on ? "island.status.on" : "island.status.off");
+    const auto stateColor = on ? islandTint(tint, role) : muted;
+    const auto stateMetrics = renderer.measureText(
+        state, 15 * s, FontWeight::SemiBold, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+    );
+    const float stateWidth = std::ceil(stateMetrics.width / s) + 2;
+    auto* stateLabel = label(state, w - 22 - stateWidth, 0, stateWidth, 15, stateColor, false, 1, FontWeight::SemiBold);
+    stateLabel->setPosition(stateLabel->x(), (h * s - stateLabel->height()) / 2);
+    const float titleX = badgeX + badgeSize + 12;
+    auto* title = label(
+        i18n::tr(charging ? "island.status.charging" : "island.status.dnd"), titleX, 0,
+        std::max(1.0F, w - 22 - stateWidth - 12 - titleX), 15, foreground, false, 1, FontWeight::SemiBold
+    );
+    title->setPosition(title->x(), (h * s - title->height()) / 2);
   } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::LockKeys || !m_osd->showProgress)) {
     // Status messages without a level centre their icon and text as one group.
     constexpr float iconSize = 26.0F;
@@ -1925,7 +2151,16 @@ void Island::prepare(Instance& inst) {
       iconSource.imageData.reset();
     const bool hasAppIcon = notificationIcon(iconSource, 22, 12, appIconSize);
     const float appLabelX = hasAppIcon ? 22 + appIconSize + 6 : 22;
-    auto* appLabel = label(n.appName, appLabelX, 14, w - 53 - appLabelX, Style::fontSizeCaption, muted);
+    // "now" / "5m ago" closes the header row, as on the notification banners.
+    constexpr float timeWidth = 56.0F;
+    auto* appLabel =
+        label(n.appName, appLabelX, 14, w - 55 - timeWidth - appLabelX, Style::fontSizeCaption, muted);
+    auto* timeLabel = label(
+        formatNotificationTime(n.receivedWallClock.value_or(WallClock::now())), w - 51 - timeWidth, 14, timeWidth,
+        Style::fontSizeCaption, muted
+    );
+    timeLabel->setTextAlign(TextAlign::End);
+    timeLabel->measure(renderer);
     control(w - 47, 5, 32, 30, "", "x", i18n::tr("notifications.dismiss"), 18, true, [this] { dismissNotification(); });
     std::vector<std::pair<std::string, std::string>> visibleActions;
     const bool hasDefault = std::ranges::find(n.actions, "default") != n.actions.end();
@@ -1934,12 +2169,15 @@ void Island::prepare(Instance& inst) {
     for (std::size_t index = 0; index + 1 < n.actions.size() && visibleActions.size() < 3; index += 2)
       if (n.actions[index] != "default")
         visibleActions.emplace_back(n.actions[index], n.actions[index + 1]);
-    const bool hasActions = !visibleActions.empty();
+    // macOS keeps actions out of sight: hovering shows the one action, or "Options" for several,
+    // in place of the time stamp, and only an opened notification (or keyboard mode) lists them.
+    const bool actionsOpen = expanded || inst.keyboardMode;
+    const bool hasActions = actionsOpen && !visibleActions.empty();
     const float maxHeight = std::min(
         expanded ? 640.0F : 360.0F,
         static_cast<float>(inst.surface->height()) / s - 16.0F - (privacyList.empty() ? 0.0F : 32.0F)
     );
-    const float footerHeight = hasActions ? 60.0F : 16.0F;
+    const float footerHeight = hasActions ? 46.0F : 16.0F;
     const float textBottom = maxHeight - footerHeight;
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
     // The thumbnail sits at the card's right, like an attachment on a macOS notification.
@@ -2033,26 +2271,54 @@ void Island::prepare(Instance& inst) {
       refresh();
     };
     if (expanded || truncated) {
-      appLabel->setMinWidth((w - 112) * s);
-      appLabel->setMaxWidth((w - 112) * s);
+      appLabel->setMinWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
+      appLabel->setMaxWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
       appLabel->measure(renderer);
+      timeLabel->setPosition((w - 86 - timeWidth) * s, timeLabel->y());
       auto* expandControl = control(
           w - 82, 5, 32, 30, "", expanded ? "chevron-up" : "chevron-down",
           i18n::tr(expanded ? "notifications.collapse" : "notifications.expand"), 18, true, toggleExpanded
       );
       expandControl->inputArea()->setTabFocusKey("notification-expand");
     }
+    // A grey capsule sized to its label, as Apple's notification buttons are.
+    const auto pillWidth = [&](const std::string& text) {
+      const auto metrics = renderer.measureText(text, Style::fontSizeCaption * s);
+      return std::ceil(metrics.width / s) + 24.0F;
+    };
+    if (!actionsOpen && !visibleActions.empty() && inst.hovered) {
+      const bool single = visibleActions.size() == 1;
+      const std::string text = single ? visibleActions.front().second : i18n::tr("notifications.actions.options");
+      const float width = std::min(pillWidth(text), w / 2.0F);
+      const float right = timeLabel->x() / s + timeWidth;
+      timeLabel->setVisible(false);
+      auto* pillControl = control(
+          right - width, 9, width, 24, text, "", text, 0, true,
+          [this, single, toggleExpanded, id = n.id, key = visibleActions.front().first] {
+            if (single)
+              (void)m_notifications->invokeAction(id, key);
+            else
+              toggleExpanded();
+          }
+      );
+      setIslandVariant(pillControl, ButtonVariant::Default);
+      pillControl->setRadius(12.0F * s);
+    }
     h = contentBottom + footerHeight;
     const float actionsY = contentBottom + 8.0F;
-    const float actionWidth = hasActions ? (w - 44) / static_cast<float>(visibleActions.size()) : 0;
-    for (std::size_t index = 0; index < visibleActions.size(); ++index) {
+    float actionX = 22.0F;
+    for (std::size_t index = 0; hasActions && index < visibleActions.size(); ++index) {
       const auto& [key, text] = visibleActions[index];
-      auto* actionControl = control(
-          22 + static_cast<float>(index) * actionWidth, actionsY, actionWidth - 8, 44, text, "", text, 18, true,
-          [this, id = n.id, key] { (void)m_notifications->invokeAction(id, key); }
-      );
+      const float width = std::min(pillWidth(text), w - 22.0F - actionX);
+      if (width <= 24.0F)
+        break;
+      auto* actionControl = control(actionX, actionsY, width, 30, text, "", text, 0, true, [this, id = n.id, key] {
+        (void)m_notifications->invokeAction(id, key);
+      });
       setIslandVariant(actionControl, ButtonVariant::Default);
+      actionControl->setRadius(15.0F * s);
       actionControl->inputArea()->setTabFocusKey("notification-action-" + key);
+      actionX += width + 8.0F;
     }
     if (!expanded)
       action(0, 37, w, contentBottom - 37.0F, "notification", [this, n, panel, truncated, toggleExpanded] {
@@ -2298,7 +2564,7 @@ void Island::prepare(Instance& inst) {
           inst.badgeHovered = false;
           if (inst.inside && !inst.hovered && !inst.suppressHover)
             inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-              if (inst.inside && !inst.badgeHovered) {
+              if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
                 inst.hovered = true;
                 refresh();
               }
@@ -2422,7 +2688,7 @@ void Island::prepare(Instance& inst) {
       inst.badgeHovered = false;
       if (inst.inside && !inst.hovered && !inst.suppressHover)
         inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-          if (inst.inside && !inst.badgeHovered) {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
             inst.hovered = true;
             refresh();
           }
@@ -2759,7 +3025,7 @@ bool Island::onPointerEvent(const PointerEvent& event) {
         m_notifications->pauseExpiry(m_notification->id);
       if (!inst.suppressHover)
         inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-          if (inst.inside && !inst.badgeHovered) {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
             inst.hovered = true;
             refresh();
           }
@@ -2885,6 +3151,13 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   if (inst.keyboardMode)
     releaseKeyboard(inst);
   inst.panelHosted = true;
+  // The panel opens from the capsule alone; the split bubble buds out again when it closes.
+  inst.splitActivity = island::Activity::None;
+  inst.splitReveal = 0;
+  inst.splitMorph = 0;
+  inst.splitHovered = false;
+  if (inst.splitBubble)
+    inst.splitBubble->setVisible(false);
   inst.compactActivity.pause(island::CompactActivity::Clock::now());
   inst.activityTimeout.stop();
   inst.animations.cancel(inst.hideAnimation);
@@ -2934,7 +3207,7 @@ island::Size Island::panelReturnSize() const {
                                                      : nullptr;
   const auto compact = island::preferredActivity(
       available, island::activityOrder(cfg.activityPriority),
-      cfg.cycleActivities && instance ? instance->compactActivity.selected() : island::Activity::None
+      instance ? instance->compactActivity.selected() : island::Activity::None
   );
   const auto view = island::view(
       m_notification.has_value(), m_osd.has_value(), false, mediaActive, false, available.downloads, available.timers,

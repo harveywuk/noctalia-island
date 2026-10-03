@@ -563,6 +563,8 @@ bool ControlCenterPanel::isTabFeatureAvailable(TabId tab) const {
   }
   const auto& cfg = m_config->config();
   switch (tab) {
+  case TabId::Notifications:
+    return false; // Notification Centre is its own panel (NotificationCenterPanel).
   case TabId::Weather:
     return cfg.weather.enabled;
   case TabId::ScreenTime:

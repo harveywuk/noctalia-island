@@ -5,6 +5,7 @@
 #include "config/config_service.h"
 #include "core/deferred_call.h"
 #include "core/log.h"
+#include "dbus/launcher/launcher_badge_service.h"
 #include "ipc/ipc_service.h"
 #include "render/scene/node.h"
 #include "shell/dock/dock_context_menu.h"
@@ -280,6 +281,19 @@ namespace {
 
 Dock::Dock() = default;
 Dock::~Dock() = default;
+
+void Dock::setSessionBus(SessionBus* bus) {
+  m_badges.reset();
+  if (bus == nullptr) {
+    return;
+  }
+  try {
+    m_badges = std::make_unique<LauncherBadgeService>(*bus);
+    m_badges->changed = [this] { refresh(); };
+  } catch (const std::exception& error) {
+    kLog.warn("app badges unavailable: {}", error.what());
+  }
+}
 
 bool Dock::initialize(CompositorPlatform& platform, ConfigService* config, RenderContext* renderContext) {
   m_platform = &platform;
@@ -1054,6 +1068,7 @@ bool Dock::syncInstanceModel(shell::dock::DockInstance& instance) {
       .globalActiveIdLower = activeIdLower,
       .pinnedEntries = m_pinnedEntries,
       .sourceSerial = m_modelSerial,
+      .badges = m_badges.get(),
   });
 
   const bool needRebuild = instance.snapshot.sourceSerial != next.sourceSerial

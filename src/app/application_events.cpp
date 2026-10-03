@@ -126,6 +126,9 @@ void Application::onUpowerStateChangedForHooks() {
         && m_soundPlayer != nullptr) {
       m_soundPlayer->play(*plugged ? "power-plug" : "power-unplug");
     }
+    if (m_prevBatteryPluggedForEvents.has_value() && !*m_prevBatteryPluggedForEvents && *plugged) {
+      m_osdOverlay.show(chargingOsdContent(state.percentage));
+    }
     m_prevBatteryPluggedForEvents = plugged;
   } else if (!state.isPresent) {
     m_prevBatteryPluggedForEvents.reset();
