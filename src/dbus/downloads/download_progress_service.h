@@ -16,6 +16,8 @@ struct DownloadProgress {
   double progress = 0;
   bool determinate = true;
   std::string phase;
+  // Symbol for the row and compact ring; empty means the download arrow. Scripts set their own.
+  std::string icon;
 };
 
 // Desktop applications publish partial LauncherEntry updates, not individual files.

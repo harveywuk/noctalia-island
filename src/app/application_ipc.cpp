@@ -762,6 +762,7 @@ void Application::initIpc() {
       return "error: session is locked\n";
     return m_island.focusKeyboard() ? "ok\n" : "error: island is unavailable\n";
   });
+  registerIslandActivityIpc();
   m_desktopWidgetsController.registerIpc(m_ipcService);
   m_lockscreenWidgetsController.registerIpc(m_ipcService);
   m_panelManager.registerIpc(m_ipcService);
@@ -837,4 +838,108 @@ bool Application::runIdleAction(const IdleActionRequest& action) {
     return m_sessionActionRunner.lockThenSuspendDetached();
   }
   return false;
+}
+
+// Live activities posted by scripts and keybinds. Each command takes positional arguments, or one
+// JSON object: {"id": "...", "title": "...", "icon": "...", "progress": 0-100 or null}.
+void Application::registerIslandActivityIpc() {
+  struct Request {
+    std::string id;
+    std::string title;
+    std::string icon;
+    std::optional<std::optional<double>> progress;
+  };
+  const auto parsePercent = [](const std::string& text) -> std::optional<std::optional<double>> {
+    if (text == "-")
+      return std::optional<double>{};
+    try {
+      std::size_t used = 0;
+      const double value = std::stod(text, &used);
+      if (used != text.size() || !std::isfinite(value))
+        return std::nullopt;
+      return std::optional{value / 100.0};
+    } catch (...) {
+      return std::nullopt;
+    }
+  };
+  const auto parseJson = [](const std::string& input, Request& request) -> std::string {
+    const nlohmann::json payload = nlohmann::json::parse(input, nullptr, false);
+    if (payload.is_discarded() || !payload.is_object())
+      return "the JSON payload must be an object";
+    for (const auto& [key, target] : {std::pair{"id", &request.id}, {"title", &request.title}, {"icon", &request.icon}})
+      if (const auto it = payload.find(key); it != payload.end()) {
+        if (!it->is_string())
+          return std::string("field '") + key + "' must be a string";
+        *target = it->get<std::string>();
+      }
+    if (const auto it = payload.find("progress"); it != payload.end()) {
+      if (it->is_null())
+        request.progress = std::optional<double>{};
+      else if (it->is_number() && std::isfinite(it->get<double>()))
+        request.progress = std::optional{it->get<double>() / 100.0};
+      else
+        return "field 'progress' must be a number from 0 to 100, or null";
+    }
+    return {};
+  };
+  const auto splitFirst = [](const std::string& input) {
+    const auto space = input.find(' ');
+    return std::pair{
+        input.substr(0, space), space == std::string::npos ? std::string{} : StringUtils::trim(input.substr(space + 1))
+    };
+  };
+
+  m_ipcService.bind(noctalia::cli::msg::islandActivityStart, [this, parseJson](const std::string& args) -> std::string {
+    const std::string input = StringUtils::trim(args);
+    Request request;
+    if (input.starts_with('{')) {
+      if (auto error = parseJson(input, request); !error.empty())
+        return "error: island-activity-start " + error + "\n";
+    } else {
+      const auto space = input.find(' ');
+      request.id = input.substr(0, space);
+      if (space != std::string::npos)
+        request.title = StringUtils::trim(input.substr(space + 1));
+    }
+    if (request.id.empty() || request.title.empty())
+      return "error: island-activity-start requires <id> and <title>\n";
+    m_island.startScriptActivity(request.id, request.title, request.icon);
+    if (request.progress)
+      m_island.updateScriptActivity(request.id, request.progress, {}, {});
+    return "ok\n";
+  });
+  m_ipcService.bind(
+      noctalia::cli::msg::islandActivityUpdate,
+      [this, parseJson, parsePercent, splitFirst](const std::string& args) -> std::string {
+        const std::string input = StringUtils::trim(args);
+        Request request;
+        if (input.starts_with('{')) {
+          if (auto error = parseJson(input, request); !error.empty())
+            return "error: island-activity-update " + error + "\n";
+        } else {
+          auto [id, rest] = splitFirst(input);
+          auto [percent, title] = splitFirst(rest);
+          request.id = std::move(id);
+          request.title = std::move(title);
+          if (!percent.empty()) {
+            request.progress = parsePercent(percent);
+            if (!request.progress)
+              return "error: island-activity-update <percent> must be a number from 0 to 100, or -\n";
+          }
+        }
+        if (request.id.empty())
+          return "error: island-activity-update requires <id>\n";
+        if (!m_island.updateScriptActivity(request.id, request.progress, request.title, request.icon))
+          return "error: no island activity named '" + request.id + "'\n";
+        return "ok\n";
+      }
+  );
+  m_ipcService.bind(noctalia::cli::msg::islandActivityEnd, [this](const std::string& args) -> std::string {
+    const std::string id = StringUtils::trim(args);
+    if (id.empty())
+      return "error: island-activity-end requires <id>\n";
+    if (!m_island.endScriptActivity(id))
+      return "error: no island activity named '" + id + "'\n";
+    return "ok\n";
+  });
 }

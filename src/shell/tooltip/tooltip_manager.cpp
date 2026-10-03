@@ -366,7 +366,8 @@ void TooltipManager::scheduleReshow() {
 }
 
 void TooltipManager::syncAnchor(InputArea* area) {
-  if (m_state != State::Showing || m_surface == nullptr || m_pendingArea != area) {
+  // A dismissed tooltip clears m_pendingArea while it fades, so a null area would match it.
+  if (area == nullptr || m_state != State::Showing || m_surface == nullptr || m_pendingArea != area) {
     return;
   }
 
@@ -416,6 +417,12 @@ void TooltipManager::showPopup() {
     kLog.warn("failed to create tooltip popup");
     m_surface.reset();
     m_state = State::Idle;
+    return;
+  }
+  // Creating the popup round-trips to the compositor, which can deliver a click that dismisses
+  // this tooltip first. Drop the half-built popup then, or it stays on screen with no owner.
+  if (m_pendingArea == nullptr) {
+    destroyPopup();
     return;
   }
 
