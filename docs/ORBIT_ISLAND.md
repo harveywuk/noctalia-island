@@ -96,6 +96,19 @@ byte counts are not reliable live percentages, so this reader shows activity
 instead of an estimated percentage. Native desktop progress, if Steam publishes
 it, takes precedence over the log reader.
 
+## Quick pills
+
+Scripts and keybinds can flash a short pill, like the Focus pill, with any icon:
+
+```sh
+noctalia msg osd-show clipboard-check Copied
+noctalia msg osd-show shield-lock "VPN connected"
+```
+
+The icon is a Tabler glyph name. The pill fades after a moment. With the Island off
+it shows as a regular OSD, and it shows even when `[osd.kinds]` hides the built-in
+OSDs.
+
 ## Battery indicators
 
 The island reuses Noctalia's UPower and Bluetooth battery services. A system
