@@ -61,9 +61,11 @@
       "authenticate": "Authenticate",
       "authenticating": "Authenticating…",
       "default-message": "Authentication required",
+      "enter-password": "Enter your password to allow this.",
       "invalid-password": "Invalid password",
       "password-placeholder": "Password",
-      "title": "Authentication Required"
+      "title": "Authentication Required",
+      "user-name-placeholder": "User Name"
     }
   },
   "bar": {
