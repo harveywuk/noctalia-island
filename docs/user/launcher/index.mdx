@@ -52,7 +52,7 @@ The launcher tracks how often you activate specific results (applications and wa
 
 ### Category filters
 
-When category filters are enabled, the launcher shows compact filter buttons for providers that expose categories.
+Category filters are off by default, so the launcher is just the search field and the list, like Raycast. Turn them on with `shell.launcher.categories` (**Settings → Launcher**), or press **F6** while the launcher is open, to show compact filter buttons for providers that expose categories.
 
 - **Applications** can be filtered by desktop-entry categories such as Internet, Development, Games, Office, System, and Utilities.
 - **Emoji** can be filtered by emoji categories such as people, animals, food, travel, objects, symbols, and flags.
@@ -158,7 +158,8 @@ Search everything you've copied, with a preview of the selected entry.
 
 - **Prefix**: `/clip ` (not in global search)
 - **Source**: The shell's clipboard history (`shell.clipboard_enabled`), newest first, pinned entries kept.
-- **Functionality**: Return pastes the entry (or copies it when auto-paste is off). Actions: **Copy to Clipboard**, **Open in Browser** for links, **Pin**/**Unpin**, **Save as Snippet** and **Delete Entry**.
+- **Functionality**: Return pastes the entry, following `shell.clipboard_auto_paste` (or copies it when that is `off`). Actions: **Copy to Clipboard**, **Open in Browser** for links, **Edit Image** for images when `shell.clipboard_image_action_command` is set, **Pin**/**Unpin**, **Save as Snippet**, **Delete Entry** and **Clear History** (pinned entries stay).
+- **Replaces the Clipboard panel**: the clipboard bar widget, the Control Center shortcut and `noctalia msg panel-toggle clipboard` open the launcher here.
 
 ### Quicklinks and web search
 
