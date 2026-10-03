@@ -11,10 +11,12 @@
 #include <unordered_set>
 #include <vector>
 
+class Button;
 class ConfigService;
 class HttpClient;
 class Input;
 class InputArea;
+class Label;
 class LayerSurface;
 class NotificationManager;
 class Node;
@@ -45,6 +47,8 @@ public:
   void onConfigReload();
   void onOutputChange();
   void hideDndSuppressed();
+  // Takes every banner off screen without closing its notification (Notification Centre opening).
+  void hideAllBanners();
   void requestLayout();
   void requestRedraw();
 
@@ -63,7 +67,9 @@ private:
     std::string body;
     std::vector<std::string> actions;
     std::optional<std::string> icon;
+    std::optional<std::string> desktopEntry;
     std::optional<NotificationImageData> imageData;
+    WallTimePoint receivedAt; // drives the "now" / "5m ago" stamp
     Urgency urgency = Urgency::Normal;
     NotificationDndPolicy dndPolicy = NotificationDndPolicy::Respect;
     int displayDurationMs = 0; // -1 = persistent (no auto-dismiss)
@@ -101,7 +107,11 @@ private:
       Node* cardNode = nullptr;
       Node* cardContent = nullptr;
       Node* cardForeground = nullptr;
+      // Invisible: holds the auto-dismiss countdown (paused on hover) without drawing a bar.
       ProgressBar* progressBar = nullptr;
+      // Top-right corner: the time stamp, swapped for the close button while hovered (macOS).
+      Label* timeLabel = nullptr;
+      Button* closeButton = nullptr;
       Node* actionsRowNode = nullptr;
       Node* inlineReplyRowNode = nullptr;
       Input* inlineReplyInput = nullptr;
@@ -120,6 +130,7 @@ private:
     float lastPointerY = 0.0F;
   };
 
+  void hideBanners(bool dndSuppressedOnly);
   void onNotificationEvent(const Notification& n, NotificationEvent event);
   void schedulePendingAdds();
   void flushPendingAdds();
@@ -144,7 +155,8 @@ private:
   void buildScene(Instance& inst, uint32_t width, uint32_t height);
   InputArea* buildCard(
       Instance& outputInstance, const PopupEntry& entry, Node** outCardContent, Node** outCardForeground,
-      ProgressBar** outProgress, Node** outActionsRow, Node** outInlineReplyRow, Input** outInlineReplyInput
+      ProgressBar** outProgress, Node** outActionsRow, Node** outInlineReplyRow, Input** outInlineReplyInput,
+      Label** outTimeLabel, Button** outCloseButton
   );
   void applyCardReveal(Instance::CardState& cs, float reveal, float y, float cardHeight) const;
   [[nodiscard]] float cardReveal(const Instance::CardState& cs, float cardHeight) const;
@@ -159,6 +171,8 @@ private:
   void endPopupHover(uint32_t notificationId, int totalDuration, const ProgressBar* progressBar = nullptr);
   void resetPopupHover(uint32_t notificationId, int totalDuration, bool resumeTimer);
   void resetInstanceHover(Instance& inst, bool resumeTimers);
+  void syncHoverChrome(uint32_t notificationId);
+  void refreshTimeLabels();
   void pauseTimeout(uint32_t notificationId, const ProgressBar* progressBar = nullptr);
   void resumeTimeout(uint32_t notificationId, int totalDuration);
   void pauseCountdowns(uint32_t notificationId);
@@ -212,4 +226,5 @@ private:
   std::string m_lastPosition;
   std::string m_lastLayer;
   std::vector<std::string> m_lastMonitorSelectors;
+  Timer m_timeRefreshTimer;
 };

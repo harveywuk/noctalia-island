@@ -79,6 +79,8 @@ namespace {
       return kinds.privacy;
     case OsdKind::KeyboardBacklight:
       return kinds.keyboardBacklight;
+    case OsdKind::Charging:
+      return kinds.charging;
     case OsdKind::Script:
       return true;
     }
