@@ -1274,7 +1274,7 @@
       "no-window": "No focused window to arrange"
     },
     "timer": {
-      "start": "Start a {duration} timer",
+      "start": "Start a timer for {duration}",
       "running": "{time} left",
       "running-subtitle": "{duration} timer running",
       "hint": "Type a duration, like 10m or 1h30 tea",

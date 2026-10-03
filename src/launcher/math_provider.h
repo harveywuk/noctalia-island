@@ -2,6 +2,8 @@
 
 #include "launcher/launcher_provider.h"
 
+#include <chrono>
+#include <ctime>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -44,7 +46,7 @@ public:
   static void saveHistory(const std::string& path, const std::deque<HistoryEntry>& history);
 
 private:
-  [[nodiscard]] std::vector<LauncherResult> evaluate(std::string_view text) const;
+  [[nodiscard]] std::vector<LauncherResult> evaluate(std::string_view text, bool prefixed) const;
   [[nodiscard]] std::vector<LauncherResult> historyResults() const;
   void remember(std::string expression, std::string result);
   [[nodiscard]] std::string historyPath() const;

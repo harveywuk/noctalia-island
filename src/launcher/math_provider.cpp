@@ -2,12 +2,16 @@
 
 #include "config/config_service.h"
 #include "i18n/i18n.h"
+#include "launcher/date_provider.h"
 #include "launcher/time_provider.h"
+#include "launcher/timer_provider.h"
 #include "net/http_client.h"
 #include "util/file_utils.h"
 #include "wayland/clipboard_service.h"
 
 #include <cctype>
+#include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <libqalculate/Calculator.h>
@@ -135,14 +139,28 @@ std::vector<LauncherResult> MathProvider::query(std::string_view text) const {
   if (!looksLikeMath(text)) {
     return {};
   }
-  return evaluate(text);
+  // Timers and dates ("timer 10m tea", "3 days from now") read as unit expressions to libqalculate.
+  if (TimerProvider::parse(text, false).has_value()) {
+    return {};
+  }
+  const std::time_t now = std::time(nullptr);
+  std::tm local{};
+  localtime_r(&now, &local);
+  const std::chrono::year_month_day today{
+      std::chrono::year{local.tm_year + 1900}, std::chrono::month{static_cast<unsigned>(local.tm_mon + 1)},
+      std::chrono::day{static_cast<unsigned>(local.tm_mday)}
+  };
+  if (DateProvider::answer(text, today, false).has_value()) {
+    return {};
+  }
+  return evaluate(text, false);
 }
 
 std::vector<LauncherResult> MathProvider::queryPrefixed(std::string_view text) const {
   if (trimmed(text).empty()) {
     return historyResults();
   }
-  return evaluate(text);
+  return evaluate(text, true);
 }
 
 std::deque<MathProvider::HistoryEntry> MathProvider::loadHistory(const std::string& path) {
@@ -223,7 +241,7 @@ std::vector<LauncherResult> MathProvider::historyResults() const {
   return results;
 }
 
-std::vector<LauncherResult> MathProvider::evaluate(std::string_view text) const {
+std::vector<LauncherResult> MathProvider::evaluate(std::string_view text, bool prefixed) const {
   // Times and time zones ("3pm in tokyo") belong to the Time provider.
   if (TimeProvider::parse(text, false).has_value()) {
     return {};
@@ -252,14 +270,22 @@ std::vector<LauncherResult> MathProvider::evaluate(std::string_view text) const 
   std::string output = m_calc->calculateAndPrint(input, /*msecs=*/200, eo, po);
 
   bool hadError = false;
+  bool hadWarning = false;
   for (CalculatorMessage* m = m_calc->message(); m != nullptr; m = m_calc->nextMessage()) {
     if (m->type() == MESSAGE_ERROR) {
       hadError = true;
+    } else if (m->type() == MESSAGE_WARNING) {
+      hadWarning = true;
     }
   }
 
-  // Reject errors and no-ops (e.g. the user just typed a bare number).
+  // Reject errors and no-ops (e.g. the user just typed a bare number). In the global search also
+  // reject answers built from words libqalculate didn't know (it quotes them: 'tea'), which is
+  // what a plain phrase with a number in it produces.
   if (hadError || output.empty() || output == input || output == localized) {
+    return {};
+  }
+  if (!prefixed && (hadWarning || output.contains('\''))) {
     return {};
   }
 
