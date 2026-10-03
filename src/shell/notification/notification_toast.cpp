@@ -16,6 +16,7 @@
 #include "render/render_target.h"
 #include "render/scene/input_area.h"
 #include "shell/surface/edge_inset.h"
+#include "time/time_format.h"
 #include "ui/builders.h"
 #include "ui/material.h"
 #include "ui/motion.h"
@@ -57,7 +58,6 @@ namespace {
   constexpr float kNotificationIconGlyphSize = 24.0F;
   constexpr float kNotificationIconGlyphSizeCompact = 20.0F;
   constexpr float kNotificationIconReferenceSize = 36.0F;
-  constexpr float kTopProgressInset = Style::spaceMd;
   constexpr auto kExitFallbackGrace = std::chrono::milliseconds(50);
 
   float notificationIconRadius(float iconSize, float localScale = 1.0F) {
@@ -108,7 +108,10 @@ namespace {
     }
     return static_cast<int>(timeout);
   }
-  constexpr int kProgressHeight = 3;
+  // Wide enough for "now", "59m ago" or "Yesterday" at caption size; also hosts the close button.
+  constexpr float kTimeSlotWidth = 56.0F;
+  constexpr float kTimeFontSize = Style::fontSizeCaption;
+  constexpr auto kTimeRefreshInterval = std::chrono::seconds(30);
   constexpr int kContentSlideOffset = 12; // subtle foreground slide during reveal/retract
   constexpr float kMetaFontSize = Style::fontSizeMini;
   constexpr float kSummaryFontSize = Style::fontSizeTitle;
@@ -152,9 +155,12 @@ namespace {
 
   [[nodiscard]] float actionRowGap(float scale) { return kActionRowGap * scale; }
 
-  [[nodiscard]] float progressHeight(float scale) { return static_cast<float>(kProgressHeight) * scale; }
+  [[nodiscard]] float timeSlotWidth(float scale) { return kTimeSlotWidth * scale; }
 
-  [[nodiscard]] float topProgressInset(float scale) { return kTopProgressInset * scale; }
+  // The summary's first lines run beside the top-right time stamp / close button.
+  [[nodiscard]] float topTextWidth(float textMaxWidth, float scale) {
+    return std::max(0.0F, textMaxWidth - timeSlotWidth(scale) - Style::spaceSm * scale);
+  }
 
   [[nodiscard]] float metaFontSize(float scale) { return kMetaFontSize * scale; }
 
@@ -298,22 +304,6 @@ namespace {
     });
   }
 
-  ColorSpec toastProgressFillColor(Urgency urgency) {
-    switch (urgency) {
-    case Urgency::Critical:
-      return colorSpecFromRole(ColorRole::Error);
-    case Urgency::Low:
-      return colorSpecFromRole(ColorRole::OnSurface, 0.9F);
-    case Urgency::Normal:
-    default:
-      return colorSpecFromRole(ColorRole::Primary);
-    }
-  }
-
-  bool showToastProgressAccent(Urgency urgency, int displayDurationMs) {
-    return displayDurationMs >= 0 || urgency == Urgency::Critical;
-  }
-
   std::vector<std::unique_ptr<Button>>
   collectNotificationActionButtons(const std::vector<std::string>& actions, float scale) {
     std::vector<std::unique_ptr<Button>> buttons;
@@ -352,31 +342,17 @@ namespace {
 
   float measureToastCardHeight(
       Renderer& renderer, const ConfigService* config, std::string_view appName, std::string_view summary,
-      std::string_view body, const std::vector<std::string>& actions, Urgency urgency, int displayDurationMs,
-      int summaryLines, int bodyLines, float scale
+      std::string_view body, const std::vector<std::string>& actions, int summaryLines, int bodyLines, float scale
   ) {
     const float cardW = cardWidth(scale);
     const float maxCardHeight = maxToastCardHeight(scale);
     const bool showActions = shouldShowNotificationActions(config);
     const float iconSize = notificationIconSize(scale, showActions);
     const float textMaxWidth = notificationTextMaxWidth(scale, showActions);
-    const float topTextMaxWidth = std::max(0.0F, textMaxWidth - closeButtonSize(scale) - Style::spaceSm * scale);
+    const float topTextMaxWidth = topTextWidth(textMaxWidth, scale);
     const bool showAppName = shouldShowNotificationAppName(config, appName);
 
-    auto card = ui::column(
-        {.maxHeight = maxCardHeight, .clipChildren = true, .width = cardW},
-        ui::progressBar({
-            .fill = toastProgressFillColor(urgency),
-            .track = clearColorSpec(),
-            .radius = progressHeight(scale) * 0.5F,
-            .orientation = ProgressBarOrientation::HorizontalCentered,
-            .width = std::max(0.0F, cardW - topProgressInset(scale) * 2.0F),
-            .height = progressHeight(scale),
-            .visible = showToastProgressAccent(urgency, displayDurationMs),
-            .participatesInLayout = showToastProgressAccent(urgency, displayDurationMs),
-            .configure = [scale](ProgressBar& progress) { progress.setPosition(topProgressInset(scale), 0.0F); },
-        })
-    );
+    auto card = ui::column({.maxHeight = maxCardHeight, .clipChildren = true, .width = cardW});
 
     auto content = ui::row(
         {
@@ -524,6 +500,12 @@ void NotificationToast::initialize(
   m_callbackToken = m_notifications->addEventCallback([this](const Notification& n, NotificationEvent event) {
     onNotificationEvent(n, event);
   });
+  // Keeps "now" turning into "1m ago" on banners that stay up (persistent or hovered).
+  m_timeRefreshTimer.startRepeating(kTimeRefreshInterval, [this]() {
+    if (!m_entries.empty()) {
+      refreshTimeLabels();
+    }
+  });
 }
 
 float NotificationToast::horizontalInnerPad(float scale) const {
@@ -660,6 +642,7 @@ void NotificationToast::onNotificationEvent(const Notification& n, NotificationE
         m_entries[i].actions = n.actions;
         m_entries[i].icon = n.icon;
         m_entries[i].imageData = n.imageData;
+        m_entries[i].receivedAt = n.receivedWallClock.value_or(m_entries[i].receivedAt);
         m_entries[i].dndPolicy = n.dndPolicy;
         refreshEntryGeometry(m_entries[i]);
         m_entries[i].rawTimeoutMs = n.timeout;
@@ -725,7 +708,7 @@ void NotificationToast::onNotificationEvent(const Notification& n, NotificationE
             cs = {};
             InputArea* rebuilt = buildCard(
                 *inst, m_entries[i], &cs.cardContent, &cs.cardForeground, &cs.progressBar, &cs.actionsRowNode,
-                &cs.inlineReplyRowNode, &cs.inlineReplyInput
+                &cs.inlineReplyRowNode, &cs.inlineReplyInput, &cs.timeLabel, &cs.closeButton
             );
             cs.cardNode = rebuilt;
             cs.clipHeight = rebuilt->height();
@@ -773,11 +756,9 @@ void NotificationToast::onNotificationEvent(const Notification& n, NotificationE
           m_entries[i].displayDurationMs = newDuration;
           m_entries[i].remainingProgress = 1.0F;
           if (newDuration < 0) {
-            cs.progressBar->setOpacity(n.urgency == Urgency::Critical ? 1.0F : 0.0F);
             cs.progressBar->setProgress(1.0F);
             cs.countdownAnimId = 0;
           } else {
-            cs.progressBar->setOpacity(1.0F);
             cs.progressBar->setProgress(1.0F);
             if (hovered) {
               cs.countdownAnimId = 0;
@@ -880,6 +861,7 @@ void NotificationToast::addPopup(const Notification& n) {
   entry.actions = n.actions;
   entry.icon = n.icon;
   entry.imageData = n.imageData;
+  entry.receivedAt = n.receivedWallClock.value_or(WallClock::now());
   entry.urgency = n.urgency;
   entry.dndPolicy = n.dndPolicy;
   entry.displayDurationMs = resolveDisplayDuration(n.timeout);
@@ -1017,7 +999,7 @@ void NotificationToast::addCardToInstance(Instance& inst, std::size_t entryIndex
   cs = {};
   InputArea* card = buildCard(
       inst, entry, &cs.cardContent, &cs.cardForeground, &cs.progressBar, &cs.actionsRowNode, &cs.inlineReplyRowNode,
-      &cs.inlineReplyInput
+      &cs.inlineReplyInput, &cs.timeLabel, &cs.closeButton
   );
   cs.cardNode = card;
   cs.clipHeight = card->height();
@@ -1049,12 +1031,10 @@ void NotificationToast::addCardToInstance(Instance& inst, std::size_t entryIndex
   // whose surface can't fit the card, so the nominal driver may never have a card at all.
   if (entry.displayDurationMs < 0) {
     // Persistent — no countdown, no auto-dismiss
-    cs.progressBar->setOpacity(entry.urgency == Urgency::Critical ? 1.0F : 0.0F);
     cs.progressBar->setProgress(1.0F);
     cs.countdownAnimId = 0;
   } else {
     const float startProgress = std::clamp(entry.remainingProgress, 0.0F, 1.0F);
-    cs.progressBar->setOpacity(1.0F);
     cs.progressBar->setProgress(startProgress);
     if (entry.replyInputFocused || entry.hovered) {
       cs.countdownAnimId = 0;
@@ -1283,6 +1263,7 @@ void NotificationToast::beginPopupHover(uint32_t notificationId, const ProgressB
   if (popup->hoverOwners == 1 && !popup->hovered) {
     popup->hovered = true;
     pauseTimeout(notificationId, progressBar);
+    syncHoverChrome(notificationId);
   } else if (progressBar != nullptr) {
     popup->remainingProgress = std::clamp(progressBar->progress(), 0.0F, 1.0F);
   }
@@ -1328,6 +1309,7 @@ void NotificationToast::resetPopupHover(uint32_t notificationId, int totalDurati
   popup->hoverResetPending = false;
   popup->hoverResetToken += 1;
   popup->hovered = false;
+  syncHoverChrome(notificationId);
   if (resumeTimer) {
     resumeTimeout(notificationId, totalDuration);
   }
@@ -1335,6 +1317,47 @@ void NotificationToast::resetPopupHover(uint32_t notificationId, int totalDurati
     collapseStack();
   }
   revealQueuedEntries();
+}
+
+void NotificationToast::syncHoverChrome(uint32_t notificationId) {
+  const auto* popup = findEntry(notificationId);
+  if (popup == nullptr) {
+    return;
+  }
+  for (auto& inst : m_instances) {
+    auto* state = findCardState(*inst, notificationId);
+    if (state == nullptr || state->timeLabel == nullptr || state->closeButton == nullptr) {
+      continue;
+    }
+    if (state->closeButton->visible() == popup->hovered) {
+      continue;
+    }
+    state->timeLabel->setVisible(!popup->hovered);
+    state->closeButton->setVisible(popup->hovered);
+    if (inst->surface != nullptr) {
+      inst->surface->requestRedraw();
+    }
+  }
+}
+
+void NotificationToast::refreshTimeLabels() {
+  for (auto& inst : m_instances) {
+    bool changed = false;
+    for (std::size_t i = 0; i < inst->cards.size() && i < m_entries.size(); ++i) {
+      Label* label = inst->cards[i].timeLabel;
+      if (label == nullptr) {
+        continue;
+      }
+      const std::string text = formatNotificationTime(m_entries[i].receivedAt);
+      if (label->text() != text) {
+        label->setText(text);
+        changed = true;
+      }
+    }
+    if (changed && inst->surface != nullptr) {
+      inst->surface->requestRedraw();
+    }
+  }
 }
 
 void NotificationToast::resetInstanceHover(Instance& inst, bool resumeTimers) {
@@ -1427,7 +1450,6 @@ void NotificationToast::resumeCountdowns(uint32_t notificationId) {
       state->countdownAnimId = 0;
     }
 
-    state->progressBar->setOpacity(1.0F);
     state->progressBar->setProgress(remaining);
     const bool isDriver = (!m_instances.empty() && m_instances[0].get() == inst.get());
     state->countdownAnimId = inst->animations.animateTimer(
@@ -1652,8 +1674,8 @@ void NotificationToast::refreshEntryGeometry(PopupEntry& entry) const {
   entry.height = std::min(
       maxToastCardHeight(scale),
       measureToastCardHeight(
-          measureRenderer, m_config, entry.appName, entry.summary, entry.body, entry.actions, entry.urgency,
-          entry.displayDurationMs, kMaxSummaryLines, entry.toastBodyLines, scale
+          measureRenderer, m_config, entry.appName, entry.summary, entry.body, entry.actions, kMaxSummaryLines,
+          entry.toastBodyLines, scale
       )
   );
 }
@@ -2271,7 +2293,8 @@ void NotificationToast::applyCardReveal(Instance::CardState& cs, float reveal, f
 
 InputArea* NotificationToast::buildCard(
     Instance& outputInstance, const PopupEntry& entry, Node** outCardContent, Node** outCardForeground,
-    ProgressBar** outProgress, Node** outActionsRow, Node** outInlineReplyRow, Input** outInlineReplyInput
+    ProgressBar** outProgress, Node** outActionsRow, Node** outInlineReplyRow, Input** outInlineReplyInput,
+    Label** outTimeLabel, Button** outCloseButton
 ) {
   m_renderContext->makeCurrent(outputInstance.surface->renderTarget());
   Renderer& renderer = outputInstance.surface->renderTarget().renderer();
@@ -2283,7 +2306,7 @@ InputArea* NotificationToast::buildCard(
   const float cardW = cardWidth(scale);
   const float maxCardHeight = maxToastCardHeight(scale);
   const float textMaxWidth = notificationTextMaxWidth(scale, showActions);
-  const float topTextMaxWidth = std::max(0.0F, textMaxWidth - closeButtonSize(scale) - Style::spaceSm * scale);
+  const float topTextMaxWidth = topTextWidth(textMaxWidth, scale);
   const bool showAppName = shouldShowNotificationAppName(m_config, entry.appName);
 
   auto viewport = ui::inputArea({});
@@ -2325,18 +2348,12 @@ InputArea* NotificationToast::buildCard(
   const bool hasBorder = m_config == nullptr || m_config->config().notification.border;
   const float borderWidth =
       hasBorder ? (entry.urgency == Urgency::Critical ? Style::emphasizedBorderWidth : Style::borderWidth) : 0.0F;
+  // macOS banners carry no countdown, so the bar that times the auto-dismiss is never drawn.
   foreground->addChild(
       ui::progressBar({
           .out = outProgress,
-          .fill = toastProgressFillColor(entry.urgency),
-          .track = clearColorSpec(),
-          .radius = progressHeight(scale) * 0.5F,
-          .orientation = ProgressBarOrientation::HorizontalCentered,
-          .width = std::max(0.0F, cardW - topProgressInset(scale) * 2.0F),
-          .height = progressHeight(scale),
-          .visible = showToastProgressAccent(entry.urgency, entry.displayDurationMs),
-          .participatesInLayout = showToastProgressAccent(entry.urgency, entry.displayDurationMs),
-          .configure = [scale](ProgressBar& progress) { progress.setPosition(topProgressInset(scale), 0.0F); },
+          .visible = false,
+          .participatesInLayout = false,
       })
   );
 
@@ -2687,14 +2704,38 @@ InputArea* NotificationToast::buildCard(
   );
 
   cardRoot->addChild(std::move(foreground));
+  // Top-right corner as on macOS: the time stamp at rest, the close button while hovered.
+  const float cornerX = cardW - cardInnerPad(scale) - timeSlotWidth(scale);
+  cardRoot->addChild(
+      ui::label({
+          .out = outTimeLabel,
+          .text = formatNotificationTime(entry.receivedAt),
+          .fontSize = kTimeFontSize * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          .minWidth = timeSlotWidth(scale),
+          .maxWidth = timeSlotWidth(scale),
+          .maxLines = 1,
+          .textAlign = TextAlign::End,
+          .visible = !entry.hovered,
+          .configure =
+              [cornerX, scale, &renderer](Label& label) {
+                label.measure(renderer);
+                label.setPosition(
+                    cornerX, cardInnerPad(scale) + std::round((closeButtonSize(scale) - label.height()) * 0.5F)
+                );
+              },
+      })
+  );
   cardRoot->addChild(
       ui::button({
+          .out = outCloseButton,
           .glyph = "close",
           .glyphSize = kCloseGlyphSize * scale,
           .variant = ButtonVariant::Ghost,
           .minWidth = closeButtonSize(scale),
           .minHeight = closeButtonSize(scale),
           .padding = 0.0F,
+          .visible = entry.hovered,
           .onClick = [this, id = entry.notificationId]() { requestClose(id, CloseReason::Dismissed); },
           .onEnter = [this, notificationId = entry.notificationId]() { beginPopupHover(notificationId); },
           .onLeave = [this, notificationId = entry.notificationId,
