@@ -88,6 +88,21 @@ namespace {
   };
 
   constexpr float kCellHeight = 40.0F;
+  constexpr float kHeaderHeight = 24.0F;
+
+  // Reserves header space above items 0 and 2, like the launcher's Top Hit and source sections.
+  class SectionedAdapter final : public VirtualGridAdapter {
+  public:
+    [[nodiscard]] std::size_t itemCount() const override { return 4; }
+    [[nodiscard]] std::unique_ptr<Node> createTile() override { return std::make_unique<Node>(); }
+    void bindTile(Node&, std::size_t, bool, bool) override {}
+    [[nodiscard]] float itemLeadingSpace(std::size_t index) const override {
+      return index == 0 || index == 2 ? kHeaderHeight : 0.0F;
+    }
+    void onActivate(std::size_t index) override { activations.push_back(index); }
+
+    std::vector<std::size_t> activations;
+  };
 
 } // namespace
 
@@ -205,6 +220,45 @@ int main() {
     area->dispatchPress(10.0F, 10.0F + threshold - 0.5F, BTN_LEFT, false);
     expect(adapter.drags.empty(), "second press reused the previous drag state");
     expect(adapter.releases.size() == 1, "second release was not delivered");
+  }
+
+  {
+    // Leading space sits above its item: the header itself is not a hit target, and the
+    // rows below it shift down by every header above them.
+    SectionedAdapter sectioned;
+    VirtualGridView list;
+    list.setAdapter(&sectioned);
+    list.setColumns(1);
+    list.setSquareCells(false);
+    list.setCellHeight(kCellHeight);
+    list.setRowGap(0.0F);
+    list.setSize(100.0F, 400.0F);
+    list.layout(renderer);
+    InputArea* listArea = list.focusArea();
+    expect(listArea != nullptr, "sectioned grid has no input area");
+    if (listArea != nullptr) {
+      const auto click = [listArea](float y) {
+        listArea->dispatchPress(10.0F, y, BTN_LEFT, true);
+        listArea->dispatchPress(10.0F, y, BTN_LEFT, false);
+      };
+      click(kHeaderHeight * 0.5F);
+      expect(sectioned.activations.empty(), "a click on a section header activated an item");
+      click(kHeaderHeight + 5.0F);
+      click(kHeaderHeight + kCellHeight + 5.0F);
+      click(kHeaderHeight + kCellHeight * 2.0F + 5.0F);
+      click(kHeaderHeight * 2.0F + kCellHeight * 2.0F + 5.0F);
+      expect(
+          sectioned.activations == std::vector<std::size_t>{0, 1, 2},
+          "items below section headers were not offset by the header space"
+      );
+      float anchorX = 0.0F;
+      float anchorY = 0.0F;
+      expect(list.absoluteAnchorForIndex(3, anchorX, anchorY), "no anchor for the last item");
+      expect(
+          anchorY > kHeaderHeight * 2.0F + kCellHeight * 3.0F && anchorY < kHeaderHeight * 2.0F + kCellHeight * 4.0F,
+          "item anchor ignored the header space above it"
+      );
+    }
   }
 
   if (gFailures != 0) {

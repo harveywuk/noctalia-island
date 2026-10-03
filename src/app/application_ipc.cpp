@@ -64,7 +64,6 @@
 #include "scripting/plugin_runtime_context.h"
 #include "shell/bar/widgets/workspace_preferences.h"
 #include "shell/bar/widgets/workspaces_widget_definition.h"
-#include "shell/clipboard/clipboard_panel.h"
 #include "shell/clipboard/clipboard_paste.h"
 #include "shell/control_center/control_center_panel.h"
 #include "shell/greeter/greeter_appearance_sync.h"
@@ -391,6 +390,13 @@ void Application::initIpc() {
         std::move(category), std::move(desktopEntry)
     );
     return "ok\n";
+  });
+
+  m_ipcService.bind(noctalia::cli::msg::launcherRun, [this](const std::string& args) -> std::string {
+    if (m_launcherPanel == nullptr) {
+      return "error: launcher unavailable\n";
+    }
+    return m_launcherPanel->runFromSpec(args);
   });
 
   m_ipcService.bind(noctalia::cli::msg::clipboardClear, [this](const std::string&) -> std::string {

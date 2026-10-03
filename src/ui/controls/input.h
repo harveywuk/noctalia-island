@@ -50,6 +50,8 @@ public:
   void setMultiline(bool enabled);
   void setInvalid(bool invalid);
   void setFrameVisible(bool visible);
+  // With the frame hidden, still draw it while focused or invalid (a plain value that edits like a field).
+  void setFrameOnFocus(bool enabled);
   /// When the frame is hidden, treat the field as sitting on a solid Primary fill (e.g. segmented control center).
   void setEmbeddedOnSolidPrimary(bool embedded);
   // With the frame hidden, draws text, placeholder, mask glyphs and caret in this colour
@@ -240,6 +242,7 @@ private:
   bool m_lineEditing = false;
   bool m_invalid = false;
   bool m_frameVisible = true;
+  bool m_frameOnFocus = false;
   bool m_embeddedOnSolidPrimary = false;
   std::optional<ColorSpec> m_contentColor;
   float m_surfaceOpacity = 1.0F;

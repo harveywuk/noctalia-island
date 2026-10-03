@@ -55,9 +55,16 @@ namespace settings {
 
     constexpr auto kLauncherProviderSettings = std::to_array<LauncherProviderSettingSpec>({
         {.name = "calculator", .prefixPlaceholder = "calc", .globalByDefault = true},
+        {.name = "clipboard", .prefixPlaceholder = "clip"},
         {.name = "emoji", .prefixPlaceholder = "emo"},
+        {.name = "files", .prefixPlaceholder = "file", .globalByDefault = true},
         {.name = "panels", .prefixPlaceholder = "pan"},
+        {.name = "quicklinks", .prefixPlaceholder = "link", .globalByDefault = true},
+        {.name = "scripts", .prefixPlaceholder = "script", .globalByDefault = true},
         {.name = "session", .prefixPlaceholder = "session"},
+        {.name = "snippets", .prefixPlaceholder = "snip", .globalByDefault = true},
+        {.name = "system", .prefixPlaceholder = "sys", .globalByDefault = true},
+        {.name = "time", .prefixPlaceholder = "time", .globalByDefault = true},
         {.name = "wallpaper", .prefixPlaceholder = "wall"},
         {.name = "windows", .prefixPlaceholder = "win"},
     });
@@ -1726,22 +1733,7 @@ namespace settings {
         ));
       }
     }
-    entries.push_back(makeEntry(
-        SettingsSection::Panels, "clipboard", tr("settings.schema.panels.placement-clipboard.label"),
-        tr("settings.schema.panels.placement-clipboard.description"), {"shell", "panel", "clipboard_placement"},
-        asSegmented(enumSelect(kPanelPlacements, cfg.shell.panel.clipboardPlacement)),
-        "attached floating bar panel position"
-    ));
-    entries.push_back(panelPositionEntry(
-        SettingsSection::Panels, "clipboard", "clipboard", "settings.schema.panels.position-clipboard.label",
-        "settings.schema.panels.position-clipboard.description", cfg.shell.panel.clipboardPosition,
-        &ShellConfig::PanelConfig::clipboardPlacement
-    ));
-    entries.push_back(panelBarAlignmentEntry(
-        SettingsSection::Panels, "clipboard", "clipboard", "settings.schema.panels.open-near-click-clipboard.label",
-        "settings.schema.panels.open-near-click-clipboard.description", cfg.shell.panel.openNearClickClipboard,
-        &ShellConfig::PanelConfig::clipboardPlacement, &ShellConfig::PanelConfig::clipboardPosition
-    ));
+    // No Clipboard placement rows: the Clipboard panel is retired and opens the launcher instead.
     entries.push_back(makeEntry(
         SettingsSection::Panels, "polkit", tr("settings.schema.panels.placement-polkit.label"),
         tr("settings.schema.panels.placement-polkit.description"), {"shell", "panel", "polkit_placement"},
@@ -2193,7 +2185,7 @@ namespace settings {
     entries.push_back(makeEntry(
         SettingsSection::Shell, "general", tr("settings.schema.shell.date-format.label"),
         tr("settings.schema.shell.date-format.description"), {"shell", "date_format"},
-        TextSetting{.value = cfg.shell.dateFormat, .placeholder = "%A, %x", .browseFileExtensions = {}},
+        TextSetting{.value = cfg.shell.dateFormat, .placeholder = "%A %-d %B", .browseFileExtensions = {}},
         "calendar date format strftime chrono"
     ));
     entries.push_back(makeEntry(
@@ -2267,16 +2259,7 @@ namespace settings {
       e.visibleWhen = clipboardOn;
       entries.push_back(std::move(e));
     }
-    {
-      auto e = makeEntry(
-          SettingsSection::Shell, "clipboard", tr("settings.schema.shell.clipboard-confirm-clear-history.label"),
-          tr("settings.schema.shell.clipboard-confirm-clear-history.description"),
-          {"shell", "clipboard_confirm_clear_history"}, ToggleSetting{cfg.shell.clipboardConfirmClearHistory},
-          "clipboard history clear confirm pinned"
-      );
-      e.visibleWhen = clipboardOn;
-      entries.push_back(std::move(e));
-    }
+    // No "confirm clear history" row: it belonged to the retired Clipboard panel's dialogs.
     {
       auto e = makeEntry(
           SettingsSection::Shell, "clipboard", tr("settings.schema.shell.clipboard-auto-paste.label"),

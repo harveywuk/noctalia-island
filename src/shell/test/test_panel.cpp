@@ -37,7 +37,7 @@ void TestPanel::create() {
       .text = "Test",
       .fontSize = Style::fontSizeTitle * scale,
       .fontWeight = FontWeight::Bold,
-      .color = colorSpecFromRole(ColorRole::Primary),
+      .color = colorSpecFromRole(ColorRole::OnSurface),
   });
   headerRow->addChild(std::move(header));
 

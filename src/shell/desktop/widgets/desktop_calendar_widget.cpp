@@ -74,7 +74,7 @@ void DesktopCalendarWidget::create() {
   calendarColumn->addChild(
       ui::label({
           .out = &m_todayLabel,
-          .text = formatLocalTime(m_config != nullptr ? m_config->config().shell.dateFormat.c_str() : "%A, %x"),
+          .text = formatLocalTime(m_config != nullptr ? m_config->config().shell.dateFormat.c_str() : "%A %-d %B"),
           .fontSize = Style::fontSizeTitle * contentScale(),
           .fontWeight = FontWeight::Medium,
           .fontFamily = m_fontFamily,
@@ -267,7 +267,7 @@ void DesktopCalendarWidget::doUpdate(Renderer& /*renderer*/) {
   }
   if (m_todayLabel != nullptr) {
     m_todayLabel->setText(
-        formatLocalTime(m_config != nullptr ? m_config->config().shell.dateFormat.c_str() : "%A, %x")
+        formatLocalTime(m_config != nullptr ? m_config->config().shell.dateFormat.c_str() : "%A %-d %B")
     );
   }
   if (m_dirty && !isLayingOut()) {

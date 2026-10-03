@@ -80,26 +80,32 @@ namespace {
           ),
           .selected = selectedState(),
       };
-    case ButtonVariant::Secondary:
+    case ButtonVariant::Secondary: {
+      // macOS has no coloured secondary button: the alternative to the blue default is a grey
+      // fill with ordinary label text, so Secondary no longer takes the palette's (green) accent.
+      const float fillAlpha = isResolvedLightTheme() ? 0.08F : 0.16F;
+      const float pressedAlpha = isResolvedLightTheme() ? 0.14F : 0.24F;
       return Button::ButtonPalette{
           .borderWidth = 0.0F,
           .normal = makeState(
-              colorSpecFromRole(ColorRole::Secondary), clearColorSpec(), colorSpecFromRole(ColorRole::OnSecondary)
+              colorSpecFromRole(ColorRole::OnSurface, fillAlpha), clearColorSpec(),
+              colorSpecFromRole(ColorRole::OnSurface)
           ),
           .hover = makeState(
-              colorSpecFromRole(ColorRole::Secondary), clearColorSpec(), colorSpecFromRole(ColorRole::OnSecondary)
+              colorSpecFromRole(ColorRole::OnSurface, fillAlpha), clearColorSpec(),
+              colorSpecFromRole(ColorRole::OnSurface)
           ),
           .pressed = makeState(
-              colorSpecFromRole(ColorRole::Secondary, Style::filledButtonPressedAlpha), clearColorSpec(),
-              colorSpecFromRole(ColorRole::OnSecondary)
+              colorSpecFromRole(ColorRole::OnSurface, pressedAlpha), clearColorSpec(),
+              colorSpecFromRole(ColorRole::OnSurface)
           ),
           .disabled = makeState(
-              colorSpecFromRole(ColorRole::Secondary, kDisabledAlpha),
-              colorSpecFromRole(ColorRole::Outline, Style::disabledOutlineAlpha),
-              colorSpecFromRole(ColorRole::OnSecondary)
+              colorSpecFromRole(ColorRole::OnSurface, fillAlpha * 0.6F), clearColorSpec(),
+              colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)
           ),
           .selected = selectedState(),
       };
+    }
     case ButtonVariant::Destructive:
       return Button::ButtonPalette{
           .borderWidth = 0.0F,

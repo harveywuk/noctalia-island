@@ -114,7 +114,7 @@ namespace {
   }
 
   std::string formatShellDate(const ConfigService* config) {
-    const char* format = config != nullptr ? config->config().shell.dateFormat.c_str() : "%A, %x";
+    const char* format = config != nullptr ? config->config().shell.dateFormat.c_str() : "%A %-d %B";
     return formatLocalTime(format);
   }
 
@@ -313,6 +313,8 @@ std::unique_ptr<Flex> HomeTab::create() {
   const auto configureUserDetailLabel = [scale](Label& label) {
     label.setShadow(colorSpecFromRole(ColorRole::Shadow, 0.36F), 0.0F, 1.0F * scale);
   };
+  // Like a macOS account card: name and account only. The uptime and build labels are kept
+  // (still updated) but hidden; `noctalia --version` and the support report carry the build.
   auto userRow = ui::row(
       {.align = FlexAlign::Center, .gap = Style::spaceMd * scale}, std::move(avatarArea),
       ui::column(
@@ -345,6 +347,7 @@ std::unique_ptr<Flex> HomeTab::create() {
               .text = "…",
               .fontSize = Style::fontSizeCaption * scale,
               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .visible = false,
               .configure = configureUserDetailLabel,
           }),
           ui::label({
@@ -352,6 +355,7 @@ std::unique_ptr<Flex> HomeTab::create() {
               .text = noctaliaVersionLine(),
               .fontSize = Style::fontSizeCaption * scale,
               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .visible = false,
               .configure = configureUserDetailLabel,
           })
       )
@@ -447,7 +451,7 @@ std::unique_ptr<Flex> HomeTab::create() {
               .out = &m_mediaProgress,
               .text = " ",
               .fontSize = Style::fontSizeCaption * scale,
-              .color = colorSpecFromRole(ColorRole::Secondary),
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
               .maxLines = 1,
               .ellipsize = TextEllipsize::End,
               .visible = false,
@@ -487,7 +491,7 @@ std::unique_ptr<Flex> HomeTab::create() {
           .text = formatShellTime(m_config),
           .fontSize = Style::fontSizeTitle * 1.7F * scale,
           .fontWeight = FontWeight::Bold,
-          .color = colorSpecFromRole(ColorRole::Primary),
+          .color = colorSpecFromRole(ColorRole::OnSurface),
       }),
       ui::column(
           {.align = FlexAlign::Start, .justify = FlexJustify::Center, .gap = Style::spaceXs * 0.5F * scale},
@@ -1804,7 +1808,7 @@ void HomeTab::applyMediaOverlay(bool overlay) {
     if (m_mediaArtist != nullptr)
       m_mediaArtist->setColor(colorSpecFromRole(ColorRole::OnSurfaceVariant));
     if (m_mediaProgress != nullptr)
-      m_mediaProgress->setColor(colorSpecFromRole(ColorRole::Secondary));
+      m_mediaProgress->setColor(colorSpecFromRole(ColorRole::OnSurfaceVariant));
     // The status colour follows playback state and is restored by the next sync.
     return;
   }

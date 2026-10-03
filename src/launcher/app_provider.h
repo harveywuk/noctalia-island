@@ -17,6 +17,7 @@ public:
   [[nodiscard]] std::string_view defaultPrefix() const override { return ""; }
   [[nodiscard]] bool allowCustomPrefix() const override { return false; }
   [[nodiscard]] std::string_view id() const override { return "Applications"; }
+  [[nodiscard]] bool supportsAliases() const override { return true; }
   [[nodiscard]] std::string displayName() const override;
   [[nodiscard]] std::string_view defaultGlyphName() const override { return "app-window"; }
   [[nodiscard]] bool trackUsage() const override { return true; }

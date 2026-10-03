@@ -126,6 +126,9 @@ namespace noctalia::cli {
       Positional{"target", {}, {}, false, false, false},
       Positional{"step", {}, {}, false, false, false},
   };
+  inline constexpr std::array kMsgLauncherRunPositionals{
+      Positional{"alias", "A launcher alias, or <provider>:<result id>", {}, true, false, true},
+  };
   inline constexpr std::array kMsgClipboardCopyPositionals{
       Positional{"text", {}, {}, true, false, false},
   };
@@ -163,6 +166,10 @@ namespace noctalia::cli {
   inline constexpr std::array kMsgNotificationShowPositionals{
       Positional{"summary", {}, {}, true, false, false},
       Positional{"body", {}, {}, true, false, true},
+  };
+  inline constexpr std::array kMsgOsdShowPositionals{
+      Positional{"icon", "A Tabler glyph name such as clipboard-check", {}, true, false, false},
+      Positional{"text", {}, {}, true, false, true},
   };
   inline constexpr std::array kMsgIslandActivityStartPositionals{
       Positional{"id", "A name for the activity, used to update or end it", {}, true, false, false},
@@ -485,6 +492,16 @@ namespace noctalia::cli {
     inline constexpr Command keyboardLayoutCycle{
         "keyboard-layout-cycle", "Switch to the next keyboard layout", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command launcherRun{
+        "launcher-run",
+        "Run a launcher result by its alias without opening the launcher",
+        {},
+        {},
+        {},
+        kMsgLauncherRunPositionals,
+        {},
+        false
+    };
     inline constexpr Command lockscreenWidgetsEdit{
         "lockscreen-widgets-edit", "Open the lockscreen widgets editor", {}, {}, {}, {}, {}, false
     };
@@ -613,6 +630,17 @@ namespace noctalia::cli {
                                               false};
     inline constexpr Command osdDisable{"osd-disable", "Disable OSD popups", {}, {}, {}, {}, {}, false};
     inline constexpr Command osdEnable{"osd-enable", "Enable OSD popups", {}, {}, {}, {}, {}, false};
+    inline constexpr Command osdShow{
+        "osd-show",
+        "Flash a short status pill with an icon and text",
+        "It appears in the Island when the Island is on, otherwise as a regular OSD, and fades after a "
+        "moment. It shows even when the OSD kinds hide the built-in ones.",
+        "Example: noctalia msg osd-show clipboard-check Copied",
+        {},
+        kMsgOsdShowPositionals,
+        {},
+        false
+    };
     inline constexpr Command osdToggle{"osd-toggle", "Toggle OSD popups", {}, {}, {}, {}, {}, false};
     inline constexpr Command panelClose{
         "panel-close",
@@ -919,6 +947,7 @@ namespace noctalia::cli {
       msg::keyboardBacklightToggle,
       msg::keyboardBacklightUp,
       msg::keyboardLayoutCycle,
+      msg::launcherRun,
       msg::lockscreenWidgetsEdit,
       msg::lockscreenWidgetsExit,
       msg::lockscreenWidgetsToggleEdit,
@@ -948,6 +977,7 @@ namespace noctalia::cli {
       msg::notificationShow,
       msg::osdDisable,
       msg::osdEnable,
+      msg::osdShow,
       msg::osdToggle,
       msg::panelClose,
       msg::panelOpen,
