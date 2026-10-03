@@ -54,6 +54,35 @@ ClipboardProvider::ClipboardProvider(ClipboardService* clipboard, ConfigService*
 
 std::string ClipboardProvider::displayName() const { return i18n::tr("launcher.providers.clipboard.title"); }
 
+std::vector<LauncherCategory> ClipboardProvider::categories() const {
+  if (m_clipboard == nullptr) {
+    return {};
+  }
+  bool text = false;
+  bool links = false;
+  bool images = false;
+  for (const ClipboardEntry& entry : m_clipboard->history()) {
+    if (entry.isImage()) {
+      images = true;
+    } else if (looksLikeLink(entry.textPreview)) {
+      links = true;
+    } else {
+      text = true;
+    }
+  }
+  std::vector<LauncherCategory> categories;
+  if (text) {
+    categories.push_back({i18n::tr("launcher.kinds.text"), "file-text"});
+  }
+  if (links) {
+    categories.push_back({i18n::tr("launcher.kinds.link"), "link"});
+  }
+  if (images) {
+    categories.push_back({i18n::tr("launcher.kinds.image"), "photo"});
+  }
+  return categories.size() > 1 ? categories : std::vector<LauncherCategory>{};
+}
+
 std::vector<LauncherResult> ClipboardProvider::query(std::string_view text) const {
   if (m_clipboard == nullptr) {
     return {};
@@ -74,6 +103,7 @@ std::vector<LauncherResult> ClipboardProvider::query(std::string_view text) cons
     result.subtitle = formatTimeAgo(entry.capturedAt);
     result.glyphName = image ? "photo" : (looksLikeLink(entry.textPreview) ? "link" : "file-text");
     result.kind = kindFor(entry);
+    result.category = result.kind;
     result.pinned = entry.pinned;
     // History is newest first; keep that order.
     result.score = -static_cast<double>(i);

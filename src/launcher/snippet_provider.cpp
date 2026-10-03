@@ -10,6 +10,7 @@
 #include "wayland/clipboard_service.h"
 
 #include <ctime>
+#include <random>
 
 namespace {
 
@@ -34,6 +35,20 @@ namespace {
     }
   }
 
+  // A random version-4 UUID, as Raycast's {uuid} placeholder gives.
+  [[nodiscard]] std::string randomUuid() {
+    static thread_local std::mt19937_64 generator{std::random_device{}()};
+    std::uniform_int_distribution<std::uint64_t> distribution;
+    std::uint64_t high = distribution(generator);
+    std::uint64_t low = distribution(generator);
+    high = (high & 0xFFFFFFFFFFFF0FFFULL) | 0x0000000000004000ULL; // version 4
+    low = (low & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;   // variant 1
+    return std::format(
+        "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}", high >> 32, (high >> 16) & 0xFFFF, high & 0xFFFF, low >> 48,
+        low & 0xFFFFFFFFFFFFULL
+    );
+  }
+
 } // namespace
 
 SnippetProvider::SnippetProvider(ConfigService* config, ClipboardService* clipboard, SnippetStore* store)
@@ -54,7 +69,16 @@ std::string SnippetProvider::expand(
   replaceAll(out, "{datetime}", formatStrftime("%Y-%m-%d %H:%M", local));
   replaceAll(out, "{date}", formatStrftime("%Y-%m-%d", local));
   replaceAll(out, "{time}", formatStrftime("%H:%M", local));
+  replaceAll(out, "{day}", formatStrftime("%d", local));
+  replaceAll(out, "{weekday}", formatStrftime("%A", local));
+  replaceAll(out, "{month}", formatStrftime("%B", local));
+  replaceAll(out, "{year}", formatStrftime("%Y", local));
   replaceAll(out, "{clipboard}", clipboardText);
+  while (out.contains("{uuid}")) {
+    out.replace(out.find("{uuid}"), 6, randomUuid());
+  }
+  // {cursor} marks where the caret should land; pasted text can't place it, so it is dropped.
+  replaceAll(out, "{cursor}", "");
   return out;
 }
 

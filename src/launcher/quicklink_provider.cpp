@@ -279,6 +279,29 @@ QuicklinkProvider::match(const std::vector<LauncherQuicklinkConfig>& links, std:
   return results;
 }
 
+std::vector<LauncherResult> QuicklinkProvider::fallbacks(
+    const std::vector<LauncherQuicklinkConfig>& links, const std::vector<std::string>& fallbackIds,
+    std::string_view query
+) {
+  std::vector<LauncherResult> results;
+  const std::string trimmed = StringUtils::trim(query);
+  if (trimmed.empty()) {
+    return results;
+  }
+  for (const std::string& wanted : fallbackIds) {
+    const std::string id = StringUtils::toLower(StringUtils::trim(wanted));
+    for (const auto& link : links) {
+      if (!takesQuery(link) || StringUtils::toLower(link.id) != id) {
+        continue;
+      }
+      LauncherResult result = resultFor(link, trimmed, kFallbackScore);
+      result.fallback = true;
+      results.push_back(std::move(result));
+    }
+  }
+  return results;
+}
+
 std::optional<LauncherResult> QuicklinkProvider::createCommand(std::string_view text, bool listAll) const {
   if (m_store == nullptr || !m_requestForm) {
     return std::nullopt;
@@ -326,6 +349,10 @@ std::vector<LauncherResult> QuicklinkProvider::query(std::string_view text) cons
     web.score = kFallbackScore;
     web.fallback = true;
     results.push_back(std::move(web));
+  }
+  if (!keywordSearch && trimmed.size() >= kMinFallbackChars && m_config != nullptr) {
+    auto extra = fallbacks(links(), m_config->config().shell.launcher.fallbacks, trimmed);
+    results.insert(results.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
   }
   return results;
 }
@@ -388,6 +415,18 @@ std::string QuicklinkProvider::primaryActionLabel(const LauncherResult& result) 
     return i18n::tr("launcher.forms.create-quicklink");
   }
   return i18n::tr("launcher.actions.open-in-browser");
+}
+
+// Tab on a search quicklink types its keyword, ready for the query ("gh ").
+std::string QuicklinkProvider::completion(const LauncherResult& result) const {
+  if (result.query.has_value()) {
+    return {};
+  }
+  const auto link = linkFor(result.id);
+  if (!link.has_value() || link->keyword.empty() || !takesQuery(*link)) {
+    return {};
+  }
+  return link->keyword + " ";
 }
 
 std::vector<LauncherAction> QuicklinkProvider::actions(const LauncherResult& result) const {

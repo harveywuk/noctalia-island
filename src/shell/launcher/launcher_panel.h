@@ -112,6 +112,15 @@ private:
   void applyProviderConfig(LauncherProvider& provider) const;
   void finishActivation(LauncherProvider& provider, const std::string& resultId, bool copied);
   [[nodiscard]] std::vector<LauncherResult> providerOverviewResults(std::string_view text) const;
+  // Raycast's Suggestions: recently run results from any provider, shown when nothing is typed.
+  void insertSuggestions();
+  // Fallback rows for a typed query ("Search Files for …"), from shell.launcher.fallbacks.
+  [[nodiscard]] std::vector<LauncherResult> providerFallbackResults(std::string_view query) const;
+  // Tab: puts the selected result's completion (a prefix, a keyword) in the field.
+  bool completeSelected();
+  // Esc inside a provider view reached from the root search goes back to it; returns false to close.
+  bool popToRoot();
+  void recordActivation(const LauncherProvider& provider, const std::string& resultId);
   [[nodiscard]] bool openActionsMenu(std::size_t index, float anchorX, float anchorY);
   [[nodiscard]] bool openSelectedActionsMenu();
   // Runs the first extra action of the selected result (Ctrl+Return, Raycast's secondary action).
@@ -159,6 +168,9 @@ private:
   std::string m_formReturnQuery;
   // The prefixed provider currently shown, when it asks for a preview pane.
   LauncherProvider* m_previewProvider = nullptr;
+  // The provider whose view is shown (prefixed or scoped), and the text after its prefix.
+  LauncherProvider* m_activeProvider = nullptr;
+  std::string m_activeQuery;
   std::vector<LauncherResult> m_results;
   std::vector<LauncherResult> m_allResults;
   UsageTracker m_usageTracker;
@@ -200,6 +212,8 @@ private:
   std::unique_ptr<LauncherAppGridAdapter> m_gridAdapter;
 
   std::string m_query;
+  // What the launcher opened with (a shortcut's "/clip"); Esc closes rather than pops back from it.
+  std::string m_openContext;
   std::string m_scopedProviderId;
   std::string m_scopedPlaceholder;
   ActiveCategoryType m_activeCategoryType = All;

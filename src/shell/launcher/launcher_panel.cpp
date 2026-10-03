@@ -56,6 +56,9 @@ namespace {
   constexpr std::string_view kAliasEditorProviderId = "__launcher_alias_editor__";
   constexpr std::string_view kFormProviderId = "__launcher_form__";
   constexpr std::string_view kFormSubmitId = "submit";
+  // How many recently run results lead the root search as Suggestions.
+  constexpr std::size_t kSuggestionCount = 5;
+  constexpr double kFallbackScore = -1e6;
 
   // Multiline form values are shown and typed in the single-line field with "\n" for a newline.
   [[nodiscard]] std::string escapeNewlines(std::string_view text) {
@@ -1160,10 +1163,21 @@ void LauncherPanel::applyProviderConfig(LauncherProvider& provider) const {
   }
 }
 
-void LauncherPanel::finishActivation(LauncherProvider& provider, const std::string& resultId, bool copied) {
-  if (shouldTrackUsage() && provider.trackUsage()) {
+void LauncherPanel::recordActivation(const LauncherProvider& provider, const std::string& resultId) {
+  if (!shouldTrackUsage()) {
+    return;
+  }
+  if (provider.trackUsage()) {
     m_usageTracker.record(provider.id(), resultId);
   }
+  // Suggestions list results that can be found again by id; aliasable providers guarantee that.
+  if (provider.supportsAliases()) {
+    m_usageTracker.recordRecent(provider.id(), resultId);
+  }
+}
+
+void LauncherPanel::finishActivation(LauncherProvider& provider, const std::string& resultId, bool copied) {
+  recordActivation(provider, resultId);
   PanelManager::instance().closePanel(false);
   if (copied && provider.supportsAutoPaste() && m_onCopiedActivation) {
     m_onCopiedActivation(provider);
@@ -1635,6 +1649,7 @@ void LauncherPanel::onOpen(std::string_view context) {
   }
 
   const std::string initialValue(context);
+  m_openContext = StringUtils::trim(context);
   if (m_input != nullptr) {
     m_input->setPlaceholder(
         m_scopedPlaceholder.empty() ? i18n::tr("launcher.search-placeholder") : m_scopedPlaceholder
@@ -1667,6 +1682,7 @@ void LauncherPanel::onClose() {
   }
 
   m_query.clear();
+  m_openContext.clear();
   m_results.clear();
   m_allResults.clear();
   m_aliasTarget.reset();
@@ -1815,6 +1831,8 @@ void LauncherPanel::onInputChanged(const std::string& text) {
   m_allResults.clear();
   m_mixedResults = false;
   m_previewProvider = nullptr;
+  m_activeProvider = nullptr;
+  m_activeQuery.clear();
 
   if (m_form.has_value()) {
     buildFormRows(text);
@@ -1850,6 +1868,8 @@ void LauncherPanel::onInputChanged(const std::string& text) {
       if (provider->id() != m_scopedProviderId) {
         continue;
       }
+      m_activeProvider = provider.get();
+      m_activeQuery = text;
       m_allResults = provider->query(text);
       anyProviderLoading = provider->isLoading();
       for (auto& result : m_allResults) {
@@ -1899,6 +1919,8 @@ void LauncherPanel::onInputChanged(const std::string& text) {
     };
 
     if (activeProvider != nullptr) {
+      m_activeProvider = activeProvider;
+      m_activeQuery = std::string(queryText);
       m_allResults = activeProvider->queryPrefixed(queryText);
       anyProviderLoading = activeProvider->isLoading();
       if (activeProvider->trackUsage()) {
@@ -1952,6 +1974,14 @@ void LauncherPanel::onInputChanged(const std::string& text) {
       }
       sortResultsByScore(m_allResults);
       applyAliases(queryText);
+      if (StringUtils::isBlank(text)) {
+        insertSuggestions();
+      } else if (allowGlobalOptIn) {
+        auto fallbacks = providerFallbackResults(StringUtils::trim(queryText));
+        m_allResults.insert(
+            m_allResults.end(), std::make_move_iterator(fallbacks.begin()), std::make_move_iterator(fallbacks.end())
+        );
+      }
     }
   }
 
@@ -2198,6 +2228,7 @@ std::vector<LauncherResult> LauncherPanel::providerOverviewResults(std::string_v
     result.title = title;
     result.subtitle = prefixText;
     result.glyphName = std::string(provider->defaultGlyphName());
+    result.kind = i18n::tr("launcher.kinds.command");
     result.score = score;
     results.push_back(std::move(result));
   }
@@ -2206,6 +2237,124 @@ std::vector<LauncherResult> LauncherPanel::providerOverviewResults(std::string_v
     sortResultsByScore(results);
   }
   return results;
+}
+
+void LauncherPanel::insertSuggestions() {
+  if (!shouldTrackUsage()) {
+    return;
+  }
+  std::vector<LauncherResult> suggestions;
+  for (const auto& [providerId, resultId] : m_usageTracker.recent()) {
+    if (suggestions.size() >= kSuggestionCount) {
+      break;
+    }
+    LauncherProvider* provider = providerFor(providerId);
+    if (provider == nullptr || !provider->supportsAliases()) {
+      continue;
+    }
+    const auto existing = std::ranges::find_if(m_allResults, [&](const LauncherResult& r) {
+      return r.providerId == providerId && r.id == resultId;
+    });
+    std::optional<LauncherResult> result;
+    if (existing != m_allResults.end()) {
+      result = *existing;
+    } else {
+      result = provider->resultForId(resultId);
+      if (result.has_value()) {
+        result->providerId = providerId;
+      }
+    }
+    if (!result.has_value()) {
+      continue;
+    }
+    result->suggested = true;
+    suggestions.push_back(std::move(*result));
+  }
+  // The copies sit beside the originals; assignSections lays them out and drops the pinned ones.
+  m_allResults.insert(
+      m_allResults.begin(), std::make_move_iterator(suggestions.begin()), std::make_move_iterator(suggestions.end())
+  );
+}
+
+std::vector<LauncherResult> LauncherPanel::providerFallbackResults(std::string_view query) const {
+  std::vector<LauncherResult> results;
+  if (m_config == nullptr || query.empty()) {
+    return results;
+  }
+  for (const std::string& name : m_config->config().shell.launcher.fallbacks) {
+    const std::string wanted = StringUtils::toLower(StringUtils::trim(name));
+    for (const auto& provider : m_providers) {
+      if (provider->prefix().empty() || StringUtils::toLower(std::string(provider->id())) != wanted) {
+        continue;
+      }
+      LauncherResult result;
+      result.id = providerOverviewId(provider->prefix());
+      result.providerId = std::string(kProviderOverviewProviderId);
+      result.query = std::string(query);
+      result.title =
+          i18n::tr("launcher.fallback.search-with", "provider", provider->displayName(), "query", std::string(query));
+      result.subtitle = std::string(provider->prefix());
+      result.glyphName = std::string(provider->defaultGlyphName());
+      result.kind = i18n::tr("launcher.kinds.command");
+      result.score = kFallbackScore;
+      result.fallback = true;
+      results.push_back(std::move(result));
+    }
+  }
+  return results;
+}
+
+bool LauncherPanel::completeSelected() {
+  if (m_selectedIndex >= m_results.size() || m_form.has_value() || m_aliasTarget.has_value()) {
+    return false;
+  }
+  const LauncherResult result = m_results[m_selectedIndex];
+  if (result.providerId == kProviderOverviewProviderId && result.id.starts_with(kProviderOverviewResultPrefix)) {
+    std::string text = result.id.substr(kProviderOverviewResultPrefix.size());
+    if (!text.empty()) {
+      text += ' ';
+    }
+    text += result.query.value_or(std::string());
+    setQuery(std::move(text));
+    return true;
+  }
+  const LauncherProvider* provider = providerFor(result.providerId);
+  if (provider == nullptr) {
+    return false;
+  }
+  std::string completion = provider->completion(result);
+  if (completion.empty() || completion == m_query) {
+    return false;
+  }
+  setQuery(std::move(completion));
+  return true;
+}
+
+bool LauncherPanel::popToRoot() {
+  if (!m_scopedProviderId.empty() || m_form.has_value() || m_aliasTarget.has_value()) {
+    return false;
+  }
+  // The provider view a query is in: the longest provider prefix it starts with, or the bare
+  // launcher prefix for the overview. Empty at the root search.
+  const auto viewFor = [this](std::string_view text) {
+    std::string view;
+    for (const auto& provider : m_providers) {
+      const std::string_view prefix = provider->prefix();
+      if (!prefix.empty() && text.starts_with(prefix) && prefix.size() > view.size()) {
+        view = std::string(prefix);
+      }
+    }
+    if (view.empty() && startsWithLauncherPrefix(text)) {
+      view = m_config != nullptr ? m_config->config().shell.launcher.providerPrefix : "/";
+    }
+    return view;
+  };
+  const std::string current = viewFor(StringUtils::trim(m_query));
+  if (current.empty() || current == viewFor(m_openContext)) {
+    return false;
+  }
+  setQuery({});
+  return true;
 }
 
 void LauncherPanel::applyActiveCategory() {
@@ -2231,6 +2380,9 @@ void LauncherPanel::applyActiveCategory() {
       }
     }
     break;
+  }
+  if (m_activeCategoryType != All) {
+    std::erase_if(m_results, [](const LauncherResult& r) { return r.suggested; });
   }
   assignSections();
   m_selectedIndex = 0;
@@ -2275,6 +2427,9 @@ void LauncherPanel::applyEmptyState() {
   if (empty) {
     if (m_anyProviderLoading && !m_query.empty()) {
       m_emptyLabel->setText(i18n::tr("launcher.empty.loading"));
+    } else if (m_activeProvider != nullptr && StringUtils::isBlank(m_activeQuery)) {
+      // A provider view with nothing to list yet (an empty clipboard history, no snippets).
+      m_emptyLabel->setText(i18n::tr("launcher.empty.provider-empty", "provider", m_activeProvider->displayName()));
     } else {
       m_emptyLabel->setText(
           m_query.empty() ? i18n::tr("launcher.empty.type-to-search") : i18n::tr("launcher.empty.no-results")
@@ -2797,9 +2952,7 @@ std::string LauncherPanel::runFromSpec(std::string_view spec) {
   if (provider == nullptr || !provider->activate(*result)) {
     return "error: could not run \"" + result->title + "\"\n";
   }
-  if (shouldTrackUsage() && provider->trackUsage()) {
-    m_usageTracker.record(provider->id(), result->id);
-  }
+  recordActivation(*provider, result->id);
   if (PanelManager::instance().isOpenPanel("launcher")) {
     PanelManager::instance().closePanel(false);
   }
@@ -2848,6 +3001,8 @@ void LauncherPanel::activateSelected() {
     if (!prefix.empty()) {
       prefix += ' ';
     }
+    // A fallback row ("Search Files for …") carries the query into the provider's view.
+    prefix += result.query.value_or(std::string());
     if (m_input != nullptr) {
       m_input->setValue(prefix);
     }
@@ -2987,6 +3142,25 @@ bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
     return true;
   }
 
+  // Raycast: Esc inside a command (a prefixed view opened from the root search) goes back to the
+  // root search; a view the launcher opened with, or the root itself, closes.
+  if (KeybindMatcher::matches(KeybindAction::Cancel, sym, modifiers) && popToRoot()) {
+    return true;
+  }
+
+  // Ctrl+N / Ctrl+P move the selection, as in Raycast (Emacs-style, beside the arrow keys).
+  if ((modifiers & (KeyMod::Ctrl | KeyMod::Alt | KeyMod::Shift)) == KeyMod::Ctrl
+      && (sym == XKB_KEY_n || sym == XKB_KEY_N || sym == XKB_KEY_p || sym == XKB_KEY_P)) {
+    const bool down = sym == XKB_KEY_n || sym == XKB_KEY_N;
+    moveSelection(down ? (gridNav ? columns : 1) : (gridNav ? -columns : -1));
+    return true;
+  }
+
+  // Tab autocompletes the selected result: a provider's prefix, a quicklink's keyword.
+  if (sym == XKB_KEY_Tab && modifiers == 0 && !m_form.has_value() && completeSelected()) {
+    return true;
+  }
+
   // Validate+Shift opens the actions menu (Shift layered on the configured Validate chord; Raycast's
   // Cmd+K is the field's kill-line). Menu navigation uses the Up/Down/Validate/Cancel keybinds.
   if ((modifiers & KeyMod::Shift) != 0
@@ -3113,7 +3287,11 @@ void LauncherPanel::syncFooter() {
         selected.id == kFormSubmitId ? m_form->submitLabel : i18n::tr("launcher.forms.next-field")
     );
   } else {
-    m_footerKind->setText(selected.kind.empty() ? sectionTitleFor(selected.providerId) : selected.kind);
+    m_footerKind->setText(
+        selected.kind.empty() && selected.providerId != kProviderOverviewProviderId
+            ? sectionTitleFor(selected.providerId)
+            : selected.kind
+    );
     m_footerPrimary->setText(primaryActionLabelFor(selected));
   }
   const bool actions =
@@ -3175,16 +3353,38 @@ void LauncherPanel::assignSections() {
   }
 
   if (StringUtils::isBlank(m_query)) {
-    // Nothing typed: pinned apps lead as Favourites, everything else follows as Applications.
-    const auto firstUnpinned = std::ranges::find_if(m_results, [](const LauncherResult& r) { return !r.pinned; });
-    if (firstUnpinned == m_results.begin()) {
-      m_results.front().section = sectionTitleFor(m_results.front().providerId);
-      return;
+    // Nothing typed, as in Raycast: pinned apps lead as Favourites, recently run results follow as
+    // Suggestions, then everything else as Applications. A suggestion that is already a favourite
+    // is not repeated.
+    std::vector<LauncherResult> ordered;
+    ordered.reserve(m_results.size());
+    for (LauncherResult& result : m_results) {
+      if (result.pinned && !result.suggested) {
+        ordered.push_back(std::move(result));
+      }
     }
-    m_results.front().section = i18n::tr("launcher.sections.favourites");
-    if (firstUnpinned != m_results.end()) {
-      firstUnpinned->section = sectionTitleFor(firstUnpinned->providerId);
+    const std::size_t suggestionStart = ordered.size();
+    for (LauncherResult& result : m_results) {
+      if (result.suggested && !result.pinned) {
+        ordered.push_back(std::move(result));
+      }
     }
+    const std::size_t restStart = ordered.size();
+    for (LauncherResult& result : m_results) {
+      if (!result.pinned && !result.suggested) {
+        ordered.push_back(std::move(result));
+      }
+    }
+    if (suggestionStart > 0) {
+      ordered.front().section = i18n::tr("launcher.sections.favourites");
+    }
+    if (suggestionStart < restStart) {
+      ordered[suggestionStart].section = i18n::tr("launcher.sections.suggestions");
+    }
+    if (restStart < ordered.size()) {
+      ordered[restStart].section = sectionTitleFor(ordered[restStart].providerId);
+    }
+    m_results = std::move(ordered);
     return;
   }
 

@@ -347,7 +347,9 @@ void VirtualGridView::doLayout(Renderer& renderer) {
       if (targetTop < visibleTop) {
         m_scroll->requestScrollToOffset(targetTop);
       } else if (rowBottom > visibleBottom) {
-        m_scroll->requestScrollToOffset(rowBottom - viewportH);
+        // Never scroll the row's own top (and its section header) out of view: the viewport can
+        // still be the previous, shorter list's height when a panel resizes around its content.
+        m_scroll->requestScrollToOffset(std::min(targetTop, rowBottom - viewportH));
       }
     }
   }
