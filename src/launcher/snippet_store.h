@@ -4,7 +4,7 @@
 #include <string_view>
 #include <vector>
 
-// Snippets saved from the launcher (e.g. "Save as Snippet" on a clipboard entry). They live in
+// Snippets saved from the launcher (Create Snippet, or "Save as Snippet" on a clipboard entry). They live in
 // the state directory beside the usage counts; snippets written in config.toml are read separately.
 class SnippetStore {
 public:
@@ -21,7 +21,8 @@ public:
 
   [[nodiscard]] const std::vector<Snippet>& snippets();
   // Saves `text` under `name` and returns the new snippet's id.
-  std::string add(std::string name, std::string text);
+  std::string add(std::string name, std::string text, std::string keyword = {});
+  bool update(std::string_view id, std::string name, std::string text, std::string keyword);
   bool remove(std::string_view id);
 
 private:

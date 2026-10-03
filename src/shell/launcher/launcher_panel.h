@@ -120,6 +120,11 @@ private:
   void applyAliases(std::string_view queryText);
   void beginAliasEdit(const LauncherResult& result);
   void endAliasEdit();
+  void beginForm(LauncherForm form, LauncherProvider* provider);
+  void endForm(bool saved);
+  void showFormField(std::size_t index);
+  void submitForm();
+  void buildFormRows(const std::string& text);
   [[nodiscard]] std::unique_ptr<Node> buildPreviewPane(float scale);
   void syncPreview();
   void rebuildCategoryFilter(const std::vector<LauncherCategory>& categories);
@@ -140,6 +145,12 @@ private:
   AliasStore m_aliases;
   // Set while the field is taking an alias for this result ("Set Alias…").
   std::optional<LauncherResult> m_aliasTarget;
+  // Create/Edit forms: the search field edits m_form->fields[m_formField].
+  std::optional<LauncherForm> m_form;
+  LauncherProvider* m_formProvider = nullptr;
+  std::size_t m_formField = 0;
+  std::string m_formError;
+  std::string m_formReturnQuery;
   // The prefixed provider currently shown, when it asks for a preview pane.
   LauncherProvider* m_previewProvider = nullptr;
   std::vector<LauncherResult> m_results;

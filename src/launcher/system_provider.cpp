@@ -5,6 +5,7 @@
 #include "core/process/process.h"
 #include "i18n/i18n.h"
 #include "ipc/ipc_service.h"
+#include "launcher/launcher_util.h"
 #include "notification/notifications.h"
 #include "system/disk_mounts.h"
 #include "util/fuzzy_match.h"
@@ -41,18 +42,6 @@ namespace {
       {.id = "empty-trash", .glyph = "trash", .ipc = {}},
       {.id = "eject-all", .glyph = "player-eject", .ipc = {}},
   }};
-
-  // Global search only shows a command when every typed word starts a word of its title or
-  // keywords, so a short query like "sig" doesn't pull in "Toggle Night Light".
-  [[nodiscard]] bool wordsMatch(std::string_view needle, std::string_view haystack) {
-    const auto words = StringUtils::splitWhitespace(haystack);
-    for (const auto& part : StringUtils::splitWhitespace(needle)) {
-      if (std::ranges::none_of(words, [&part](const std::string& word) { return word.starts_with(part); })) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   [[nodiscard]] std::string titleFor(const SystemProvider::Command& command) {
     return i18n::tr(std::format("launcher.system.{}.title", command.id));
@@ -135,7 +124,7 @@ std::vector<LauncherResult> SystemProvider::search(std::string_view text, bool l
     if (!needle.empty()) {
       const std::string lowerTitle = StringUtils::toLower(title);
       const std::string lowerKeywords = StringUtils::toLower(keywordsFor(command));
-      if (!listAll && !wordsMatch(needle, lowerTitle + " " + lowerKeywords)) {
+      if (!listAll && !launcher_util::wordsMatch(needle, lowerTitle + " " + lowerKeywords)) {
         continue;
       }
       score = FuzzyMatch::score(needle, lowerTitle);

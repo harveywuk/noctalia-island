@@ -2,6 +2,7 @@
 
 #include "util/file_utils.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -18,7 +19,7 @@ const std::vector<SnippetStore::Snippet>& SnippetStore::snippets() {
   return m_snippets;
 }
 
-std::string SnippetStore::add(std::string name, std::string text) {
+std::string SnippetStore::add(std::string name, std::string text, std::string keyword) {
   ensureLoaded();
   std::size_t next = 1;
   for (const auto& snippet : m_snippets) {
@@ -27,10 +28,25 @@ std::string SnippetStore::add(std::string name, std::string text) {
     } catch (...) {
     }
   }
-  Snippet snippet{.id = std::to_string(next), .name = std::move(name), .keyword = {}, .text = std::move(text)};
+  Snippet snippet{
+      .id = std::to_string(next), .name = std::move(name), .keyword = std::move(keyword), .text = std::move(text)
+  };
   m_snippets.push_back(snippet);
   save();
   return snippet.id;
+}
+
+bool SnippetStore::update(std::string_view id, std::string name, std::string text, std::string keyword) {
+  ensureLoaded();
+  const auto it = std::ranges::find(m_snippets, id, &Snippet::id);
+  if (it == m_snippets.end()) {
+    return false;
+  }
+  it->name = std::move(name);
+  it->text = std::move(text);
+  it->keyword = std::move(keyword);
+  save();
+  return true;
 }
 
 bool SnippetStore::remove(std::string_view id) {

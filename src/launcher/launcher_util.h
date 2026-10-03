@@ -21,6 +21,10 @@ namespace launcher_util {
   // Reveals a file in the file manager (org.freedesktop.FileManager1), or opens its folder.
   bool showInFolder(const std::filesystem::path& path);
 
+  // True when every word of `needle` starts a word of `haystack` (both already lower-cased). Commands
+  // in global search use it so a short query like "sig" doesn't pull in "Toggle Night Light".
+  [[nodiscard]] bool wordsMatch(std::string_view needle, std::string_view haystack);
+
   // "512 B", "12 KB", "3.4 MB" (decimal units, like Finder and Raycast).
   [[nodiscard]] std::string formatByteSize(std::uintmax_t bytes);
 

@@ -3,6 +3,7 @@
 #include "config/config_service.h"
 #include "i18n/i18n.h"
 #include "launcher/launcher_util.h"
+#include "launcher/snippet_provider.h"
 #include "launcher/snippet_store.h"
 #include "notification/notifications.h"
 #include "time/time_format.h"
@@ -176,6 +177,11 @@ LauncherActionOutcome ClipboardProvider::runAction(const LauncherResult& result,
     std::string name = firstLine(text);
     if (name.size() > kSnippetNameChars) {
       name = StringUtils::truncateUtf8CodePoints(name, kSnippetNameChars) + "…";
+    }
+    if (m_requestForm) {
+      // Like Raycast, open the snippet form filled in so it can be named and given a keyword.
+      m_requestForm(SnippetProvider::makeForm(m_config, m_snippets, {}, name, {}, text));
+      return LauncherActionOutcome::KeepOpen;
     }
     m_snippets->add(name, text);
     notify::info("Noctalia", i18n::tr("launcher.snippets.saved"), name);

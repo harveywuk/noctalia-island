@@ -47,6 +47,7 @@
 #include "launcher/panel_provider.h"
 #include "launcher/plugin_launcher_provider.h"
 #include "launcher/quicklink_provider.h"
+#include "launcher/quicklink_store.h"
 #include "launcher/script_provider.h"
 #include "launcher/session_provider.h"
 #include "launcher/snippet_provider.h"
@@ -651,10 +652,13 @@ void Application::initPanelManagerAndPanels() {
     launcherPanel->addProvider(std::make_unique<EmojiProvider>(&m_clipboardService));
     launcherPanel->addProvider(std::make_unique<FileProvider>(&m_clipboardService));
     m_launcherSnippets = std::make_shared<SnippetStore>();
+    m_launcherQuicklinks = std::make_shared<QuicklinkStore>();
     launcherPanel->addProvider(
         std::make_unique<ClipboardProvider>(&m_clipboardService, &m_configService, m_launcherSnippets.get())
     );
-    launcherPanel->addProvider(std::make_unique<QuicklinkProvider>(&m_configService, &m_clipboardService));
+    launcherPanel->addProvider(
+        std::make_unique<QuicklinkProvider>(&m_configService, &m_clipboardService, m_launcherQuicklinks.get())
+    );
     launcherPanel->addProvider(
         std::make_unique<SnippetProvider>(&m_configService, &m_clipboardService, m_launcherSnippets.get())
     );
