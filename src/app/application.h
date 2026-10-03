@@ -413,7 +413,6 @@ private:
   Timer m_polkitIdleCloseTimer;
   Timer m_greeterSyncTimeoutTimer;
   Timer m_greeterAutoSyncTimer;
-  Timer m_clipboardAutoPasteTimer;
   Timer m_launcherAutoPasteTimer;
   Timer m_pluginAutoUpdateTimer;
   Timer m_graphicsRecoveryTimer;

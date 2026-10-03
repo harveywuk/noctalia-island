@@ -31,13 +31,21 @@ public:
   LauncherActionOutcome runAction(const LauncherResult& result, std::string_view actionId) override;
   [[nodiscard]] std::optional<LauncherPreview> preview(const LauncherResult& result) const override;
 
+  // Whether the last entry pasted from the list was an image, which pastes with a different chord.
+  [[nodiscard]] bool lastCopyWasImage() const noexcept { return m_lastCopyWasImage; }
+  // The configured image action with the exported image's path filled in; exposed for tests.
+  [[nodiscard]] static std::string imageActionCommand(std::string command, std::string_view imagePath);
+
 private:
   [[nodiscard]] std::optional<std::size_t> indexFor(std::string_view storageId) const;
   [[nodiscard]] std::string fullText(std::size_t index) const;
   bool copy(std::string_view storageId, bool promote);
+  [[nodiscard]] bool pastes() const;
+  [[nodiscard]] std::string imageAction() const;
 
   ClipboardService* m_clipboard = nullptr;
   ConfigService* m_config = nullptr;
   SnippetStore* m_snippets = nullptr;
   std::function<void(LauncherForm)> m_requestForm;
+  bool m_lastCopyWasImage = false;
 };

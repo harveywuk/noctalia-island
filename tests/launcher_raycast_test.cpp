@@ -3,6 +3,7 @@
 // and the alias, quicklink and snippet stores.
 
 #include "launcher/alias_store.h"
+#include "launcher/clipboard_provider.h"
 #include "launcher/launcher_util.h"
 #include "launcher/quicklink_provider.h"
 #include "launcher/quicklink_store.h"
@@ -35,6 +36,11 @@ namespace {
     TEST_CHECK(launcher_util::formatByteSize(34'000'000) == "34 MB");
     TEST_CHECK(launcher_util::wordsMatch("dark mo", "toggle dark mode appearance"));
     TEST_CHECK(!launcher_util::wordsMatch("sig", "toggle night light"));
+
+    // The clipboard image action: {path} gets the export, otherwise the image is piped in.
+    TEST_CHECK(ClipboardProvider::imageActionCommand("gimp {path}", "/tmp/a b.png") == "gimp '/tmp/a b.png'");
+    TEST_CHECK(ClipboardProvider::imageActionCommand("satty -f {stdin}", "/tmp/x.png") == "cat -- '/tmp/x.png' | satty -f -");
+    TEST_CHECK(ClipboardProvider::imageActionCommand("gradia", "/tmp/x.png") == "cat -- '/tmp/x.png' | gradia");
   }
 
   void testQuicklinkForms() {

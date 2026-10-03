@@ -1166,7 +1166,7 @@ void LauncherPanel::finishActivation(LauncherProvider& provider, const std::stri
   }
   PanelManager::instance().closePanel(false);
   if (copied && provider.supportsAutoPaste() && m_onCopiedActivation) {
-    m_onCopiedActivation();
+    m_onCopiedActivation(provider);
   }
 }
 
@@ -1645,6 +1645,12 @@ void LauncherPanel::onOpen(std::string_view context) {
     m_grid->scrollView().setScrollOffset(0.0F);
   }
   onInputChanged(initialValue);
+}
+
+bool LauncherPanel::isContextActive(std::string_view context) const {
+  return !m_form.has_value()
+      && !StringUtils::isBlank(context)
+      && StringUtils::trim(m_query) == StringUtils::trim(context);
 }
 
 void LauncherPanel::onClose() {

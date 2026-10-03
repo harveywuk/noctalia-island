@@ -772,6 +772,7 @@
   "launcher": {
     "actions": {
       "change-alias": "Change Alias…",
+      "clear-history": "Clear History",
       "close-window": "Close Window",
       "copy-answer": "Copy Answer",
       "copy-emoji": "Copy Emoji",
@@ -786,6 +787,7 @@
       "delete-entry": "Delete Entry",
       "delete-quicklink": "Delete Quicklink",
       "delete-snippet": "Delete Snippet",
+      "edit-image": "Edit Image",
       "edit-quicklink": "Edit Quicklink…",
       "edit-script": "Edit Script",
       "edit-snippet": "Edit Snippet…",

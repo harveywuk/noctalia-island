@@ -1,6 +1,7 @@
 #include "launcher/clipboard_provider.h"
 
 #include "config/config_service.h"
+#include "core/process/process.h"
 #include "i18n/i18n.h"
 #include "launcher/launcher_util.h"
 #include "launcher/snippet_provider.h"
@@ -117,14 +118,42 @@ bool ClipboardProvider::copy(std::string_view storageId, bool promote) {
   if (promote && !entry.pinned) {
     (void)m_clipboard->promoteEntry(*index);
   }
+  m_lastCopyWasImage = entry.isImage();
   return m_clipboard->copyEntry(entry);
+}
+
+// Clipboard history follows the clipboard's own paste setting (shell.clipboard_auto_paste), as the
+// Clipboard panel it replaces did, rather than the launcher's.
+bool ClipboardProvider::pastes() const {
+  return m_config == nullptr || m_config->config().shell.clipboardAutoPaste != ClipboardAutoPasteMode::Off;
+}
+
+std::string ClipboardProvider::imageAction() const {
+  return m_config != nullptr ? StringUtils::trim(m_config->config().shell.clipboardImageActionCommand) : std::string();
+}
+
+std::string ClipboardProvider::imageActionCommand(std::string command, std::string_view imagePath) {
+  // {path} receives a private export of the image; {stdin} (or no {path}) pipes the bytes in instead.
+  const bool hasPath = command.contains("{path}");
+  const bool hasStdin = command.contains("{stdin}");
+  const std::string quotedPath = StringUtils::shellQuote(imagePath);
+  const auto replaceAll = [&command](std::string_view from, std::string_view to) {
+    for (std::size_t pos = command.find(from); pos != std::string::npos; pos = command.find(from, pos + to.size())) {
+      command.replace(pos, from.size(), to);
+    }
+  };
+  replaceAll("{path}", quotedPath);
+  replaceAll("{stdin}", "-");
+  if (!hasPath || hasStdin) {
+    return "cat -- " + quotedPath + " | " + command;
+  }
+  return command;
 }
 
 bool ClipboardProvider::activate(const LauncherResult& result) { return copy(result.id, true); }
 
 std::string ClipboardProvider::primaryActionLabel(const LauncherResult& /*result*/) const {
-  const bool paste = m_config == nullptr || m_config->config().shell.launcher.autoPaste != ClipboardAutoPasteMode::Off;
-  return i18n::tr(paste ? "launcher.actions.paste" : "launcher.actions.copy-to-clipboard");
+  return i18n::tr(pastes() ? "launcher.actions.paste" : "launcher.actions.copy-to-clipboard");
 }
 
 std::vector<LauncherAction> ClipboardProvider::actions(const LauncherResult& result) const {
@@ -134,12 +163,14 @@ std::vector<LauncherAction> ClipboardProvider::actions(const LauncherResult& res
     return actions;
   }
   const ClipboardEntry& entry = m_clipboard->history()[*index];
-  const bool paste = m_config == nullptr || m_config->config().shell.launcher.autoPaste != ClipboardAutoPasteMode::Off;
-  if (paste) {
+  if (pastes()) {
     actions.push_back({.id = "copy", .label = i18n::tr("launcher.actions.copy-to-clipboard")});
   }
   if (looksLikeLink(entry.textPreview)) {
     actions.push_back({.id = "open-link", .label = i18n::tr("launcher.actions.open-in-browser")});
+  }
+  if (entry.isImage() && !imageAction().empty()) {
+    actions.push_back({.id = "image-action", .label = i18n::tr("launcher.actions.edit-image")});
   }
   actions.push_back(
       {.id = entry.pinned ? "unpin" : "pin",
@@ -149,6 +180,7 @@ std::vector<LauncherAction> ClipboardProvider::actions(const LauncherResult& res
     actions.push_back({.id = "save-snippet", .label = i18n::tr("launcher.actions.save-as-snippet")});
   }
   actions.push_back({.id = "delete", .label = i18n::tr("launcher.actions.delete-entry")});
+  actions.push_back({.id = "clear", .label = i18n::tr("launcher.actions.clear-history")});
   return actions;
 }
 
@@ -189,6 +221,22 @@ LauncherActionOutcome ClipboardProvider::runAction(const LauncherResult& result,
   }
   if (actionId == "delete") {
     return m_clipboard->removeHistoryEntry(*index) ? LauncherActionOutcome::KeepOpen : LauncherActionOutcome::Failed;
+  }
+  if (actionId == "clear") {
+    // Pinned entries stay, like the Clipboard panel's "Keep pinned".
+    m_clipboard->clearUnpinnedHistory();
+    return LauncherActionOutcome::KeepOpen;
+  }
+  if (actionId == "image-action") {
+    const std::string command = imageAction();
+    if (command.empty() || !m_clipboard->history()[*index].isImage()) {
+      return LauncherActionOutcome::Failed;
+    }
+    const auto exported = m_clipboard->exportEntryForExternalTool(*index);
+    if (!exported.has_value() || !process::runAsync(imageActionCommand(command, *exported))) {
+      return LauncherActionOutcome::Failed;
+    }
+    return LauncherActionOutcome::Done;
   }
   return LauncherActionOutcome::Failed;
 }

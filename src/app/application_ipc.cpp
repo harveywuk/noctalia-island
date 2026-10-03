@@ -64,7 +64,6 @@
 #include "scripting/plugin_runtime_context.h"
 #include "shell/bar/widgets/workspace_preferences.h"
 #include "shell/bar/widgets/workspaces_widget_definition.h"
-#include "shell/clipboard/clipboard_panel.h"
 #include "shell/clipboard/clipboard_paste.h"
 #include "shell/control_center/control_center_panel.h"
 #include "shell/greeter/greeter_appearance_sync.h"

@@ -1673,7 +1673,8 @@ struct ShellConfig {
   // under [shell.panel] (launcher_placement/position/open_near_click_launcher),
   // parallel to every other surface.
   struct LauncherConfig {
-    bool categories = true;
+    // Off by default: Raycast shows only the search field and the list. F6 or the setting brings them back.
+    bool categories = false;
     bool showIcons = true;
     bool showAppOriginIndicator = true;
     bool compact = false;

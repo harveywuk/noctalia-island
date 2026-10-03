@@ -538,10 +538,33 @@ void PanelManager::unregisterPanel(const std::string& id) {
   m_panels.erase(it);
 }
 
-void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest request) {
+void PanelManager::registerPanelRedirect(
+    const std::string& fromId, std::string toId, std::function<std::string()> context
+) {
+  m_redirects[fromId] = PanelRedirect{.target = std::move(toId), .context = std::move(context)};
+}
+
+std::string PanelManager::resolveRedirect(const std::string& panelId, PanelOpenRequest& request) {
+  const auto it = m_redirects.find(panelId);
+  if (it == m_redirects.end() || m_panels.contains(panelId)) {
+    return panelId;
+  }
+  if (request.context.empty() && it->second.context) {
+    m_redirectContext = it->second.context();
+    request.context = m_redirectContext;
+  }
+  return it->second.target;
+}
+
+bool PanelManager::isKnownPanel(const std::string& panelId) const {
+  return m_panels.contains(panelId) || m_persistentHost.hasPanel(panelId) || m_redirects.contains(panelId);
+}
+
+void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest request) {
   if (m_inTransition) {
     return;
   }
+  const std::string panelId = resolveRedirect(requestedId, request);
 
   if (request.output == nullptr && m_platform != nullptr) {
     request.output = m_platform->focusedInteractiveOutput(std::chrono::milliseconds(1200));
@@ -1600,7 +1623,8 @@ void PanelManager::destroyPanel() {
   }
 }
 
-void PanelManager::togglePanel(const std::string& panelId, PanelOpenRequest request) {
+void PanelManager::togglePanel(const std::string& requestedId, PanelOpenRequest request) {
+  const std::string panelId = resolveRedirect(requestedId, request);
   if (m_persistentHost.hasPanel(panelId)) {
     if (m_persistentHost.isOpen(panelId)) {
       m_persistentHost.close(panelId);
@@ -1633,6 +1657,10 @@ void PanelManager::togglePanel(const std::string& panelId, PanelOpenRequest requ
 }
 
 void PanelManager::togglePanel(const std::string& panelId) {
+  if (m_redirects.contains(panelId) && !m_panels.contains(panelId)) {
+    togglePanel(panelId, PanelOpenRequest{});
+    return;
+  }
   if (m_persistentHost.hasPanel(panelId)) {
     if (m_persistentHost.isOpen(panelId)) {
       m_persistentHost.close(panelId);
@@ -2964,7 +2992,7 @@ void PanelManager::registerIpc(IpcService& ipc) {
         if (auto error = parseOpenArgs(args, "panel-toggle", panelId, context)) {
           return *error;
         }
-        if (!m_panels.contains(panelId) && !m_persistentHost.hasPanel(panelId)) {
+        if (!isKnownPanel(panelId)) {
           return unknownPanelError(panelId);
         }
         // Output left unset: openPanel resolves it (focus source, else compositor probe).
@@ -2984,7 +3012,7 @@ void PanelManager::registerIpc(IpcService& ipc) {
         if (auto error = parseOpenArgs(args, "panel-open", panelId, context)) {
           return *error;
         }
-        if (!m_panels.contains(panelId) && !m_persistentHost.hasPanel(panelId)) {
+        if (!isKnownPanel(panelId)) {
           return unknownPanelError(panelId);
         }
 
@@ -3007,7 +3035,7 @@ void PanelManager::registerIpc(IpcService& ipc) {
     if (!panelId.empty() && StringUtils::splitWhitespace(panelId).size() != 1) {
       return "error: panel-close accepts at most one panel id\n";
     }
-    if (!panelId.empty() && !m_panels.contains(panelId) && !m_persistentHost.hasPanel(panelId)) {
+    if (!panelId.empty() && !isKnownPanel(panelId)) {
       return unknownPanelError(panelId);
     }
 
@@ -3015,7 +3043,9 @@ void PanelManager::registerIpc(IpcService& ipc) {
       m_persistentHost.close(panelId);
       return "ok\n";
     }
-    if (panelId.empty() || isOpenPanel(panelId)) {
+    const auto redirect = m_redirects.find(panelId);
+    const bool redirectOpen = redirect != m_redirects.end() && isOpenPanel(redirect->second.target);
+    if (panelId.empty() || isOpenPanel(panelId) || redirectOpen) {
       closePanel();
     }
     return "ok\n";

@@ -103,6 +103,10 @@ public:
   // Drops a previously registered panel, closing it first if it is open. Used to
   // retire plugin-backed panels on a plugin enable/disable/reload.
   void unregisterPanel(const std::string& id);
+  // Makes `fromId` open `toId` instead, with the context `context()` returns when a request carries
+  // none. The retired Clipboard panel opens the launcher's clipboard history this way, so its bar
+  // widget, shortcut and `panel-toggle clipboard` keep working.
+  void registerPanelRedirect(const std::string& fromId, std::string toId, std::function<std::string()> context);
   // Every currently registered panel id (regular and persistent), unsorted.
   [[nodiscard]] std::vector<std::string> availablePanelIds() const;
 
@@ -268,7 +272,17 @@ private:
   Box* m_panelContactShadowNode = nullptr;
   InputDispatcher m_inputDispatcher;
 
+  // The panel id a request for `panelId` really opens, filling in a redirect's context.
+  [[nodiscard]] std::string resolveRedirect(const std::string& panelId, PanelOpenRequest& request);
+  [[nodiscard]] bool isKnownPanel(const std::string& panelId) const;
   std::unordered_map<std::string, std::unique_ptr<Panel>> m_panels;
+  struct PanelRedirect {
+    std::string target;
+    std::function<std::string()> context;
+  };
+  std::unordered_map<std::string, PanelRedirect> m_redirects;
+  // Backs the string_view context of a redirected request.
+  std::string m_redirectContext;
   Panel* m_activePanel = nullptr;
   std::string m_activePanelId;
   std::string m_pendingOpenContext;
