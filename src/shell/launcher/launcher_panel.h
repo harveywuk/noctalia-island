@@ -48,6 +48,9 @@ public:
 
   void create() override;
   void onOpen(std::string_view context) override;
+  // True while the field still holds `context`, so toggling the same prefix (the Clipboard
+  // shortcut's "/clip") closes the launcher instead of reopening it.
+  [[nodiscard]] bool isContextActive(std::string_view context) const override;
   void onClose() override;
   void onIconThemeChanged() override;
 
@@ -60,7 +63,10 @@ public:
 
   // Invoked after a terminal close when the activation copied text and the provider
   // supports auto-paste. The host schedules virtual-keyboard paste (clipboard path).
-  void setCopiedActivationCallback(std::function<void()> callback) { m_onCopiedActivation = std::move(callback); }
+  // Called after a copy-style activation, with the provider that copied, so auto-paste can follow it.
+  void setCopiedActivationCallback(std::function<void(const LauncherProvider&)> callback) {
+    m_onCopiedActivation = std::move(callback);
+  }
   // Copies text for launcher-level actions ("Copy Hotkey Command").
   void setCopyTextCallback(std::function<void(std::string)> callback) { m_copyText = std::move(callback); }
 
@@ -214,6 +220,6 @@ private:
   AsyncTextureCache* m_asyncTextures = nullptr;
   std::unique_ptr<ContextMenuPopup> m_actionsMenu;
   Signal<>::ScopedConnection m_appIconColorizeConn;
-  std::function<void()> m_onCopiedActivation;
+  std::function<void(const LauncherProvider&)> m_onCopiedActivation;
   std::function<void(std::string)> m_copyText;
 };

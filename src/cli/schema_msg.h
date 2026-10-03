@@ -710,12 +710,8 @@ namespace noctalia::cli {
         {},
         false
     };
-    inline constexpr Command recordRegion{
-        "record-region", "Select a region and record video with desktop audio", {}, {}, {}, {}, {}, false
-    };
-    inline constexpr Command recordMonitor{
-        "record-monitor", "Pick a monitor and record video with desktop audio", {}, {}, {}, {}, {}, false
-    };
+    inline constexpr Command recordRegion{"record-region", "Select a region and record video with desktop audio", {}, {}, {}, {}, {}, false};
+    inline constexpr Command recordMonitor{"record-monitor", "Pick a monitor and record video with desktop audio", {}, {}, {}, {}, {}, false};
     inline constexpr Command recordStop{"record-stop", "Stop recording and save the video", {}, {}, {}, {}, {}, false};
     inline constexpr Command recordStatus{"record-status", "Show recording status", {}, {}, {}, {}, {}, false};
     inline constexpr Command screenshotRegion{

@@ -49,8 +49,8 @@
 #include "launcher/wallpaper_provider.h"
 #include "launcher/window_provider.h"
 #include "notification/notifications.h"
-#include "pipewire/pipewire_poll_source.h"
 #include "pipewire/camera_device_scanner.h"
+#include "pipewire/pipewire_poll_source.h"
 #include "pipewire/pipewire_service.h"
 #include "pipewire/pipewire_spectrum.h"
 #include "pipewire/pipewire_spectrum_poll_source.h"
@@ -66,7 +66,6 @@
 #include "scripting/plugin_registry.h"
 #include "scripting/plugin_runtime_context.h"
 #include "scripting/script_runtime.h"
-#include "shell/clipboard/clipboard_panel.h"
 #include "shell/clipboard/clipboard_paste.h"
 #include "shell/control_center/control_center_panel.h"
 #include "shell/greeter/greeter_appearance_sync.h"
@@ -102,17 +101,16 @@
 #include <cmath>
 #include <csignal>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <limits>
 #include <malloc.h>
-#include <cstdlib>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
+#include <unistd.h>
 #include <unordered_map>
 #include <utility>
-
-#include <unistd.h>
 
 namespace {
   constexpr Logger kLog("app");
@@ -505,9 +503,6 @@ void Application::syncClipboardService() {
   );
 
   if (!enabled) {
-    if (m_panelManager.isOpenPanel("clipboard")) {
-      m_panelManager.close();
-    }
     kLog.info("clipboard history disabled by config (live copy/paste still active)");
   }
 
@@ -903,12 +898,7 @@ void Application::initWaylandCallbacks() {
     m_pluginServiceHost.onOutputChange();
     reconcileOutputSurfaces();
   });
-  m_clipboardService.setChangeCallback([this]() {
-    m_scriptApi.setClipboardText(m_clipboardService.clipboardText());
-    if (m_panelManager.isOpenPanel("clipboard")) {
-      m_panelManager.refresh();
-    }
-  });
+  m_clipboardService.setChangeCallback([this]() { m_scriptApi.setClipboardText(m_clipboardService.clipboardText()); });
   m_scriptApi.setClipboardText(m_clipboardService.clipboardText());
   m_compositorPlatform.setWorkspaceAlertService(&m_workspaceAlertService);
   m_compositorPlatform.setWorkspaceChangeCallback([this]() {
@@ -1524,18 +1514,18 @@ void Application::initBrightnessAndPipewire() {
         std::chrono::seconds(2),
         [svc = m_pipewireService.get(),
          procRoot = std::string(procRootOverride != nullptr ? procRootOverride : "/proc")]() {
-      std::vector<PrivacyCapture> captures;
-      for (auto& user : privacy::scanCameraDeviceUsers(procRoot, ::getpid())) {
-        captures.push_back(
-            PrivacyCapture{
-                .kind = PrivacyCaptureKind::Camera,
-                .appName = std::move(user.appName),
-                .binary = std::move(user.binary),
-            }
-        );
-      }
-      svc->setDeviceCameraCaptures(std::move(captures));
-    }
+          std::vector<PrivacyCapture> captures;
+          for (auto& user : privacy::scanCameraDeviceUsers(procRoot, ::getpid())) {
+            captures.push_back(
+                PrivacyCapture{
+                    .kind = PrivacyCaptureKind::Camera,
+                    .appName = std::move(user.appName),
+                    .binary = std::move(user.binary),
+                }
+            );
+          }
+          svc->setDeviceCameraCaptures(std::move(captures));
+        }
     );
     m_soundPlayer = std::make_shared<SoundPlayer>(m_pipewireService->loop());
 
@@ -1613,9 +1603,7 @@ void Application::initEarlySessionBusAndTray() {
   });
   m_trayService->setMenuToggleCallback([this](
                                            const std::string& itemId, float contentScale, const std::string& barPosition
-                                       ) {
-    m_trayMenu.toggleForItem(itemId, contentScale, barPosition);
-  });
+                                       ) { m_trayMenu.toggleForItem(itemId, contentScale, barPosition); });
   startTrayService();
 }
 
