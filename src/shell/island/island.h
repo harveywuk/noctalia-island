@@ -36,6 +36,7 @@ namespace island {
 namespace island {
   struct Countdown;
 }
+class CalendarService;
 class HttpClient;
 class NotificationManager;
 enum class NotificationEvent;
@@ -57,6 +58,8 @@ public:
   void refresh();
   void onWorkspaceChanged();
   bool showOsd(const OsdContent&);
+  // Calendar events about to start count down in the timers slot.
+  void setCalendar(CalendarService* calendar) { m_calendar = calendar; }
   bool onNotification(const Notification&, NotificationEvent);
   bool onPointerEvent(const PointerEvent&);
   bool focusKeyboard();
@@ -108,6 +111,9 @@ private:
   PipeWireSpectrum* m_spectrum = nullptr;
   mutable island::PrivacySummary m_privacySummary;
   std::unique_ptr<DownloadProgressService> m_downloads;
+  CalendarService* m_calendar = nullptr;
+  // Up-next events the user dismissed, keyed by countdown id.
+  std::unordered_set<std::string> m_dismissedEvents;
   std::unique_ptr<WidgetFactory> m_widgetFactory;
   noctalia::bar::WidgetActionDispatcher m_widgetActions;
   std::vector<std::unique_ptr<Instance>> m_instances;

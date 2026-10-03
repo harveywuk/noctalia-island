@@ -1,6 +1,10 @@
 #include "shell/island/island_timer.h"
 #include "tests/test_check.h"
+
+#include <chrono>
 #include <limits>
+#include <unordered_set>
+#include <vector>
 
 int main() {
   using nlohmann::json;
@@ -33,5 +37,33 @@ int main() {
   state["sessionPtr"]["session"] = 999999;
   TEST_CHECK(!island::pomodoroSnapshot(state, sessions));
   TEST_CHECK(!island::pomodoroSnapshot(json::array(), sessions));
+
+  using namespace std::chrono_literals;
+  const auto now = std::chrono::system_clock::time_point{} + 1000h;
+  const auto event = [&](std::string id, auto start, auto length, bool allDay = false) {
+    return CalendarEvent{
+        .id = std::move(id),
+        .title = "Standup",
+        .url = "https://meet.example/x",
+        .start = now + start,
+        .end = now + start + length,
+        .allDay = allDay
+    };
+  };
+  std::unordered_set<std::string> dismissed;
+  std::vector<CalendarEvent> events{
+      event("later", 20min, 30min), event("soon", 4min, 30min), event("holiday", -1h, 24h, true)
+  };
+  auto next = island::upNextSnapshot(events, now, 10, dismissed);
+  TEST_CHECK(next && next->event && next->active && next->running && next->title == "Standup");
+  TEST_CHECK(next->remaining == 240 && next->duration == 600 && next->time() == "4:00");
+  TEST_CHECK(next->url == "https://meet.example/x" && next->panel == "calendar");
+  TEST_CHECK(!island::upNextSnapshot(events, now, 0, dismissed));                        // 0 turns it off
+  TEST_CHECK(!island::upNextSnapshot(events, now, 3, dismissed));                        // nothing that close
+  TEST_CHECK(island::upNextSnapshot(events, now + 6min, 10, dismissed)->remaining == 0); // started
+  TEST_CHECK(!island::upNextSnapshot(events, now + 9min, 3, dismissed));                 // gone 5 minutes in
+  dismissed.insert(next->plugin);
+  TEST_CHECK(!island::upNextSnapshot(events, now, 10, dismissed));
+  TEST_CHECK(island::upNextSnapshot(events, now + 15min, 10, dismissed)->remaining == 300); // next one
   return 0;
 }
