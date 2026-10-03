@@ -190,6 +190,7 @@ undo_hook = "bash '{{ config_dir }}/mango/undo.sh'"
 [templates.qt]
 input_path = "./qt/qtct.conf"
 output_path = ["$XDG_CONFIG_HOME/qt5ct/colors/noctalia.conf", "$XDG_CONFIG_HOME/qt6ct/colors/noctalia.conf"]
+post_hook = "bash '{{ config_dir }}/qt/apply.sh'"
 undo_hook = "bash '{{ config_dir }}/qt/undo.sh'"
 
 [templates.scroll]
