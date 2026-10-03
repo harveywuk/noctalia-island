@@ -1138,7 +1138,8 @@ void Island::prepare(Instance& inst) {
         + m_notification->body
         + actionSignature
         + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed")
-        + formatNotificationTime(m_notification->receivedWallClock.value_or(WallClock::now()));
+        + formatNotificationTime(m_notification->receivedWallClock.value_or(WallClock::now()))
+        + (inst.hovered ? "hovered" : "");
     break;
   case island::View::Osd:
     signature += std::format(
@@ -1934,12 +1935,15 @@ void Island::prepare(Instance& inst) {
     for (std::size_t index = 0; index + 1 < n.actions.size() && visibleActions.size() < 3; index += 2)
       if (n.actions[index] != "default")
         visibleActions.emplace_back(n.actions[index], n.actions[index + 1]);
-    const bool hasActions = !visibleActions.empty();
+    // macOS keeps actions out of sight: hovering shows the one action, or "Options" for several,
+    // in place of the time stamp, and only an opened notification (or keyboard mode) lists them.
+    const bool actionsOpen = expanded || inst.keyboardMode;
+    const bool hasActions = actionsOpen && !visibleActions.empty();
     const float maxHeight = std::min(
         expanded ? 640.0F : 360.0F,
         static_cast<float>(inst.surface->height()) / s - 16.0F - (privacyList.empty() ? 0.0F : 32.0F)
     );
-    const float footerHeight = hasActions ? 60.0F : 16.0F;
+    const float footerHeight = hasActions ? 46.0F : 16.0F;
     const float textBottom = maxHeight - footerHeight;
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
     const float textWidth = w - (expanded ? 64.0F : 44.0F);
@@ -2022,17 +2026,44 @@ void Island::prepare(Instance& inst) {
       );
       expandControl->inputArea()->setTabFocusKey("notification-expand");
     }
+    // A grey capsule sized to its label, as Apple's notification buttons are.
+    const auto pillWidth = [&](const std::string& text) {
+      const auto metrics = renderer.measureText(text, Style::fontSizeCaption * s);
+      return std::ceil(metrics.width / s) + 24.0F;
+    };
+    if (!actionsOpen && !visibleActions.empty() && inst.hovered) {
+      const bool single = visibleActions.size() == 1;
+      const std::string text = single ? visibleActions.front().second : i18n::tr("notifications.actions.options");
+      const float width = std::min(pillWidth(text), w / 2.0F);
+      const float right = timeLabel->x() / s + timeWidth;
+      timeLabel->setVisible(false);
+      auto* pillControl = control(
+          right - width, 9, width, 24, text, "", text, 0, true,
+          [this, single, toggleExpanded, id = n.id, key = visibleActions.front().first] {
+            if (single)
+              (void)m_notifications->invokeAction(id, key);
+            else
+              toggleExpanded();
+          }
+      );
+      setIslandVariant(pillControl, ButtonVariant::Default);
+      pillControl->setRadius(12.0F * s);
+    }
     h = contentBottom + footerHeight;
     const float actionsY = contentBottom + 8.0F;
-    const float actionWidth = hasActions ? (w - 44) / static_cast<float>(visibleActions.size()) : 0;
-    for (std::size_t index = 0; index < visibleActions.size(); ++index) {
+    float actionX = 22.0F;
+    for (std::size_t index = 0; hasActions && index < visibleActions.size(); ++index) {
       const auto& [key, text] = visibleActions[index];
-      auto* actionControl = control(
-          22 + static_cast<float>(index) * actionWidth, actionsY, actionWidth - 8, 44, text, "", text, 18, true,
-          [this, id = n.id, key] { (void)m_notifications->invokeAction(id, key); }
-      );
+      const float width = std::min(pillWidth(text), w - 22.0F - actionX);
+      if (width <= 24.0F)
+        break;
+      auto* actionControl = control(actionX, actionsY, width, 30, text, "", text, 0, true, [this, id = n.id, key] {
+        (void)m_notifications->invokeAction(id, key);
+      });
       setIslandVariant(actionControl, ButtonVariant::Default);
+      actionControl->setRadius(15.0F * s);
       actionControl->inputArea()->setTabFocusKey("notification-action-" + key);
+      actionX += width + 8.0F;
     }
     if (!expanded)
       action(0, 37, w, contentBottom - 37.0F, "notification", [this, n, panel, truncated, toggleExpanded] {

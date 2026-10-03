@@ -417,6 +417,7 @@
     },
     "notifications": {
       "clear-all": "Clear all notifications",
+      "clear-all-short": "Clear All",
       "clear-group": "Clear {app} notifications",
       "dnd-off": "Turn Do Not Disturb Off",
       "dnd-on": "Turn Do Not Disturb On",
@@ -892,7 +893,8 @@
     "collapse": "Collapse notification",
     "actions": {
       "fallback": "Action",
-      "open": "Open"
+      "open": "Open",
+      "options": "Options"
     },
     "inline-reply": {
       "button": "Reply",

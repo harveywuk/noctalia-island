@@ -310,6 +310,9 @@ namespace {
     if (panelId == "polkit") {
       return pc.polkitPosition;
     }
+    if (panelId == "notification-center") {
+      return "center_right";
+    }
     return "auto";
   }
 
@@ -538,10 +541,19 @@ void PanelManager::unregisterPanel(const std::string& id) {
   m_panels.erase(it);
 }
 
-void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest request) {
+std::string PanelManager::routedPanelId(const std::string& panelId, PanelOpenRequest& request) const {
+  if (panelId == "control-center" && request.context == "notifications" && m_panels.contains("notification-center")) {
+    request.context = {};
+    return "notification-center";
+  }
+  return panelId;
+}
+
+void PanelManager::openPanel(const std::string& requestedPanelId, PanelOpenRequest request) {
   if (m_inTransition) {
     return;
   }
+  const std::string panelId = routedPanelId(requestedPanelId, request);
 
   if (request.output == nullptr && m_platform != nullptr) {
     request.output = m_platform->focusedInteractiveOutput(std::chrono::milliseconds(1200));
@@ -605,7 +617,7 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
   const std::string_view islandAnchor = m_config != nullptr && !m_config->config().shell.panelAnchorBar.empty()
       ? std::string_view(m_config->config().shell.panelAnchorBar)
       : request.sourceBarName;
-  if (openIslandPanel(request.output, islandAnchor))
+  if (m_activePanel->islandHostable() && openIslandPanel(request.output, islandAnchor))
     return;
 
   auto barConfigOpt =
@@ -1600,7 +1612,8 @@ void PanelManager::destroyPanel() {
   }
 }
 
-void PanelManager::togglePanel(const std::string& panelId, PanelOpenRequest request) {
+void PanelManager::togglePanel(const std::string& requestedPanelId, PanelOpenRequest request) {
+  const std::string panelId = routedPanelId(requestedPanelId, request);
   if (m_persistentHost.hasPanel(panelId)) {
     if (m_persistentHost.isOpen(panelId)) {
       m_persistentHost.close(panelId);
