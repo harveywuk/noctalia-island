@@ -15,21 +15,22 @@ active_monitor_only = false      # when true, only show apps/windows from the ac
 monitors            = []         # connector names to show on; empty = all outputs
 
 icon_size           = 48
-main_axis_padding   = 16          # inner padding along the icon row (main axis)
-cross_axis_padding  = 8           # inner padding perpendicular to the icon row
-item_spacing        = 6          # gap between items in pixels
+main_axis_padding   = 4          # inner padding along the icon row (main axis)
+cross_axis_padding  = 4          # inner padding perpendicular to the icon row
+item_spacing        = 2          # gap between items in pixels
 background_opacity  = 0.88
 border              = "outline"  # color role or #RRGGBB for the dock outline
-border_width        = 0.0        # inside outline width in pixels; 0 disables it
+border_width        = 0.0        # inside outline width in pixels; 0 uses the hairline below
+hairline_border     = true       # faint glass edge, as on macOS (only when border_width = 0)
 shadow              = true       # cast the global [shell.shadow]
 radius              = 16
 radius_top_left     = 16         # optional per-corner overrides
 radius_top_right    = 16
 radius_bottom_left  = 16
 radius_bottom_right = 16
-concave_edge_corners = true      # carve the screen-edge corners inward; requires margin_edge = 0
+concave_edge_corners = false     # carve the screen-edge corners inward; requires margin_edge = 0
 margin_ends         = 0          # inset from each end of the dock along its main axis
-margin_edge         = 0          # distance from the nearest screen edge (positive values float the dock)
+margin_edge         = 8          # distance from the nearest screen edge (0 attaches the dock to the edge)
 
 show_running        = true       # also show running apps not in the pinned list
 auto_hide           = false      # slide out when pointer leaves; reveal from edge trigger strip
@@ -38,13 +39,14 @@ reserve_space       = true       # reserve compositor exclusive zone / push wind
 layer               = "top"      # top | overlay (overlay keeps the dock above fullscreen apps)
 
 active_scale        = 1.0        # icon scale for the focused app (clamped 0.1–1.75)
-inactive_scale      = 0.85       # icon scale for non-focused apps (clamped 0.1–1.0)
+inactive_scale      = 1.0        # icon scale for non-focused apps (clamped 0.1–1.0)
 magnification       = true       # magnify icons near the pointer (macOS-style)
 magnification_scale = 1.45       # max scale multiplier at the pointer center (1.0–2.0; 1.0 = off)
 active_opacity      = 1.0
-inactive_opacity    = 0.85
-show_instance_count = true       # badge with window count when an app has 2+ windows
-show_dots           = false      # running-window indicator dots below app icons
+inactive_opacity    = 1.0
+show_instance_count = false      # badge with window count when an app has 2+ windows
+show_dots           = true       # a dot below each running app
+show_badges         = true       # red unread-count badges that apps report
 
 launcher_position   = "none"     # none | start | end - optional launcher button on the dock
 launcher_icon       = "grid-dots" # Tabler glyph for the launcher button
@@ -92,6 +94,16 @@ Configure in **Settings → Appearance → Interface**, or under `[shell]` in th
 - All other apps use `inactive_scale` and `inactive_opacity`.
 - Focus changes animate smoothly between the two states.
 
+By default every icon is drawn at full size and opacity, as in the macOS dock. Lower `inactive_scale` or `inactive_opacity` to make the focused app stand out.
+
+## Running apps
+
+With `show_dots = true` (default), a small dot under an icon marks an app that is running, however many windows it has. Running apps that are not pinned follow the pinned apps, after a thin divider.
+
+## Badges
+
+With `show_badges = true` (default), an app that reports an unread count gets a red badge at the top-right of its icon, as on macOS. Counts above 99 show as **99+**. Apps report counts through the `com.canonical.Unity.LauncherEntry` D-Bus interface (`count` and `count-visible`), the same one many mail, chat and calendar apps already use for other docks. An unread badge takes the corner before the window-count badge (`show_instance_count`).
+
 ## Magnification
 
 When `magnification = true` (default), icons grow as the pointer moves along the dock - similar to the macOS dock. Icons under the pointer grow the most; nearby entries scale down smoothly with distance.
@@ -104,7 +116,7 @@ When `magnification = true` (default), icons grow as the pointer moves along the
 
 Magnification follows the shell's animation speed. Turning off animations under **Appearance → Motion** also disables hover magnification and launch bounces; app activation and auto-hide continue to work immediately.
 
-**Animate Opening Apps** (`animate_launch = true`) adds a brief settling bounce when an app is launched from the dock. It can be disabled independently in **Dock → Focus Styling**. Pressing an icon gives immediate visual feedback, and clicking a running app activates it (repeated clicks cycle its windows).
+**Animate Opening Apps** (`animate_launch = true`) bounces an app's icon after it is launched from the dock, as macOS does, until the app is running (at most eight seconds), then settles it with one small hop. It can be disabled independently in **Dock → Focus Styling**. Pressing an icon gives immediate visual feedback, and clicking a running app activates it (repeated clicks cycle its windows).
 
 ## Window previews
 

@@ -75,6 +75,7 @@
 #include "shell/control_center/control_center_panel.h"
 #include "shell/greeter/greeter_appearance_sync.h"
 #include "shell/launcher/launcher_panel.h"
+#include "shell/notification/notification_center_panel.h"
 #include "shell/panel/plugin_panel.h"
 #include "shell/polkit/polkit_panel.h"
 #include "shell/session/session_ipc.h"
@@ -628,6 +629,11 @@ void Application::initPanelManagerAndPanels() {
   ControlCenterPanel* controlCenterPanelPtr = controlCenterPanel.get();
   m_panelManager.registerPanel("control-center", std::move(controlCenterPanel));
   {
+    auto notificationCenter = std::make_unique<NotificationCenterPanel>(&m_notificationManager, &m_compositorPlatform);
+    notificationCenter->onOpened = [this]() { m_notificationToast.hideAllBanners(); };
+    m_panelManager.registerPanel("notification-center", std::move(notificationCenter));
+  }
+  {
     auto launcherPanel = std::make_unique<LauncherPanel>(&m_configService, &m_asyncTextureCache);
     launcherPanel->addProvider(std::make_unique<AppProvider>(&m_configService, &m_compositorPlatform));
     launcherPanel->addProvider(std::make_unique<WallpaperProvider>(&m_configService, &m_wayland, &m_themeService));
@@ -1054,6 +1060,7 @@ void Application::initWidgetControllersAndCallbacks() {
   auto shouldRefreshControlCenter = [this]() { return m_panelManager.isOpenPanel("control-center"); };
 
   m_dock.initialize(m_compositorPlatform, &m_configService, &m_renderContext);
+  m_dock.setSessionBus(m_bus.get());
   const DesktopWidgetScriptDeps desktopWidgetScriptDeps{
       .scriptApi = &m_scriptApi,
       .fileWatcher = &m_fileWatcher,

@@ -153,6 +153,7 @@ private:
   void destroyWindow();
   [[nodiscard]] bool shouldUseModalDialogs() const noexcept;
   void prepareFrame(bool needsUpdate, bool needsLayout);
+  void updateBackgroundBlur(std::uint32_t width, std::uint32_t height);
   void buildScene(std::uint32_t width, std::uint32_t height);
   void rebuildSettingsContent();
   [[nodiscard]] settings::RegistryEnvironment buildRegistryEnvironment() const;
@@ -315,6 +316,9 @@ private:
 
   std::uint32_t m_lastSceneWidth = 0;
   std::uint32_t m_lastSceneHeight = 0;
+  bool m_backgroundBlurApplied = false;
+  std::uint32_t m_backgroundBlurWidth = 0;
+  std::uint32_t m_backgroundBlurHeight = 0;
   ScrollViewState m_sidebarScrollState;
   ScrollViewState m_contentScrollState;
   std::vector<settings::SettingEntry> m_settingsRegistry;

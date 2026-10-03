@@ -310,6 +310,9 @@ namespace {
     if (panelId == "polkit") {
       return pc.polkitPosition;
     }
+    if (panelId == "notification-center") {
+      return "center_right";
+    }
     return "auto";
   }
 
@@ -545,6 +548,12 @@ void PanelManager::registerPanelRedirect(
 }
 
 std::string PanelManager::resolveRedirect(const std::string& panelId, PanelOpenRequest& request) {
+  // Notification Centre is its own panel: a request for the Control Center's notifications
+  // tab opens it instead (and drops the tab context).
+  if (panelId == "control-center" && request.context == "notifications" && m_panels.contains("notification-center")) {
+    request.context = {};
+    return "notification-center";
+  }
   const auto it = m_redirects.find(panelId);
   if (it == m_redirects.end() || m_panels.contains(panelId)) {
     return panelId;
@@ -628,7 +637,7 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
   const std::string_view islandAnchor = m_config != nullptr && !m_config->config().shell.panelAnchorBar.empty()
       ? std::string_view(m_config->config().shell.panelAnchorBar)
       : request.sourceBarName;
-  if (openIslandPanel(request.output, islandAnchor))
+  if (m_activePanel->islandHostable() && openIslandPanel(request.output, islandAnchor))
     return;
 
   auto barConfigOpt =
@@ -1493,8 +1502,8 @@ void PanelManager::closePanel(bool animateClose) {
       m_islandSurface->width = m_islandWidth;
       m_islandSurface->height = m_islandHeight;
       const float contentOpacity = m_contentNode ? m_contentNode->opacity() : 0;
-      m_animations.animate(
-          1.0F, 0.0F, Motion::dismissMs, Motion::dismiss,
+      Motion::animateSpring(
+          m_animations, 1.0F, 0.0F, Motion::panelClose,
           [this, contentOpacity](float v) {
             const auto target = m_islandHost->panelReturnSize();
             m_islandCollapsedWidth = target.width * m_islandSurface->scale;
@@ -1510,13 +1519,12 @@ void PanelManager::closePanel(bool animateClose) {
                 destroyPanel();
             });
           },
-          m_sceneRoot.get()
+          m_sceneRoot.get(), Motion::closeTolerance
       );
     } else if (m_attachedToBar && m_attachedRevealClipNode != nullptr) {
       m_animations.cancelForOwner(m_attachedRevealClipNode);
-      m_animations.animate(
-          m_attachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
-          [this](float v) { applyAttachedReveal(v); },
+      Motion::animateSpring(
+          m_animations, m_attachedRevealProgress, 0.0F, Motion::panelClose, [this](float v) { applyAttachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
               if (m_destroyGeneration == gen) {
@@ -1524,13 +1532,12 @@ void PanelManager::closePanel(bool animateClose) {
               }
             });
           },
-          m_attachedRevealClipNode
+          m_attachedRevealClipNode, Motion::closeTolerance
       );
     } else {
       m_animations.cancelForOwner(m_sceneRoot.get());
-      m_animations.animate(
-          m_detachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
-          [this](float v) { applyDetachedReveal(v); },
+      Motion::animateSpring(
+          m_animations, m_detachedRevealProgress, 0.0F, Motion::panelClose, [this](float v) { applyDetachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
               if (m_destroyGeneration == gen) {
@@ -1538,7 +1545,7 @@ void PanelManager::closePanel(bool animateClose) {
               }
             });
           },
-          m_sceneRoot.get()
+          m_sceneRoot.get(), Motion::closeTolerance
       );
     }
     m_surface->requestRedraw();
@@ -2330,8 +2337,10 @@ void PanelManager::startAttachedOpenAnimation() {
   }
 
   m_attachedOpenAnimationPending = false;
-  m_animations.animate(
-      m_attachedRevealProgress, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyAttachedReveal(v); }, {},
+  // The reveal is clamped at fully open, so the spring settles against the bar instead of
+  // overshooting away from it.
+  Motion::animateSpring(
+      m_animations, m_attachedRevealProgress, 1.0F, Motion::panelOpen, [this](float v) { applyAttachedReveal(v); }, {},
       m_attachedRevealClipNode
   );
 }
@@ -2749,8 +2758,8 @@ void PanelManager::buildScene(std::uint32_t width, std::uint32_t height) {
       m_attachedOpenAnimationPending = true;
     } else {
       applyDetachedReveal(0.0F);
-      m_animations.animate(
-          0.0F, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyDetachedReveal(v); }, {},
+      Motion::animateSpring(
+          m_animations, 0.0F, 1.0F, Motion::panelOpen, [this](float v) { applyDetachedReveal(v); }, {},
           m_sceneRoot.get()
       );
     }

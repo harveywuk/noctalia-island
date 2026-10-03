@@ -45,6 +45,11 @@ namespace shell::dock {
     Flex* row = nullptr;
     InputDispatcher inputDispatcher;
     std::vector<shell::dock::DockItemView> items;
+    // Hairline between pinned and other running apps; null unless both groups are present.
+    Node* divider = nullptr;
+    float dividerRestMainPos = 0.0F;
+    float dividerRestCrossPos = 0.0F;
+    float dividerHoverMainOffset = 0.0F;
     DockSnapshot snapshot;
     bool pointerInside = false;
     float hoverPointerMain = 0.0F;
@@ -96,7 +101,7 @@ namespace shell::dock {
   );
   void buildScene(DockInstance& instance, DockInstanceDependencies deps, const DockInstanceCallbacks& callbacks);
   void resizeSurface(DockInstance& instance, const DockConfig& cfg, const ShellConfig::ShadowConfig& shadowConfig);
-  void applyPanelPalette(DockInstance& instance, const DockConfig& cfg);
+  void applyPanelPalette(DockInstance& instance, const Config& config);
   void syncDockSlideLayerTransform(DockInstance& instance, const DockConfig& cfg);
   void applyDockCompositorBlur(DockInstance& instance, const DockConfig& cfg);
   void startHideFadeOut(DockInstance& instance, ConfigService& config);

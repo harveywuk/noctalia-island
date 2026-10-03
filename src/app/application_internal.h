@@ -116,6 +116,17 @@ inline OsdContent dndOsdContent(bool enabled) {
   };
 }
 
+// Shown when a charger is plugged in; the level rides along for the Island's pill.
+inline OsdContent chargingOsdContent(double percentage) {
+  return OsdContent{
+      .kind = OsdKind::Charging,
+      .icon = "battery-charging",
+      .value = i18n::tr("osd.charging"),
+      .progress = static_cast<float>(std::clamp(percentage / 100.0, 0.0, 1.0)),
+      .showProgress = false,
+  };
+}
+
 inline OsdContent wifiOsdContent(bool enabled) {
   return OsdContent{
       .kind = OsdKind::Wifi,

@@ -35,6 +35,7 @@
 #include "theme/custom_palettes.h"
 #include "ui/builders.h"
 #include "ui/controls/select_dropdown_popup.h"
+#include "ui/material.h"
 #include "ui/palette.h"
 #include "ui/scroll_into_view.h"
 #include "ui/style.h"
@@ -2240,7 +2241,7 @@ void SettingsWindow::buildScene(std::uint32_t width, std::uint32_t height) {
     m_sceneRoot->setPopupContext(m_selectPopup.get());
   }
 
-  const float bgOpacity = cfg.shell.settingsWindowTranslucent ? 0.8F : 1.0F;
+  const float bgOpacity = ui::material::settingsWindowOpacity(cfg.shell);
 
   auto bg = ui::box({
       .width = w,

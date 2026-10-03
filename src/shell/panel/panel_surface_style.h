@@ -3,6 +3,7 @@
 #include "config/config_service.h"
 #include "config/config_types.h"
 #include "shell/surface/shadow.h"
+#include "ui/material.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -41,16 +42,18 @@ namespace shell::panel_surface {
     return std::max(0.1F, configService->config().accessibility.uiScale);
   }
 
-  [[nodiscard]] inline float backgroundOpacity(const ConfigService* configService) noexcept {
+  [[nodiscard]] inline PanelTransparencyMode transparencyMode(const ConfigService* configService) noexcept {
     const auto mode =
-        configService != nullptr ? configService->config().shell.panel.transparencyMode : PanelTransparencyMode::Solid;
-    return detachedPanelBackgroundOpacityForTransparencyMode(mode);
+        configService != nullptr ? configService->config().shell.panel.transparencyMode : PanelTransparencyMode::Auto;
+    return ui::material::resolveMode(mode);
+  }
+
+  [[nodiscard]] inline float backgroundOpacity(const ConfigService* configService) noexcept {
+    return ui::material::tintOpacity(ui::material::Kind::Panel, transparencyMode(configService));
   }
 
   [[nodiscard]] inline float cardOpacity(const ConfigService* configService, float panelBackgroundOpacity) noexcept {
-    const auto mode =
-        configService != nullptr ? configService->config().shell.panel.transparencyMode : PanelTransparencyMode::Solid;
-    return panelCardOpacityForTransparencyMode(mode, panelBackgroundOpacity);
+    return panelCardOpacityForTransparencyMode(transparencyMode(configService), panelBackgroundOpacity);
   }
 
 } // namespace shell::panel_surface

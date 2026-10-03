@@ -79,7 +79,7 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     {"powersaver", "leaf"},
     {"shutdown", "power"},
     {"reboot", "refresh"},
-    {"suspend", "player-pause"},
+    {"suspend", "moon"},
     {"hibernate", "zzz"},
 
     // Night light / dark mode

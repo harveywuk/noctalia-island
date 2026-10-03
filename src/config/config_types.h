@@ -98,6 +98,8 @@ struct IslandConfig {
   bool outerProgressRing = false;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
+  // A second running activity detaches into a round bubble beside the capsule, as on iPhone.
+  bool splitActivities = true;
   bool cycleActivities = false;
   int activityCycleSeconds = 5;
   int hoverOpenDelayMs = 110;
@@ -135,6 +137,7 @@ struct IslandMonitorOverride {
   std::optional<bool> outerProgressRing;
   std::optional<float> mediaArtworkSize;
   std::optional<IslandActivityPriority> activityPriority;
+  std::optional<bool> splitActivities;
   std::optional<bool> cycleActivities;
   std::optional<int> activityCycleSeconds;
   std::optional<int> hoverOpenDelayMs;
@@ -192,6 +195,8 @@ inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOv
     base.mediaArtworkSize = *override.mediaArtworkSize;
   if (override.activityPriority)
     base.activityPriority = *override.activityPriority;
+  if (override.splitActivities)
+    base.splitActivities = *override.splitActivities;
   if (override.cycleActivities)
     base.cycleActivities = *override.cycleActivities;
   if (override.activityCycleSeconds)
@@ -839,31 +844,35 @@ struct DockConfig {
   DockEdge position = DockEdge::Bottom;
   bool activeMonitorOnly = false;    // render only on preferred active output
   std::int32_t iconSize = 48;        // icon size in pixels (before ui_scale)
-  std::int32_t mainAxisPadding = 16; // inner padding along the icon row (main axis)
-  std::int32_t crossAxisPadding = 8; // inner padding perpendicular to the icon row
-  std::int32_t itemSpacing = 6;      // gap between items
+  std::int32_t mainAxisPadding = 4;  // inner padding along the icon row (main axis)
+  std::int32_t crossAxisPadding = 4; // inner padding perpendicular to the icon row
+  std::int32_t itemSpacing = 2;      // gap between items
   float backgroundOpacity = 0.88F;
   // Inside outline for the dock background.
   ColorSpec border = colorSpecFromRole(ColorRole::Outline);
   float borderWidth = 0.0F;
-  std::int32_t radius = 16;            // dock background corner radius
-  std::int32_t radiusTopLeft = 16;     // dock background top-left corner radius
-  std::int32_t radiusTopRight = 16;    // dock background top-right corner radius
-  std::int32_t radiusBottomLeft = 16;  // dock background bottom-left corner radius
-  std::int32_t radiusBottomRight = 16; // dock background bottom-right corner radius
-  bool concaveEdgeCorners = true;      // carve concave corners on the side that touches the screen edge
-  std::int32_t marginEnds = 0;         // inset from each end of the dock along its main axis
-  std::int32_t marginEdge = 0;         // distance from the nearest screen edge (floats the dock when > 0)
-  bool shadow = true;                  // use the global shell shadow
-  bool showRunning = true;             // also show running apps not in pinned list
-  bool autoHide = false;               // slide out when not hovered (overlay mode)
-  bool smartAutoHide = false;          // hide while the active workspace has windows; show when it is empty
-  std::string layer = "top";           // top | overlay
+  // Faint hairline around the dock's glass, as on macOS; drawn when border_width is 0.
+  bool hairlineBorder = true;
+  // Defaults float a fully rounded dock above the screen edge, like macOS.
+  std::int32_t radius = static_cast<std::int32_t>(Style::radiusXl); // dock background corner radius
+  std::int32_t radiusTopLeft = static_cast<std::int32_t>(Style::radiusXl);
+  std::int32_t radiusTopRight = static_cast<std::int32_t>(Style::radiusXl);
+  std::int32_t radiusBottomLeft = static_cast<std::int32_t>(Style::radiusXl);
+  std::int32_t radiusBottomRight = static_cast<std::int32_t>(Style::radiusXl);
+  // Distance from the nearest screen edge (floats the dock when > 0).
+  std::int32_t marginEdge = static_cast<std::int32_t>(Style::spaceSm);
+  bool concaveEdgeCorners = false; // carve concave corners on the side that touches the screen edge
+  std::int32_t marginEnds = 0;     // inset from each end of the dock along its main axis
+  bool shadow = true;              // use the global shell shadow
+  bool showRunning = true;         // also show running apps not in pinned list
+  bool autoHide = false;           // slide out when not hovered (overlay mode)
+  bool smartAutoHide = false;      // hide while the active workspace has windows; show when it is empty
+  std::string layer = "top";       // top | overlay
 
   [[nodiscard]] constexpr bool isAutoHideEnabled() const noexcept { return autoHide || smartAutoHide; }
   bool reserveSpace = true;          // reserve compositor exclusive zone; applies with or without auto_hide
   float activeScale = 1.0F;          // focused app icon scale
-  float inactiveScale = 0.85F;       // non-focused app icon scale
+  float inactiveScale = 1.0F;        // non-focused app icon scale
   bool magnification = true;         // magnify icons near the pointer (macOS-style)
   float magnificationScale = 1.45F;  // max icon scale multiplier at the pointer center
   bool animateLaunch = true;         // brief icon bounce when launching an app
@@ -871,9 +880,10 @@ struct DockConfig {
   std::int32_t previewDelayMs = 450; // delay before opening window previews
   std::int32_t hideDelayMs = 200;    // grace period after leaving the dock
   float activeOpacity = 1.0F;        // focused app icon opacity
-  float inactiveOpacity = 0.85F;     // non-focused app icon opacity
-  bool showDots = false;             // show optional running window dots below app icons
-  bool showInstanceCount = true;     // show a badge with count when app has >1 window
+  float inactiveOpacity = 1.0F;      // non-focused app icon opacity
+  bool showDots = true;              // show a dot below apps that are running
+  bool showInstanceCount = false;    // show a badge with count when app has >1 window
+  bool showBadges = true;            // red unread-count badges that apps publish (LauncherEntry)
   DockLauncherPosition launcherPosition = DockLauncherPosition::None;
   std::string launcherIcon = "grid-dots";   // Tabler glyph name
   std::string launcherCustomImage = "";     // image path; overrides launcherIcon glyph when set
@@ -948,6 +958,7 @@ struct OsdKindsConfig {
   bool media = true;
   bool privacy = true;
   bool keyboardBacklight = true;
+  bool charging = true;
   bool operator==(const OsdKindsConfig&) const = default;
 };
 
@@ -1088,17 +1099,19 @@ enum class PanelTransparencyMode : std::uint8_t {
   Solid = 0,
   Soft = 1,
   Glass = 2,
+  Auto = 3, // Glass when the compositor offers background blur, otherwise Solid
 };
 
 constexpr EnumOption<PanelTransparencyMode> kPanelTransparencyModes[] = {
+    {PanelTransparencyMode::Auto, "auto", "settings.options.shell.panel-transparency.auto"},
     {PanelTransparencyMode::Solid, "solid", "settings.options.shell.panel-transparency.solid"},
     {PanelTransparencyMode::Soft, "soft", "settings.options.shell.panel-transparency.soft"},
     {PanelTransparencyMode::Glass, "glass", "settings.options.shell.panel-transparency.glass"},
 };
 
+// Expects a resolved mode (see ui::material::resolveMode); Auto is treated as Solid.
 [[nodiscard]] float
 panelCardOpacityForTransparencyMode(PanelTransparencyMode mode, float panelBackgroundOpacity) noexcept;
-[[nodiscard]] float detachedPanelBackgroundOpacityForTransparencyMode(PanelTransparencyMode mode) noexcept;
 
 enum class PanelPlacement : std::uint8_t {
   Attached = 0,
@@ -1640,7 +1653,7 @@ struct ShellConfig {
   };
 
   struct PanelConfig {
-    PanelTransparencyMode transparencyMode = PanelTransparencyMode::Solid;
+    PanelTransparencyMode transparencyMode = PanelTransparencyMode::Auto;
     bool borders = true;                   // outline on floating panel surfaces
     bool shadow = true;                    // cast the global [shell.shadow] from panel surfaces
     bool listItemBackground = false;       // filled rounded background behind launcher/clipboard list items
@@ -1813,7 +1826,7 @@ struct ShellConfig {
   std::string avatarPath;
   bool settingsShowAdvanced = true;
   bool settingsExpandAllGroups = false;
-  bool settingsWindowTranslucent = false;
+  bool settingsWindowTranslucent = true; // follows panel transparency_mode; solid without compositor blur
   bool showLocation = true;
   bool appIconColorize = false;
   std::optional<ColorSpec> appIconColor;

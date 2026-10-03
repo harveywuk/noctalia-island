@@ -272,7 +272,8 @@ private:
   Box* m_panelContactShadowNode = nullptr;
   InputDispatcher m_inputDispatcher;
 
-  // The panel id a request for `panelId` really opens, filling in a redirect's context.
+  // The panel id a request for `panelId` really opens: Notification Centre for the Control
+  // Center's notifications tab, or a registered redirect (filling in its context).
   [[nodiscard]] std::string resolveRedirect(const std::string& panelId, PanelOpenRequest& request);
   [[nodiscard]] bool isKnownPanel(const std::string& panelId) const;
   std::unordered_map<std::string, std::unique_ptr<Panel>> m_panels;

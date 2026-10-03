@@ -102,27 +102,32 @@ bool isValidPluginSourceName(std::string_view name) {
 }
 
 std::vector<SessionPanelActionConfig> defaultSessionPanelActions() {
+  // The Apple menu's order: Sleep, Restart…, Shut Down…, then Lock Screen and Log Out….
+  // Restart, Shut Down and Log Out ask first, with macOS's one-minute countdown.
+  constexpr double kConfirmSeconds = 60.0;
   return {
       SessionPanelActionConfig{
-          .action = "lock",
+          .action = "lock_and_suspend",
           .shortcut = KeyChord{.sym = XKB_KEY_1},
       },
       SessionPanelActionConfig{
-          .action = "logout",
-          .shortcut = KeyChord{.sym = XKB_KEY_2},
-      },
-      SessionPanelActionConfig{
-          .action = "lock_and_suspend",
-          .shortcut = KeyChord{.sym = XKB_KEY_3},
-      },
-      SessionPanelActionConfig{
           .action = "reboot",
-          .shortcut = KeyChord{.sym = XKB_KEY_4},
+          .shortcut = KeyChord{.sym = XKB_KEY_2},
+          .countdownSeconds = kConfirmSeconds,
       },
       SessionPanelActionConfig{
           .action = "shutdown",
-          .variant = SessionActionButtonVariant::Destructive,
+          .shortcut = KeyChord{.sym = XKB_KEY_3},
+          .countdownSeconds = kConfirmSeconds,
+      },
+      SessionPanelActionConfig{
+          .action = "lock",
+          .shortcut = KeyChord{.sym = XKB_KEY_4},
+      },
+      SessionPanelActionConfig{
+          .action = "logout",
           .shortcut = KeyChord{.sym = XKB_KEY_5},
+          .countdownSeconds = kConfirmSeconds,
       },
   };
 }
@@ -192,23 +197,12 @@ float panelCardOpacityForTransparencyMode(PanelTransparencyMode mode, float pane
   const float backgroundOpacity = std::clamp(panelBackgroundOpacity, 0.0F, 1.0F);
   switch (mode) {
   case PanelTransparencyMode::Solid:
+  case PanelTransparencyMode::Auto:
     return 1.0F;
   case PanelTransparencyMode::Soft:
-    return std::clamp(backgroundOpacity + 0.08F, 0.82F, 0.92F);
+    return std::clamp(backgroundOpacity + 0.06F, 0.82F, 0.94F);
   case PanelTransparencyMode::Glass:
-    return std::clamp(backgroundOpacity + 0.10F, 0.62F, 0.75F);
-  }
-  return 1.0F;
-}
-
-float detachedPanelBackgroundOpacityForTransparencyMode(PanelTransparencyMode mode) noexcept {
-  switch (mode) {
-  case PanelTransparencyMode::Solid:
-    return 1.0F;
-  case PanelTransparencyMode::Soft:
-    return 0.80F;
-  case PanelTransparencyMode::Glass:
-    return 0.55F;
+    return std::clamp(backgroundOpacity + 0.08F, 0.62F, 0.86F);
   }
   return 1.0F;
 }
