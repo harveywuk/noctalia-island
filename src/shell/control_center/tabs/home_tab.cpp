@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -666,11 +667,25 @@ std::unique_ptr<Flex> HomeTab::create() {
               applyShortcutButtonStyle(button, enabled, isActive, fillOpacity);
             },
     });
-    if (!showLabels) {
-      btn->setTooltip(label);
-    }
     Button* btnPtr = btn.get();
     if (auto* ia = btnPtr->inputArea(); ia != nullptr) {
+      // Contextual tooltip, like a macOS menu bar extra: the control and its current state
+      // ("Wi-Fi: Home-5G", "Audio: Muted"), re-read every second while shown so a click on the
+      // tile updates it in place. With captions on, a tile without a state has nothing to add.
+      ia->setTooltipProvider(
+          [this, padIdx, showLabels]() -> TooltipContent {
+            if (padIdx >= m_shortcutPads.size()) {
+              return std::monostate{};
+            }
+            const Shortcut& sc = *m_shortcutPads[padIdx].shortcut;
+            std::string text = sc.tooltipText();
+            if (showLabels && text == sc.displayLabel()) {
+              return std::monostate{};
+            }
+            return text;
+          },
+          std::chrono::seconds(1)
+      );
       ia->setOnAxisHandler([this, padIdx](const InputArea::PointerData& data) -> bool {
         if (data.axis != WL_POINTER_AXIS_VERTICAL_SCROLL || padIdx >= m_shortcutPads.size()) {
           return false;
@@ -1905,8 +1920,6 @@ void HomeTab::syncShortcuts() {
       if (pad.label->text() != label) {
         pad.label->setText(label);
       }
-    } else if (pad.button != nullptr) {
-      pad.button->setTooltip(sc.displayLabel());
     }
   }
 }

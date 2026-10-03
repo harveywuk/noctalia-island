@@ -20,6 +20,13 @@ public:
 
   [[nodiscard]] virtual bool active() const { return false; }
 
+  // What the shortcut is doing right now, for its tooltip: the network it is on, "Muted", the
+  // active power mode, the track playing. Empty when the label says it all.
+  [[nodiscard]] virtual std::string statusText() const { return {}; }
+  // The tooltip for the shortcut's tile: "Wi-Fi: Home-5G" style when there is a status, else the
+  // label. Like macOS' menu bar extras, it says what the control is and its current state.
+  [[nodiscard]] virtual std::string tooltipText() const;
+
   virtual void onClick() {}
   virtual void onRightClick() {}
   /// direction >= 0 scrolls forward (e.g. toward performance), direction < 0 backward.

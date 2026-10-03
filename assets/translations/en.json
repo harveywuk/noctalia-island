@@ -503,6 +503,7 @@
       "view-day": "View Day Details"
     },
     "shortcuts": {
+      "appearance": "Appearance",
       "audio": "Audio",
       "bluetooth": "Bluetooth",
       "caffeine": "Caffeine",
@@ -526,7 +527,20 @@
       "power-profile": "Power Mode",
       "screen-time": "Screen Time",
       "session": "Session",
+      "status": {
+        "auto": "Auto",
+        "dark": "Dark",
+        "light": "Light",
+        "muted": "Muted",
+        "not-connected": "Not connected",
+        "nothing-playing": "Nothing playing",
+        "off": "Off",
+        "on": "On",
+        "paused": "Paused",
+        "playing": "Playing"
+      },
       "system": "System",
+      "tooltip": "{label}: {status}",
       "wallpaper": "Wallpaper",
       "weather": "Weather",
       "wifi": "Wi-Fi"
@@ -5883,10 +5897,12 @@
       }
     },
     "window": {
+      "close": "Close",
       "export-config": "Export Config…",
       "export-config-saved": "Config export saved.",
       "filter-overridden": "Overridden",
       "legacy-config-warning": "Legacy setting: {issue}. Edit this source entry; Noctalia is applying the replacement only temporarily. Run noctalia config validate to list every required change.",
+      "more-actions": "More Actions",
       "native-title": "Noctalia Settings",
       "no-results": "No settings found",
       "no-results-hint": "Try a different setting name or config key.",

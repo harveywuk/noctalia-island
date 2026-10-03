@@ -73,3 +73,14 @@ Fixed on this branch:
 - **The dock's menu opened with its first item already highlighted**, a full-width accent bar under a pointer that wasn't over it, and the icon's tooltip stayed on top of the menu. Context menus now open with nothing highlighted until the pointer enters a row or the arrow keys move (Down lands on the first row, Up on the last); the dock hides the tooltip when its menu opens; and the menu's minimum width follows its contents (168 px) instead of 240 px.
 
 Looked at and left: the launcher's height change to a provider view, the session panel's open, the Control Center tab switch and the OSD pill all read as one capsule changing shape; the banner buds out of the pill, fills, and returns to the compact state.
+
+## Fifth pass (3 October 2026, later): tooltips
+
+The tooltip layer already sized its bubble to the text (wrapping at 280 px) and refreshed live content, but most controls told it nothing: the Control Center tiles only had a tooltip when their captions were hidden, and then only the caption, and the Settings window's header buttons had none.
+
+Fixed on this branch:
+
+- **Control Center tiles describe their state.** Each shortcut now reports a status, and the tile's tooltip reads like a macOS menu bar extra: "Wi-Fi: Home-5G" (or "Not connected", "Off"), "Bluetooth: AirPods Pro" (the connected devices, or "On"), "Night Light: Scheduled", "DND: On", "Caffeine: Off", "Audio: 45%" or "Audio: Muted", "Microphone: Muted", "Power Mode: Performance", "Appearance: Auto", "Weather: 18°C Partly cloudy · London", "Keyboard Layout: English (US)", "Media: Playing · Track – Artist". The text is re-read every second while the bubble shows, so clicking the tile updates it in place. With captions on, a tile with no state to add (System, Session, Wallpaper…) shows no tooltip, as the caption already says what it is; with captions off every tile has one.
+- **The Settings window's header buttons have tooltips**: "More Actions" on the ellipsis and "Close" on the close button.
+
+Looked at and left: the bar widgets (network, volume, battery, Bluetooth, weather, system monitor, clock) already show key/value tables that resize to their rows, and the dock and taskbar show the window's own title.
