@@ -45,6 +45,11 @@ namespace shell::dock {
     Flex* row = nullptr;
     InputDispatcher inputDispatcher;
     std::vector<shell::dock::DockItemView> items;
+    // Hairline between pinned and other running apps; null unless both groups are present.
+    Node* divider = nullptr;
+    float dividerRestMainPos = 0.0F;
+    float dividerRestCrossPos = 0.0F;
+    float dividerHoverMainOffset = 0.0F;
     DockSnapshot snapshot;
     bool pointerInside = false;
     float hoverPointerMain = 0.0F;
