@@ -1831,6 +1831,8 @@ void LauncherPanel::onInputChanged(const std::string& text) {
   m_allResults.clear();
   m_mixedResults = false;
   m_previewProvider = nullptr;
+  m_activeProvider = nullptr;
+  m_activeQuery.clear();
 
   if (m_form.has_value()) {
     buildFormRows(text);
@@ -1866,6 +1868,8 @@ void LauncherPanel::onInputChanged(const std::string& text) {
       if (provider->id() != m_scopedProviderId) {
         continue;
       }
+      m_activeProvider = provider.get();
+      m_activeQuery = text;
       m_allResults = provider->query(text);
       anyProviderLoading = provider->isLoading();
       for (auto& result : m_allResults) {
@@ -1915,6 +1919,8 @@ void LauncherPanel::onInputChanged(const std::string& text) {
     };
 
     if (activeProvider != nullptr) {
+      m_activeProvider = activeProvider;
+      m_activeQuery = std::string(queryText);
       m_allResults = activeProvider->queryPrefixed(queryText);
       anyProviderLoading = activeProvider->isLoading();
       if (activeProvider->trackUsage()) {
@@ -2222,6 +2228,7 @@ std::vector<LauncherResult> LauncherPanel::providerOverviewResults(std::string_v
     result.title = title;
     result.subtitle = prefixText;
     result.glyphName = std::string(provider->defaultGlyphName());
+    result.kind = i18n::tr("launcher.kinds.command");
     result.score = score;
     results.push_back(std::move(result));
   }
@@ -2284,7 +2291,8 @@ std::vector<LauncherResult> LauncherPanel::providerFallbackResults(std::string_v
       result.id = providerOverviewId(provider->prefix());
       result.providerId = std::string(kProviderOverviewProviderId);
       result.query = std::string(query);
-      result.title = i18n::tr("launcher.fallback.search-with", "provider", provider->displayName());
+      result.title =
+          i18n::tr("launcher.fallback.search-with", "provider", provider->displayName(), "query", std::string(query));
       result.subtitle = std::string(provider->prefix());
       result.glyphName = std::string(provider->defaultGlyphName());
       result.kind = i18n::tr("launcher.kinds.command");
@@ -2419,6 +2427,9 @@ void LauncherPanel::applyEmptyState() {
   if (empty) {
     if (m_anyProviderLoading && !m_query.empty()) {
       m_emptyLabel->setText(i18n::tr("launcher.empty.loading"));
+    } else if (m_activeProvider != nullptr && StringUtils::isBlank(m_activeQuery)) {
+      // A provider view with nothing to list yet (an empty clipboard history, no snippets).
+      m_emptyLabel->setText(i18n::tr("launcher.empty.provider-empty", "provider", m_activeProvider->displayName()));
     } else {
       m_emptyLabel->setText(
           m_query.empty() ? i18n::tr("launcher.empty.type-to-search") : i18n::tr("launcher.empty.no-results")
@@ -3276,7 +3287,11 @@ void LauncherPanel::syncFooter() {
         selected.id == kFormSubmitId ? m_form->submitLabel : i18n::tr("launcher.forms.next-field")
     );
   } else {
-    m_footerKind->setText(selected.kind.empty() ? sectionTitleFor(selected.providerId) : selected.kind);
+    m_footerKind->setText(
+        selected.kind.empty() && selected.providerId != kProviderOverviewProviderId
+            ? sectionTitleFor(selected.providerId)
+            : selected.kind
+    );
     m_footerPrimary->setText(primaryActionLabelFor(selected));
   }
   const bool actions =

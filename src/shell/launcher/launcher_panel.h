@@ -168,6 +168,9 @@ private:
   std::string m_formReturnQuery;
   // The prefixed provider currently shown, when it asks for a preview pane.
   LauncherProvider* m_previewProvider = nullptr;
+  // The provider whose view is shown (prefixed or scoped), and the text after its prefix.
+  LauncherProvider* m_activeProvider = nullptr;
+  std::string m_activeQuery;
   std::vector<LauncherResult> m_results;
   std::vector<LauncherResult> m_allResults;
   UsageTracker m_usageTracker;

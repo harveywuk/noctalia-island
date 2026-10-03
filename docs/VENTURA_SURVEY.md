@@ -33,3 +33,15 @@ Launcher and its /clip, /snip and web fallback ([launcher-modes.png](assets/merg
 ## Small and not about looks
 
 - A pinned dock app written with ".desktop" on the end (for example `org.codeberg.dnkl.foot.desktop`) shows a blank placeholder; the docs say it should match. Easy to fix if you want it.
+
+## Second pass (3 October 2026, evening): launcher and panels on the merged branch with the Raycast changes
+
+Headless Sway at 1920x1080, Inter, Papirus, light and dark. Screenshots of the launcher are in [assets/launcher-raycast](assets/launcher-raycast/).
+
+Fixed on this branch:
+
+- The `/` overview put its internal provider id (`__launcher_provider_overview__`) in the action bar's kind label. Overview rows now read **Command** there and at the trailing edge.
+- Going back to the root search from a short or empty provider view (Esc from `/clip`) scrolled the first section header out of view: the grid brought the selected row into a viewport that still had the shorter list's height. The grid now never scrolls a row's own top away.
+- An empty provider view said "No results found" with nothing typed; it now says "Nothing in Clipboard History yet".
+
+Still as before, and fine: the launcher card, section headers, kind labels and the action bar match Raycast's proportions in both themes; Control Center, the notification stack, session cards, the wallpaper picker, Settings and the dock read as Ventura. The sway title bar above Settings and the missing dock magnification are the headless compositor, not the shell.

@@ -883,7 +883,8 @@
     "empty": {
       "loading": "Loading results...",
       "no-results": "No results found",
-      "type-to-search": "Type to search…"
+      "type-to-search": "Type to search…",
+      "provider-empty": "Nothing in {provider} yet"
     },
     "footer": {
       "actions": "Actions",

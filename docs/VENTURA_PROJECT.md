@@ -1,6 +1,6 @@
 # Noctalia Island: project summary
 
-_State as of 3 October 2026, 16:45 UTC._
+_State as of 3 October 2026, 19:00 UTC._
 
 ## Scope and direction
 
@@ -65,6 +65,7 @@ Every PR below is merged into `feature/orbit-island`. The merged branch builds, 
    - the screenshot thumbnail and meeting countdown with real screenshots and a real calendar
    - clicks and hovers generally, since the cloud test setup can only send keys
 2. **Known gaps to consider later:**
+   - Raycast features still missing from the launcher: a searchable action panel with per-action key hints (the actions menu is a plain list), calculator history, natural-language dates ("3 days from now"), Floating Notes, Kill Process, dictionary and colour picker commands. Window Management's layouts use the classic Hyprland dispatchers (`setfloating`, `resizewindowpixel`, `movewindowpixel`); on a Lua-configured Hyprland only Toggle Fullscreen and Toggle Floating have Lua forms, so check the rest on the real machine.
    - Launcher snippets paste only from the launcher. They don't expand as you type in other apps.
    - Snippets are typed on one line, so new lines are written as `\n`.
    - Panels open a little more slowly with springs: about 270 ms to open (was 200) and 300 ms to close (was 190). This can be tuned in `src/ui/motion.h`.
@@ -74,3 +75,5 @@ Every PR below is merged into `feature/orbit-island`. The merged branch builds, 
 ## Handy references
 
 - Build: `just configure && just build`. Turn the Island on in config; it's off by default.
+- Ubuntu 24.04 needs WirePlumber 0.5, sdbus-c++ 2.x, current stb headers and g++-14 built or installed by hand; the stock packages are too old. The shell itself builds against libwayland 1.22 again.
+- Launcher screenshots from the headless Sway survey of the Raycast pass are in [assets/launcher-raycast](assets/launcher-raycast/).
