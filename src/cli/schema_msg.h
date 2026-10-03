@@ -126,6 +126,9 @@ namespace noctalia::cli {
       Positional{"target", {}, {}, false, false, false},
       Positional{"step", {}, {}, false, false, false},
   };
+  inline constexpr std::array kMsgLauncherRunPositionals{
+      Positional{"alias", "A launcher alias, or <provider>:<result id>", {}, true, false, true},
+  };
   inline constexpr std::array kMsgClipboardCopyPositionals{
       Positional{"text", {}, {}, true, false, false},
   };
@@ -473,6 +476,16 @@ namespace noctalia::cli {
     inline constexpr Command keyboardLayoutCycle{
         "keyboard-layout-cycle", "Switch to the next keyboard layout", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command launcherRun{
+        "launcher-run",
+        "Run a launcher result by its alias without opening the launcher",
+        {},
+        {},
+        {},
+        kMsgLauncherRunPositionals,
+        {},
+        false
+    };
     inline constexpr Command lockscreenWidgetsEdit{
         "lockscreen-widgets-edit", "Open the lockscreen widgets editor", {}, {}, {}, {}, {}, false
     };
@@ -533,9 +546,8 @@ namespace noctalia::cli {
     inline constexpr Command notificationClearActive{
         "notification-clear-active", "Dismiss all currently active notifications", {}, {}, {}, {}, {}, false
     };
-    inline constexpr Command islandFocus{
-        "island-focus", "Focus the island for keyboard navigation", {}, {}, {}, {}, {}, false
-    };
+    inline constexpr Command islandFocus{"island-focus", "Focus the island for keyboard navigation", {}, {}, {}, {}, {},
+                                         false};
     inline constexpr Command notificationClearHistory{
         "notification-clear-history", "Clear notification history", {}, {}, {}, {}, {}, false
     };
@@ -644,8 +656,12 @@ namespace noctalia::cli {
         {},
         false
     };
-    inline constexpr Command recordRegion{"record-region", "Select a region and record video with desktop audio", {}, {}, {}, {}, {}, false};
-    inline constexpr Command recordMonitor{"record-monitor", "Pick a monitor and record video with desktop audio", {}, {}, {}, {}, {}, false};
+    inline constexpr Command recordRegion{
+        "record-region", "Select a region and record video with desktop audio", {}, {}, {}, {}, {}, false
+    };
+    inline constexpr Command recordMonitor{
+        "record-monitor", "Pick a monitor and record video with desktop audio", {}, {}, {}, {}, {}, false
+    };
     inline constexpr Command recordStop{"record-stop", "Stop recording and save the video", {}, {}, {}, {}, {}, false};
     inline constexpr Command recordStatus{"record-status", "Show recording status", {}, {}, {}, {}, {}, false};
     inline constexpr Command screenshotRegion{
@@ -881,6 +897,7 @@ namespace noctalia::cli {
       msg::keyboardBacklightToggle,
       msg::keyboardBacklightUp,
       msg::keyboardLayoutCycle,
+      msg::launcherRun,
       msg::lockscreenWidgetsEdit,
       msg::lockscreenWidgetsExit,
       msg::lockscreenWidgetsToggleEdit,

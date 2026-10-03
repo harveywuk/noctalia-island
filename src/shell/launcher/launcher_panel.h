@@ -1,5 +1,6 @@
 #pragma once
 
+#include "launcher/alias_store.h"
 #include "launcher/launcher_provider.h"
 #include "launcher/usage_tracker.h"
 #include "shell/panel/panel.h"
@@ -9,17 +10,21 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 class ContextMenuPopup;
 class Flex;
+class Glyph;
+class Image;
 class Input;
 class Label;
 class LauncherResultAdapter;
 class LauncherAppGridAdapter;
 class Renderer;
 class Segmented;
+class Separator;
 class ScrollView;
 class VirtualGridView;
 class ConfigService;
@@ -46,12 +51,18 @@ public:
   void onClose() override;
   void onIconThemeChanged() override;
 
+  // Runs a result without opening the launcher: an alias, or "<provider>:<result id>"
+  // (`noctalia msg launcher-run`). Returns an IPC reply line.
+  std::string runFromSpec(std::string_view spec);
+
   void clearUsage();
   void syncUsageTrackingState();
 
   // Invoked after a terminal close when the activation copied text and the provider
   // supports auto-paste. The host schedules virtual-keyboard paste (clipboard path).
   void setCopiedActivationCallback(std::function<void()> callback) { m_onCopiedActivation = std::move(callback); }
+  // Copies text for launcher-level actions ("Copy Hotkey Command").
+  void setCopyTextCallback(std::function<void(std::string)> callback) { m_copyText = std::move(callback); }
 
   [[nodiscard]] float preferredWidth() const override { return scaled(560.0F); }
   [[nodiscard]] float preferredHeight() const override { return scaled(500.0F); }
@@ -84,13 +95,33 @@ private:
   void activateSelected();
   bool handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers);
   void applyEmptyState();
+  [[nodiscard]] std::unique_ptr<Node> buildFooter(float scale);
+  void syncFooter();
+  void assignSections();
+  [[nodiscard]] std::string sectionTitleFor(std::string_view providerId) const;
+  [[nodiscard]] std::string kindFor(const LauncherResult& result) const;
   void bindDetailResult();
   [[nodiscard]] bool shouldUseDetailPresentation() const;
   [[nodiscard]] bool startsWithLauncherPrefix(std::string_view text) const;
   void applyProviderConfig(LauncherProvider& provider) const;
   void finishActivation(LauncherProvider& provider, const std::string& resultId, bool copied);
   [[nodiscard]] std::vector<LauncherResult> providerOverviewResults(std::string_view text) const;
-  [[nodiscard]] bool openAppActionsMenu(std::size_t index, float anchorX, float anchorY);
+  [[nodiscard]] bool openActionsMenu(std::size_t index, float anchorX, float anchorY);
+  [[nodiscard]] bool openSelectedActionsMenu();
+  // Runs the first extra action of the selected result (Ctrl+Return, Raycast's secondary action).
+  bool runSecondaryAction();
+  void runProviderAction(const LauncherResult& result, std::string_view actionId);
+  [[nodiscard]] LauncherProvider* providerFor(std::string_view providerId) const;
+  [[nodiscard]] std::string primaryActionLabelFor(const LauncherResult& result) const;
+  [[nodiscard]] bool hasActions(const LauncherResult& result) const;
+  [[nodiscard]] std::optional<LauncherResult> resolveAliasTarget(const AliasStore::Target& target) const;
+  [[nodiscard]] static std::string specFor(const LauncherResult& result);
+  [[nodiscard]] std::string aliasForResult(const LauncherResult& result);
+  void applyAliases(std::string_view queryText);
+  void beginAliasEdit(const LauncherResult& result);
+  void endAliasEdit();
+  [[nodiscard]] std::unique_ptr<Node> buildPreviewPane(float scale);
+  void syncPreview();
   void rebuildCategoryFilter(const std::vector<LauncherCategory>& categories);
   void setCategoryFilterVisible(bool visible);
   void setActiveCategorySlot(std::size_t slotIndex);
@@ -106,6 +137,11 @@ private:
   [[nodiscard]] bool shouldTrackUsage() const;
 
   std::vector<std::unique_ptr<LauncherProvider>> m_providers;
+  AliasStore m_aliases;
+  // Set while the field is taking an alias for this result ("Set Alias…").
+  std::optional<LauncherResult> m_aliasTarget;
+  // The prefixed provider currently shown, when it asks for a preview pane.
+  LauncherProvider* m_previewProvider = nullptr;
   std::vector<LauncherResult> m_results;
   std::vector<LauncherResult> m_allResults;
   UsageTracker m_usageTracker;
@@ -115,11 +151,33 @@ private:
   Input* m_input = nullptr;
   Segmented* m_categoryFilter = nullptr;
   Flex* m_body = nullptr;
+  Flex* m_listColumn = nullptr;
+  Flex* m_previewPane = nullptr;
+  Separator* m_previewDivider = nullptr;
+  Image* m_previewImage = nullptr;
+  Label* m_previewBadge = nullptr;
+  Label* m_previewTitle = nullptr;
+  Label* m_previewBody = nullptr;
+  Separator* m_previewMetaDivider = nullptr;
+  std::vector<Flex*> m_previewMetaRows;
+  std::vector<Label*> m_previewMetaLabels;
+  std::vector<Label*> m_previewMetaValues;
+  std::string m_previewKey;
+  std::string m_pendingPreviewImagePath;
+  std::vector<std::uint8_t> m_pendingPreviewImageBytes;
+  bool m_previewImageDirty = false;
   VirtualGridView* m_grid = nullptr;
   ScrollView* m_detailScroll = nullptr;
   Label* m_detailSubtitle = nullptr;
   Label* m_detailBody = nullptr;
   Label* m_emptyLabel = nullptr;
+  Flex* m_footer = nullptr;
+  Label* m_footerKind = nullptr;
+  Label* m_footerPrimary = nullptr;
+  Flex* m_footerActions = nullptr;
+  Separator* m_footerActionsSeparator = nullptr;
+  // True when the results mix sources (no prefix or scope), so they are grouped into sections.
+  bool m_mixedResults = false;
   bool m_anyProviderLoading = false;
   std::unique_ptr<LauncherResultAdapter> m_listAdapter;
   std::unique_ptr<LauncherAppGridAdapter> m_gridAdapter;
@@ -146,4 +204,5 @@ private:
   std::unique_ptr<ContextMenuPopup> m_actionsMenu;
   Signal<>::ScopedConnection m_appIconColorizeConn;
   std::function<void()> m_onCopiedActivation;
+  std::function<void(std::string)> m_copyText;
 };

@@ -2,6 +2,7 @@
 
 #include "config/config_service.h"
 #include "i18n/i18n.h"
+#include "launcher/time_provider.h"
 #include "net/http_client.h"
 #include "wayland/clipboard_service.h"
 
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <libqalculate/Calculator.h>
 #include <memory>
+#include <regex>
 #include <string>
 
 namespace {
@@ -36,6 +38,29 @@ namespace {
       --end;
     }
     return std::string(text.substr(begin, end - begin));
+  }
+
+  // Raycast-style conversions say "in" ("5 ft in cm", "100 usd in eur"); libqalculate reads "in" as
+  // inches, so the last " in " becomes its conversion operator. Temperature shorthand
+  // ("20c in f") is spelled out, since bare c and f are the speed of light and farads.
+  std::string conversionSyntax(std::string_view text) {
+    static const std::regex kTemperature(
+        R"(^\s*(-?[0-9.,]+)\s*(?:°)?\s*([cfk])\s+(?:in|to)\s+(?:°)?\s*([cfk])\s*$)", std::regex::icase
+    );
+    const std::string input(text);
+    std::smatch match;
+    if (std::regex_match(input, match, kTemperature)) {
+      const auto unit = [](const std::string& letter) {
+        const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(letter.front())));
+        return c == 'c' ? std::string("oC") : (c == 'f' ? std::string("oF") : std::string("K"));
+      };
+      return match[1].str() + " " + unit(match[2].str()) + " to " + unit(match[3].str());
+    }
+    std::string out = input;
+    if (const auto in = out.rfind(" in "); in != std::string::npos && in > 0) {
+      out.replace(in, 4, " to ");
+    }
+    return out;
   }
 
   bool shouldRefreshExchangeRateSource(std::string_view url) { return !url.contains("nbrb.by"); }
@@ -109,7 +134,11 @@ std::vector<LauncherResult> MathProvider::query(std::string_view text) const {
 std::vector<LauncherResult> MathProvider::queryPrefixed(std::string_view text) const { return evaluate(text); }
 
 std::vector<LauncherResult> MathProvider::evaluate(std::string_view text) const {
-  const std::string localized = trimmed(text);
+  // Times and time zones ("3pm in tokyo") belong to the Time provider.
+  if (TimeProvider::parse(text, false).has_value()) {
+    return {};
+  }
+  const std::string localized = conversionSyntax(trimmed(text));
   if (!m_calc || localized.empty()) {
     return {};
   }
@@ -161,4 +190,24 @@ bool MathProvider::activate(const LauncherResult& result) {
 
   std::string value = result.title.substr(2);
   return m_clipboard != nullptr && m_clipboard->copyText(std::move(value));
+}
+
+std::string MathProvider::primaryActionLabel(const LauncherResult& /*result*/) const {
+  const bool paste = m_config == nullptr || m_config->config().shell.launcher.autoPaste != ClipboardAutoPasteMode::Off;
+  return i18n::tr(paste ? "launcher.actions.paste-answer" : "launcher.actions.copy-answer");
+}
+
+std::vector<LauncherAction> MathProvider::actions(const LauncherResult& /*result*/) const {
+  return {
+      {.id = "copy-answer", .label = i18n::tr("launcher.actions.copy-answer")},
+      {.id = "copy-expression", .label = i18n::tr("launcher.actions.copy-expression")},
+  };
+}
+
+LauncherActionOutcome MathProvider::runAction(const LauncherResult& result, std::string_view actionId) {
+  if (m_clipboard == nullptr || result.id != "math") {
+    return LauncherActionOutcome::Failed;
+  }
+  std::string value = actionId == "copy-expression" ? result.subtitle : result.title.substr(2);
+  return m_clipboard->copyText(std::move(value)) ? LauncherActionOutcome::Done : LauncherActionOutcome::Failed;
 }

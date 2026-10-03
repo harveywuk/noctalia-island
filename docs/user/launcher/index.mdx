@@ -1,6 +1,6 @@
 ---
 title: Launcher
-description: Searching applications, calculating expressions, and picking emojis or wallpapers.
+description: Searching applications, files, clipboard history, snippets, quicklinks and scripts, with Raycast-style actions.
 sidebar:
   order: 5
 ---
@@ -15,6 +15,32 @@ As you type, Noctalia queries all active **Launcher Providers**. Providers can e
 - **Prefixed providers** (like Emoji and Wallpaper) take over the search results when their prefix is detected at the start of your query.
 
 Type `/` by itself to show a lightweight overview of available prefixed providers. Activating one inserts its prefix into the launcher input.
+
+### Sections and the action bar
+
+Like Raycast, a global search lists everything it found under **Results**, ranked by relevance, with matching files after them under **Files**. With nothing typed, pinned apps appear under **Favourites** above the other applications. Prefixed searches keep a single list.
+
+The bar along the bottom names the selected result's kind and its keys: **Return** runs the primary action (its name, such as **Open Application** or **Paste Snippet**, is shown there) and **Shift + Return** opens the actions menu. When a search has a query, a **Use "…" with…** section at the end offers to search the web for it.
+
+### Actions menu
+
+**Shift + Return** (or a right click) lists everything you can do with the selected result, Raycast-style: the primary action first, then the result's own actions (for example **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. **Ctrl + Return** runs the first of the result's own actions directly.
+
+### Aliases and hotkeys
+
+**Set Alias…** gives a result a short word, shown as a small tag beside it. Typing the alias exactly puts that result at the top, above everything else. Aliases set this way are kept in `~/.local/state/noctalia/launcher_aliases.json`; aliases in `[shell.launcher.aliases]` take precedence. Applications, quicklinks, panels and session actions can have aliases.
+
+**Copy Hotkey Command** copies a `noctalia msg launcher-run <alias or Provider:id>` command. Bind it in your compositor to run that result from anywhere, without opening the launcher:
+
+```ini
+# hyprland.conf
+bind = SUPER, N, exec, noctalia msg launcher-run notes
+bind = SUPER SHIFT, D, exec, noctalia msg launcher-run System:toggle-dark-mode
+```
+
+### Preview pane
+
+Scoped searches for clipboard history, snippets and files show a preview pane beside the list: the full text or image, the first lines of a text file, and details such as size, type and when it was modified.
 
 ### Usage-based boosting
 
@@ -54,6 +80,15 @@ When `shell.launcher.app_grid` is enabled and every visible result is an applica
 - **Pinned apps**: Drag a pinned app onto another pinned app to reorder them. Pin markers appear in both the list and app-grid views.
 - **Terminal apps**: Entries with `Terminal=true` run inside a terminal. Prefer `export TERMINAL=wezterm` (or another emulator on `PATH`); do not put `-e` in `$TERMINAL`. See [Shell: launching apps](/noctalia/configuration/shell/#shell-settings) for discovery order and how this differs from `launch_apps_custom_command`.
 
+### Files
+
+Find files and folders in your home folder by name.
+
+- **Prefix**: `/file ` (also included in global search; turn it off with `[shell.launcher.providers.files] global = false`)
+- **Source**: Indexes your home folder on a background thread the first time you search, and again when the index is more than five minutes old. Hidden files and folders, dependency and build trees (`node_modules`, `target`, `build`, …) and anything more than six folders deep are skipped.
+- **Search**: Matches the query as part of a file or folder name; names that start with it rank first. Global search shows the best six, `/file` up to fifty.
+- **Functionality**: Activating a result opens it with `xdg-open`. The actions menu adds **Show in Folder**, **Open in Terminal** (folders), **Copy Path**, **Copy File** and **Move to Trash**. `/file` shows a preview pane with image and text previews.
+
 ### Calculator
 
 A built-in expression evaluator powered by [`libqalculate`](https://qalculate.github.io/).
@@ -62,8 +97,8 @@ A built-in expression evaluator powered by [`libqalculate`](https://qalculate.gi
 - **Trigger**: Automatically activates in global search when the query contains a digit. The explicit `/calc` prefix
   also accepts digit-free expressions such as `/calc EUR`.
 - **Functionality**: Standard arithmetic and functions (`sin`, `cos`, `sqrt`, `pi`, `e`, …), plus
-  unit conversion (`10 cm to in`, `100 km/h to mph`), number bases (`0xff`), and currency conversion
-  (`10 USD to EUR`). Decimal and thousands separators follow the system numeric locale
+  unit conversion (`10 cm to in`, `5 ft in cm`, `100 km/h to mph`, `70F in C`), number bases (`0xff`), and currency conversion
+  (`10 USD to EUR`, `20 GBP in JPY`). Both `to` and `in` work. Decimal and thousands separators follow the system numeric locale
   (for example `10000,50+2000,25` under `pt_BR`). Pressing **Enter** copies the result to your clipboard.
 - **Currency rates**: Exchange rates are cached locally and refreshed in the background from libqalculate's
   ECB/global providers when `shell.launcher.fetch_exchange_rates` is enabled (the default). Refresh is also
@@ -111,7 +146,59 @@ Find and focus any currently open window.
 
 - **Prefix**: `/win `
 - **Source**: Lists the windows reported by your compositor across every monitor and workspace.
-- **Functionality**: Fuzzy-matches against the window title and app id. Activating a result focuses the window, switching to its workspace if needed.
+- **Functionality**: Fuzzy-matches against the window title and app id. Activating a result focuses the window, switching to its workspace if needed. The actions menu adds **Close Window**.
+
+### Clipboard history
+
+Search everything you've copied, with a preview of the selected entry.
+
+- **Prefix**: `/clip ` (not in global search)
+- **Source**: The shell's clipboard history (`shell.clipboard_enabled`), newest first, pinned entries kept.
+- **Functionality**: Return pastes the entry (or copies it when auto-paste is off). Actions: **Copy to Clipboard**, **Open in Browser** for links, **Pin**/**Unpin**, **Save as Snippet** and **Delete Entry**.
+
+### Quicklinks and web search
+
+Open a URL, or search a site, from a keyword.
+
+- **Prefix**: `/link ` (also in global search)
+- **Built in**: `g` Google, `ddg` DuckDuckGo, `gh` GitHub, `yt` YouTube, `wiki` Wikipedia, `aw` ArchWiki and `maps` OpenStreetMap.
+- **Functionality**: Type a keyword, a space and your query (`gh noctalia`) to search that site. Activating a search quicklink with no query fills in its keyword so you can type one. Add your own under `[shell.launcher.quicklinks.<id>]`; a URL containing `{query}` becomes a search.
+- **Web search**: Any query of two or more characters also offers **Search the Web** at the end of the results, using `shell.launcher.web_search_url`.
+
+### Snippets
+
+Paste saved text by name or keyword.
+
+- **Prefix**: `/snip ` (also in global search)
+- **Source**: `[shell.launcher.snippets.<id>]` in your config, plus entries saved from clipboard history with **Save as Snippet** (kept in `~/.local/state/noctalia/launcher_snippets.json`).
+- **Placeholders**: `{date}`, `{time}`, `{datetime}` and `{clipboard}` are filled in when the snippet is pasted.
+- **Limits**: Snippets are pasted from the launcher; they don't expand automatically as you type in other apps.
+
+### Script commands
+
+Run your own scripts from the launcher, using Raycast's script command format.
+
+- **Prefix**: `/script ` (also in global search)
+- **Source**: Executable files in `~/.config/noctalia/scripts` and any folders in `shell.launcher.script_directories`.
+- **Metadata**: Comment lines such as `# @raycast.title`, `@raycast.description`, `@raycast.packageName`, `@raycast.icon` and `@raycast.mode` (`silent`, `compact` or `fullOutput`) are read from the top of the file; `@noctalia.` works too. Raycast script commands work unchanged.
+- **Arguments**: Text typed after the title is passed to the script (`deploy staging`).
+- **Output**: `compact` shows the last line of output as a notification, `fullOutput` shows all of it, and a failing script reports its error. Actions: **Edit Script** and **Show in Folder**.
+
+### Time zones
+
+See the time anywhere, or convert a time between places.
+
+- **Prefix**: `/time ` (also in global search)
+- **Examples**: `time tokyo`, `tokyo`, `3pm london in new york`, `9:30 pst to cet`.
+- **Functionality**: Knows common cities and zone abbreviations plus every IANA zone name. Return copies the time.
+
+### System
+
+Toggle settings and run system actions.
+
+- **Prefix**: `/sys ` (also in global search)
+- **Commands**: Toggle Dark Mode, Do Not Disturb, Wi-Fi, Bluetooth, Keep Awake, Night Light, Mute and Microphone; Take Screenshot, Screenshot and Annotate, Record Screen, Stop Recording, Turn Off Displays, Clear Clipboard History, Clear Notifications, Empty Trash and Eject All Disks.
+- **Matching**: In global search every word you type must start a word of the command's name or keywords, so short queries don't pull in unrelated commands.
 
 ---
 
@@ -234,7 +321,7 @@ So `provider_prefix = "/"` with a trigger word of `emo` gives `/emo`. Changing `
 
 Each provider type gets its trigger word from a different place:
 
-- **Built-in providers** (Calculator, Emoji, Panels, Session, Wallpaper, Windows): `[shell.launcher.providers.<name>]`.
+- **Built-in providers** (Calculator, Clipboard, Emoji, Files, Panels, Quicklinks, Scripts, Session, Snippets, System, Time, Wallpaper, Windows): `[shell.launcher.providers.<name>]`.
 - **Dmenu providers**: the `prefix`/`global` keys on the entry's `[shell.launcher.dmenu.entry.<id>]` table.
 - **Plugin providers**: the `[[launcher_provider]]` manifest `prefix`, optionally overridden per-user via `[shell.launcher.providers."<pluginId>:<entry>"]`.
 
@@ -245,7 +332,7 @@ See [Shell: Launcher settings](/noctalia/configuration/shell/#shell-settings) fo
 The built-in providers can be configured without editing your config, under **Settings → Panels → Launcher → Providers**:
 
 - **Common Prefix Character**: the shared `provider_prefix` (defaults to `/`).
-- **&lt;Provider&gt; Prefix**: the trigger word for each built-in provider (Calculator, Emoji, Panels, Session, Wallpaper, Windows). Leave blank to fall back to the built-in default.
+- **&lt;Provider&gt; Prefix**: the trigger word for each built-in provider. Leave blank to fall back to the built-in default.
 - **&lt;Provider&gt; in Global Search**: toggles whether that provider also contributes results to the un-prefixed search.
 
 Dmenu and plugin provider prefixes are configured only through their config tables (see the reference linked above); they do not appear in the Settings UI.

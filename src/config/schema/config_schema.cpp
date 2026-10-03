@@ -1820,6 +1820,25 @@ namespace noctalia::config::schema {
       return s;
     }
 
+    const Schema<LauncherQuicklinkConfig>& launcherQuicklinkSchema() {
+      static const Schema<LauncherQuicklinkConfig> s = {
+          field(&LauncherQuicklinkConfig::name, "name"),
+          field(&LauncherQuicklinkConfig::url, "url"),
+          field(&LauncherQuicklinkConfig::keyword, "keyword"),
+          field(&LauncherQuicklinkConfig::glyph, "glyph"),
+      };
+      return s;
+    }
+
+    const Schema<LauncherSnippetConfig>& launcherSnippetSchema() {
+      static const Schema<LauncherSnippetConfig> s = {
+          field(&LauncherSnippetConfig::name, "name"),
+          field(&LauncherSnippetConfig::keyword, "keyword"),
+          field(&LauncherSnippetConfig::text, "text"),
+      };
+      return s;
+    }
+
     const Schema<ShellConfig::LauncherConfig::PanelsConfig>& shellLauncherPanelsSchema() {
       static const Schema<ShellConfig::LauncherConfig::PanelsConfig> s = {
           field(&ShellConfig::LauncherConfig::PanelsConfig::ignored, "ignored"),
@@ -1849,6 +1868,19 @@ namespace noctalia::config::schema {
               },
               [](const LauncherProviderConfig& elem) { return elem.name; }
           ),
+          field(&ShellConfig::LauncherConfig::webSearchUrl, "web_search_url"),
+          namedMap<ShellConfig::LauncherConfig, LauncherQuicklinkConfig>(
+              &ShellConfig::LauncherConfig::quicklinks, "quicklinks", launcherQuicklinkSchema(),
+              [](LauncherQuicklinkConfig& elem, std::string_view name) { elem.id = std::string(name); },
+              [](const LauncherQuicklinkConfig& elem) { return elem.id; }
+          ),
+          namedMap<ShellConfig::LauncherConfig, LauncherSnippetConfig>(
+              &ShellConfig::LauncherConfig::snippets, "snippets", launcherSnippetSchema(),
+              [](LauncherSnippetConfig& elem, std::string_view name) { elem.id = std::string(name); },
+              [](const LauncherSnippetConfig& elem) { return elem.id; }
+          ),
+          field(&ShellConfig::LauncherConfig::aliases, "aliases"),
+          field(&ShellConfig::LauncherConfig::scriptDirectories, "script_directories"),
       };
       return s;
     }

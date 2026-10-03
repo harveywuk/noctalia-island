@@ -393,6 +393,13 @@ void Application::initIpc() {
     return "ok\n";
   });
 
+  m_ipcService.bind(noctalia::cli::msg::launcherRun, [this](const std::string& args) -> std::string {
+    if (m_launcherPanel == nullptr) {
+      return "error: launcher unavailable\n";
+    }
+    return m_launcherPanel->runFromSpec(args);
+  });
+
   m_ipcService.bind(noctalia::cli::msg::clipboardClear, [this](const std::string&) -> std::string {
     // Pinned entries survive; with nothing pinned this clears the whole history.
     m_clipboardService.clearUnpinnedHistory();
