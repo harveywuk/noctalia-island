@@ -717,12 +717,13 @@ namespace settings {
       for (const auto& group : {std::string("plugins"), std::string("sources")}) {
         section->addChild(
             ui::button({
-                .text = (group == "sources" ? sourcesTitle : pluginsTitle) + "   ›",
+                .text = group == "sources" ? sourcesTitle : pluginsTitle,
                 .fontSize = Style::fontSizeBody * scale,
                 .contentAlign = ButtonContentAlign::Start,
                 .variant = ButtonVariant::Default,
                 .minHeight = 52.0F * scale,
                 .onClick = [navigate = ctx.navigateGroup, group] { navigate(group); },
+                .configure = [scale](Button& button) { addTrailingDisclosureChevron(button, scale); },
             })
         );
       }

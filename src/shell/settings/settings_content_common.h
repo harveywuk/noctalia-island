@@ -31,6 +31,9 @@ namespace settings {
   [[nodiscard]] std::unique_ptr<Label>
   makeLabel(std::string_view text, float fontSize, const ColorSpec& color, FontWeight fontWeight = FontWeight::Normal);
   [[nodiscard]] std::unique_ptr<Flex> makeSettingsStatusBanner(SettingsStatusBannerProps props);
+  // Index rows that open a sub-page, like System Settings: label on the left, chevron at the
+  // row's trailing edge. Call from a button's configure hook.
+  void addTrailingDisclosureChevron(Button& button, float scale);
   void updateSettingsStatusBanner(Flex& banner, Label& message, std::string_view text, bool error);
 
   // Non-dismissible callout for settings pages/sheets that need HTTP while offline_mode is on.

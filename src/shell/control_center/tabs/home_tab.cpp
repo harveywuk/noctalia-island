@@ -30,6 +30,7 @@
 #include "ui/dialogs/file_dialog.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -145,6 +146,24 @@ namespace {
     } else {
       card.clearBorder();
     }
+  }
+
+  // Up to two initials from the first letters of the name's words, like a macOS monogram.
+  [[nodiscard]] std::string monogramInitials(std::string_view name) {
+    std::string initials;
+    bool atWordStart = true;
+    for (std::size_t i = 0; i < name.size() && initials.size() < 2; ++i) {
+      const auto ch = static_cast<unsigned char>(name[i]);
+      if (std::isspace(ch) != 0) {
+        atWordStart = true;
+        continue;
+      }
+      if (atWordStart && std::isalnum(ch) != 0) {
+        initials.push_back(static_cast<char>(std::toupper(ch)));
+      }
+      atWordStart = false;
+    }
+    return initials;
   }
 
   void applyAvatarChrome(Image* avatar, bool highlighted) {
@@ -285,6 +304,28 @@ std::unique_ptr<Flex> HomeTab::create() {
     }
   });
   m_userAvatarArea = avatarArea.get();
+  // Without a picture, show a grey circle with the user's initials, as macOS and the lock
+  // screen do, so the card never has an empty hole where the avatar goes.
+  avatarArea->addChild(
+      ui::column(
+          {.out = &m_userMonogram,
+           .align = FlexAlign::Center,
+           .justify = FlexJustify::Center,
+           .fill = fixedColorSpec(rgba(0.557F, 0.557F, 0.576F, 1.0F)),
+           .radius = avatarSize * 0.5F,
+           .width = avatarSize,
+           .height = avatarSize,
+           .configure = [](Flex& monogram) { monogram.setHitTestVisible(false); }},
+          ui::label({
+              .out = &m_userInitials,
+              .text = monogramInitials(displayName),
+              .fontSize = avatarSize * 0.4F,
+              .fontWeight = FontWeight::SemiBold,
+              .color = fixedColorSpec(rgba(1.0F, 1.0F, 1.0F, 1.0F)),
+              .maxLines = 1,
+          })
+      )
+  );
   avatarArea->addChild(
       ui::image({
           .out = &m_userAvatar,
@@ -977,6 +1018,13 @@ void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight)
       m_userAvatar->setSize(desiredAvatar, desiredAvatar);
       m_userAvatar->setRadius(desiredAvatar * 0.5F);
       m_userAvatar->setPadding(1.0F * scale);
+      if (m_userMonogram != nullptr) {
+        m_userMonogram->setSize(desiredAvatar, desiredAvatar);
+        m_userMonogram->setRadius(desiredAvatar * 0.5F);
+      }
+      if (m_userInitials != nullptr) {
+        m_userInitials->setFontSize(desiredAvatar * 0.4F);
+      }
     }
     m_userMain->setMinHeight(desiredAvatar);
     m_userMain->setSize(m_userMain->width(), desiredAvatar);
@@ -1467,6 +1515,8 @@ void HomeTab::onClose() {
   m_userCard = nullptr;
   m_userMain = nullptr;
   m_userAvatar = nullptr;
+  m_userMonogram = nullptr;
+  m_userInitials = nullptr;
   m_timeLabel = nullptr;
   m_dateLabel = nullptr;
   m_weatherGlyph = nullptr;
@@ -1578,6 +1628,9 @@ void HomeTab::sync(Renderer& renderer) {
 
   if (m_userAvatar != nullptr && m_config != nullptr && m_asyncTextures != nullptr) {
     const std::string displayPath = shell::avatarDisplayPath(m_accounts, m_config->config());
+    if (m_userMonogram != nullptr) {
+      m_userMonogram->setVisible(displayPath.empty());
+    }
     if (displayPath.empty()) {
       m_userAvatar->clear(renderer);
     } else {

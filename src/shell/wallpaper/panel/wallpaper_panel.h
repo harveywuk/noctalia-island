@@ -75,6 +75,7 @@ private:
   void refreshScan();
   void onScanComplete();
   void syncLoadingState();
+  void syncEmptyState();
   void applyFilter();
   void syncBrowseChrome();
   void syncBackButton();
@@ -145,6 +146,8 @@ private:
   Button* m_closeButton = nullptr;
   VirtualGridView* m_grid = nullptr;
   Flex* m_loadingBox = nullptr;
+  Flex* m_emptyBox = nullptr;
+  Label* m_emptyHint = nullptr;
   Spinner* m_spinner = nullptr;
   std::unique_ptr<WallpaperGridAdapter> m_adapter;
 
