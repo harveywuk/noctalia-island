@@ -123,6 +123,8 @@ pinned          = []     # desktop entry IDs shown first when the launcher opens
 fetch_exchange_rates = true  # refresh currency rates from third-party online sources
 provider_prefix = "/"    # common prefix character for provider trigger words (e.g. "/" or ".")
 auto_paste      = "auto" # off | auto | ctrl_v | ctrl_shift_v | shift_insert (after copy activations)
+web_search_url  = "https://duckduckgo.com/?q={query}"  # "Search the Web" fallback; {query} is URL-encoded
+script_directories = []  # extra folders of script commands (~/.config/noctalia/scripts is always read)
 
 [shell.launcher.providers.calculator]
 prefix = "calc"          # trigger word for calculator expressions (e.g. "/calc")
@@ -146,6 +148,25 @@ prefix = "wall"          # trigger word for wallpaper selector (e.g. "/wall")
 
 [shell.launcher.providers.windows]
 prefix = "win"           # trigger word for windows (e.g. "/win")
+
+# Raycast-style providers. Each has [shell.launcher.providers.<name>] prefix/global keys:
+# clipboard ("clip", not global), quicklinks ("link"), snippets ("snip"), scripts ("script"),
+# system ("sys") and time ("time").
+
+[shell.launcher.quicklinks.man]
+name    = "Arch Man Pages"
+url     = "https://man.archlinux.org/search?q={query}"  # {query} makes it a search link
+keyword = "man"          # type "man grep" to search
+glyph   = "book"         # optional icon
+
+[shell.launcher.snippets.signature]
+name    = "Email signature"
+keyword = "sig"
+text    = "Best,\nHarvey\nSent {date}"  # {date} {time} {datetime} {clipboard}
+
+[shell.launcher.aliases]
+n  = "notes"                       # desktop id (with or without .desktop) for apps
+dm = "System:toggle-dark-mode"     # or Provider:id for any other result
 
 # Dmenu-style providers: a command emits newline-separated candidates that show up
 # in the launcher. A tab in a line splits it into title \t description. On activate,
@@ -276,6 +297,7 @@ Notes:
 - `shell.launcher.show_app_actions` includes searchable `.desktop` actions alongside application results. Action rows show the action name with the parent application underneath and launch that action directly. Disabled by default; application actions remain available from an application's right-click menu.
 - `shell.launcher.sort_by_usage` boosts frequently launched apps toward the top of results and exposes a **Recently Used** category filter. Disable it for strictly alphabetical ordering within each provider.
 - `shell.launcher.pinned` is an ordered list of desktop entry IDs shown first when the launcher opens without a query. Launcher pins are independent from `dock.pinned` and each taskbar widget's `pinned` list.
+- `shell.launcher.quicklinks`, `snippets`, `aliases`, `web_search_url` and `script_directories` configure the Raycast-style providers; see [Launcher](/noctalia/launcher/). A quicklink with the same id as a built-in one (`google`, `duckduckgo`, `github`, `youtube`, `wikipedia`, `archwiki`, `maps`) replaces it. Aliases set from the launcher's actions menu are stored in the state folder, and config aliases win over them.
 - `shell.launcher.fetch_exchange_rates` refreshes currency exchange rates in the background from libqalculate's third-party online sources (enabled by default). Disable it to opt out of those requests; the last cached rates are still used for conversion. Refresh is also skipped when `[shell].offline_mode` is enabled.
 - `shell.launcher.auto_paste` controls virtual-keyboard paste after copy-style activations (calculator, emoji, copy-mode dmenu). Providers that copy opt in with `supportsAutoPaste`. Same values as `shell.clipboard_auto_paste` (`off` | `auto` | `ctrl_v` | `ctrl_shift_v` | `shift_insert`). Default `auto`.
 - Reset stored launcher usage data from **Settings → Panels → Launcher → Reset Usage Data** (clears `usage_counts.json` and `recently_used.json` while Noctalia is running).

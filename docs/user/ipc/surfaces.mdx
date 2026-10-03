@@ -29,6 +29,7 @@ Use <IpcCommand command="bar-hide" /> when you want the bar to stay hidden until
 | Open panel | <IpcCommand command="panel-open <id> [context]" /> | Open a panel by id without toggling it closed when it is already open. Optional `context` works like <IpcCommand command="panel-toggle <id> [context]" />. |
 | Close panel | <IpcCommand command="panel-close [id]" /> | Close the active panel, or close the named panel if it is active. |
 | Toggle launcher | <IpcCommand command="panel-toggle launcher [query]" /> | Open or close the app launcher. Optional `query` pre-fills the search input (e.g. `noctalia msg panel-toggle launcher "/wall"`). |
+| Run launcher item | <IpcCommand command="launcher-run <alias>" /> | Run a launcher result without opening the launcher, by its alias or `Provider:id` (e.g. `noctalia msg launcher-run System:toggle-dark-mode`). Copy the command for any result with **Copy Hotkey Command** in the launcher's actions menu. |
 | Toggle session menu | <IpcCommand command="panel-toggle session" /> | Open or close the logout, reboot, and shutdown menu. |
 | Toggle clipboard | <IpcCommand command="panel-toggle clipboard" /> | Open or close clipboard history. |
 | Toggle wallpaper panel | <IpcCommand command="panel-toggle wallpaper" /> | Open or close wallpaper picker. |
