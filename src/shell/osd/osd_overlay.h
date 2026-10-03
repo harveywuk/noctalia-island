@@ -35,7 +35,10 @@ enum class OsdKind : std::uint8_t {
   KeyboardLayout,
   Media,
   Privacy,
-  KeyboardBacklight
+  KeyboardBacklight,
+  Charging,
+  // Posted by `noctalia msg osd-show`; always shown, since a script asked for it.
+  Script
 };
 
 struct OsdContent {

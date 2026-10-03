@@ -65,6 +65,7 @@ namespace noctalia::config::schema {
         field(&OsdKindsConfig::media, "media"),
         field(&OsdKindsConfig::privacy, "privacy"),
         field(&OsdKindsConfig::keyboardBacklight, "keyboard_backlight"),
+        field(&OsdKindsConfig::charging, "charging"),
     };
     return s;
   }
@@ -97,6 +98,7 @@ namespace noctalia::config::schema {
         field(&IslandConfig::outerProgressRing, "outer_progress_ring"),
         field(&IslandConfig::mediaArtworkSize, "media_artwork_size", Range<float>{40.0F, 80.0F}),
         enumField(&IslandConfig::activityPriority, "activity_priority", kIslandActivityPriority),
+        field(&IslandConfig::splitActivities, "split_activities"),
         field(&IslandConfig::cycleActivities, "cycle_activities"),
         field(&IslandConfig::activityCycleSeconds, "activity_cycle_seconds", Range<std::int64_t>{1, 30}),
         field(&IslandConfig::hoverOpenDelayMs, "hover_open_delay_ms", Range<std::int64_t>{0, 2000}),
@@ -105,6 +107,7 @@ namespace noctalia::config::schema {
         field(&IslandConfig::pausedMediaSeconds, "paused_media_seconds", Range<std::int64_t>{0, 30}),
         field(&IslandConfig::bluetoothPreviewSeconds, "bluetooth_preview_seconds", Range<std::int64_t>{0, 30}),
         field(&IslandConfig::revealOnTrackChange, "reveal_on_track_change"),
+        field(&IslandConfig::upNextMinutes, "up_next_minutes", Range<std::int64_t>{0, 60}),
         field(&IslandConfig::trackPreviewMonitor, "track_preview_monitor"),
         field(&IslandConfig::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
         field(&IslandConfig::volumeBarHeight, "volume_bar_height", Range<float>{5.0F, 24.0F}),
@@ -1818,6 +1821,25 @@ namespace noctalia::config::schema {
       return s;
     }
 
+    const Schema<LauncherQuicklinkConfig>& launcherQuicklinkSchema() {
+      static const Schema<LauncherQuicklinkConfig> s = {
+          field(&LauncherQuicklinkConfig::name, "name"),
+          field(&LauncherQuicklinkConfig::url, "url"),
+          field(&LauncherQuicklinkConfig::keyword, "keyword"),
+          field(&LauncherQuicklinkConfig::glyph, "glyph"),
+      };
+      return s;
+    }
+
+    const Schema<LauncherSnippetConfig>& launcherSnippetSchema() {
+      static const Schema<LauncherSnippetConfig> s = {
+          field(&LauncherSnippetConfig::name, "name"),
+          field(&LauncherSnippetConfig::keyword, "keyword"),
+          field(&LauncherSnippetConfig::text, "text"),
+      };
+      return s;
+    }
+
     const Schema<ShellConfig::LauncherConfig::PanelsConfig>& shellLauncherPanelsSchema() {
       static const Schema<ShellConfig::LauncherConfig::PanelsConfig> s = {
           field(&ShellConfig::LauncherConfig::PanelsConfig::ignored, "ignored"),
@@ -1847,6 +1869,19 @@ namespace noctalia::config::schema {
               },
               [](const LauncherProviderConfig& elem) { return elem.name; }
           ),
+          field(&ShellConfig::LauncherConfig::webSearchUrl, "web_search_url"),
+          namedMap<ShellConfig::LauncherConfig, LauncherQuicklinkConfig>(
+              &ShellConfig::LauncherConfig::quicklinks, "quicklinks", launcherQuicklinkSchema(),
+              [](LauncherQuicklinkConfig& elem, std::string_view name) { elem.id = std::string(name); },
+              [](const LauncherQuicklinkConfig& elem) { return elem.id; }
+          ),
+          namedMap<ShellConfig::LauncherConfig, LauncherSnippetConfig>(
+              &ShellConfig::LauncherConfig::snippets, "snippets", launcherSnippetSchema(),
+              [](LauncherSnippetConfig& elem, std::string_view name) { elem.id = std::string(name); },
+              [](const LauncherSnippetConfig& elem) { return elem.id; }
+          ),
+          field(&ShellConfig::LauncherConfig::aliases, "aliases"),
+          field(&ShellConfig::LauncherConfig::scriptDirectories, "script_directories"),
       };
       return s;
     }
@@ -2440,6 +2475,7 @@ namespace noctalia::config::schema {
         field(&DockConfig::radiusTopRight, "radius_top_right", kDockRadiusRange),
         field(&DockConfig::radiusBottomLeft, "radius_bottom_left", kDockRadiusRange),
         field(&DockConfig::radiusBottomRight, "radius_bottom_right", kDockRadiusRange),
+        field(&DockConfig::hairlineBorder, "hairline_border"),
         field(&DockConfig::concaveEdgeCorners, "concave_edge_corners"),
         field(&DockConfig::marginEnds, "margin_ends", kDockMarginEndsRange),
         field(&DockConfig::marginEdge, "margin_edge", kDockMarginEdgeRange),
@@ -2474,6 +2510,7 @@ namespace noctalia::config::schema {
         field(&DockConfig::inactiveOpacity, "inactive_opacity", kUnitRange),
         field(&DockConfig::showDots, "show_dots"),
         field(&DockConfig::showInstanceCount, "show_instance_count"),
+        field(&DockConfig::showBadges, "show_badges"),
         enumField(&DockConfig::launcherPosition, "launcher_position", kDockLauncherPositions),
         field(&DockConfig::launcherIcon, "launcher_icon"),
         pathStringField(&DockConfig::launcherCustomImage, "launcher_custom_image"),
@@ -2826,6 +2863,7 @@ namespace noctalia::config::schema {
         optionalBoolField(&IslandMonitorOverride::outerProgressRing, "outer_progress_ring"),
         optionalFloatField(&IslandMonitorOverride::mediaArtworkSize, "media_artwork_size", Range<float>{40, 80}),
         optionalEnumField(&IslandMonitorOverride::activityPriority, "activity_priority", kIslandActivityPriority),
+        optionalBoolField(&IslandMonitorOverride::splitActivities, "split_activities"),
         optionalBoolField(&IslandMonitorOverride::cycleActivities, "cycle_activities"),
         optionalIntField(
             &IslandMonitorOverride::activityCycleSeconds, "activity_cycle_seconds", Range<std::int64_t>{1, 30}

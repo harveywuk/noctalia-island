@@ -98,6 +98,8 @@ struct IslandConfig {
   bool outerProgressRing = false;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
+  // A second running activity detaches into a round bubble beside the capsule, as on iPhone.
+  bool splitActivities = true;
   bool cycleActivities = false;
   int activityCycleSeconds = 5;
   int hoverOpenDelayMs = 110;
@@ -106,6 +108,8 @@ struct IslandConfig {
   int pausedMediaSeconds = 3;
   int bluetoothPreviewSeconds = 5;
   bool revealOnTrackChange = true;
+  // Minutes before a calendar event starts that its countdown appears; 0 turns it off.
+  int upNextMinutes = 10;
   std::string trackPreviewMonitor = "all";
   std::string bluetoothPreviewMonitor = "all";
   float volumeBarHeight = 18.0F;
@@ -135,6 +139,7 @@ struct IslandMonitorOverride {
   std::optional<bool> outerProgressRing;
   std::optional<float> mediaArtworkSize;
   std::optional<IslandActivityPriority> activityPriority;
+  std::optional<bool> splitActivities;
   std::optional<bool> cycleActivities;
   std::optional<int> activityCycleSeconds;
   std::optional<int> hoverOpenDelayMs;
@@ -192,6 +197,8 @@ inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOv
     base.mediaArtworkSize = *override.mediaArtworkSize;
   if (override.activityPriority)
     base.activityPriority = *override.activityPriority;
+  if (override.splitActivities)
+    base.splitActivities = *override.splitActivities;
   if (override.cycleActivities)
     base.cycleActivities = *override.cycleActivities;
   if (override.activityCycleSeconds)
@@ -846,6 +853,8 @@ struct DockConfig {
   // Inside outline for the dock background.
   ColorSpec border = colorSpecFromRole(ColorRole::Outline);
   float borderWidth = 0.0F;
+  // Faint hairline around the dock's glass, as on macOS; drawn when border_width is 0.
+  bool hairlineBorder = true;
   // Defaults float a fully rounded dock above the screen edge, like macOS.
   std::int32_t radius = static_cast<std::int32_t>(Style::radiusXl); // dock background corner radius
   std::int32_t radiusTopLeft = static_cast<std::int32_t>(Style::radiusXl);
@@ -876,6 +885,7 @@ struct DockConfig {
   float inactiveOpacity = 1.0F;      // non-focused app icon opacity
   bool showDots = true;              // show a dot below apps that are running
   bool showInstanceCount = false;    // show a badge with count when app has >1 window
+  bool showBadges = true;            // red unread-count badges that apps publish (LauncherEntry)
   DockLauncherPosition launcherPosition = DockLauncherPosition::None;
   std::string launcherIcon = "grid-dots";   // Tabler glyph name
   std::string launcherCustomImage = "";     // image path; overrides launcherIcon glyph when set
@@ -950,6 +960,7 @@ struct OsdKindsConfig {
   bool media = true;
   bool privacy = true;
   bool keyboardBacklight = true;
+  bool charging = true;
   bool operator==(const OsdKindsConfig&) const = default;
 };
 
@@ -1177,6 +1188,29 @@ struct DmenuEntryConfig {
   bool freeform = false;            // Let typed query text become an activatable result.
 
   bool operator==(const DmenuEntryConfig&) const = default;
+};
+
+// A launcher quicklink: a URL opened by name, or a search URL whose {query} the launcher fills in
+// from the text typed after its keyword (e.g. "gh noctalia").
+struct LauncherQuicklinkConfig {
+  std::string id; // [shell.launcher.quicklinks.<id>] table key
+  std::string name;
+  std::string url;
+  std::string keyword;
+  std::string glyph;
+
+  bool operator==(const LauncherQuicklinkConfig&) const = default;
+};
+
+// A launcher snippet: saved text pasted by name or keyword. {date}, {time}, {datetime} and
+// {clipboard} are expanded when it is pasted.
+struct LauncherSnippetConfig {
+  std::string id; // [shell.launcher.snippets.<id>] table key
+  std::string name;
+  std::string keyword;
+  std::string text;
+
+  bool operator==(const LauncherSnippetConfig&) const = default;
 };
 
 struct LauncherProviderConfig {
@@ -1654,7 +1688,8 @@ struct ShellConfig {
   // under [shell.panel] (launcher_placement/position/open_near_click_launcher),
   // parallel to every other surface.
   struct LauncherConfig {
-    bool categories = true;
+    // Off by default: Raycast shows only the search field and the list. F6 or the setting brings them back.
+    bool categories = false;
     bool showIcons = true;
     bool showAppOriginIndicator = true;
     bool compact = false;
@@ -1684,6 +1719,17 @@ struct ShellConfig {
     } panels;
 
     std::vector<LauncherProviderConfig> providers;
+
+    // Search URL for the "Search the web" fallback; {query} is replaced by the typed text.
+    std::string webSearchUrl = "https://duckduckgo.com/?q={query}";
+    // Quicklinks and snippets from config. With no quicklinks configured a small built-in set is used.
+    std::vector<LauncherQuicklinkConfig> quicklinks;
+    std::vector<LauncherSnippetConfig> snippets;
+    // Alias -> target, where target is a desktop entry id ("firefox") or "<provider>:<result id>".
+    // Aliases set from the launcher's actions menu are kept in its state file instead.
+    std::unordered_map<std::string, std::string> aliases;
+    // Folders scanned for script commands. Empty means $XDG_CONFIG_HOME/noctalia/scripts.
+    std::vector<std::string> scriptDirectories;
 
     bool operator==(const LauncherConfig&) const = default;
   };
@@ -1765,7 +1811,7 @@ struct ShellConfig {
   std::string fontFamily = font_defaults::kFamily;
   std::string lang; // empty = auto-detect from $LC_ALL/$LC_MESSAGES/$LANG
   std::string timeFormat = "{:%H:%M}";
-  std::string dateFormat = "%A, %x";
+  std::string dateFormat = "%A %-d %B";
   bool offlineMode = false;
   /// Bar name panels attach to when opened without a source bar (IPC, shortcuts, dock).
   /// Empty keeps per-source resolution (widget click bar, else first enabled bar).

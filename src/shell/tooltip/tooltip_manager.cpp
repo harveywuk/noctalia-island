@@ -29,8 +29,9 @@ namespace {
   constexpr float kMaxContentWidth = 280.0F;
   constexpr int kMaxTextLines = 3;
   constexpr float kTableMinPeerColumnWidth = 80.0F;
-  constexpr float kPadH = Style::spaceMd;
-  constexpr float kPadV = Style::spaceSm;
+  // macOS tooltips are compact: small text in a snug, lightly rounded bubble.
+  constexpr float kPadH = 8.0F;
+  constexpr float kPadV = 4.0F;
   constexpr float kTableColumnGap = Style::spaceMd;
   constexpr float kBorder = Style::borderWidth;
   // Monospace so grid-mode value columns don't reflow on tiny per-tick content changes
@@ -365,7 +366,8 @@ void TooltipManager::scheduleReshow() {
 }
 
 void TooltipManager::syncAnchor(InputArea* area) {
-  if (m_state != State::Showing || m_surface == nullptr || m_pendingArea != area) {
+  // A dismissed tooltip clears m_pendingArea while it fades, so a null area would match it.
+  if (area == nullptr || m_state != State::Showing || m_surface == nullptr || m_pendingArea != area) {
     return;
   }
 
@@ -415,6 +417,12 @@ void TooltipManager::showPopup() {
     kLog.warn("failed to create tooltip popup");
     m_surface.reset();
     m_state = State::Idle;
+    return;
+  }
+  // Creating the popup round-trips to the compositor, which can deliver a click that dismisses
+  // this tooltip first. Drop the half-built popup then, or it stays on screen with no owner.
+  if (m_pendingArea == nullptr) {
+    destroyPopup();
     return;
   }
 
@@ -694,8 +702,8 @@ void TooltipManager::buildScene(const TooltipContent& content, float w, float h,
 
   m_sceneRoot->addChild(
       ui::box({
-          .fill = colorSpecFromRole(ColorRole::Surface),
-          .radius = Style::scaledRadiusMd(),
+          .fill = colorSpecFromRole(ColorRole::SurfaceVariant),
+          .radius = Style::scaledRadiusSm(),
           .width = w,
           .height = h,
           .configure = [](Box& box) {
@@ -743,7 +751,7 @@ void TooltipManager::buildScene(const TooltipContent& content, float w, float h,
       auto keyLabel = ui::label({
           .text = row.key,
           .fontSize = fontSize,
-          .color = colorSpecFromRole(ColorRole::Secondary),
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
           .maxLines = 1,
       });
       const auto km = renderer.measureText(row.key, fontSize);

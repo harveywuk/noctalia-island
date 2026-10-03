@@ -310,6 +310,9 @@ namespace {
     if (panelId == "polkit") {
       return pc.polkitPosition;
     }
+    if (panelId == "notification-center") {
+      return "center_right";
+    }
     return "auto";
   }
 
@@ -538,10 +541,39 @@ void PanelManager::unregisterPanel(const std::string& id) {
   m_panels.erase(it);
 }
 
-void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest request) {
+void PanelManager::registerPanelRedirect(
+    const std::string& fromId, std::string toId, std::function<std::string()> context
+) {
+  m_redirects[fromId] = PanelRedirect{.target = std::move(toId), .context = std::move(context)};
+}
+
+std::string PanelManager::resolveRedirect(const std::string& panelId, PanelOpenRequest& request) {
+  // Notification Centre is its own panel: a request for the Control Center's notifications
+  // tab opens it instead (and drops the tab context).
+  if (panelId == "control-center" && request.context == "notifications" && m_panels.contains("notification-center")) {
+    request.context = {};
+    return "notification-center";
+  }
+  const auto it = m_redirects.find(panelId);
+  if (it == m_redirects.end() || m_panels.contains(panelId)) {
+    return panelId;
+  }
+  if (request.context.empty() && it->second.context) {
+    m_redirectContext = it->second.context();
+    request.context = m_redirectContext;
+  }
+  return it->second.target;
+}
+
+bool PanelManager::isKnownPanel(const std::string& panelId) const {
+  return m_panels.contains(panelId) || m_persistentHost.hasPanel(panelId) || m_redirects.contains(panelId);
+}
+
+void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest request) {
   if (m_inTransition) {
     return;
   }
+  const std::string panelId = resolveRedirect(requestedId, request);
 
   if (request.output == nullptr && m_platform != nullptr) {
     request.output = m_platform->focusedInteractiveOutput(std::chrono::milliseconds(1200));
@@ -605,7 +637,7 @@ void PanelManager::openPanel(const std::string& panelId, PanelOpenRequest reques
   const std::string_view islandAnchor = m_config != nullptr && !m_config->config().shell.panelAnchorBar.empty()
       ? std::string_view(m_config->config().shell.panelAnchorBar)
       : request.sourceBarName;
-  if (openIslandPanel(request.output, islandAnchor))
+  if (m_activePanel->islandHostable() && openIslandPanel(request.output, islandAnchor))
     return;
 
   auto barConfigOpt =
@@ -1470,8 +1502,8 @@ void PanelManager::closePanel(bool animateClose) {
       m_islandSurface->width = m_islandWidth;
       m_islandSurface->height = m_islandHeight;
       const float contentOpacity = m_contentNode ? m_contentNode->opacity() : 0;
-      m_animations.animate(
-          1.0F, 0.0F, Motion::dismissMs, Motion::dismiss,
+      Motion::animateSpring(
+          m_animations, 1.0F, 0.0F, Motion::panelClose,
           [this, contentOpacity](float v) {
             const auto target = m_islandHost->panelReturnSize();
             m_islandCollapsedWidth = target.width * m_islandSurface->scale;
@@ -1487,13 +1519,12 @@ void PanelManager::closePanel(bool animateClose) {
                 destroyPanel();
             });
           },
-          m_sceneRoot.get()
+          m_sceneRoot.get(), Motion::closeTolerance
       );
     } else if (m_attachedToBar && m_attachedRevealClipNode != nullptr) {
       m_animations.cancelForOwner(m_attachedRevealClipNode);
-      m_animations.animate(
-          m_attachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
-          [this](float v) { applyAttachedReveal(v); },
+      Motion::animateSpring(
+          m_animations, m_attachedRevealProgress, 0.0F, Motion::panelClose, [this](float v) { applyAttachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
               if (m_destroyGeneration == gen) {
@@ -1501,13 +1532,12 @@ void PanelManager::closePanel(bool animateClose) {
               }
             });
           },
-          m_attachedRevealClipNode
+          m_attachedRevealClipNode, Motion::closeTolerance
       );
     } else {
       m_animations.cancelForOwner(m_sceneRoot.get());
-      m_animations.animate(
-          m_detachedRevealProgress, 0.0F, Motion::dismissMs, Motion::dismiss,
-          [this](float v) { applyDetachedReveal(v); },
+      Motion::animateSpring(
+          m_animations, m_detachedRevealProgress, 0.0F, Motion::panelClose, [this](float v) { applyDetachedReveal(v); },
           [this, gen]() {
             DeferredCall::callLater([this, gen]() {
               if (m_destroyGeneration == gen) {
@@ -1515,7 +1545,7 @@ void PanelManager::closePanel(bool animateClose) {
               }
             });
           },
-          m_sceneRoot.get()
+          m_sceneRoot.get(), Motion::closeTolerance
       );
     }
     m_surface->requestRedraw();
@@ -1600,7 +1630,8 @@ void PanelManager::destroyPanel() {
   }
 }
 
-void PanelManager::togglePanel(const std::string& panelId, PanelOpenRequest request) {
+void PanelManager::togglePanel(const std::string& requestedId, PanelOpenRequest request) {
+  const std::string panelId = resolveRedirect(requestedId, request);
   if (m_persistentHost.hasPanel(panelId)) {
     if (m_persistentHost.isOpen(panelId)) {
       m_persistentHost.close(panelId);
@@ -1633,6 +1664,10 @@ void PanelManager::togglePanel(const std::string& panelId, PanelOpenRequest requ
 }
 
 void PanelManager::togglePanel(const std::string& panelId) {
+  if (m_redirects.contains(panelId) && !m_panels.contains(panelId)) {
+    togglePanel(panelId, PanelOpenRequest{});
+    return;
+  }
   if (m_persistentHost.hasPanel(panelId)) {
     if (m_persistentHost.isOpen(panelId)) {
       m_persistentHost.close(panelId);
@@ -2302,8 +2337,10 @@ void PanelManager::startAttachedOpenAnimation() {
   }
 
   m_attachedOpenAnimationPending = false;
-  m_animations.animate(
-      m_attachedRevealProgress, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyAttachedReveal(v); }, {},
+  // The reveal is clamped at fully open, so the spring settles against the bar instead of
+  // overshooting away from it.
+  Motion::animateSpring(
+      m_animations, m_attachedRevealProgress, 1.0F, Motion::panelOpen, [this](float v) { applyAttachedReveal(v); }, {},
       m_attachedRevealClipNode
   );
 }
@@ -2721,8 +2758,8 @@ void PanelManager::buildScene(std::uint32_t width, std::uint32_t height) {
       m_attachedOpenAnimationPending = true;
     } else {
       applyDetachedReveal(0.0F);
-      m_animations.animate(
-          0.0F, 1.0F, Motion::revealMs, Motion::reveal, [this](float v) { applyDetachedReveal(v); }, {},
+      Motion::animateSpring(
+          m_animations, 0.0F, 1.0F, Motion::panelOpen, [this](float v) { applyDetachedReveal(v); }, {},
           m_sceneRoot.get()
       );
     }
@@ -2964,7 +3001,7 @@ void PanelManager::registerIpc(IpcService& ipc) {
         if (auto error = parseOpenArgs(args, "panel-toggle", panelId, context)) {
           return *error;
         }
-        if (!m_panels.contains(panelId) && !m_persistentHost.hasPanel(panelId)) {
+        if (!isKnownPanel(panelId)) {
           return unknownPanelError(panelId);
         }
         // Output left unset: openPanel resolves it (focus source, else compositor probe).
@@ -2984,7 +3021,7 @@ void PanelManager::registerIpc(IpcService& ipc) {
         if (auto error = parseOpenArgs(args, "panel-open", panelId, context)) {
           return *error;
         }
-        if (!m_panels.contains(panelId) && !m_persistentHost.hasPanel(panelId)) {
+        if (!isKnownPanel(panelId)) {
           return unknownPanelError(panelId);
         }
 
@@ -3007,7 +3044,7 @@ void PanelManager::registerIpc(IpcService& ipc) {
     if (!panelId.empty() && StringUtils::splitWhitespace(panelId).size() != 1) {
       return "error: panel-close accepts at most one panel id\n";
     }
-    if (!panelId.empty() && !m_panels.contains(panelId) && !m_persistentHost.hasPanel(panelId)) {
+    if (!panelId.empty() && !isKnownPanel(panelId)) {
       return unknownPanelError(panelId);
     }
 
@@ -3015,7 +3052,9 @@ void PanelManager::registerIpc(IpcService& ipc) {
       m_persistentHost.close(panelId);
       return "ok\n";
     }
-    if (panelId.empty() || isOpenPanel(panelId)) {
+    const auto redirect = m_redirects.find(panelId);
+    const bool redirectOpen = redirect != m_redirects.end() && isOpenPanel(redirect->second.target);
+    if (panelId.empty() || isOpenPanel(panelId) || redirectOpen) {
       closePanel();
     }
     return "ok\n";

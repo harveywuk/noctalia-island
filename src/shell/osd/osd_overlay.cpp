@@ -10,6 +10,7 @@
 #include "render/core/renderer.h"
 #include "render/render_context.h"
 #include "render/scene/node.h"
+#include "render/text/glyph_registry.h"
 #include "shell/surface/edge_inset.h"
 #include "ui/builders.h"
 #include "ui/material.h"
@@ -21,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 
 namespace {
 
@@ -77,6 +79,10 @@ namespace {
       return kinds.privacy;
     case OsdKind::KeyboardBacklight:
       return kinds.keyboardBacklight;
+    case OsdKind::Charging:
+      return kinds.charging;
+    case OsdKind::Script:
+      return true;
     }
     return true;
   }
@@ -231,6 +237,22 @@ void OsdOverlay::registerIpc(IpcService& ipc) {
     }
     setEnabledOverride(!isEnabled());
     return isEnabled() ? "on\n" : "off\n";
+  });
+  ipc.bind(noctalia::cli::msg::osdShow, [this](const std::string& args) -> std::string {
+    const auto words = noctalia::ipc::splitWords(args);
+    if (words.size() < 2) {
+      return "error: osd-show needs an icon and some text\n";
+    }
+    if (!GlyphRegistry::contains(words.front())) {
+      return std::format("error: unknown icon '{}'\n", words.front());
+    }
+    std::string text = words[1];
+    for (std::size_t i = 2; i < words.size(); ++i) {
+      text += ' ';
+      text += words[i];
+    }
+    show(OsdContent{.kind = OsdKind::Script, .icon = words.front(), .value = text, .showProgress = false});
+    return "ok\n";
   });
 }
 

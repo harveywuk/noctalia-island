@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
@@ -474,6 +475,43 @@ std::string formatElapsedSince(std::chrono::steady_clock::time_point since) {
   using namespace std::chrono;
   const auto secs = duration_cast<seconds>(steady_clock::now() - since).count();
   return formatAgeSeconds(secs, std::nullopt);
+}
+
+std::string formatNotificationTime(std::chrono::system_clock::time_point tp, std::chrono::system_clock::time_point now) {
+  using namespace std::chrono;
+  const auto secs = std::max<std::int64_t>(duration_cast<seconds>(now - tp).count(), 0);
+  if (secs < 60) {
+    return i18n::tr("time.relative.now");
+  }
+  if (secs < 3600) {
+    return i18n::trp("time.relative.minutes-ago-short", static_cast<long>(secs / 60));
+  }
+
+  const std::time_t thenT = system_clock::to_time_t(tp);
+  const std::time_t nowT = system_clock::to_time_t(now);
+  std::tm thenL{};
+  std::tm nowL{};
+  localtime_r(&thenT, &thenL);
+  localtime_r(&nowT, &nowL);
+  // Whole calendar days between the two local dates, via noon to stay clear of DST shifts.
+  const auto localNoon = [](std::tm day) {
+    day.tm_hour = 12;
+    day.tm_min = 0;
+    day.tm_sec = 0;
+    day.tm_isdst = -1;
+    return std::mktime(&day);
+  };
+  const auto dayDiff = static_cast<long>(std::lround(std::difftime(localNoon(nowL), localNoon(thenL)) / 86400.0));
+  if (dayDiff <= 0) {
+    return i18n::trp("time.relative.hours-ago-short", static_cast<long>(secs / 3600));
+  }
+  if (dayDiff == 1) {
+    return i18n::tr("time.relative.yesterday");
+  }
+  if (dayDiff < 7) {
+    return formatStrftime("%A", thenL);
+  }
+  return formatStrftime(thenL.tm_year == nowL.tm_year ? "%b %-d" : "%b %-d, %Y", thenL);
 }
 
 std::string formatDuration(std::chrono::seconds duration) {

@@ -193,13 +193,15 @@ namespace settings {
                  .gap = Style::spaceSm * scale,
                  .configure = [scale](Flex& flex) { flex.setPadding(Style::spaceSm * scale, 0.0F, 0.0F, 0.0F); }},
                 ui::separator(),
-                makeLabel(title, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::Secondary), FontWeight::Bold)
+                makeLabel(
+                    title, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurfaceVariant), FontWeight::Bold
+                )
             )
         );
       } else {
-        section.addChild(
-            makeLabel(title, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::Secondary), FontWeight::Bold)
-        );
+        section.addChild(makeLabel(
+            title, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurfaceVariant), FontWeight::Bold
+        ));
       }
     };
 
@@ -1312,7 +1314,7 @@ namespace settings {
              .radius = Style::scaledRadiusMd(scale)}
         );
         for (const auto& group : pageGroupKeys) {
-          if (!card->children().empty())
+          if (hasLaidOutChildren(*card))
             card->addChild(ui::separator());
           card->addChild(
               ui::button({

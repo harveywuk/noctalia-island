@@ -1,16 +1,22 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace launcher {
-  inline constexpr std::array kBuiltinProviders = {std::string_view("calculator"), std::string_view("emoji"),
-                                                   std::string_view("panels"),     std::string_view("session"),
-                                                   std::string_view("wallpaper"),  std::string_view("windows")};
+  inline constexpr std::array kBuiltinProviders = {std::string_view("calculator"), std::string_view("clipboard"),
+                                                   std::string_view("emoji"),      std::string_view("files"),
+                                                   std::string_view("panels"),     std::string_view("quicklinks"),
+                                                   std::string_view("scripts"),    std::string_view("session"),
+                                                   std::string_view("snippets"),   std::string_view("system"),
+                                                   std::string_view("time"),       std::string_view("wallpaper"),
+                                                   std::string_view("windows")};
 } // namespace launcher
 
 struct LauncherCategory {
@@ -40,8 +46,68 @@ struct LauncherResult {
   std::string presentation;
   std::optional<std::string> query;
   double score = 0.0;
+  // Set by LauncherPanel on the first result of each list section (Results, Files, Favourites, …);
+  // the row draws it as a header above itself.
+  std::string section;
+  // Set by LauncherPanel: a short kind shown at the trailing edge (Application, File, …).
+  std::string kind;
+  // Set by LauncherPanel: the alias the user gave this result, drawn as a tag before the kind.
+  std::string alias;
+  // Fallback results (web search and friends) sort after everything else under their own header.
+  bool fallback = false;
   int recentlyUsedIndex = 0; // Higher is more recent. <=0 means no record or too old.
   bool pinned = false;       // Set by LauncherPanel for launcher-owned pinned applications.
+};
+
+// An extra action offered for a result in the actions menu (Shift+Return, or right click).
+struct LauncherAction {
+  std::string id;
+  std::string label;
+};
+
+enum class LauncherActionOutcome {
+  // Nothing happened; the launcher stays as it is.
+  Failed,
+  // Done; the launcher closes.
+  Done,
+  // Text was copied; the launcher closes and, for providers that support it, pastes.
+  Pasted,
+  // Done, and the launcher stays open with its results refreshed (pin, delete, …).
+  KeepOpen,
+};
+
+// What the preview pane shows for the selected result, for providers that ask for one.
+struct LauncherPreview {
+  std::string title;
+  std::string body;
+  // A large emoji or symbol drawn above the title.
+  std::string badge;
+  // An image file, or encoded image bytes (PNG, JPEG, …) when there is no file.
+  std::string imagePath;
+  std::vector<std::uint8_t> imageBytes;
+  // Label and value rows under the body (Type, Size, Modified, …).
+  std::vector<std::pair<std::string, std::string>> metadata;
+};
+
+// A Raycast-style form shown in place of the results (Create Quicklink, Edit Snippet, …). The
+// search field edits one field at a time; Return moves to the next field and finally submits.
+struct LauncherFormField {
+  std::string id;
+  std::string label;
+  std::string placeholder;
+  std::string value;
+  bool required = false;
+  // Newlines are typed and shown as "\n" in the single-line search field.
+  bool multiline = false;
+};
+
+struct LauncherForm {
+  std::string title;
+  std::string submitLabel;
+  std::string glyph;
+  std::vector<LauncherFormField> fields;
+  // Saves the form. Returns an error to show under the submit row, or an empty string when saved.
+  std::function<std::string(const std::vector<LauncherFormField>&)> submit;
 };
 
 class LauncherProvider {
@@ -99,6 +165,9 @@ public:
   // e.g. to implement autocomplete.
   virtual void setQueryRequestedCallback(std::function<void(std::string)> /*callback*/) {}
 
+  // Providers with create/edit commands ask the launcher to show a form through this.
+  virtual void setFormRequestedCallback(std::function<void(LauncherForm)> /*callback*/) {}
+
   // Async (plugin-backed) providers defer the launcher close until their activation
   // handler resolves: if it rewrote the query the panel stays open, otherwise the
   // provider invokes this to close it (and record usage). Arguments are the
@@ -116,6 +185,40 @@ public:
   [[nodiscard]] virtual std::vector<LauncherResult> queryPrefixed(std::string_view text) const { return query(text); }
 
   virtual bool activate(const LauncherResult& result) = 0;
+
+  // The primary action's name, shown in the action bar and at the top of the actions menu.
+  // Empty means the launcher's generic "Open".
+  [[nodiscard]] virtual std::string primaryActionLabel(const LauncherResult& /*result*/) const { return {}; }
+  // Extra actions for a result, listed under the primary action.
+  [[nodiscard]] virtual std::vector<LauncherAction> actions(const LauncherResult& /*result*/) const { return {}; }
+  virtual LauncherActionOutcome runAction(const LauncherResult& /*result*/, std::string_view /*actionId*/) {
+    return LauncherActionOutcome::Failed;
+  }
+
+  // Providers whose results read better beside a preview (clipboard, snippets, files) return true;
+  // the launcher then splits into a list and a preview pane while only this provider is shown.
+  [[nodiscard]] virtual bool showsPreview() const { return false; }
+  [[nodiscard]] virtual std::optional<LauncherPreview> preview(const LauncherResult& /*result*/) const {
+    return std::nullopt;
+  }
+
+  // True when result ids are stable, so a result can carry an alias and be run by id
+  // (`noctalia msg launcher-run`) without the launcher open.
+  [[nodiscard]] virtual bool supportsAliases() const { return false; }
+  // Finds a result by id. The default searches the unfiltered listing.
+  [[nodiscard]] virtual std::optional<LauncherResult> resultForId(std::string_view resultId) const {
+    for (auto& result : queryPrefixed({})) {
+      if (result.id == resultId) {
+        return result;
+      }
+    }
+    for (auto& result : query({})) {
+      if (result.id == resultId) {
+        return result;
+      }
+    }
+    return std::nullopt;
+  }
 
 private:
   std::optional<std::string> m_customPrefix;

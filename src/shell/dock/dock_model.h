@@ -8,6 +8,7 @@
 #include <vector>
 
 class CompositorPlatform;
+class LauncherBadgeService;
 struct DockConfig;
 struct ToplevelInfo;
 struct wl_output;
@@ -24,6 +25,7 @@ namespace shell::dock {
     bool running = false;
     bool active = false;
     std::size_t instanceCount = 0;
+    std::int64_t badgeCount = 0; // unread count the app publishes; 0 hides the badge
   };
 
   struct DockSnapshot {
@@ -42,6 +44,7 @@ namespace shell::dock {
     const std::string& globalActiveIdLower;
     const std::vector<DesktopEntry>& pinnedEntries;
     std::uint64_t sourceSerial = 0;
+    const LauncherBadgeService* badges = nullptr;
   };
 
   [[nodiscard]] wl_output* dockFilterOutput(const DockConfig& cfg, wl_output* instanceOutput);

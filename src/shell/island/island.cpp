@@ -1,5 +1,6 @@
 #include "shell/island/island.h"
 
+#include "calendar/calendar_service.h"
 #include "capture/screen_recorder.h"
 #include "config/config_service.h"
 #include "core/deferred_call.h"
@@ -10,6 +11,7 @@
 #include "dbus/mpris/mpris_art.h"
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
+#include "net/url_open.h"
 #include "notification/notification_manager.h"
 #include "pipewire/pipewire_spectrum.h"
 #include "render/animation/motion_service.h"
@@ -18,6 +20,7 @@
 #include "render/core/texture_manager.h"
 #include "render/render_context.h"
 #include "render/scene/countdown_ring_node.h"
+#include "render/scene/input_area.h"
 #include "render/scene/input_dispatcher.h"
 #include "render/scene/node.h"
 #include "scripting/plugin_registry.h"
@@ -58,6 +61,7 @@
 #include <glib.h>
 #include <linux/input-event-codes.h>
 #include <ranges>
+#include <span>
 
 using namespace std::chrono_literals;
 
@@ -142,6 +146,23 @@ struct Island::Instance {
   bool inside = false;
   bool hovered = false;
   bool badgeHovered = false;
+  // Split Island: a second running activity in a round bubble beside the capsule, as on iPhone.
+  // The bubble sits behind the capsule and slides out from under its right end.
+  Box* splitBubble = nullptr;
+  InputArea* splitArea = nullptr;
+  Node* splitContent = nullptr;
+  island::Activity splitActivity = island::Activity::None;
+  std::string splitSignature;
+  std::function<void(float)> splitProgress;
+  // 0 tucked under the capsule, 1 fully apart.
+  float splitReveal = 0;
+  AnimationManager::Id splitMorph = 0;
+  bool splitHovered = false;
+  // Several jobs in the downloads lane split among themselves: the bubble holds the next job,
+  // and clicking it makes that job the capsule's lead.
+  bool splitLane = false;
+  std::string splitNext;
+  std::string splitLead;
   island::PrivacyRotation privacyRotation;
   // Icon last shown in the compact indicator slot, to animate the change to the next one.
   std::string slotIcon;
@@ -178,6 +199,8 @@ struct Island::Instance {
     std::string plugin;
     Label* label;
     std::function<void(float)> setFraction;
+    // An up-next row's label reads "Starts in 4:07" rather than the bare time.
+    bool eventStatus = false;
   };
   std::vector<TimerUi> timerUi;
   struct DownloadUi {
@@ -206,6 +229,8 @@ namespace {
   constexpr Color kAppleGreen = rgba(0.188F, 0.82F, 0.345F);
   constexpr Color kAppleBlue = rgba(0.039F, 0.518F, 1.0F);
   constexpr Color kApplePurple = rgba(0.749F, 0.353F, 0.949F);
+  // Focus modes, Do Not Disturb among them, are indigo.
+  constexpr Color kAppleIndigo = rgba(0.369F, 0.361F, 0.902F);
   // View changes crossfade the capsule's content.
   constexpr float kViewFadeOutMs = 150.0F;
   // The incoming content fades in over half the expand spring's response, by which time the
@@ -213,6 +238,26 @@ namespace {
   constexpr float kViewFadeInMs = Motion::islandExpand.responseMs / 2;
   // Extra space below expanded content; see the layout tail in Island::prepare.
   constexpr float kExpandedBottomInset = 8.0F;
+  // The split bubble buds out with a slight overshoot and tucks back without one.
+  constexpr float kSplitOutMs = 420.0F;
+  constexpr float kSplitInMs = 220.0F;
+
+  // The gap between the capsule and the split bubble scales with the Island's height.
+  [[nodiscard]] float splitGap(float height) { return std::round(height * 0.16F); }
+
+  // Up-next events read "Now" once they start; plugin timers keep their clock.
+  std::string countdownTime(const island::Countdown& timer) {
+    return timer.event && timer.remaining <= 0 ? i18n::tr("island.up-next.now") : timer.time();
+  }
+  std::string eventStatus(const island::Countdown& timer) {
+    return timer.remaining > 0 ? i18n::tr("island.up-next.starts-in", "time", timer.time())
+                               : i18n::tr("island.up-next.started");
+  }
+  std::string countdownTitle(const island::Countdown& timer) {
+    return timer.event && !timer.title.empty() ? timer.title : i18n::tr(timer.titleKey);
+  }
+  // Calendar countdowns take the system blue, so they read apart from orange timers.
+  Color countdownTint(const island::Countdown& timer) { return timer.event ? kAppleBlue : kAppleOrange; }
 
   [[nodiscard]] ColorSpec islandFixed(Color color, float alpha) {
     ColorSpec spec = fixedColorSpec(color);
@@ -482,6 +527,15 @@ std::vector<island::Countdown> Island::countdowns() const {
             value("thepunkoff/pomodoro", "pomodoro.state"), value("thepunkoff/pomodoro", "pomodoro.sessionData")
         ))
       result.push_back(*timer);
+  if (m_calendar != nullptr && m_calendar->enabled() && m_calendar->hasData()) {
+    int minutes = 0;
+    for (const auto& inst : m_instances)
+      minutes = std::max(minutes, inst->config.upNextMinutes);
+    if (auto event = island::upNextSnapshot(
+            m_calendar->snapshot().events, std::chrono::system_clock::now(), minutes, m_dismissedEvents
+        ))
+      result.push_back(std::move(*event));
+  }
   std::ranges::stable_sort(result, [](const auto& a, const auto& b) {
     if (a.active != b.active)
       return a.active;
@@ -490,6 +544,84 @@ std::vector<island::Countdown> Island::countdowns() const {
     return a.plugin < b.plugin;
   });
   return result;
+}
+
+std::vector<DownloadProgress> Island::progressActivities() const {
+  auto result = m_downloads ? m_downloads->active() : std::vector<DownloadProgress>{};
+  for (const auto& activity : m_scriptActivities)
+    result.push_back({
+        .desktopId = "script:" + activity.id,
+        .name = activity.title,
+        .progress = activity.progress.value_or(0.0),
+        .determinate = activity.progress.has_value(),
+        .phase = "working",
+        .icon = activity.icon.empty() ? "terminal-2" : activity.icon,
+    });
+  return result;
+}
+
+namespace {
+  constexpr auto kScriptActivityLifetime = std::chrono::hours(1);
+}
+
+void Island::expireScriptActivities() {
+  const auto now = std::chrono::steady_clock::now();
+  const auto before = m_scriptActivities.size();
+  std::erase_if(m_scriptActivities, [now](const auto& activity) {
+    return now - activity.updated >= kScriptActivityLifetime;
+  });
+  if (m_scriptActivities.empty()) {
+    m_scriptActivityExpiry.stop();
+  } else {
+    const auto oldest = std::ranges::min(m_scriptActivities, {}, &ScriptActivity::updated).updated;
+    m_scriptActivityExpiry.start(
+        std::chrono::ceil<std::chrono::milliseconds>(oldest + kScriptActivityLifetime - now) + 1ms,
+        [this] { expireScriptActivities(); }
+    );
+  }
+  if (m_scriptActivities.size() != before)
+    refresh();
+}
+
+bool Island::startScriptActivity(const std::string& id, const std::string& title, const std::string& icon) {
+  auto it = std::ranges::find(m_scriptActivities, id, &ScriptActivity::id);
+  if (it == m_scriptActivities.end())
+    it = m_scriptActivities.insert(m_scriptActivities.end(), ScriptActivity{.id = id});
+  // Starting again restarts the activity, as an indeterminate one until progress arrives.
+  it->title = title;
+  it->icon = icon;
+  it->progress.reset();
+  it->updated = std::chrono::steady_clock::now();
+  expireScriptActivities();
+  refresh();
+  return true;
+}
+
+bool Island::updateScriptActivity(
+    const std::string& id, std::optional<std::optional<double>> progress, const std::string& title,
+    const std::string& icon
+) {
+  const auto it = std::ranges::find(m_scriptActivities, id, &ScriptActivity::id);
+  if (it == m_scriptActivities.end())
+    return false;
+  if (progress)
+    it->progress = *progress ? std::optional{std::clamp(**progress, 0.0, 1.0)} : std::nullopt;
+  if (!title.empty())
+    it->title = title;
+  if (!icon.empty())
+    it->icon = icon;
+  it->updated = std::chrono::steady_clock::now();
+  expireScriptActivities();
+  refresh();
+  return true;
+}
+
+bool Island::endScriptActivity(const std::string& id) {
+  if (std::erase_if(m_scriptActivities, [&id](const auto& activity) { return activity.id == id; }) == 0)
+    return false;
+  expireScriptActivities();
+  refresh();
+  return true;
 }
 
 void Island::timerCommand(const island::Countdown& timer, const std::string& command) {
@@ -729,13 +861,14 @@ void Island::refresh() {
     m_batteryTimeout.stop();
   const auto timers = countdowns();
   const bool timerActive = std::ranges::any_of(timers, [](const auto& timer) { return timer.active; });
-  const bool downloadActive = m_downloads && !m_downloads->active().empty();
+  const bool downloadActive = !progressActivities().empty();
   for (auto& inst : m_instances) {
     updateVisibility(*inst);
     const auto& cfg = inst->config;
     inst->compactActivity.update(
         {player && m_mediaActivity.compact(now, cfg.pausedMediaSeconds), downloadActive, timerActive},
-        cfg.activityPriority, cfg.cycleActivities, cfg.activityCycleSeconds,
+        // Split activities are all in view, so they never cycle.
+        cfg.activityPriority, cfg.cycleActivities && !cfg.splitActivities, cfg.activityCycleSeconds,
         inst->inside
             || inst->hovered
             || inst->keyboardMode
@@ -966,8 +1099,32 @@ void Island::geometry(Instance& inst) {
   if (!inst.root)
     return;
   const float s = inst.scale;
+  // The capsule stays centred, where panels open from and collapse back to; the split bubble
+  // hangs off its right end.
+  const float bubble = inst.config.height;
+  const float spacing = splitGap(bubble);
+  const float splitWidth = std::max(0.0F, inst.splitReveal) * (spacing + bubble);
   const float x = (static_cast<float>(inst.surface->width()) - inst.width * s) / 2;
   const float y = (8 - (inst.height + 12) * (1 - inst.visibility)) * s;
+  if (inst.splitBubble) {
+    // Out from under the capsule's right end, with a little growth as it separates.
+    const float reveal = inst.splitReveal;
+    const float diameter = bubble * (0.72F + 0.28F * std::min(1.0F, std::max(0.0F, reveal)));
+    const float centre = inst.width - bubble / 2 + (spacing + bubble) * reveal;
+    inst.splitBubble->setVisible(reveal > 0.001F);
+    inst.splitBubble->setPosition(x + (centre - diameter / 2) * s, y + (bubble - diameter) * s / 2);
+    inst.splitBubble->setSize(diameter * s, diameter * s);
+    inst.splitBubble->setRadius(diameter * s / 2);
+    if (inst.splitArea) {
+      inst.splitArea->setSize(diameter * s, diameter * s);
+      inst.splitArea->setHitTestVisible(reveal > 0.5F);
+    }
+    if (inst.splitContent) {
+      // The content is laid out for the full bubble; keep it centred while the bubble grows.
+      inst.splitContent->setPosition((diameter - bubble) * s / 2, (diameter - bubble) * s / 2);
+      inst.splitContent->setOpacity(std::clamp((reveal - 0.4F) / 0.6F, 0.0F, 1.0F));
+    }
+  }
   inst.background->setPosition(x, y);
   inst.background->setSize(inst.width * s, inst.height * s);
   const float radius = island::surfaceRadius(inst.height * s, s, gCupertino);
@@ -991,7 +1148,7 @@ void Island::geometry(Instance& inst) {
     inst.content->setHitTestVisible(inst.content->opacity() > 0.1F);
   }
   const std::array<int, 4> inputRegion{
-      static_cast<int>(std::floor(x)), 0, static_cast<int>(std::ceil(inst.width * s)),
+      static_cast<int>(std::floor(x)), 0, static_cast<int>(std::ceil((inst.width + splitWidth) * s)),
       inst.wantsVisible ? static_cast<int>(std::ceil((inst.height + 8) * s)) : 3
   };
   if (inst.inputRegion != inputRegion) {
@@ -1020,7 +1177,11 @@ void Island::prepare(Instance& inst) {
   const auto player = m_mpris ? m_mpris->activePlayer() : std::nullopt;
   const bool playing = player && player->playbackStatus == "Playing";
   const std::string announcement = player && trackPreview(cfg, inst.output) ? player->title : "";
-  const auto downloads = m_downloads ? m_downloads->active() : std::vector<DownloadProgress>{};
+  auto downloads = progressActivities();
+  // A bubble click put this job in the capsule; it stays there while it runs.
+  if (const auto lead = std::ranges::find(downloads, inst.splitLead, &DownloadProgress::desktopId);
+      lead != downloads.end())
+    std::rotate(downloads.begin(), lead, lead + 1);
   const auto timers = countdowns();
   const bool timerActive = !timers.empty() && timers.front().active;
   const bool recording = ScreenRecorder::instance().active();
@@ -1060,6 +1221,31 @@ void Island::prepare(Instance& inst) {
       || view == island::View::Downloads
       || view == island::View::Timers;
   const bool showSwitcher = expandedView && inst.activities.switching && availableActivities.count() > 0;
+  // Split Island: with two activities running, the compact capsule shows one and a bubble beside
+  // it the other, rather than the activity order hiding the second.
+  const auto primaryActivity = view == island::View::Activity ? island::Activity::Media
+      : view == island::View::DownloadActivity                ? island::Activity::Downloads
+      : view == island::View::TimerActivity                   ? island::Activity::Timers
+                                                              : island::Activity::None;
+  const auto otherActivity = cfg.splitActivities && !recording && primaryActivity != island::Activity::None
+      ? island::secondaryActivity(
+            {player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
+             !downloads.empty(), timerActive},
+            island::activityOrder(cfg.activityPriority), primaryActivity
+        )
+      : island::Activity::None;
+  // With nothing else running, two jobs in the downloads lane split between capsule and bubble.
+  const bool laneSplit = cfg.splitActivities
+      && !recording
+      && primaryActivity == island::Activity::Downloads
+      && otherActivity == island::Activity::None
+      && downloads.size() > 1;
+  const auto splitActivity = laneSplit ? island::Activity::Downloads : otherActivity;
+  const std::span<const DownloadProgress> capsuleDownloads =
+      laneSplit ? std::span<const DownloadProgress>(downloads).first(1) : std::span<const DownloadProgress>(downloads);
+  const std::span<const DownloadProgress> bubbleDownloads = laneSplit
+      ? std::span<const DownloadProgress>(downloads).subspan(1)
+      : std::span<const DownloadProgress>(downloads);
   // Cupertino focuses an expanded activity on that activity alone, like Apple's Dynamic
   // Island; batteries, unread history and hover widgets stay in the idle (calendar) view.
   // Privacy indicators always show.
@@ -1137,7 +1323,9 @@ void Island::prepare(Instance& inst) {
         + m_notification->summary
         + m_notification->body
         + actionSignature
-        + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed");
+        + (inst.expandedNotification == m_notification->id ? "expanded" : "collapsed")
+        + formatNotificationTime(m_notification->receivedWallClock.value_or(WallClock::now()))
+        + (inst.hovered ? "hovered" : "");
     break;
   case island::View::Osd:
     signature += std::format(
@@ -1170,11 +1358,12 @@ void Island::prepare(Instance& inst) {
   case island::View::DownloadActivity:
   case island::View::Downloads:
     signature += view == island::View::Downloads ? std::to_string(player.has_value()) : time;
+    signature += laneSplit ? "|lane" : "";
     for (const auto& download : downloads)
       signature += std::format(
-          "|{}|{}|{}|{}|{}", download.desktopId, download.name,
+          "|{}|{}|{}|{}|{}|{}", download.desktopId, download.name,
           view == island::View::Downloads ? 0L : std::lround(download.progress * 100), download.determinate,
-          download.phase
+          download.phase, download.icon
       );
     break;
   }
@@ -1189,8 +1378,8 @@ void Island::prepare(Instance& inst) {
   if (expandedView || view == island::View::TimerActivity)
     for (const auto& timer : timers)
       signature += std::format(
-          "|timer:{}|{}|{}|{}|{}|{}|{}", timer.plugin, timer.titleKey, timer.running, timer.active, timer.finished,
-          timer.duration, timer.session
+          "|timer:{}|{}|{}|{}|{}|{}|{}|{}|{}", timer.plugin, countdownTitle(timer), timer.running, timer.active,
+          timer.finished, timer.duration, timer.session, timer.url, timer.event && timer.remaining <= 0
       );
   for (const auto& activity : privacyList)
     signature += std::format("|privacy:{}:{}", static_cast<int>(activity.kind), activity.appNames());
@@ -1235,7 +1424,7 @@ void Island::prepare(Instance& inst) {
     bool charging = false;
     if (outlineTimer) {
       fraction = timers.front().fraction();
-      fill = islandTint(kAppleOrange, ColorRole::Primary);
+      fill = islandTint(countdownTint(timers.front()), ColorRole::Primary);
     } else if (outlineDownload) {
       fill = islandTint(kAppleBlue, ColorRole::Primary);
       // Each download gets equal weight; one unknown total makes the group indeterminate.
@@ -1262,6 +1451,122 @@ void Island::prepare(Instance& inst) {
       inst.captureGlow->update(!privacyList.empty() || recording, islandRole(ColorRole::Error));
   };
   updateCaptureGlow();
+  const auto updateSplit = [&] {
+    if (!inst.splitBubble)
+      return;
+    const float s = inst.scale;
+    const float d = cfg.height;
+    std::optional<float> fraction;
+    if (splitActivity == island::Activity::Timers)
+      fraction = timers.front().fraction();
+    else if (splitActivity == island::Activity::Downloads && std::ranges::all_of(bubbleDownloads, [](const auto& item) {
+               return item.determinate;
+             })) {
+      float total = 0;
+      for (const auto& item : bubbleDownloads)
+        total += static_cast<float>(item.progress);
+      fraction = total / static_cast<float>(bubbleDownloads.size());
+    }
+    // A lone job in the bubble shows its own symbol; a group shows the download arrow.
+    const std::string bubbleIcon = bubbleDownloads.size() == 1 && !bubbleDownloads.front().icon.empty()
+        ? bubbleDownloads.front().icon
+        : "download";
+    inst.splitLane = laneSplit;
+    inst.splitNext = laneSplit ? bubbleDownloads.front().desktopId : "";
+    // A retracting bubble keeps its last content until it is tucked away.
+    if (splitActivity != island::Activity::None) {
+      std::string bubbleSignature = std::format("{}|{}|{}|{}", static_cast<int>(splitActivity), d, s, gCupertino);
+      if (splitActivity == island::Activity::Media)
+        bubbleSignature += "|" + artPath;
+      else if (splitActivity == island::Activity::Timers)
+        bubbleSignature += "|" + timers.front().plugin + "|" + timers.front().icon;
+      else
+        bubbleSignature += std::format("|{}|{}|{}", fraction.has_value(), bubbleIcon, inst.splitNext);
+      if (bubbleSignature != inst.splitSignature) {
+        m_renderContext->makeCurrent(inst.surface->renderTarget());
+        inst.splitSignature = bubbleSignature;
+        inst.splitProgress = {};
+        if (inst.splitContent)
+          (void)inst.splitArea->removeChild(inst.splitContent);
+        auto content = std::make_unique<Node>();
+        content->setSize(d * s, d * s);
+        content->setHitTestVisible(false);
+        const auto centred = [&](std::unique_ptr<Node> node) {
+          node->setPosition((d * s - node->width()) / 2, (d * s - node->height()) / 2);
+          return content->addChild(std::move(node));
+        };
+        const auto symbol = [&](const std::string& name, ColorSpec color) {
+          auto node = std::make_unique<Glyph>();
+          node->setGlyph(name);
+          node->setGlyphSize(std::round(d * 0.28F) * s);
+          node->setColor(color);
+          node->measure(renderer);
+          centred(std::move(node));
+        };
+        bool artShown = false;
+        if (splitActivity == island::Activity::Media && !artPath.empty()) {
+          // Apple's minimal Now Playing view: the album art, round, filling most of the bubble.
+          const float size = std::round(d * 0.62F);
+          auto image = std::make_unique<Image>();
+          image->setSize(size * s, size * s);
+          image->setRadius(size * s / 2);
+          image->setFit(ImageFit::Cover);
+          if (image->setSourceFile(renderer, artPath, static_cast<int>(std::ceil(size * s * 2.0F)), true, true)) {
+            centred(std::move(image));
+            artShown = true;
+          }
+        }
+        if (splitActivity == island::Activity::Media && !artShown)
+          symbol("music", islandRole(ColorRole::OnSurface));
+        if (splitActivity == island::Activity::Timers || splitActivity == island::Activity::Downloads) {
+          // A progress ring around the activity's symbol, in its activity colour.
+          const bool timer = splitActivity == island::Activity::Timers;
+          const auto tint = timer ? islandTint(kAppleOrange, ColorRole::Primary)
+                                  : islandTint(kAppleBlue, ColorRole::Primary);
+          auto ring = std::make_unique<DownloadRing>(std::round(d * 0.62F) * s, 2.5F * s, fraction, tint);
+          auto* ringPtr = ring.get();
+          centred(std::move(ring));
+          if (fraction)
+            inst.splitProgress = [ringPtr](float value) { ringPtr->setProgress(value); };
+          symbol(timer ? timers.front().icon : bubbleIcon, tint);
+        }
+        inst.splitContent = inst.splitArea->addChild(std::move(content));
+        inst.splitArea->setTooltip(
+            laneSplit && bubbleDownloads.size() == 1
+                ? bubbleDownloads.front().name
+                : i18n::tr(
+                      splitActivity == island::Activity::Media        ? "island.split.media"
+                          : splitActivity == island::Activity::Timers ? "island.split.timers"
+                                                                      : "island.split.downloads"
+                  )
+        );
+      }
+      if (inst.splitProgress && fraction)
+        inst.splitProgress(*fraction);
+    }
+    const bool shown = splitActivity != island::Activity::None;
+    const bool wasShown = inst.splitActivity != island::Activity::None;
+    inst.splitActivity = splitActivity;
+    if (shown == wasShown)
+      return;
+    inst.animations.cancel(inst.splitMorph);
+    inst.splitMorph = 0;
+    if (!MotionService::instance().enabled()) {
+      inst.splitReveal = shown ? 1.0F : 0.0F;
+      geometry(inst);
+      return;
+    }
+    const float from = inst.splitReveal;
+    inst.splitMorph = inst.animations.animate(
+        from, shown ? 1.0F : 0.0F, shown ? kSplitOutMs : kSplitInMs, shown ? Easing::EaseOutBack : Motion::dismiss,
+        [this, &inst](float value) {
+          inst.splitReveal = value;
+          geometry(inst);
+        },
+        [&inst] { inst.splitMorph = 0; }
+    );
+  };
+  updateSplit();
   if (signature == inst.signature && inst.root) {
     if ((recording && inst.recordingLabel)
         || !inst.timerUi.empty()
@@ -1284,7 +1589,7 @@ void Island::prepare(Instance& inst) {
       const auto timer = std::ranges::find(timers, ui.plugin, &island::Countdown::plugin);
       if (timer == timers.end())
         continue;
-      ui.label->setText(timer->time());
+      ui.label->setText(ui.eventStatus ? eventStatus(*timer) : countdownTime(*timer));
       ui.label->measure(renderer);
       ui.setFraction(timer->fraction());
     }
@@ -1354,6 +1659,39 @@ void Island::prepare(Instance& inst) {
     // Behind the capsule, so only the part of its halo outside the edge shows.
     auto glow = std::make_unique<island::CaptureGlow>();
     inst.captureGlow = static_cast<island::CaptureGlow*>(inst.root->addChild(std::move(glow)));
+    // Behind the capsule too, so the split bubble slides out from under it.
+    auto bubble = std::make_unique<Box>();
+    bubble->setFill(islandRole(ColorRole::Surface));
+    bubble->setClipChildren(true);
+    bubble->setVisible(false);
+    auto area = std::make_unique<InputArea>();
+    area->setHitShape(InputArea::HitShape::Circle);
+    area->setOnEnter([&inst](const InputArea::PointerData&) {
+      // Reaching for the bubble must not expand the capsule beside it.
+      inst.splitHovered = true;
+      inst.enter.stop();
+    });
+    area->setOnLeave([this, &inst] {
+      inst.splitHovered = false;
+      if (inst.inside && !inst.hovered && !inst.suppressHover)
+        inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
+            inst.hovered = true;
+            refresh();
+          }
+        });
+    });
+    area->setOnClick([this, &inst](const InputArea::PointerData&) {
+      if (inst.splitActivity == island::Activity::None)
+        return;
+      if (inst.splitLane)
+        inst.splitLead = inst.splitNext;
+      else
+        inst.compactActivity.promote(inst.splitActivity);
+      refresh();
+    });
+    inst.splitArea = static_cast<InputArea*>(bubble->addChild(std::move(area)));
+    inst.splitBubble = static_cast<Box*>(inst.root->addChild(std::move(bubble)));
     auto box = std::make_unique<Box>();
     box->setFill(islandRole(ColorRole::Surface));
     box->setClipChildren(true);
@@ -1373,6 +1711,7 @@ void Island::prepare(Instance& inst) {
     inst.input.setSceneRoot(inst.root.get());
     inst.width = w;
     inst.height = h;
+    updateSplit();
   }
   // Critical notifications: a full red outline in the theme look; a quieter one on black.
   if (view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical)
@@ -1624,8 +1963,8 @@ void Island::prepare(Instance& inst) {
   if (view == island::View::DownloadActivity || view == island::View::TimerActivity) {
     const bool timerView = view == island::View::TimerActivity;
     const auto fraction = timerView ? std::optional{timers.front().fraction()}
-        : downloads.size() == 1 && downloads.front().determinate
-        ? std::optional{static_cast<float>(downloads.front().progress)}
+        : capsuleDownloads.size() == 1 && capsuleDownloads.front().determinate
+        ? std::optional{static_cast<float>(capsuleDownloads.front().progress)}
         : std::nullopt;
     DownloadRing* ringPtr = nullptr;
     if (!(outlineTimer || outlineDownload)) {
@@ -1635,14 +1974,28 @@ void Island::prepare(Instance& inst) {
       ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
       canvas->addChild(std::move(ring));
     }
-    glyph(timerView ? timers.front().icon : "download", 23, (cfg.height - 18) / 2, 18, islandRole(ColorRole::Primary));
+    const auto downloadIcon = capsuleDownloads.size() == 1 && !capsuleDownloads.front().icon.empty()
+        ? capsuleDownloads.front().icon
+        : "download";
+    // A lone script activity names itself where the clock would be, like a Live Activity.
+    const bool scriptTitle = !timerView
+        && capsuleDownloads.size() == 1
+        && !capsuleDownloads.front().icon.empty()
+        && !capsuleDownloads.front().name.empty();
+    glyph(
+        timerView ? timers.front().icon : downloadIcon, 23, (cfg.height - 18) / 2, 18, islandRole(ColorRole::Primary)
+    );
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
-    const auto clockText = timerView ? timers.front().time() : time;
+    const auto clockText = timerView ? countdownTime(timers.front())
+        : scriptTitle                ? capsuleDownloads.front().name
+                                     : time;
+    const float textSize = scriptTitle ? std::min(cfg.clockSize, 16.0F) : cfg.clockSize;
     const auto metrics = renderer.measureText(
-        clockText, cfg.clockSize * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+        clockText, textSize * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
     );
-    const float clockSize = cfg.clockSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
+    const float clockSize =
+        scriptTitle ? textSize : textSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
     auto* clockLabel = label(clockText, inset, 0, available, clockSize, foreground, true);
     if (timerView)
       inst.timerUi.push_back({timers.front().plugin, clockLabel, [ringPtr](float value) {
@@ -1656,7 +2009,7 @@ void Island::prepare(Instance& inst) {
             std::max(0.0F, cfg.height * s - clockLabel->height())
         )
     );
-    if (timerView && !showBattery && privacyList.empty()) {
+    if (timerView && !showBattery && privacyList.empty() && !timers.front().event) {
       glyph(
           timers.front().running        ? "player-pause"
               : timers.front().finished ? "check"
@@ -1664,10 +2017,14 @@ void Island::prepare(Instance& inst) {
           w - (showUnread ? 80 : 46), (cfg.height - 18) / 2, 18, muted
       );
     } else if (
-        !timerView && !showBattery && privacyList.empty() && (downloads.size() > 1 || downloads.front().determinate)
+        !timerView
+        && !showBattery
+        && privacyList.empty()
+        && (capsuleDownloads.size() > 1 || capsuleDownloads.front().determinate)
     ) {
-      const auto value = downloads.size() == 1 ? std::format("{}%", std::lround(downloads.front().progress * 100))
-                                               : std::to_string(downloads.size());
+      const auto value = capsuleDownloads.size() == 1
+          ? std::format("{}%", std::lround(capsuleDownloads.front().progress * 100))
+          : std::to_string(capsuleDownloads.size());
       auto* status = label(value, w - (showUnread ? 91 : 70), 0, 50, 12, muted, true);
       status->setPosition(status->x(), (cfg.height * s - status->height()) / 2);
     }
@@ -1677,10 +2034,12 @@ void Island::prepare(Instance& inst) {
       refresh();
     });
   } else if (view == island::View::Downloads) {
-    glyph("download", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
+    // Script activities share this card; it is "In Progress" unless every row is a download.
+    const bool onlyDownloads = std::ranges::all_of(downloads, [](const auto& item) { return item.icon.empty(); });
+    glyph(onlyDownloads ? "download" : "stack-2", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
     label(
-        i18n::tr("island.downloads.title"), 56, 17, w - 78, Style::fontSizeTitle, foreground, false, 1,
-        FontWeight::SemiBold
+        i18n::tr(onlyDownloads ? "island.downloads.title" : "island.downloads.in-progress"), 56, 17, w - 78,
+        Style::fontSizeTitle, foreground, false, 1, FontWeight::SemiBold
     );
     const auto rows = std::min(downloads.size(), std::size_t{4});
     for (std::size_t i = 0; i < rows; ++i) {
@@ -1690,7 +2049,7 @@ void Island::prepare(Instance& inst) {
       // Cupertino leads each row with a round blue badge, as Apple lists transfers.
       const float textX = gCupertino ? 62 : 22;
       if (gCupertino)
-        leadingBadge("download", 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
+        leadingBadge(download.icon.empty() ? "download" : download.icon, 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
       label(download.name, textX, y, w - textX - 88, 13, foreground, false, 1, FontWeight::Normal, true);
       if (download.determinate) {
         auto* percentage =
@@ -1882,6 +2241,35 @@ void Island::prepare(Instance& inst) {
         m_mpris->setPosition(bus, static_cast<std::int64_t>(static_cast<double>(length) * seekFraction));
       };
     }
+  } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::Dnd || m_osd->kind == OsdKind::Charging)) {
+    // Status pills, as the iPhone announces a Focus or a charger: a tinted symbol and title lead,
+    // and the state (On, Off or the charge level) sits at the far end in the same tint.
+    const bool charging = m_osd->kind == OsdKind::Charging;
+    const bool on = charging || !m_osd->inactive;
+    const Color tint = charging ? kAppleGreen : kAppleIndigo;
+    const ColorRole role = charging ? ColorRole::Secondary : ColorRole::Primary;
+    constexpr float badgeSize = 34.0F;
+    const float badgeX = 16.0F;
+    const std::string icon = charging ? "bolt" : on ? "moon" : "moon-off";
+    if (on)
+      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, tint, role);
+    else
+      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, rgba(1.0F, 1.0F, 1.0F), ColorRole::OnSurfaceVariant);
+    const auto state = charging ? std::format("{}%", std::lround(m_osd->progress * 100))
+                                : i18n::tr(on ? "island.status.on" : "island.status.off");
+    const auto stateColor = on ? islandTint(tint, role) : muted;
+    const auto stateMetrics = renderer.measureText(
+        state, 15 * s, FontWeight::SemiBold, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+    );
+    const float stateWidth = std::ceil(stateMetrics.width / s) + 2;
+    auto* stateLabel = label(state, w - 22 - stateWidth, 0, stateWidth, 15, stateColor, false, 1, FontWeight::SemiBold);
+    stateLabel->setPosition(stateLabel->x(), (h * s - stateLabel->height()) / 2);
+    const float titleX = badgeX + badgeSize + 12;
+    auto* title = label(
+        i18n::tr(charging ? "island.status.charging" : "island.status.dnd"), titleX, 0,
+        std::max(1.0F, w - 22 - stateWidth - 12 - titleX), 15, foreground, false, 1, FontWeight::SemiBold
+    );
+    title->setPosition(title->x(), (h * s - title->height()) / 2);
   } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::LockKeys || !m_osd->showProgress)) {
     // Status messages without a level centre their icon and text as one group.
     constexpr float iconSize = 26.0F;
@@ -1913,9 +2301,28 @@ void Island::prepare(Instance& inst) {
     const bool expanded = inst.expandedNotification == n.id;
     // The sending app's icon leads its name, as on macOS; the name sits alone when none resolves.
     const float appIconSize = 18.0F;
-    const bool hasAppIcon = notificationIcon(n, 22, 12, appIconSize);
+    // A screenshot's image is its thumbnail, not the sender's icon.
+    const bool screenshot = n.category == kScreenshotNotificationCategory
+        && n.imageData
+        && n.imageData->width > 0
+        && n.imageData->height > 0
+        && n.imageData->channels == 4
+        && n.imageData->data.size() >= static_cast<std::size_t>(n.imageData->rowStride) * n.imageData->height;
+    Notification iconSource = n;
+    if (screenshot)
+      iconSource.imageData.reset();
+    const bool hasAppIcon = notificationIcon(iconSource, 22, 12, appIconSize);
     const float appLabelX = hasAppIcon ? 22 + appIconSize + 6 : 22;
-    auto* appLabel = label(n.appName, appLabelX, 14, w - 53 - appLabelX, Style::fontSizeCaption, muted);
+    // "now" / "5m ago" closes the header row, as on the notification banners.
+    constexpr float timeWidth = 56.0F;
+    auto* appLabel =
+        label(n.appName, appLabelX, 14, w - 55 - timeWidth - appLabelX, Style::fontSizeCaption, muted);
+    auto* timeLabel = label(
+        formatNotificationTime(n.receivedWallClock.value_or(WallClock::now())), w - 51 - timeWidth, 14, timeWidth,
+        Style::fontSizeCaption, muted
+    );
+    timeLabel->setTextAlign(TextAlign::End);
+    timeLabel->measure(renderer);
     control(w - 47, 5, 32, 30, "", "x", i18n::tr("notifications.dismiss"), 18, true, [this] { dismissNotification(); });
     std::vector<std::pair<std::string, std::string>> visibleActions;
     const bool hasDefault = std::ranges::find(n.actions, "default") != n.actions.end();
@@ -1924,15 +2331,25 @@ void Island::prepare(Instance& inst) {
     for (std::size_t index = 0; index + 1 < n.actions.size() && visibleActions.size() < 3; index += 2)
       if (n.actions[index] != "default")
         visibleActions.emplace_back(n.actions[index], n.actions[index + 1]);
-    const bool hasActions = !visibleActions.empty();
+    // macOS keeps actions out of sight: hovering shows the one action, or "Options" for several,
+    // in place of the time stamp, and only an opened notification (or keyboard mode) lists them.
+    const bool actionsOpen = expanded || inst.keyboardMode;
+    const bool hasActions = actionsOpen && !visibleActions.empty();
     const float maxHeight = std::min(
         expanded ? 640.0F : 360.0F,
         static_cast<float>(inst.surface->height()) / s - 16.0F - (privacyList.empty() ? 0.0F : 32.0F)
     );
-    const float footerHeight = hasActions ? 60.0F : 16.0F;
+    const float footerHeight = hasActions ? 46.0F : 16.0F;
     const float textBottom = maxHeight - footerHeight;
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
-    const float textWidth = w - (expanded ? 64.0F : 44.0F);
+    // The thumbnail sits at the card's right, like an attachment on a macOS notification.
+    constexpr float thumbnailHeight = 64.0F;
+    const float thumbnailWidth = screenshot
+        ? std::min(
+              120.0F, thumbnailHeight * static_cast<float>(n.imageData->width) / static_cast<float>(n.imageData->height)
+          )
+        : 0.0F;
+    const float textWidth = w - (expanded ? 64.0F : 44.0F) - (screenshot ? thumbnailWidth + 12.0F : 0.0F);
     auto* summary =
         label(n.summary, 22, 37, textWidth, Style::fontSizeTitle, foreground, false, 0, FontWeight::SemiBold);
     const float fullSummaryHeight = summary->height();
@@ -1977,6 +2394,20 @@ void Island::prepare(Instance& inst) {
       if (body->visible())
         contentBottom = bodyY + body->height() / s;
     }
+    if (screenshot) {
+      const auto& raw = *n.imageData;
+      auto image = std::make_unique<Image>();
+      image->setSize(thumbnailWidth * s, thumbnailHeight * s);
+      image->setRadius(Style::scaledRadiusMd(s));
+      image->setFit(ImageFit::Cover);
+      image->setPosition((w - 22 - thumbnailWidth) * s, 37 * s);
+      if (image->setSourceRaw(
+              renderer, raw.data.data(), raw.data.size(), raw.width, raw.height, raw.rowStride, PixmapFormat::RGBA, true
+          )) {
+        inst.content->addChild(std::move(image));
+        contentBottom = std::max(contentBottom, 37.0F + thumbnailHeight);
+      }
+    }
     if (expanded) {
       auto scroll = std::make_unique<ScrollView>();
       scroll->setContentScale(s);
@@ -2002,26 +2433,54 @@ void Island::prepare(Instance& inst) {
       refresh();
     };
     if (expanded || truncated) {
-      appLabel->setMinWidth((w - 112) * s);
-      appLabel->setMaxWidth((w - 112) * s);
+      appLabel->setMinWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
+      appLabel->setMaxWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
       appLabel->measure(renderer);
+      timeLabel->setPosition((w - 86 - timeWidth) * s, timeLabel->y());
       auto* expandControl = control(
           w - 82, 5, 32, 30, "", expanded ? "chevron-up" : "chevron-down",
           i18n::tr(expanded ? "notifications.collapse" : "notifications.expand"), 18, true, toggleExpanded
       );
       expandControl->inputArea()->setTabFocusKey("notification-expand");
     }
+    // A grey capsule sized to its label, as Apple's notification buttons are.
+    const auto pillWidth = [&](const std::string& text) {
+      const auto metrics = renderer.measureText(text, Style::fontSizeCaption * s);
+      return std::ceil(metrics.width / s) + 24.0F;
+    };
+    if (!actionsOpen && !visibleActions.empty() && inst.hovered) {
+      const bool single = visibleActions.size() == 1;
+      const std::string text = single ? visibleActions.front().second : i18n::tr("notifications.actions.options");
+      const float width = std::min(pillWidth(text), w / 2.0F);
+      const float right = timeLabel->x() / s + timeWidth;
+      timeLabel->setVisible(false);
+      auto* pillControl = control(
+          right - width, 9, width, 24, text, "", text, 0, true,
+          [this, single, toggleExpanded, id = n.id, key = visibleActions.front().first] {
+            if (single)
+              (void)m_notifications->invokeAction(id, key);
+            else
+              toggleExpanded();
+          }
+      );
+      setIslandVariant(pillControl, ButtonVariant::Default);
+      pillControl->setRadius(12.0F * s);
+    }
     h = contentBottom + footerHeight;
     const float actionsY = contentBottom + 8.0F;
-    const float actionWidth = hasActions ? (w - 44) / static_cast<float>(visibleActions.size()) : 0;
-    for (std::size_t index = 0; index < visibleActions.size(); ++index) {
+    float actionX = 22.0F;
+    for (std::size_t index = 0; hasActions && index < visibleActions.size(); ++index) {
       const auto& [key, text] = visibleActions[index];
-      auto* actionControl = control(
-          22 + static_cast<float>(index) * actionWidth, actionsY, actionWidth - 8, 44, text, "", text, 18, true,
-          [this, id = n.id, key] { (void)m_notifications->invokeAction(id, key); }
-      );
+      const float width = std::min(pillWidth(text), w - 22.0F - actionX);
+      if (width <= 24.0F)
+        break;
+      auto* actionControl = control(actionX, actionsY, width, 30, text, "", text, 0, true, [this, id = n.id, key] {
+        (void)m_notifications->invokeAction(id, key);
+      });
       setIslandVariant(actionControl, ButtonVariant::Default);
+      actionControl->setRadius(15.0F * s);
       actionControl->inputArea()->setTabFocusKey("notification-action-" + key);
+      actionX += width + 8.0F;
     }
     if (!expanded)
       action(0, 37, w, contentBottom - 37.0F, "notification", [this, n, panel, truncated, toggleExpanded] {
@@ -2083,27 +2542,78 @@ void Island::prepare(Instance& inst) {
       if (!timer.active)
         continue;
       const float sectionTop = h;
-      auto ring = std::make_unique<DownloadRing>(
-          36 * s, 2.5F * s, timer.fraction(), islandTint(kAppleOrange, ColorRole::Primary)
-      );
+      const Color tint = countdownTint(timer);
+      auto ring =
+          std::make_unique<DownloadRing>(36 * s, 2.5F * s, timer.fraction(), islandTint(tint, ColorRole::Primary));
       auto* ringPtr = ring.get();
       ring->setPosition(22 * s, (h + 6) * s);
       canvas->addChild(std::move(ring));
-      glyph(timer.icon, 31, h + 15, 18, islandTint(kAppleOrange, ColorRole::Primary));
+      glyph(timer.icon, 31, h + 15, 18, islandTint(tint, ColorRole::Primary));
       // Cupertino keeps the controls on the timer's row as round buttons; the theme look
       // lists them as a row of text buttons below.
       const float controlsWidth = gCupertino ? 3 * 32 + 2 * 8 + 10 : 0;
-      label(i18n::tr(timer.titleKey), 70, h + 3, w - 165 - controlsWidth, 13);
-      auto* remaining = label(timer.time(), w - 94 - controlsWidth, h + 3, 72, 16, foreground, true);
-      inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
-      label(
-          i18n::tr(
-              timer.finished      ? "island.timer.finished"
-                  : timer.running ? "island.timer.running"
-                                  : "island.timer.paused"
-          ),
-          70, h + 25, w - 92, 11, muted
-      );
+      if (timer.event) {
+        // The title takes the row; the countdown reads as its status line.
+        label(countdownTitle(timer), 70, h + 3, w - 92 - controlsWidth, 13, foreground, false, 1, FontWeight::SemiBold);
+        auto* status = label(eventStatus(timer), 70, h + 25, w - 92 - controlsWidth, 11, muted);
+        inst.timerUi.push_back({timer.plugin, status, [ringPtr](float value) { ringPtr->setProgress(value); }, true});
+      } else {
+        label(countdownTitle(timer), 70, h + 3, w - 165 - controlsWidth, 13);
+        auto* remaining = label(countdownTime(timer), w - 94 - controlsWidth, h + 3, 72, 16, foreground, true);
+        inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
+        label(
+            i18n::tr(
+                timer.finished      ? "island.timer.finished"
+                    : timer.running ? "island.timer.running"
+                                    : "island.timer.paused"
+            ),
+            70, h + 25, w - 92, 11, muted
+        );
+      }
+      // Events trade pause and cancel for joining the call and dismissing the countdown.
+      const auto join = [url = timer.url] { (void)net::openInBrowser(url); };
+      const auto dismiss = [this, key = timer.plugin] {
+        m_dismissedEvents.insert(key);
+        refresh();
+      };
+      if (gCupertino && timer.event) {
+        const float x = w - 22 - controlsWidth + 10;
+        auto* joinButton =
+            control(x, h + 8, 32, 32, "", "video", i18n::tr("island.up-next.join"), 16, !timer.url.empty(), join);
+        joinButton->inputArea()->setTabFocusKey(timer.plugin + "-join");
+        roundButton(joinButton, kAppleGreen);
+        auto* dismissButton =
+            control(x + 40, h + 8, 32, 32, "", "x", i18n::tr("island.up-next.dismiss"), 16, true, dismiss);
+        dismissButton->inputArea()->setTabFocusKey(timer.plugin + "-dismiss");
+        roundButton(dismissButton);
+        auto* open = control(
+            x + 80, h + 8, 32, 32, "", "chevron-right", i18n::tr("island.up-next.open"), 16, true,
+            [panel, timer] { panel(timer.panel); }
+        );
+        open->inputArea()->setTabFocusKey(timer.plugin + "-open");
+        roundButton(open);
+        h += 56;
+        sectionCard(sectionTop, h);
+        continue;
+      }
+      if (timer.event) {
+        h += 48;
+        const float buttonWidth = (w - 60) / 3;
+        auto* joinButton =
+            control(22, h, buttonWidth, 30, i18n::tr("island.up-next.join"), "", "", 0, !timer.url.empty(), join);
+        joinButton->inputArea()->setTabFocusKey(timer.plugin + "-join");
+        auto* dismissButton =
+            control(30 + buttonWidth, h, buttonWidth, 30, i18n::tr("island.up-next.dismiss"), "", "", 0, true, dismiss);
+        dismissButton->inputArea()->setTabFocusKey(timer.plugin + "-dismiss");
+        auto* open = control(
+            38 + 2 * buttonWidth, h, buttonWidth, 30, i18n::tr("island.up-next.open"), "", "", 0, true,
+            [panel, timer] { panel(timer.panel); }
+        );
+        open->inputArea()->setTabFocusKey(timer.plugin + "-open");
+        h += 38;
+        sectionCard(sectionTop, h);
+        continue;
+      }
       if (gCupertino) {
         const float x = w - 22 - controlsWidth + 10;
         const bool toggleAvailable = !timer.finished && timer.remaining > 0;
@@ -2267,7 +2777,7 @@ void Island::prepare(Instance& inst) {
           inst.badgeHovered = false;
           if (inst.inside && !inst.hovered && !inst.suppressHover)
             inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-              if (inst.inside && !inst.badgeHovered) {
+              if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
                 inst.hovered = true;
                 refresh();
               }
@@ -2391,7 +2901,7 @@ void Island::prepare(Instance& inst) {
       inst.badgeHovered = false;
       if (inst.inside && !inst.hovered && !inst.suppressHover)
         inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-          if (inst.inside && !inst.badgeHovered) {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
             inst.hovered = true;
             refresh();
           }
@@ -2666,7 +3176,7 @@ bool Island::focusKeyboard() {
   const auto timers = countdowns();
   if (!m_notification
       && (!m_mpris || !m_mpris->activePlayer())
-      && (!m_downloads || m_downloads->active().empty())
+      && progressActivities().empty()
       && std::ranges::none_of(timers, [](const auto& timer) { return timer.active; })) {
     if (!openPanel)
       return false;
@@ -2728,7 +3238,7 @@ bool Island::onPointerEvent(const PointerEvent& event) {
         m_notifications->pauseExpiry(m_notification->id);
       if (!inst.suppressHover)
         inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-          if (inst.inside && !inst.badgeHovered) {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
             inst.hovered = true;
             refresh();
           }
@@ -2854,6 +3364,13 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   if (inst.keyboardMode)
     releaseKeyboard(inst);
   inst.panelHosted = true;
+  // The panel opens from the capsule alone; the split bubble buds out again when it closes.
+  inst.splitActivity = island::Activity::None;
+  inst.splitReveal = 0;
+  inst.splitMorph = 0;
+  inst.splitHovered = false;
+  if (inst.splitBubble)
+    inst.splitBubble->setVisible(false);
   inst.compactActivity.pause(island::CompactActivity::Clock::now());
   inst.activityTimeout.stop();
   inst.animations.cancel(inst.hideAnimation);
@@ -2895,7 +3412,7 @@ island::Size Island::panelReturnSize() const {
       player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds);
   const auto timers = countdowns();
   const island::Activities available{
-      mediaActive, m_downloads && !m_downloads->active().empty(),
+      mediaActive, !progressActivities().empty(),
       std::ranges::any_of(timers, [](const auto& timer) { return timer.active; })
   };
   const auto* instance = hosted != m_instances.end() ? hosted->get()
@@ -2903,7 +3420,7 @@ island::Size Island::panelReturnSize() const {
                                                      : nullptr;
   const auto compact = island::preferredActivity(
       available, island::activityOrder(cfg.activityPriority),
-      cfg.cycleActivities && instance ? instance->compactActivity.selected() : island::Activity::None
+      instance ? instance->compactActivity.selected() : island::Activity::None
   );
   const auto view = island::view(
       m_notification.has_value(), m_osd.has_value(), false, mediaActive, false, available.downloads, available.timers,

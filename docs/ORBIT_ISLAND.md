@@ -57,6 +57,18 @@ OSDs continue updating their service state in the background. When no panel is
 open, notifications and OSDs take priority. Hover shows downloads, media, or the
 calendar; otherwise an active countdown precedes downloads, media, and the idle clock.
 
+When two activities run at once, the Island splits as on iPhone: the capsule shows
+the first in the activity order and a round bubble beside it shows the next (album
+art for media, a progress ring for a timer or download). Clicking the bubble swaps
+the two until the activity it brought forward ends. Hovering or an alert tucks the
+bubble back under the capsule. Set `split_activities = false` to hide the second
+activity instead, or to cycle activities with `cycle_activities = true`.
+
+Turning Do Not Disturb on or off from a keybind or `noctalia msg notification-dnd-set`
+shows a short pill: an indigo moon, "Do Not Disturb", and On or Off. Plugging in a
+laptop's charger shows a green "Charging" pill with the battery level. Turn the
+charging pill off with `[osd.kinds] charging = false`.
+
 ## Download indicators
 
 Applications publishing `com.canonical.Unity.LauncherEntry.Update` progress appear
@@ -95,6 +107,55 @@ not modify Steam, install a plugin, or enable remote debugging. Steam's saved
 byte counts are not reliable live percentages, so this reader shows activity
 instead of an estimated percentage. Native desktop progress, if Steam publishes
 it, takes precedence over the log reader.
+
+## Script activities
+
+Scripts and keybinds can post their own live activity. It shows like a download:
+a ring around its icon with its title in the capsule, and a row in the hover card.
+With Split activities on, a second job (or a download) sits in the bubble beside
+the capsule; clicking the bubble swaps them.
+
+```sh
+noctalia msg island-activity-start backup "Backing up Documents"
+noctalia msg island-activity-update backup 40           # 40 %
+noctalia msg island-activity-update backup - "Verifying" # spinner, new title
+noctalia msg island-activity-end backup
+```
+
+`start` begins with a spinner; `update` takes a percentage from 0 to 100, or `-`
+for a spinner, and an optional new title. Each command also accepts one JSON
+object, which is the only way to pick an icon:
+
+```sh
+noctalia msg island-activity-start '{"id":"build","title":"Building","icon":"hammer","progress":75}'
+```
+
+Icons are the shell's Tabler glyph names. Starting an id that already exists
+restarts it. An activity nobody updates for an hour is dropped, so a script that
+dies doesn't leave it behind. Script activities share the downloads slot in the
+activity priority setting, and the card's heading reads "In Progress" when one is
+present. Without an icon, a script activity shows a terminal symbol.
+
+## Quick pills
+
+Scripts and keybinds can flash a short pill, like the Focus pill, with any icon:
+
+```sh
+noctalia msg osd-show clipboard-check Copied
+noctalia msg osd-show shield-lock "VPN connected"
+```
+
+The icon is a Tabler glyph name. The pill fades after a moment. With the Island off
+it shows as a regular OSD, and it shows even when `[osd.kinds]` hides the built-in
+OSDs.
+
+## Screenshot thumbnail
+
+When the shell saves a screenshot, its "Screenshot saved" notification carries a
+thumbnail at the card's right, like a macOS screenshot thumbnail. Clicking the card
+opens the image, and its buttons are Markup (the shell's annotator) and Show in
+Folder. `noctalia msg island-focus` reaches the same buttons from the keyboard:
+Tab to one, Enter to use it, Escape to dismiss.
 
 ## Battery indicators
 
@@ -154,6 +215,17 @@ state. Existing upstream limitations apply: these plugin versions initialise the
 timers afresh on shell/service restart and do not persist an in-progress countdown.
 Tests use copies of the actual upstream plugins in a private session, with a
 test-only state observer; production plugin files are not patched.
+
+## Up next
+
+When the shell's calendar is set up (Settings → Calendar: Google, CalDAV or local
+vdir calendars), the next timed event counts down in the timers slot. It appears
+`up_next_minutes` before it starts (default 10; 0 turns it off), with a blue ring
+that empties as the start nears, and reads "Now" for its first five minutes.
+Hover shows the event with Join (its meeting link, when it has one), Dismiss and
+Open Calendar. All-day events are skipped. It shares the timers slot in the
+activity priority setting, and the calendar's own reminder notifications still
+fire as before.
 
 ## Crowded activity layouts
 

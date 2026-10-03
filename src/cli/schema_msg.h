@@ -126,6 +126,9 @@ namespace noctalia::cli {
       Positional{"target", {}, {}, false, false, false},
       Positional{"step", {}, {}, false, false, false},
   };
+  inline constexpr std::array kMsgLauncherRunPositionals{
+      Positional{"alias", "A launcher alias, or <provider>:<result id>", {}, true, false, true},
+  };
   inline constexpr std::array kMsgClipboardCopyPositionals{
       Positional{"text", {}, {}, true, false, false},
   };
@@ -163,6 +166,22 @@ namespace noctalia::cli {
   inline constexpr std::array kMsgNotificationShowPositionals{
       Positional{"summary", {}, {}, true, false, false},
       Positional{"body", {}, {}, true, false, true},
+  };
+  inline constexpr std::array kMsgOsdShowPositionals{
+      Positional{"icon", "A Tabler glyph name such as clipboard-check", {}, true, false, false},
+      Positional{"text", {}, {}, true, false, true},
+  };
+  inline constexpr std::array kMsgIslandActivityStartPositionals{
+      Positional{"id", "A name for the activity, used to update or end it", {}, true, false, false},
+      Positional{"title", "Text shown in the Island", {}, false, false, true},
+  };
+  inline constexpr std::array kMsgIslandActivityUpdatePositionals{
+      Positional{"id", "The activity's name from island-activity-start", {}, true, false, false},
+      Positional{"percent", "Progress from 0 to 100, or - for a spinner", {}, false, false, false},
+      Positional{"title", "New text, or omit to keep the current title", {}, false, false, true},
+  };
+  inline constexpr std::array kMsgIslandActivityEndPositionals{
+      Positional{"id", "The activity's name from island-activity-start", {}, true, false, false},
   };
   inline constexpr std::array kMsgPanelClosePositionals{
       Positional{"id", {}, {}, false, false, false},
@@ -473,6 +492,16 @@ namespace noctalia::cli {
     inline constexpr Command keyboardLayoutCycle{
         "keyboard-layout-cycle", "Switch to the next keyboard layout", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command launcherRun{
+        "launcher-run",
+        "Run a launcher result by its alias without opening the launcher",
+        {},
+        {},
+        {},
+        kMsgLauncherRunPositionals,
+        {},
+        false
+    };
     inline constexpr Command lockscreenWidgetsEdit{
         "lockscreen-widgets-edit", "Open the lockscreen widgets editor", {}, {}, {}, {}, {}, false
     };
@@ -536,6 +565,32 @@ namespace noctalia::cli {
     inline constexpr Command islandFocus{
         "island-focus", "Focus the island for keyboard navigation", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command islandActivityStart{
+        "island-activity-start",
+        "Show a live activity in the Island for a script or keybind",
+        "It shows with a spinner until island-activity-update reports progress. Starting an id that is already "
+        "running restarts it. An activity that is not updated or ended for an hour is removed. Instead of the "
+        "positional arguments, pass a JSON object such as {\"id\":\"backup\",\"title\":\"Backing up\","
+        "\"icon\":\"cloud-upload\",\"progress\":40}; icon is a Tabler icon name.",
+        "Example: noctalia msg island-activity-start backup Backing up",
+        {},
+        kMsgIslandActivityStartPositionals,
+        {},
+        false
+    };
+    inline constexpr Command islandActivityUpdate{
+        "island-activity-update",
+        "Update a live activity's progress or title",
+        "Also accepts the JSON object form of island-activity-start.",
+        "Example: noctalia msg island-activity-update backup 40",
+        {},
+        kMsgIslandActivityUpdatePositionals,
+        {},
+        false
+    };
+    inline constexpr Command islandActivityEnd{
+        "island-activity-end", "End a live activity", {}, {}, {}, kMsgIslandActivityEndPositionals, {}, false
+    };
     inline constexpr Command notificationClearHistory{
         "notification-clear-history", "Clear notification history", {}, {}, {}, {}, {}, false
     };
@@ -575,6 +630,17 @@ namespace noctalia::cli {
                                               false};
     inline constexpr Command osdDisable{"osd-disable", "Disable OSD popups", {}, {}, {}, {}, {}, false};
     inline constexpr Command osdEnable{"osd-enable", "Enable OSD popups", {}, {}, {}, {}, {}, false};
+    inline constexpr Command osdShow{
+        "osd-show",
+        "Flash a short status pill with an icon and text",
+        "It appears in the Island when the Island is on, otherwise as a regular OSD, and fades after a "
+        "moment. It shows even when the OSD kinds hide the built-in ones.",
+        "Example: noctalia msg osd-show clipboard-check Copied",
+        {},
+        kMsgOsdShowPositionals,
+        {},
+        false
+    };
     inline constexpr Command osdToggle{"osd-toggle", "Toggle OSD popups", {}, {}, {}, {}, {}, false};
     inline constexpr Command panelClose{
         "panel-close",
@@ -881,6 +947,7 @@ namespace noctalia::cli {
       msg::keyboardBacklightToggle,
       msg::keyboardBacklightUp,
       msg::keyboardLayoutCycle,
+      msg::launcherRun,
       msg::lockscreenWidgetsEdit,
       msg::lockscreenWidgetsExit,
       msg::lockscreenWidgetsToggleEdit,
@@ -899,6 +966,9 @@ namespace noctalia::cli {
       msg::nightlightToggle,
       msg::notificationClearActive,
       msg::islandFocus,
+      msg::islandActivityStart,
+      msg::islandActivityUpdate,
+      msg::islandActivityEnd,
       msg::notificationClearHistory,
       msg::notificationDndSet,
       msg::notificationDndStatus,
@@ -907,6 +977,7 @@ namespace noctalia::cli {
       msg::notificationShow,
       msg::osdDisable,
       msg::osdEnable,
+      msg::osdShow,
       msg::osdToggle,
       msg::panelClose,
       msg::panelOpen,

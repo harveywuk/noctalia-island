@@ -19,7 +19,9 @@ struct wl_output;
 class CompositorPlatform;
 class ConfigService;
 class IpcService;
+class LauncherBadgeService;
 class RenderContext;
+class SessionBus;
 struct PointerEvent;
 struct WaylandOutput;
 struct wl_surface;
@@ -38,6 +40,8 @@ public:
   ~Dock();
 
   bool initialize(CompositorPlatform& platform, ConfigService* config, RenderContext* renderContext);
+  // Listens for the unread counts apps publish, for the dock's red badges. Null leaves them off.
+  void setSessionBus(SessionBus* bus);
   void reload();
   void show();
   /// Tears down dock surfaces without changing config (e.g. lockscreen widget editor overlay).
@@ -114,6 +118,7 @@ private:
   shell::dock::DockInstance* m_popupOwnerInstance = nullptr; // instance that owns the current open popup
   std::unique_ptr<shell::dock::DockPopup> m_itemMenu;        // right-click context menu
   std::unique_ptr<shell::dock::DockPreview> m_preview;
+  std::unique_ptr<LauncherBadgeService> m_badges;
   std::unique_ptr<shell::dock::DockItemAction> m_previewAction;
   shell::dock::DockInstance* m_previewHoverOwner = nullptr;
   std::string m_previewHoverId;

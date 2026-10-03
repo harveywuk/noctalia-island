@@ -41,6 +41,8 @@ namespace {
   constexpr float kBadgeFontRatio = 0.72F; // font size relative to badge diameter
   constexpr float kBadgeCornerInsetX = 0.55F;
   constexpr float kBadgeCornerInsetY = 0.45F;
+  constexpr float kBadgePillPadRatio = 0.5F; // horizontal padding of a multi-digit badge, per badge height
+  constexpr std::int64_t kBadgeMaxUnread = 99;
   // One running indicator per app, whatever its window count, as in the macOS dock.
   constexpr float kDotSizeRatio = 0.09F;
   constexpr float kDotMinSize = 4.0F;
@@ -116,8 +118,10 @@ namespace {
     const float iconRight = iconX + iconSize * (1.0F + iconScale) * 0.5F;
     const float iconTop = iconY + iconSize * (1.0F - iconScale) * 0.5F;
     const float badgeCenterAdjust = badgeSize * (1.0F - iconScale) * 0.5F;
+    // A multi-digit badge widens into a pill towards the icon, keeping its outer edge in place.
+    const float width = std::max(badgeSize, badge->width());
     badge->setPosition(
-        iconRight - badgeSize * kBadgeCornerInsetX * iconScale - badgeCenterAdjust,
+        iconRight + badgeSize * iconScale * (1.0F - kBadgeCornerInsetX) - width * (1.0F + iconScale) * 0.5F,
         iconTop - badgeSize * kBadgeCornerInsetY * iconScale - badgeCenterAdjust
     );
   }
@@ -670,7 +674,7 @@ namespace shell::dock {
         positionRunningDot(item.runningDot, edge, iSize, static_cast<float>(cfg.crossAxisPadding));
       }
 
-      if (cfg.showInstanceCount) {
+      if (cfg.showInstanceCount || cfg.showBadges) {
         const float bd = std::max(kBadgeMinSize, iSize * kBadgeSizeRatio);
         const float badgeX = kCellPad + iSize - bd * kBadgeCornerInsetX;
         const float badgeY = kCellPad - bd * kBadgeCornerInsetY;
@@ -876,14 +880,6 @@ namespace shell::dock {
           }
         }
 
-        if (item.badge != nullptr && !cfg.magnification) {
-          const float bd = std::max(kBadgeMinSize, static_cast<float>(cfg.iconSize) * kBadgeSizeRatio);
-          item.badge->setScale(1.0F);
-          item.badge->setPosition(
-              kCellPad + static_cast<float>(cfg.iconSize) - bd * kBadgeCornerInsetX, kCellPad - bd * kBadgeCornerInsetY
-          );
-        }
-
         if (!cfg.magnification && !dragActive) {
           item.hoverMainOffset = 0.0F;
           applyItemMainOffset(item.area, shell::dock::isVerticalEdge(edge), item.restMainPos, item.restCrossPos, 0.0F);
@@ -919,19 +915,34 @@ namespace shell::dock {
       }
 
       if (item.badge != nullptr && item.badgeLabel != nullptr) {
-        const bool show = count >= 2;
+        // An app's unread count (red, as on macOS) takes the corner before the window count.
+        const bool unread = cfg.showBadges && model.badgeCount > 0;
+        const bool windows = !unread && cfg.showInstanceCount && count >= 2;
+        const bool show = unread || windows;
         item.badge->setVisible(show);
         item.badgeLabel->setVisible(show);
         if (show) {
-          const std::string label = (count > 9) ? "9+" : std::to_string(count);
+          std::string label;
+          if (unread) {
+            label = model.badgeCount > kBadgeMaxUnread ? std::to_string(kBadgeMaxUnread) + "+"
+                                                       : std::to_string(model.badgeCount);
+          } else {
+            label = count > 9 ? "9+" : std::to_string(count);
+          }
           item.badgeLabel->setText(label);
-          item.badgeLabel->setColor(colorSpecFromRole(ColorRole::OnPrimary));
-          item.badge->setFill(colorSpecFromRole(ColorRole::Primary));
+          item.badgeLabel->setColor(
+              unread ? fixedColorSpec(rgba(1.0F, 1.0F, 1.0F)) : colorSpecFromRole(ColorRole::OnPrimary)
+          );
+          item.badge->setFill(colorSpecFromRole(unread ? ColorRole::Error : ColorRole::Primary));
           const float bd = std::max(kBadgeMinSize, static_cast<float>(cfg.iconSize) * kBadgeSizeRatio);
           item.badgeLabel->measure(renderer);
+          const float width = std::max(bd, std::round(item.badgeLabel->width() + bd * kBadgePillPadRatio));
+          item.badge->setSize(width, bd);
           item.badgeLabel->setPosition(
-              std::round((bd - item.badgeLabel->width()) * 0.5F), std::round((bd - item.badgeLabel->height()) * 0.5F)
+              std::round((width - item.badgeLabel->width()) * 0.5F), std::round((bd - item.badgeLabel->height()) * 0.5F)
           );
+          const float scale = cfg.magnification && item.visualScale > 0.0F ? item.visualScale : 1.0F;
+          applyHoverBadgeVisual(item.badge, edge, kCellPad, kCellPad, static_cast<float>(cfg.iconSize), bd, scale);
         }
       }
     }

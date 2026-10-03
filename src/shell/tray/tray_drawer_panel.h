@@ -8,6 +8,7 @@
 
 class ConfigService;
 class TrayService;
+class Flex;
 class TrayWidget;
 
 class TrayDrawerPanel : public Panel {
@@ -35,4 +36,7 @@ private:
   TrayService* m_tray = nullptr;
   ConfigService* m_config = nullptr;
   std::unique_ptr<TrayWidget> m_drawerWidget;
+  Flex* m_emptyLayout = nullptr;
+  bool m_showingEmpty = false;
+  static constexpr float kEmptyWidth = 240.0F;
 };

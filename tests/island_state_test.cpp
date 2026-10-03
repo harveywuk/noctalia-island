@@ -97,6 +97,24 @@ int main() {
   cycle.update({true, true, true}, Priority::TimersDownloadsMedia, false, 2, false, start + 35s);
   assert(cycle.selected() == Activity::Timers && !cycle.nextExpiry());
   assert(independent.selected() == Activity::Media);
+  // Split Island: the bubble shows the next running activity, and a click on it swaps the two.
+  {
+    const auto order = island::activityOrder(Priority::TimersDownloadsMedia);
+    assert(island::secondaryActivity({true, true, true}, order, Activity::Timers) == Activity::Downloads);
+    assert(island::secondaryActivity({true, false, true}, order, Activity::Timers) == Activity::Media);
+    assert(island::secondaryActivity({true, false, true}, order, Activity::Media) == Activity::Timers);
+    assert(island::secondaryActivity({false, false, true}, order, Activity::Timers) == Activity::None);
+    island::CompactActivity split;
+    split.update({true, false, true}, Priority::TimersDownloadsMedia, false, 5, false, start);
+    assert(split.selected() == Activity::Timers);
+    split.promote(Activity::Media);
+    split.update({true, false, true}, Priority::TimersDownloadsMedia, false, 5, false, start + 1s);
+    assert(split.selected() == Activity::Media); // The swap survives later refreshes.
+    split.update({false, false, true}, Priority::TimersDownloadsMedia, false, 5, false, start + 2s);
+    assert(split.selected() == Activity::Timers);
+    split.update({true, false, true}, Priority::TimersDownloadsMedia, false, 5, false, start + 3s);
+    assert(split.selected() == Activity::Timers); // An ended activity loses its promotion.
+  }
   assert(
       view(false, false, false, true, false, true, true, true, true, Activity::None, Activity::Media) == View::Activity
   );
@@ -221,6 +239,10 @@ int main() {
   readInto(table, cfg, islandSchema(), "island", diagnostics);
   assert(cfg.activityPriority == Priority::MediaTimersDownloads && cfg.activityCycleSeconds == 1);
   assert(cfg.mediaArtworkSize == 80 && cfg.volumeBarHeight == 5 && cfg.volumeShowPercentage);
+  assert(cfg.splitActivities);
+  table = toml::parse("split_activities = false\n");
+  readInto(table, cfg, islandSchema(), "island", diagnostics);
+  assert(!cfg.splitActivities);
   table = toml::parse("calendar_labels = 'invalid'\n");
   readInto(table, cfg, islandSchema(), "island", diagnostics);
   assert(cfg.calendarLabels == IslandCalendarLabels::TodayAbbreviated);

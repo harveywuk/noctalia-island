@@ -16,6 +16,7 @@ public:
 
   [[nodiscard]] std::string_view defaultPrefix() const override { return "pan"; }
   [[nodiscard]] std::string_view id() const override { return "Panels"; }
+  [[nodiscard]] bool supportsAliases() const override { return true; }
   [[nodiscard]] std::string displayName() const override;
   [[nodiscard]] std::string_view defaultGlyphName() const override { return "rectangle"; }
   [[nodiscard]] bool trackUsage() const override { return true; }

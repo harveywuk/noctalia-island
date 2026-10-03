@@ -109,6 +109,8 @@ namespace {
     });
   }
 
+  constexpr float kSettingsContentMaxWidth = 760.0F;
+
   std::unique_ptr<Flex> centeredRow(std::unique_ptr<Flex> child) {
     child->setFlexGrow(1.0F);
     return ui::row(
@@ -1246,7 +1248,7 @@ std::unique_ptr<Flex> SettingsWindow::buildHeaderRow(float scale) {
       }),
       ui::button({
           .out = &m_actionsMenuButton,
-          .glyph = "more-vertical",
+          .glyph = "dots-circle-horizontal",
           .glyphSize = Style::fontSizeBody * scale,
           .variant = ButtonVariant::Ghost,
           .minWidth = Style::controlHeightSm * scale,
@@ -1348,58 +1350,6 @@ std::unique_ptr<Flex> SettingsWindow::buildFilterRow(
     );
   }
 
-  auto advancedLabel = makeLabel(
-      i18n::tr("settings.badges.advanced"), Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurfaceVariant),
-      FontWeight::Normal
-  );
-  filters->addChild(std::move(advancedLabel));
-
-  filters->addChild(
-      ui::toggle({
-          .checked = m_showAdvanced,
-          .scale = scale,
-          .onChange = [this, requestRebuild](bool value) {
-            if (m_config != nullptr && !m_config->setOverride({"shell", "settings_show_advanced"}, value)) {
-              markSettingsWriteError(i18n::tr("settings.errors.write"));
-              return;
-            }
-            m_showAdvanced = value;
-            const bool hadPendingReset = !m_pendingResetPageScope.empty() || !m_pendingResetSettingPaths.empty();
-            m_pendingResetPageScope.clear();
-            m_pendingResetSettingPaths.clear();
-            if (hadPendingReset) {
-              requestRebuild();
-            } else {
-              requestContentRebuild();
-            }
-          },
-      })
-  );
-
-  auto overriddenLabel = makeLabel(
-      i18n::tr("settings.window.filter-overridden"), Style::fontSizeBody * scale,
-      colorSpecFromRole(ColorRole::OnSurfaceVariant), FontWeight::Normal
-  );
-  filters->addChild(std::move(overriddenLabel));
-
-  filters->addChild(
-      ui::toggle({
-          .checked = m_showOverriddenOnly,
-          .scale = scale,
-          .onChange = [this, requestRebuild](bool value) {
-            m_showOverriddenOnly = value;
-            const bool hadPendingReset = !m_pendingResetPageScope.empty() || !m_pendingResetSettingPaths.empty();
-            m_pendingResetPageScope.clear();
-            m_pendingResetSettingPaths.clear();
-            if (hadPendingReset) {
-              requestRebuild();
-            } else {
-              requestContentRebuild();
-            }
-          },
-      })
-  );
-
   if (!resetPagePaths.empty()) {
     const bool pendingReset = m_pendingResetPageScope == resetPageScope;
     filters->addChild(
@@ -1425,6 +1375,12 @@ std::unique_ptr<Flex> SettingsWindow::buildFilterRow(
         })
     );
   }
+
+  // With the view filters in the actions menu the row is often just its spacer; drop it then so the
+  // page title sits directly above the first group.
+  const bool hasContent = filters->children().size() > 1;
+  filters->setVisible(hasContent);
+  filters->setParticipatesInLayout(hasContent);
 
   return filters;
 }
@@ -1517,7 +1473,14 @@ std::unique_ptr<Flex> SettingsWindow::buildBody(
   body->addChild(std::move(sidebarColumn));
   body->addChild(ui::separator());
 
-  auto contentColumn = ui::column({.align = FlexAlign::Stretch, .gap = Style::spaceSm * scale, .flexGrow = 1.0F});
+  // System Settings keeps its rows in a fixed-width column; without a cap a tiled window pushes
+  // every control to the far edge, a screen's width away from its label.
+  auto contentColumn = ui::column(
+      {.align = FlexAlign::Stretch,
+       .gap = Style::spaceSm * scale,
+       .maxWidth = kSettingsContentMaxWidth * scale,
+       .flexGrow = 1.0F}
+  );
   contentColumn->addChild(
       ui::row({
           .out = &m_pageTitleRow,
@@ -1568,7 +1531,16 @@ std::unique_ptr<Flex> SettingsWindow::buildBody(
   rebuildSettingsContent();
 
   contentColumn->addChild(std::move(scroll));
-  body->addChild(std::move(contentColumn));
+  body->addChild(
+      ui::row(
+          {
+              .align = FlexAlign::Stretch,
+              .justify = FlexJustify::Center,
+              .flexGrow = 1.0F,
+          },
+          std::move(contentColumn)
+      )
+  );
   return body;
 }
 

@@ -49,7 +49,7 @@ popup_shadows         = true            # draw drop shadows behind popups and dr
 font_family           = "SF Pro Text, SF Pro, Inter, sans-serif"  # Pango family list; first installed family wins
 lang                  = ""              # empty = auto-detect; otherwise BCP-47 or POSIX locale
 time_format           = "{:%H:%M}"      # default time format for shell UI without its own setting
-date_format           = "%A, %x"        # default date format for shell UI without its own setting
+date_format           = "%A %-d %B"     # default date format for shell UI without its own setting
 offline_mode          = false           # block all outgoing HTTP requests
 # panel_anchor_bar   = "main"           # bar panels attach to without a source bar; omit = first enabled bar
 external_ip_enabled   = false           # resolve the WAN IP for the Control Center network tab and network widget tooltip
@@ -71,9 +71,9 @@ app_icon_color        = "on_surface"    # ColorSpec when colorize is enabled; se
 clipboard_enabled     = true            # false disables clipboard history/panel (basic copy & paste still work)
 clipboard_keep_from_closed_apps = true  # keep the live selection after its source application closes
 clipboard_history_max_entries = 100     # unpinned history cap (10–10000); pinned entries are exempt
-clipboard_confirm_clear_history = true  # confirm before clear history / delete unpinned entries
+clipboard_confirm_clear_history = true  # no longer used: the Clipboard panel was retired
 clipboard_auto_paste  = "auto"          # off | auto | ctrl_v | ctrl_shift_v | shift_insert
-clipboard_image_action_command = ""     # image clipboard action; e.g. "gimp {path}" or "satty -f -"
+clipboard_image_action_command = ""     # "Edit Image" action in /clip; e.g. "gimp {path}" or "satty -f -"
 shared_gl_context     = true            # startup-only; share GPU textures across surfaces
 disable_mipmaps       = false           # startup-only; disable texture mipmaps if downscaled icons/wallpaper show GPU artifacts
 
@@ -96,23 +96,23 @@ shadow                = true   # cast the global [shell.shadow] from panel surfa
 list_item_background  = false  # filled rounded background behind launcher and clipboard list items
 floating_layer         = "overlay" # overlay | top; applies to floating interactive panels
 launcher_placement       = "floating" # attached | floating
-clipboard_placement      = "floating" # attached | floating
+clipboard_placement      = "floating" # no longer used: the Clipboard panel was retired
 control_center_placement = "attached" # attached | floating
 wallpaper_placement      = "attached" # attached | floating
 session_placement        = "attached" # attached | floating
 polkit_placement         = "floating" # attached | floating
 launcher_position        = "center"   # auto | center | top_left | … (floating only)
-clipboard_position       = "center"   # auto | center | top_left | … (floating only)
+clipboard_position       = "center"   # no longer used
 polkit_position          = "center"   # auto | center | top_left | … (floating only)
 floating_offset          = 8           # px gap between a floating panel and the bar edge
 open_near_click_control_center = false  # attached/floating: follow the bar click instead of bar-center
 open_near_click_launcher       = false  # attached/floating: follow the bar click instead of bar-center
-open_near_click_clipboard      = false  # attached/floating: follow the bar click instead of bar-center
+open_near_click_clipboard      = false  # no longer used
 open_near_click_wallpaper      = false  # attached/floating: follow the bar click instead of bar-center
 open_near_click_session        = false  # attached/floating: follow the bar click instead of bar-center
 
 [shell.launcher]
-categories      = true   # show launcher category filters; Tab toggles them while open
+categories      = false  # show launcher category filters (off by default, like Raycast); F6 shows them while open
 show_icons      = true   # show application icons in launcher results
 show_app_origin_indicator = true # show package origin indicators on application results
 compact         = false  # smaller icons and tighter rows; hides subtitles
@@ -123,6 +123,8 @@ pinned          = []     # desktop entry IDs shown first when the launcher opens
 fetch_exchange_rates = true  # refresh currency rates from third-party online sources
 provider_prefix = "/"    # common prefix character for provider trigger words (e.g. "/" or ".")
 auto_paste      = "auto" # off | auto | ctrl_v | ctrl_shift_v | shift_insert (after copy activations)
+web_search_url  = "https://duckduckgo.com/?q={query}"  # "Search the Web" fallback; {query} is URL-encoded
+script_directories = []  # extra folders of script commands (~/.config/noctalia/scripts is always read)
 
 [shell.launcher.providers.calculator]
 prefix = "calc"          # trigger word for calculator expressions (e.g. "/calc")
@@ -146,6 +148,25 @@ prefix = "wall"          # trigger word for wallpaper selector (e.g. "/wall")
 
 [shell.launcher.providers.windows]
 prefix = "win"           # trigger word for windows (e.g. "/win")
+
+# Raycast-style providers. Each has [shell.launcher.providers.<name>] prefix/global keys:
+# clipboard ("clip", not global), quicklinks ("link"), snippets ("snip"), scripts ("script"),
+# system ("sys") and time ("time").
+
+[shell.launcher.quicklinks.man]
+name    = "Arch Man Pages"
+url     = "https://man.archlinux.org/search?q={query}"  # {query} makes it a search link
+keyword = "man"          # type "man grep" to search
+glyph   = "book"         # optional icon
+
+[shell.launcher.snippets.signature]
+name    = "Email signature"
+keyword = "sig"
+text    = "Best,\nHarvey\nSent {date}"  # {date} {time} {datetime} {clipboard}
+
+[shell.launcher.aliases]
+n  = "notes"                       # desktop id (with or without .desktop) for apps
+dm = "System:toggle-dark-mode"     # or Provider:id for any other result
 
 # Dmenu-style providers: a command emits newline-separated candidates that show up
 # in the launcher. A tab in a line splits it into title \t description. On activate,
@@ -235,15 +256,15 @@ Notes:
 - `show_location`: when `false`, weather location text/coordinates are hidden in shell surfaces.
 - `app_icon_colorize` and `app_icon_color`: global application icon tinting for the dock, system tray (bar and drawer), taskbar, active-window widget, and launcher panel results. See [App icon colorization](#app-icon-colorization). Bar `launcher` / `control-center` widgets can optionally tint `custom_image` via `custom_image_colorize` using the widget **Color** setting (Presentation group in the widget editor).
 - `lang`: empty follows `$LC_ALL`, `$LC_MESSAGES`, then `$LANG`. Values may be BCP-47 tags (`pt-BR`, `zh-Hans`) or POSIX locale names (`pt_BR.UTF-8`, `zh_CN.UTF-8`). Chinese region locales infer script before matching catalogs, so `zh_CN` and `zh_SG` match `zh-Hans`, while `zh_TW`, `zh_HK`, and `zh_MO` match `zh-Hant`. When a right-to-left catalog is loaded, Noctalia mirrors text, controls, grids, scrollbars, and directional icons automatically. Bar `start`/`center`/`end` lanes and dock item order remain on their configured physical sides. If no matching catalog loads and Noctalia falls back to English, the UI remains left-to-right.
-- `clipboard_enabled`: when `false`, disables clipboard **history** only - the history is no longer recorded or persisted, and the clipboard panel and bar/control-center shortcuts are unavailable. The live clipboard transport stays active, so basic copy/cut/paste in text fields and launcher math/emoji copy-to-clipboard actions keep working.
+- `clipboard_enabled`: when `false`, disables clipboard **history** only - the history is no longer recorded or persisted, and clipboard history (`/clip` in the launcher) and its bar/control-center shortcuts are unavailable. The live clipboard transport stays active, so basic copy/cut/paste in text fields and launcher math/emoji copy-to-clipboard actions keep working.
 - `clipboard_keep_from_closed_apps`: when `true` (default), Noctalia takes ownership of the live selection after the
   application that supplied it closes, keeping the last copied value pasteable. This is independent of clipboard
   history retention.
 - Clipboard history is encrypted at rest with a purpose-specific key derived from the Noctalia storage master key. The default `secret-service` source stores the master key through Secret Service. If the provider is unavailable or locked, history still works for the current session but is not read from or written to disk; unlock or start the provider and use **Settings → Shell → Clipboard → Retry**. Noctalia also reopens encrypted storage on its own once the provider appears or its keyring unlocks; see [Secret Service & keyrings](/noctalia/configuration/secret-service/) for the unlock requirements and the multiple-keyrings caveat. Existing plaintext history is migrated only after the encrypted replacement is complete, and encrypted files are preserved if their key is missing.
 - `clipboard_history_max_entries`: caps how many **unpinned** clipboard history rows Noctalia keeps (default `100`, range `10`–`10000`). Pinned entries stay outside this limit. Lowering the value trims older unpinned rows on reload.
-- `clipboard_confirm_clear_history`: when `true` (default), the clipboard panel asks before **Clear history** and before deleting an **unpinned** entry (trash in the preview, or double-click a row). When `false`, those actions apply immediately: sidebar clear removes unpinned rows and keeps pins when any exist, or clears everything when nothing is pinned; unpinned single deletes are immediate. **Pinned** entries still require confirmation before delete. With confirmation enabled, the clear dialog only offers **Keep pinned** when both pinned and unpinned rows exist; if history is all pinned or all unpinned, the description matches that case. Toggle in **Settings → Shell → Clipboard**.
-- `clipboard_auto_paste`: `auto` = image entries use `Ctrl+V`, text entries use `Ctrl+Shift+V`; `off` = copy only, no automatic paste.
-- `clipboard_image_action_command`: when non-empty, image clipboard previews show an action button. Use `{path}` to receive a private plaintext export of the encrypted payload. Use `{stdin}` (expanded to `-`) or omit `{path}` to receive the image bytes on stdin, matching the v4 annotation tool behavior (`satty -f -`, `gradia`, etc.).
+- The Clipboard panel was retired in favour of the launcher's clipboard history (`/clip`), Raycast-style. The clipboard bar widget, the Control Center shortcut and `noctalia msg panel-toggle clipboard` now open the launcher on `/clip`. `clipboard_confirm_clear_history`, `shell.panel.clipboard_placement`, `clipboard_position` and `open_near_click_clipboard` are still accepted but no longer do anything.
+- `clipboard_auto_paste`: how `/clip` pastes the entry you pick. `auto` = image entries use `Ctrl+V`, text entries use `Ctrl+Shift+V`; `off` = copy only, no automatic paste.
+- `clipboard_image_action_command`: when non-empty, image entries in `/clip` get an **Edit Image** action. Use `{path}` to receive a private plaintext export of the encrypted payload. Use `{stdin}` (expanded to `-`) or omit `{path}` to receive the image bytes on stdin, matching the v4 annotation tool behavior (`satty -f -`, `gradia`, etc.).
 - `corner_radius_scale` scales rounded corners across shell surfaces: `0` = square, `1` = default, `2` = extra rounded.
 - `button_borders`: when `true` (default), buttons use the outline defined by their built-in or custom style. Set it to `false` for borderless buttons throughout the shell. Other controls, cards, panels, and explicitly configured raw borders are unaffected. Toggle in **Settings → Appearance → Borders**.
 - `input_borders`: when `true` (default), text fields and select/dropdown triggers draw a resting outline. Set it to `false` to drop the resting border; the focus ring still appears while an input is focused. Toggle in **Settings → Appearance → Borders**.
@@ -268,7 +289,7 @@ Notes:
 - `shell.panel.floating_offset` sets the gap in pixels a floating panel keeps from the bar edge, or from the screen edge when it is pinned with a `*_position` (default `8`). It also spaces panels using the reserved edge area when multiple bars share an edge. `attached` panels ignore it.
 - When multiple enabled bars resolve to the same edge on one monitor, exact source-bar attachment is ambiguous. In that case attached/floating panels use the compositor's reserved edge area and open outside the bar stack instead of anchoring to one bar. Prefer setting `shell.panel_anchor_bar` when you have more than one bar and open panels via IPC or shortcuts.
 - `shell.panel.open_near_click_control_center`, `open_near_click_launcher`, `open_near_click_clipboard`, `open_near_click_wallpaper`, and `open_near_click_session` position attached or floating panels near the click location on the bar instead of centering them along the bar. They are ignored when a panel is `floating` with a `*_position` other than `auto`, since it is then pinned to a fixed screen position.
-- `shell.launcher.categories` shows compact category filters in the launcher for providers that expose categories, currently Applications and Emoji. **All** leaves results unfiltered. With a prefixed provider such as `/emo`, the filters come from that provider. Press `Tab` while the launcher is open to hide/show the filters; the left/right keybind actions move between filters.
+- `shell.launcher.categories` (off by default) shows compact category filters in the launcher for providers that expose categories, currently Applications and Emoji. **All** leaves results unfiltered. With a prefixed provider such as `/emo`, the filters come from that provider. Press `Tab` while the launcher is open to hide/show the filters; the left/right keybind actions move between filters.
 - `shell.launcher.show_icons` toggles application icons in launcher result rows. Prefixed-provider rows (for example emoji) still show their leading character when icons are hidden.
 - `shell.launcher.show_app_origin_indicator` toggles the package-origin overlays on application results, such as Flatpak, Snap, Nix, and AppImage.
 - `shell.launcher.compact` uses smaller icons, tighter padding, and single-line rows (subtitles hidden).
@@ -276,6 +297,7 @@ Notes:
 - `shell.launcher.show_app_actions` includes searchable `.desktop` actions alongside application results. Action rows show the action name with the parent application underneath and launch that action directly. Disabled by default; application actions remain available from an application's right-click menu.
 - `shell.launcher.sort_by_usage` boosts frequently launched apps toward the top of results and exposes a **Recently Used** category filter. Disable it for strictly alphabetical ordering within each provider.
 - `shell.launcher.pinned` is an ordered list of desktop entry IDs shown first when the launcher opens without a query. Launcher pins are independent from `dock.pinned` and each taskbar widget's `pinned` list.
+- `shell.launcher.quicklinks`, `snippets`, `aliases`, `web_search_url` and `script_directories` configure the Raycast-style providers; see [Launcher](/noctalia/launcher/). A quicklink with the same id as a built-in one (`google`, `duckduckgo`, `github`, `youtube`, `wikipedia`, `archwiki`, `maps`) replaces it. Aliases set from the launcher's actions menu are stored in the state folder, and config aliases win over them.
 - `shell.launcher.fetch_exchange_rates` refreshes currency exchange rates in the background from libqalculate's third-party online sources (enabled by default). Disable it to opt out of those requests; the last cached rates are still used for conversion. Refresh is also skipped when `[shell].offline_mode` is enabled.
 - `shell.launcher.auto_paste` controls virtual-keyboard paste after copy-style activations (calculator, emoji, copy-mode dmenu). Providers that copy opt in with `supportsAutoPaste`. Same values as `shell.clipboard_auto_paste` (`off` | `auto` | `ctrl_v` | `ctrl_shift_v` | `shift_insert`). Default `auto`.
 - Reset stored launcher usage data from **Settings → Panels → Launcher → Reset Usage Data** (clears `usage_counts.json` and `recently_used.json` while Noctalia is running).

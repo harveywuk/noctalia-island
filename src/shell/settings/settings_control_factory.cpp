@@ -344,7 +344,7 @@ namespace settings {
     tagTabFocusKey(*control, joinSettingPath(entry.path));
     actions->addChild(std::move(control));
 
-    if (!section.children().empty())
+    if (hasLaidOutChildren(section))
       section.addChild(ui::separator());
 
     // Text and path fields are wide, so beside them a description is squeezed into a
@@ -556,6 +556,8 @@ namespace settings {
                                    : Style::sliderDefaultWidth - kInvertSlotContentWidth - Style::spaceSm)
         * scale;
 
+    // The value reads as plain text beside the slider, as in System Settings, but stays an
+    // input: Tab reaches it and a typed number still commits.
     Input* valueInputPtr = nullptr;
     auto valueInput = ui::input({
         .out = &valueInputPtr,
@@ -563,8 +565,11 @@ namespace settings {
         .fontSize = Style::fontSizeCaption * scale,
         .controlHeight = Style::controlHeightSm * scale,
         .horizontalPadding = Style::spaceXs * scale,
+        .frameVisible = false,
+        .textAlign = TextAlign::Start,
         .width = 50.0F * scale,
         .height = Style::controlHeightSm * scale,
+        .configure = [](Input& input) { input.setFrameOnFocus(true); },
     });
 
     Slider* sliderPtr = nullptr;
@@ -1178,7 +1183,7 @@ namespace settings {
         ui::label({
             .text = entry.title,
             .fontSize = Style::fontSizeBody * scale,
-            .fontWeight = FontWeight::Bold,
+            .fontWeight = FontWeight::Normal,
             .color = colorSpecFromRole(ColorRole::OnSurface),
             .maxLines = titleMaxTwoLines ? std::optional<int>{2} : std::nullopt,
         })
@@ -1258,6 +1263,8 @@ namespace settings {
     });
     block->addChild(std::move(listEditor));
 
+    if (hasLaidOutChildren(section))
+      section.addChild(ui::separator());
     section.addChild(std::move(block));
   }
 

@@ -55,9 +55,16 @@ namespace settings {
 
     constexpr auto kLauncherProviderSettings = std::to_array<LauncherProviderSettingSpec>({
         {.name = "calculator", .prefixPlaceholder = "calc", .globalByDefault = true},
+        {.name = "clipboard", .prefixPlaceholder = "clip"},
         {.name = "emoji", .prefixPlaceholder = "emo"},
+        {.name = "files", .prefixPlaceholder = "file", .globalByDefault = true},
         {.name = "panels", .prefixPlaceholder = "pan"},
+        {.name = "quicklinks", .prefixPlaceholder = "link", .globalByDefault = true},
+        {.name = "scripts", .prefixPlaceholder = "script", .globalByDefault = true},
         {.name = "session", .prefixPlaceholder = "session"},
+        {.name = "snippets", .prefixPlaceholder = "snip", .globalByDefault = true},
+        {.name = "system", .prefixPlaceholder = "sys", .globalByDefault = true},
+        {.name = "time", .prefixPlaceholder = "time", .globalByDefault = true},
         {.name = "wallpaper", .prefixPlaceholder = "wall"},
         {.name = "windows", .prefixPlaceholder = "win"},
     });
@@ -1180,6 +1187,7 @@ namespace settings {
       auto priority = enumSelect(kIslandActivityPriority, island.activityPriority);
       priority.preferredWidth = 280;
       islandSetting("activities", "activity_priority", std::move(priority));
+      islandSetting("activities", "split_activities", ToggleSetting{island.splitActivities});
       islandSetting("activities", "cycle_activities", ToggleSetting{island.cycleActivities});
       islandSetting("activities", "activity_cycle_seconds", SliderSetting{island.activityCycleSeconds, 1, 30, 1, true});
       islandSetting("hover-timing", "hover_open_delay_ms", SliderSetting{island.hoverOpenDelayMs, 0, 2000, 10, true});
@@ -1189,6 +1197,7 @@ namespace settings {
       islandSetting("clock", "clock_offset", SliderSetting{island.clockOffset, -12, 12, 1, true});
       islandSetting("clock", "expanded_clock_offset", SliderSetting{island.expandedClockOffset, -12, 12, 1, true});
       islandSetting("calendar", "calendar_labels", enumSelect(kIslandCalendarLabels, island.calendarLabels));
+      islandSetting("calendar", "up_next_minutes", SliderSetting{island.upNextMinutes, 0, 60, 5, true});
       islandSetting("media", "media_artwork_size", SliderSetting{island.mediaArtworkSize, 40, 80, 1, true});
       islandSetting("media", "track_preview_seconds", SliderSetting{island.trackPreviewSeconds, 0, 30, 1, true});
       islandSetting("media", "paused_media_seconds", SliderSetting{island.pausedMediaSeconds, 0, 30, 1, true});
@@ -1301,6 +1310,11 @@ namespace settings {
         SettingsSection::Dock, "behavior", tr("settings.schema.dock.show-instance-count.label"),
         tr("settings.schema.dock.show-instance-count.description"), {"dock", "show_instance_count"},
         ToggleSetting{cfg.dock.showInstanceCount}, "badge windows"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Dock, "behavior", tr("settings.schema.dock.show-badges.label"),
+        tr("settings.schema.dock.show-badges.description"), {"dock", "show_badges"}, ToggleSetting{cfg.dock.showBadges},
+        "badge unread notifications count"
     ));
     entries.push_back(makeEntry(
         SettingsSection::Dock, "layout", tr("settings.schema.dock.launcher-position.label"),
@@ -1425,6 +1439,11 @@ namespace settings {
         SettingsSection::Dock, "shape", tr("settings.schema.dock.border-width.label"),
         tr("settings.schema.dock.border-width.description"), {"dock", "border_width"},
         sliderFor(cfg.dock.borderWidth, noctalia::config::schema::kDockBorderWidthRange, false), "outline stroke", true
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Dock, "shape", tr("settings.schema.dock.hairline-border.label"),
+        tr("settings.schema.dock.hairline-border.description"), {"dock", "hairline_border"},
+        ToggleSetting{cfg.dock.hairlineBorder}, "outline edge glass"
     ));
     entries.push_back(makeEntry(
         SettingsSection::Dock, "effects", tr("settings.schema.shared.background-opacity.label"),
@@ -1714,22 +1733,7 @@ namespace settings {
         ));
       }
     }
-    entries.push_back(makeEntry(
-        SettingsSection::Panels, "clipboard", tr("settings.schema.panels.placement-clipboard.label"),
-        tr("settings.schema.panels.placement-clipboard.description"), {"shell", "panel", "clipboard_placement"},
-        asSegmented(enumSelect(kPanelPlacements, cfg.shell.panel.clipboardPlacement)),
-        "attached floating bar panel position"
-    ));
-    entries.push_back(panelPositionEntry(
-        SettingsSection::Panels, "clipboard", "clipboard", "settings.schema.panels.position-clipboard.label",
-        "settings.schema.panels.position-clipboard.description", cfg.shell.panel.clipboardPosition,
-        &ShellConfig::PanelConfig::clipboardPlacement
-    ));
-    entries.push_back(panelBarAlignmentEntry(
-        SettingsSection::Panels, "clipboard", "clipboard", "settings.schema.panels.open-near-click-clipboard.label",
-        "settings.schema.panels.open-near-click-clipboard.description", cfg.shell.panel.openNearClickClipboard,
-        &ShellConfig::PanelConfig::clipboardPlacement, &ShellConfig::PanelConfig::clipboardPosition
-    ));
+    // No Clipboard placement rows: the Clipboard panel is retired and opens the launcher instead.
     entries.push_back(makeEntry(
         SettingsSection::Panels, "polkit", tr("settings.schema.panels.placement-polkit.label"),
         tr("settings.schema.panels.placement-polkit.description"), {"shell", "panel", "polkit_placement"},
@@ -2181,7 +2185,7 @@ namespace settings {
     entries.push_back(makeEntry(
         SettingsSection::Shell, "general", tr("settings.schema.shell.date-format.label"),
         tr("settings.schema.shell.date-format.description"), {"shell", "date_format"},
-        TextSetting{.value = cfg.shell.dateFormat, .placeholder = "%A, %x", .browseFileExtensions = {}},
+        TextSetting{.value = cfg.shell.dateFormat, .placeholder = "%A %-d %B", .browseFileExtensions = {}},
         "calendar date format strftime chrono"
     ));
     entries.push_back(makeEntry(
@@ -2255,16 +2259,7 @@ namespace settings {
       e.visibleWhen = clipboardOn;
       entries.push_back(std::move(e));
     }
-    {
-      auto e = makeEntry(
-          SettingsSection::Shell, "clipboard", tr("settings.schema.shell.clipboard-confirm-clear-history.label"),
-          tr("settings.schema.shell.clipboard-confirm-clear-history.description"),
-          {"shell", "clipboard_confirm_clear_history"}, ToggleSetting{cfg.shell.clipboardConfirmClearHistory},
-          "clipboard history clear confirm pinned"
-      );
-      e.visibleWhen = clipboardOn;
-      entries.push_back(std::move(e));
-    }
+    // No "confirm clear history" row: it belonged to the retired Clipboard panel's dialogs.
     {
       auto e = makeEntry(
           SettingsSection::Shell, "clipboard", tr("settings.schema.shell.clipboard-auto-paste.label"),
@@ -2606,6 +2601,11 @@ namespace settings {
         SettingsSection::Osd, "kinds", tr("settings.schema.shell.osd-kinds-keyboard-backlight.label"),
         tr("settings.schema.shell.osd-kinds-keyboard-backlight.description"), {"osd", "kinds", "keyboard_backlight"},
         ToggleSetting{cfg.osd.kinds.keyboardBacklight}, "hud overlay keyboard backlight kbd"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Osd, "kinds", tr("settings.schema.shell.osd-kinds-charging.label"),
+        tr("settings.schema.shell.osd-kinds-charging.description"), {"osd", "kinds", "charging"},
+        ToggleSetting{cfg.osd.kinds.charging}, "hud overlay battery power charger plugged ac"
     ));
     // Gate every OSD entry after the master toggle on osd.enabled, preserving any per-entry visibility.
     for (std::size_t i = osdGatedStart; i < entries.size(); ++i) {

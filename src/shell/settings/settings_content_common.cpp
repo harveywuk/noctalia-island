@@ -10,6 +10,7 @@
 #include "ui/style.h"
 #include "util/string_utils.h"
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <unordered_set>
@@ -176,6 +177,10 @@ namespace settings {
         .fontWeight = fontWeight,
         .color = color,
     });
+  }
+
+  bool hasLaidOutChildren(const Flex& container) {
+    return std::ranges::any_of(container.children(), [](const auto& child) { return child->participatesInLayout(); });
   }
 
   Flex* addSettingsCard(Flex& parent, std::string_view title, float scale) {
