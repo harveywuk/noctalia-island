@@ -24,7 +24,7 @@ _State as of 3 October 2026, 16:45 UTC._
 
 ## Work done
 
-Every PR below is merged into `feature/orbit-island`.
+Every PR below is merged into `feature/orbit-island`. The merged branch builds, and 151 of 152 tests pass. The one failure (`process`) happens only in the cloud sandbox. `main` is untouched.
 
 ### Look and feel (PRs #1 to #6)
 
