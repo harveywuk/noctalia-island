@@ -9,6 +9,8 @@
 #include "core/input/key_chord.h"
 #include "core/input/keybind_matcher.h"
 #include "core/log.h"
+#include "core/process/process.h"
+#include "i18n/i18n.h"
 #include "ipc/ipc_service.h"
 #include "notification/notification.h"
 #include "notification/notification_manager.h"
@@ -48,6 +50,8 @@
 namespace {
 
   constexpr Logger kLog("screenshot");
+  // Wide enough for the notification's thumbnail at 2x scale.
+  constexpr int kScreenshotThumbnailWidth = 480;
   constexpr const char* kScreenshotPathEnv = "NOCTALIA_SCREENSHOT_PATH";
   constexpr const char* kStateOwner = "screenshot";
   constexpr const char* kLastRegionKey = "last_region";
@@ -618,7 +622,13 @@ ScreenshotService::ScreenshotService(
     NotificationManager& notifications, ClipboardService* clipboard
 )
     : m_wayland(wayland), m_platform(platform), m_notifications(notifications), m_configService(configService),
-      m_clipboard(clipboard), m_capture(wayland) {}
+      m_clipboard(clipboard), m_capture(wayland) {
+  m_notifications.addInternalActionCallback(
+      [this](std::uint32_t id, const std::string& actionKey, const std::string& activationToken) {
+        onSavedNotificationAction(id, actionKey, activationToken);
+      }
+  );
+}
 
 ScreenshotService::~ScreenshotService() { ScreenRecorder::instance().shutdown(); }
 
@@ -1877,7 +1887,7 @@ bool ScreenshotService::finishDelivery(
       kLog.warn("screenshot write failed: {}", destPath->string());
       failureMessage = "Failed to save screenshot";
     } else {
-      notifySaved(*destPath);
+      notifySaved(*destPath, image);
       delivered = true;
     }
   }
@@ -1938,8 +1948,67 @@ ScreenshotService::makeScreenshotPath(const OutputOptions& options, const std::s
   return dir / (stem + ".png");
 }
 
-void ScreenshotService::notifySaved(const std::filesystem::path& path) {
-  m_notifications.addInternal("Noctalia", "Screenshot saved", path.string());
+void ScreenshotService::notifySaved(const std::filesystem::path& path, const ScreencopyImage& image) {
+  NotificationRequest request;
+  request.appName = "Noctalia";
+  request.summary = i18n::tr("notifications.internal.screenshot-saved");
+  request.body = path.filename().string();
+  request.origin = NotificationOrigin::Internal;
+  request.category = std::string(kScreenshotNotificationCategory);
+  request.actions = {
+      "default", i18n::tr("notifications.actions.open"),
+      "markup",  i18n::tr("notifications.internal.screenshot-markup"),
+      "folder",  i18n::tr("notifications.internal.screenshot-show-in-folder"),
+  };
+  // A small copy for the notification, like the floating thumbnail on macOS.
+  ScreencopyImage thumbnail = image;
+  const int width = std::min(thumbnail.width, kScreenshotThumbnailWidth);
+  const int height = std::max(1, thumbnail.height * width / std::max(1, thumbnail.width));
+  if (resampleRgbaImage(thumbnail, width, height)) {
+    request.imageData = NotificationImageData{
+        .width = thumbnail.width,
+        .height = thumbnail.height,
+        .rowStride = thumbnail.width * 4,
+        .hasAlpha = true,
+        .bitsPerSample = 8,
+        .channels = 4,
+        .data = std::move(thumbnail.rgba),
+    };
+  }
+  const std::uint32_t id = m_notifications.addOrReplace(std::move(request));
+  if (id == 0) {
+    return;
+  }
+  m_savedNotifications.emplace_back(id, path);
+  if (m_savedNotifications.size() > 8) {
+    m_savedNotifications.erase(m_savedNotifications.begin());
+  }
+}
+
+void ScreenshotService::onSavedNotificationAction(
+    std::uint32_t id, const std::string& actionKey, const std::string& activationToken
+) {
+  const auto it = std::ranges::find(m_savedNotifications, id, &std::pair<std::uint32_t, std::filesystem::path>::first);
+  if (it == m_savedNotifications.end()) {
+    return;
+  }
+  const std::filesystem::path path = it->second;
+  if (actionKey == "markup") {
+    auto* renderContext = PanelManager::instance().renderContext();
+    if (renderContext == nullptr) {
+      return;
+    }
+    if (const auto started =
+            beginImageFileAnnotation(*renderContext, path.string(), outputOptionsFromConfig(m_configService.config()));
+        !started) {
+      notifyError(started.error());
+    }
+    return;
+  }
+  const std::string target = actionKey == "folder" ? path.parent_path().string() : path.string();
+  if (!process::runAsync(std::vector<std::string>{"xdg-open", target}, activationToken)) {
+    kLog.warn("failed to open {}", target);
+  }
 }
 
 void ScreenshotService::notifyError(const std::string& message) {

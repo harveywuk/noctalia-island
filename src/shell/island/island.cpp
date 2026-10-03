@@ -2301,7 +2301,17 @@ void Island::prepare(Instance& inst) {
     const bool expanded = inst.expandedNotification == n.id;
     // The sending app's icon leads its name, as on macOS; the name sits alone when none resolves.
     const float appIconSize = 18.0F;
-    const bool hasAppIcon = notificationIcon(n, 22, 12, appIconSize);
+    // A screenshot's image is its thumbnail, not the sender's icon.
+    const bool screenshot = n.category == kScreenshotNotificationCategory
+        && n.imageData
+        && n.imageData->width > 0
+        && n.imageData->height > 0
+        && n.imageData->channels == 4
+        && n.imageData->data.size() >= static_cast<std::size_t>(n.imageData->rowStride) * n.imageData->height;
+    Notification iconSource = n;
+    if (screenshot)
+      iconSource.imageData.reset();
+    const bool hasAppIcon = notificationIcon(iconSource, 22, 12, appIconSize);
     const float appLabelX = hasAppIcon ? 22 + appIconSize + 6 : 22;
     // "now" / "5m ago" closes the header row, as on the notification banners.
     constexpr float timeWidth = 56.0F;
@@ -2332,7 +2342,14 @@ void Island::prepare(Instance& inst) {
     const float footerHeight = hasActions ? 46.0F : 16.0F;
     const float textBottom = maxHeight - footerHeight;
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
-    const float textWidth = w - (expanded ? 64.0F : 44.0F);
+    // The thumbnail sits at the card's right, like an attachment on a macOS notification.
+    constexpr float thumbnailHeight = 64.0F;
+    const float thumbnailWidth = screenshot
+        ? std::min(
+              120.0F, thumbnailHeight * static_cast<float>(n.imageData->width) / static_cast<float>(n.imageData->height)
+          )
+        : 0.0F;
+    const float textWidth = w - (expanded ? 64.0F : 44.0F) - (screenshot ? thumbnailWidth + 12.0F : 0.0F);
     auto* summary =
         label(n.summary, 22, 37, textWidth, Style::fontSizeTitle, foreground, false, 0, FontWeight::SemiBold);
     const float fullSummaryHeight = summary->height();
@@ -2376,6 +2393,20 @@ void Island::prepare(Instance& inst) {
       }
       if (body->visible())
         contentBottom = bodyY + body->height() / s;
+    }
+    if (screenshot) {
+      const auto& raw = *n.imageData;
+      auto image = std::make_unique<Image>();
+      image->setSize(thumbnailWidth * s, thumbnailHeight * s);
+      image->setRadius(Style::scaledRadiusMd(s));
+      image->setFit(ImageFit::Cover);
+      image->setPosition((w - 22 - thumbnailWidth) * s, 37 * s);
+      if (image->setSourceRaw(
+              renderer, raw.data.data(), raw.data.size(), raw.width, raw.height, raw.rowStride, PixmapFormat::RGBA, true
+          )) {
+        inst.content->addChild(std::move(image));
+        contentBottom = std::max(contentBottom, 37.0F + thumbnailHeight);
+      }
     }
     if (expanded) {
       auto scroll = std::make_unique<ScrollView>();

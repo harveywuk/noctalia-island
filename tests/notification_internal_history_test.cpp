@@ -89,11 +89,16 @@ int main() {
   {
     std::string externalKey;
     std::string internalKey;
+    std::string secondKey;
     manager.setActionInvokeCallback([&externalKey](uint32_t, const std::string& key, const std::string&) {
       externalKey = key;
     });
     manager.setInternalActionCallback([&internalKey](uint32_t, const std::string& key, const std::string&) {
       internalKey = key;
+    });
+    // Several in-process handlers (calendar reminders, screenshots) all see the action.
+    manager.addInternalActionCallback([&secondKey](uint32_t, const std::string& key, const std::string&) {
+      secondKey = key;
     });
 
     const auto internalId = manager.addOrReplace(
@@ -112,6 +117,7 @@ int main() {
          )
         && ok;
     ok = check(internalKey == "default", "an internal notification action was not dispatched in-process") && ok;
+    ok = check(secondKey == "default", "a second internal action handler was not called") && ok;
     ok = check(externalKey.empty(), "an internal notification action leaked to the D-Bus callback") && ok;
 
     // External notifications keep going to the D-Bus callback.
