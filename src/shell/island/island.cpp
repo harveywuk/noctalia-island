@@ -492,6 +492,84 @@ std::vector<island::Countdown> Island::countdowns() const {
   return result;
 }
 
+std::vector<DownloadProgress> Island::progressActivities() const {
+  auto result = m_downloads ? m_downloads->active() : std::vector<DownloadProgress>{};
+  for (const auto& activity : m_scriptActivities)
+    result.push_back({
+        .desktopId = "script:" + activity.id,
+        .name = activity.title,
+        .progress = activity.progress.value_or(0.0),
+        .determinate = activity.progress.has_value(),
+        .phase = "working",
+        .icon = activity.icon.empty() ? "progress" : activity.icon,
+    });
+  return result;
+}
+
+namespace {
+  constexpr auto kScriptActivityLifetime = std::chrono::hours(1);
+}
+
+void Island::expireScriptActivities() {
+  const auto now = std::chrono::steady_clock::now();
+  const auto before = m_scriptActivities.size();
+  std::erase_if(m_scriptActivities, [now](const auto& activity) {
+    return now - activity.updated >= kScriptActivityLifetime;
+  });
+  if (m_scriptActivities.empty()) {
+    m_scriptActivityExpiry.stop();
+  } else {
+    const auto oldest = std::ranges::min(m_scriptActivities, {}, &ScriptActivity::updated).updated;
+    m_scriptActivityExpiry.start(
+        std::chrono::ceil<std::chrono::milliseconds>(oldest + kScriptActivityLifetime - now) + 1ms,
+        [this] { expireScriptActivities(); }
+    );
+  }
+  if (m_scriptActivities.size() != before)
+    refresh();
+}
+
+bool Island::startScriptActivity(const std::string& id, const std::string& title, const std::string& icon) {
+  auto it = std::ranges::find(m_scriptActivities, id, &ScriptActivity::id);
+  if (it == m_scriptActivities.end())
+    it = m_scriptActivities.insert(m_scriptActivities.end(), ScriptActivity{.id = id});
+  // Starting again restarts the activity, as an indeterminate one until progress arrives.
+  it->title = title;
+  it->icon = icon;
+  it->progress.reset();
+  it->updated = std::chrono::steady_clock::now();
+  expireScriptActivities();
+  refresh();
+  return true;
+}
+
+bool Island::updateScriptActivity(
+    const std::string& id, std::optional<std::optional<double>> progress, const std::string& title,
+    const std::string& icon
+) {
+  const auto it = std::ranges::find(m_scriptActivities, id, &ScriptActivity::id);
+  if (it == m_scriptActivities.end())
+    return false;
+  if (progress)
+    it->progress = *progress ? std::optional{std::clamp(**progress, 0.0, 1.0)} : std::nullopt;
+  if (!title.empty())
+    it->title = title;
+  if (!icon.empty())
+    it->icon = icon;
+  it->updated = std::chrono::steady_clock::now();
+  expireScriptActivities();
+  refresh();
+  return true;
+}
+
+bool Island::endScriptActivity(const std::string& id) {
+  if (std::erase_if(m_scriptActivities, [&id](const auto& activity) { return activity.id == id; }) == 0)
+    return false;
+  expireScriptActivities();
+  refresh();
+  return true;
+}
+
 void Island::timerCommand(const island::Countdown& timer, const std::string& command) {
   if (!scripting::PluginRegistry::instance().hasEntry(timer.panel))
     return;
@@ -729,7 +807,7 @@ void Island::refresh() {
     m_batteryTimeout.stop();
   const auto timers = countdowns();
   const bool timerActive = std::ranges::any_of(timers, [](const auto& timer) { return timer.active; });
-  const bool downloadActive = m_downloads && !m_downloads->active().empty();
+  const bool downloadActive = !progressActivities().empty();
   for (auto& inst : m_instances) {
     updateVisibility(*inst);
     const auto& cfg = inst->config;
@@ -1020,7 +1098,7 @@ void Island::prepare(Instance& inst) {
   const auto player = m_mpris ? m_mpris->activePlayer() : std::nullopt;
   const bool playing = player && player->playbackStatus == "Playing";
   const std::string announcement = player && trackPreview(cfg, inst.output) ? player->title : "";
-  const auto downloads = m_downloads ? m_downloads->active() : std::vector<DownloadProgress>{};
+  const auto downloads = progressActivities();
   const auto timers = countdowns();
   const bool timerActive = !timers.empty() && timers.front().active;
   const bool recording = ScreenRecorder::instance().active();
@@ -1172,9 +1250,9 @@ void Island::prepare(Instance& inst) {
     signature += view == island::View::Downloads ? std::to_string(player.has_value()) : time;
     for (const auto& download : downloads)
       signature += std::format(
-          "|{}|{}|{}|{}|{}", download.desktopId, download.name,
+          "|{}|{}|{}|{}|{}|{}", download.desktopId, download.name,
           view == island::View::Downloads ? 0L : std::lround(download.progress * 100), download.determinate,
-          download.phase
+          download.phase, download.icon
       );
     break;
   }
@@ -1635,7 +1713,11 @@ void Island::prepare(Instance& inst) {
       ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
       canvas->addChild(std::move(ring));
     }
-    glyph(timerView ? timers.front().icon : "download", 23, (cfg.height - 18) / 2, 18, islandRole(ColorRole::Primary));
+    const auto downloadIcon =
+        downloads.size() == 1 && !downloads.front().icon.empty() ? downloads.front().icon : "download";
+    glyph(
+        timerView ? timers.front().icon : downloadIcon, 23, (cfg.height - 18) / 2, 18, islandRole(ColorRole::Primary)
+    );
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
     const auto clockText = timerView ? timers.front().time() : time;
@@ -1677,10 +1759,12 @@ void Island::prepare(Instance& inst) {
       refresh();
     });
   } else if (view == island::View::Downloads) {
-    glyph("download", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
+    // Script activities share this card; it is "In Progress" unless every row is a download.
+    const bool onlyDownloads = std::ranges::all_of(downloads, [](const auto& item) { return item.icon.empty(); });
+    glyph(onlyDownloads ? "download" : "progress", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
     label(
-        i18n::tr("island.downloads.title"), 56, 17, w - 78, Style::fontSizeTitle, foreground, false, 1,
-        FontWeight::SemiBold
+        i18n::tr(onlyDownloads ? "island.downloads.title" : "island.downloads.in-progress"), 56, 17, w - 78,
+        Style::fontSizeTitle, foreground, false, 1, FontWeight::SemiBold
     );
     const auto rows = std::min(downloads.size(), std::size_t{4});
     for (std::size_t i = 0; i < rows; ++i) {
@@ -1690,7 +1774,7 @@ void Island::prepare(Instance& inst) {
       // Cupertino leads each row with a round blue badge, as Apple lists transfers.
       const float textX = gCupertino ? 62 : 22;
       if (gCupertino)
-        leadingBadge("download", 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
+        leadingBadge(download.icon.empty() ? "download" : download.icon, 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
       label(download.name, textX, y, w - textX - 88, 13, foreground, false, 1, FontWeight::Normal, true);
       if (download.determinate) {
         auto* percentage =
@@ -2666,7 +2750,7 @@ bool Island::focusKeyboard() {
   const auto timers = countdowns();
   if (!m_notification
       && (!m_mpris || !m_mpris->activePlayer())
-      && (!m_downloads || m_downloads->active().empty())
+      && progressActivities().empty()
       && std::ranges::none_of(timers, [](const auto& timer) { return timer.active; })) {
     if (!openPanel)
       return false;
@@ -2895,7 +2979,7 @@ island::Size Island::panelReturnSize() const {
       player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds);
   const auto timers = countdowns();
   const island::Activities available{
-      mediaActive, m_downloads && !m_downloads->active().empty(),
+      mediaActive, !progressActivities().empty(),
       std::ranges::any_of(timers, [](const auto& timer) { return timer.active; })
   };
   const auto* instance = hosted != m_instances.end() ? hosted->get()
