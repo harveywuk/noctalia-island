@@ -108,6 +108,7 @@ namespace sdbus {
 }
 
 class LauncherPanel;
+class SnippetStore;
 class AccountsService;
 class BluetoothAgent;
 class BluetoothService;
@@ -347,6 +348,8 @@ private:
   PanelManager m_panelManager;
   // Owned by m_panelManager; kept raw so plugin launcher providers can be re-applied.
   LauncherPanel* m_launcherPanel = nullptr;
+  // Snippets saved from the launcher; shared by its clipboard and snippet providers.
+  std::shared_ptr<SnippetStore> m_launcherSnippets;
   // Ids of plugin-backed panels currently registered with m_panelManager, so a
   // reload can retire the previous set before registering the new one.
   std::vector<std::string> m_pluginPanelIds;

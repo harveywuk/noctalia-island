@@ -770,6 +770,48 @@
     }
   },
   "launcher": {
+    "actions": {
+      "change-alias": "Change Alias…",
+      "close-window": "Close Window",
+      "copy-answer": "Copy Answer",
+      "copy-emoji": "Copy Emoji",
+      "copy-expression": "Copy Expression",
+      "copy-file": "Copy File",
+      "copy-hotkey-command": "Copy Hotkey Command",
+      "copy-name": "Copy Name",
+      "copy-path": "Copy Path",
+      "copy-time": "Copy Time",
+      "copy-to-clipboard": "Copy to Clipboard",
+      "copy-url": "Copy URL",
+      "delete-entry": "Delete Entry",
+      "delete-snippet": "Delete Snippet",
+      "edit-script": "Edit Script",
+      "move-to-trash": "Move to Trash",
+      "open": "Open",
+      "open-in-browser": "Open in Browser",
+      "open-in-terminal": "Open in Terminal",
+      "paste": "Paste",
+      "paste-answer": "Paste Answer",
+      "paste-emoji": "Paste Emoji",
+      "paste-snippet": "Paste Snippet",
+      "pin": "Pin",
+      "remove-alias": "Remove Alias",
+      "run-command": "Run Command",
+      "run-script": "Run Script",
+      "save-alias": "Save Alias",
+      "save-as-snippet": "Save as Snippet",
+      "set-alias": "Set Alias…",
+      "show-in-folder": "Show in Folder",
+      "switch-to-window": "Switch to Window",
+      "unpin": "Unpin"
+    },
+    "aliases": {
+      "footer": "Return saves the alias, Esc cancels",
+      "no-spaces": "Aliases can’t contain spaces",
+      "placeholder": "Type an alias for {name}",
+      "set": "Set “{alias}” as the alias for {name}",
+      "type": "Type an alias for {name}"
+    },
     "categories": {
       "all": "All",
       "applications": {
@@ -796,6 +838,9 @@
       },
       "recently-used": "Recently Used"
     },
+    "clipboard": {
+      "image": "Image · {size}"
+    },
     "context-menu": {
       "open": "Open",
       "pin": "Pin to Launcher",
@@ -813,11 +858,23 @@
       "open": "Open",
       "open-application": "Open Application"
     },
+    "hotkey": {
+      "copied": "Hotkey command copied",
+      "copied-body": "Bind it in hyprland.conf, for example: bind = SUPER, T, exec, <command>"
+    },
     "kinds": {
       "application": "Application",
       "command": "Command",
       "file": "File",
       "folder": "Folder",
+      "image": "Image",
+      "link": "Link",
+      "quicklink": "Quicklink",
+      "script": "Script",
+      "snippet": "Snippet",
+      "text": "Text",
+      "time": "Time",
+      "web-search": "Web Search",
       "window": "Window"
     },
     "origins": {
@@ -828,12 +885,30 @@
       "system": "System",
       "user": "User"
     },
+    "preview": {
+      "category": "Category",
+      "characters": "Characters",
+      "copied": "Copied",
+      "items": "Items",
+      "keyword": "Keyword",
+      "keywords": "Keywords",
+      "kind": "Kind",
+      "modified": "Modified",
+      "name": "Name",
+      "size": "Size",
+      "source": "Source",
+      "type": "Type",
+      "where": "Where"
+    },
     "providers": {
       "applications": {
         "title": "Applications"
       },
       "calculator": {
         "title": "Calculator"
+      },
+      "clipboard": {
+        "title": "Clipboard History"
       },
       "emoji": {
         "title": "Emoji"
@@ -855,10 +930,25 @@
         },
         "title": "Panels"
       },
+      "quicklinks": {
+        "title": "Quicklinks"
+      },
+      "scripts": {
+        "title": "Script Commands"
+      },
       "session": {
         "action-subtitle": "Run session action",
         "command-subtitle": "Run configured command",
         "title": "Session"
+      },
+      "snippets": {
+        "title": "Snippets"
+      },
+      "system": {
+        "title": "System"
+      },
+      "time": {
+        "title": "Time Zones"
       },
       "wallpaper": {
         "title": "Wallpaper"
@@ -867,14 +957,107 @@
         "title": "Windows"
       }
     },
+    "quicklinks": {
+      "search-for": "Search {name} for “{query}”",
+      "search-web": "Search the Web"
+    },
+    "scripts": {
+      "exit-code": "Exited with code {code}",
+      "failed": "{title} failed"
+    },
     "search-placeholder": "Search for apps, files and commands…",
     "sections": {
       "applications": "Applications",
       "commands": "Commands",
+      "fallback": "Use “{query}” with…",
       "favourites": "Favourites",
       "files": "Files",
       "results": "Results",
       "windows": "Windows"
+    },
+    "snippets": {
+      "saved": "Saved as snippet",
+      "source-config": "From config",
+      "source-saved": "Saved from clipboard"
+    },
+    "system": {
+      "annotate": {
+        "keywords": "screenshot markup draw annotate",
+        "title": "Screenshot and Annotate"
+      },
+      "clear-clipboard": {
+        "keywords": "clipboard history clear wipe",
+        "title": "Clear Clipboard History"
+      },
+      "clear-notifications": {
+        "keywords": "notifications history clear dismiss",
+        "title": "Clear Notifications"
+      },
+      "displays-off": {
+        "keywords": "monitor screen display dpms sleep",
+        "title": "Turn Off Displays"
+      },
+      "eject-all": {
+        "keywords": "eject unmount drive usb disk",
+        "title": "Eject All Disks",
+        "done": "Ejected {count} disk",
+        "done-plural": "Ejected {count} disks",
+        "none": "No disks to eject"
+      },
+      "empty-trash": {
+        "keywords": "trash bin delete empty",
+        "title": "Empty Trash",
+        "done": "Trash emptied"
+      },
+      "record": {
+        "keywords": "screen recording video capture",
+        "title": "Record Screen"
+      },
+      "screenshot": {
+        "keywords": "screenshot capture region screen",
+        "title": "Take Screenshot"
+      },
+      "stop-recording": {
+        "keywords": "screen recording video stop",
+        "title": "Stop Recording"
+      },
+      "toggle-bluetooth": {
+        "keywords": "bluetooth wireless",
+        "title": "Toggle Bluetooth"
+      },
+      "toggle-dark-mode": {
+        "keywords": "appearance theme light dark",
+        "title": "Toggle Dark Mode"
+      },
+      "toggle-dnd": {
+        "keywords": "focus notifications dnd silence",
+        "title": "Toggle Do Not Disturb"
+      },
+      "toggle-keep-awake": {
+        "keywords": "caffeine sleep idle awake",
+        "title": "Toggle Keep Awake"
+      },
+      "toggle-mic": {
+        "keywords": "mic microphone mute input",
+        "title": "Toggle Microphone"
+      },
+      "toggle-mute": {
+        "keywords": "volume sound audio mute speaker",
+        "title": "Toggle Mute"
+      },
+      "toggle-night-light": {
+        "keywords": "night shift warm blue light",
+        "title": "Toggle Night Light"
+      },
+      "toggle-wifi": {
+        "keywords": "wifi wireless network internet",
+        "title": "Toggle Wi-Fi"
+      }
+    },
+    "time": {
+      "local": "Local",
+      "tomorrow": "Tomorrow",
+      "yesterday": "Yesterday"
     }
   },
   "location": {
@@ -2826,6 +3009,10 @@
           "description": "Also show calculator results in unprefixed search",
           "label": "Calculator in Global Search"
         },
+        "launcher-global-clipboard": {
+          "description": "Also show clipboard history results in unprefixed search",
+          "label": "Clipboard History in Global Search"
+        },
         "launcher-global-emoji": {
           "description": "Also show emoji results in unprefixed search",
           "label": "Emoji in Global Search"
@@ -2838,9 +3025,29 @@
           "description": "Also show panels in unprefixed search",
           "label": "Panels in Global Search"
         },
+        "launcher-global-quicklinks": {
+          "description": "Also show quicklinks results in unprefixed search",
+          "label": "Quicklinks in Global Search"
+        },
+        "launcher-global-scripts": {
+          "description": "Also show script commands results in unprefixed search",
+          "label": "Script Commands in Global Search"
+        },
         "launcher-global-session": {
           "description": "Also show session actions in unprefixed search",
           "label": "Session in Global Search"
+        },
+        "launcher-global-snippets": {
+          "description": "Also show snippets results in unprefixed search",
+          "label": "Snippets in Global Search"
+        },
+        "launcher-global-system": {
+          "description": "Also show system commands results in unprefixed search",
+          "label": "System Commands in Global Search"
+        },
+        "launcher-global-time": {
+          "description": "Also show time zones results in unprefixed search",
+          "label": "Time Zones in Global Search"
         },
         "launcher-global-wallpaper": {
           "description": "Also show wallpapers in unprefixed search",
@@ -2866,6 +3073,10 @@
           "description": "Common prefix character used to trigger all provider prefixes (e.g. /)",
           "label": "Common Prefix Character"
         },
+        "launcher-prefix-clipboard": {
+          "description": "Prefix that scopes the launcher to clipboard history",
+          "label": "Clipboard History Prefix"
+        },
         "launcher-prefix-emoji": {
           "description": "Trigger prefix for emoji search",
           "label": "Emoji Prefix"
@@ -2878,9 +3089,29 @@
           "description": "Trigger prefix for panel search",
           "label": "Panels Prefix"
         },
+        "launcher-prefix-quicklinks": {
+          "description": "Prefix that scopes the launcher to quicklinks",
+          "label": "Quicklinks Prefix"
+        },
+        "launcher-prefix-scripts": {
+          "description": "Prefix that scopes the launcher to script commands",
+          "label": "Script Commands Prefix"
+        },
         "launcher-prefix-session": {
           "description": "Trigger prefix for session power actions",
           "label": "Session Prefix"
+        },
+        "launcher-prefix-snippets": {
+          "description": "Prefix that scopes the launcher to snippets",
+          "label": "Snippets Prefix"
+        },
+        "launcher-prefix-system": {
+          "description": "Prefix that scopes the launcher to system commands",
+          "label": "System Commands Prefix"
+        },
+        "launcher-prefix-time": {
+          "description": "Prefix that scopes the launcher to time zones",
+          "label": "Time Zones Prefix"
         },
         "launcher-prefix-wallpaper": {
           "description": "Trigger prefix for wallpaper selector",
@@ -4128,6 +4359,10 @@
           "keyboard-layout-cycle": {
             "description": "Switch to the next keyboard layout",
             "label": "Cycle keyboard layout"
+          },
+          "launcher-run": {
+            "description": "Run a launcher result by alias or Provider:id, for keyboard shortcuts",
+            "label": "Run Launcher Item"
           },
           "lockscreen-widgets-edit": {
             "description": "Open the lockscreen widgets editor",

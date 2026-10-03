@@ -20,6 +20,10 @@ public:
 
   bool activate(const LauncherResult& result) override;
 
+  [[nodiscard]] std::string primaryActionLabel(const LauncherResult& result) const override;
+  [[nodiscard]] std::vector<LauncherAction> actions(const LauncherResult& result) const override;
+  LauncherActionOutcome runAction(const LauncherResult& result, std::string_view actionId) override;
+
 private:
   CompositorPlatform* m_platform = nullptr;
 };

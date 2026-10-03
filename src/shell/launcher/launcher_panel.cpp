@@ -9,6 +9,7 @@
 #include "cursor-shape-v1-client-protocol.h"
 #include "i18n/i18n.h"
 #include "launcher/app_provider.h"
+#include "notification/notifications.h"
 #include "render/core/async_texture_cache.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
@@ -19,7 +20,10 @@
 #include "ui/app_icon_colorization.h"
 #include "ui/builders.h"
 #include "ui/controls/context_menu_popup.h"
+#include "ui/controls/image.h"
+#include "ui/controls/label.h"
 #include "ui/controls/scroll_view.h"
+#include "ui/controls/separator.h"
 #include "ui/palette.h"
 #include "ui/signal.h"
 #include "ui/style.h"
@@ -49,6 +53,9 @@ namespace {
   constexpr double kTypedUsageScoreCap = 0.5;
   constexpr std::string_view kProviderOverviewProviderId = "__launcher_provider_overview__";
   constexpr std::string_view kProviderOverviewResultPrefix = "provider:";
+  constexpr std::string_view kAliasEditorProviderId = "__launcher_alias_editor__";
+  // An alias typed exactly puts its result above everything else, the calculator included.
+  constexpr double kAliasScore = 1e9;
 
   double usageBoostForScore(double score, int usageCount, bool typedQuery) {
     if (usageCount <= 0) {
@@ -318,6 +325,28 @@ namespace {
           })
       );
 
+      // Raycast shows a result's alias as a small tag beside it.
+      auto aliasTag = ui::row({
+          .out = &m_aliasTag,
+          .align = FlexAlign::Center,
+          .paddingV = 1.0F * m_style.scale,
+          .paddingH = Style::spaceXs * 1.5F * m_style.scale,
+          .fill = colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha * 1.5F),
+          .radius = Style::radiusSm * m_style.scale,
+          .visible = false,
+          .participatesInLayout = false,
+      });
+      aliasTag->addChild(
+          ui::label({
+              .out = &m_aliasLabel,
+              .fontSize = Style::fontSizeMini * m_style.scale,
+              .fontWeight = FontWeight::Medium,
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .maxLines = 1,
+          })
+      );
+      m_row->addChild(std::move(aliasTag));
+
       m_row->addChild(
           ui::label({
               .out = &m_kindLabel,
@@ -419,8 +448,20 @@ namespace {
       }
       m_kindLabel->setVisible(hasKind);
       m_kindLabel->setParticipatesInLayout(hasKind);
+      const bool hasAlias = !result.alias.empty();
+      float aliasWidth = 0.0F;
+      if (hasAlias) {
+        m_aliasLabel->setText(result.alias);
+        aliasWidth = std::ceil(
+            renderer.measureText(result.alias, Style::fontSizeMini * m_style.scale, FontWeight::Medium).width
+            + Style::spaceXs * 3.0F * m_style.scale
+            + gap
+        );
+      }
+      m_aliasTag->setVisible(hasAlias);
+      m_aliasTag->setParticipatesInLayout(hasAlias);
       const float textWidth =
-          std::max(0.0F, width - leadingWidth - pinnedWidth - originWidth - kindWidth - horizontalPad);
+          std::max(0.0F, width - leadingWidth - pinnedWidth - originWidth - kindWidth - aliasWidth - horizontalPad);
       const std::string title = singleLinePreview(result.title);
       const float titleWidth = std::min(
           textWidth,
@@ -520,6 +561,8 @@ namespace {
     Glyph* m_originGlyph = nullptr;
     Label* m_sectionLabel = nullptr;
     Label* m_kindLabel = nullptr;
+    Flex* m_aliasTag = nullptr;
+    Label* m_aliasLabel = nullptr;
     AsyncTextureCache* m_asyncTextures = nullptr;
     std::string m_iconPath;
     std::string m_fallbackGlyph;
@@ -1193,10 +1236,18 @@ void LauncherPanel::create() {
       })
   );
 
-  auto body = ui::column({
+  // The results list, with the preview pane beside it for providers that ask for one.
+  auto body = ui::row({
       .out = &m_body,
       .align = FlexAlign::Stretch,
+      .gap = Style::spaceSm * scale,
       .fillWidth = true,
+      .flexGrow = 1.0F,
+  });
+  auto listColumn = ui::column({
+      .out = &m_listColumn,
+      .align = FlexAlign::Stretch,
+      .fillHeight = true,
       .flexGrow = 1.0F,
   });
 
@@ -1207,7 +1258,7 @@ void LauncherPanel::create() {
   m_gridAdapter->setResults(&m_results);
   const auto onActivate = [this](std::size_t index) { activateAt(index); };
   const auto onSecondaryActivate = [this](std::size_t index, float ax, float ay) {
-    (void)openAppActionsMenu(index, ax, ay);
+    (void)openActionsMenu(index, ax, ay);
   };
   m_listAdapter->setOnActivate(onActivate);
   m_listAdapter->setOnSecondaryActivate(onSecondaryActivate);
@@ -1226,7 +1277,7 @@ void LauncherPanel::create() {
     reorderPinnedApplication(m_results[sourceIndex].desktopEntryPath, m_results[targetIndex].desktopEntryPath);
   });
 
-  body->addChild(
+  listColumn->addChild(
       ui::virtualGridView({
           .out = &m_grid,
           .columns = 1,
@@ -1244,6 +1295,7 @@ void LauncherPanel::create() {
                   m_selectedIndex = *idx;
                 }
                 syncFooter();
+                syncPreview();
               },
           .configure = [](VirtualGridView& grid) { grid.setFillWidth(true); },
       })
@@ -1286,9 +1338,9 @@ void LauncherPanel::create() {
           .flexGrow = 1.0F,
       })
   );
-  body->addChild(std::move(detailScroll));
+  listColumn->addChild(std::move(detailScroll));
 
-  body->addChild(
+  listColumn->addChild(
       ui::label({
           .out = &m_emptyLabel,
           .fontSize = Style::fontSizeCaption * scale,
@@ -1297,6 +1349,20 @@ void LauncherPanel::create() {
           .participatesInLayout = false,
       })
   );
+
+  body->addChild(std::move(listColumn));
+  body->addChild(
+      ui::separator({
+          .out = &m_previewDivider,
+          .color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+          .thickness = 1.0F,
+          .spacing = 0.0F,
+          .orientation = SeparatorOrientation::VerticalRule,
+          .visible = false,
+          .participatesInLayout = false,
+      })
+  );
+  body->addChild(buildPreviewPane(scale));
 
   container->addChild(std::move(body));
   container->addChild(buildFooter(scale));
@@ -1480,6 +1546,30 @@ void LauncherPanel::doLayout(Renderer& renderer, float width, float height) {
   syncLauncherViewLayout(&renderer);
   updateLauncherGridMetrics(renderer);
 
+  if (m_previewPane != nullptr && m_previewPane->visible()) {
+    // Raycast gives the preview a little over half the window.
+    const float paneWidth = std::round(width * 0.52F);
+    m_previewPane->setMinWidth(paneWidth);
+    m_previewPane->setMaxWidth(paneWidth);
+    for (Label* value : m_previewMetaValues) {
+      value->setMaxWidth(paneWidth * 0.62F);
+    }
+    if (m_previewImageDirty && m_previewImage != nullptr) {
+      m_previewImageDirty = false;
+      const int target = static_cast<int>(std::round(paneWidth));
+      bool loaded = false;
+      if (!m_pendingPreviewImagePath.empty()) {
+        loaded = m_previewImage->setSourceFile(renderer, m_pendingPreviewImagePath, target, true);
+      } else if (!m_pendingPreviewImageBytes.empty()) {
+        loaded = m_previewImage->setSourceBytes(
+            renderer, m_pendingPreviewImageBytes.data(), m_pendingPreviewImageBytes.size(), true
+        );
+      }
+      m_previewImage->setVisible(loaded);
+      m_previewImage->setParticipatesInLayout(loaded);
+    }
+  }
+
   m_container->setSize(width, height);
   m_container->layout(renderer);
 }
@@ -1488,6 +1578,10 @@ void LauncherPanel::onOpen(std::string_view context) {
   for (auto& provider : m_providers) {
     applyProviderConfig(*provider);
   }
+  if (m_config != nullptr) {
+    m_aliases.setConfigAliases(m_config->config().shell.launcher.aliases);
+  }
+  m_aliasTarget.reset();
 
   // Pick up apps installed since the last scan (notably Nix profile swaps that
   // inotify cannot observe). Cheap stat-only check; only rescans on real change.
@@ -1534,6 +1628,12 @@ void LauncherPanel::onClose() {
   m_query.clear();
   m_results.clear();
   m_allResults.clear();
+  m_aliasTarget.reset();
+  m_previewProvider = nullptr;
+  m_previewKey.clear();
+  m_pendingPreviewImagePath.clear();
+  m_pendingPreviewImageBytes.clear();
+  m_previewImageDirty = false;
   m_scopedProviderId.clear();
   m_scopedPlaceholder.clear();
   m_activeCategoryType = All;
@@ -1556,6 +1656,17 @@ void LauncherPanel::onClose() {
   m_input = nullptr;
   m_categoryFilter = nullptr;
   m_body = nullptr;
+  m_listColumn = nullptr;
+  m_previewPane = nullptr;
+  m_previewDivider = nullptr;
+  m_previewImage = nullptr;
+  m_previewBadge = nullptr;
+  m_previewTitle = nullptr;
+  m_previewBody = nullptr;
+  m_previewMetaDivider = nullptr;
+  m_previewMetaRows.clear();
+  m_previewMetaLabels.clear();
+  m_previewMetaValues.clear();
   m_grid = nullptr;
   m_detailScroll = nullptr;
   m_detailSubtitle = nullptr;
@@ -1660,6 +1771,27 @@ void LauncherPanel::onInputChanged(const std::string& text) {
   m_query = text;
   m_allResults.clear();
   m_mixedResults = false;
+  m_previewProvider = nullptr;
+
+  if (m_aliasTarget.has_value()) {
+    // "Set Alias…": the field takes the alias; one row says what Return will do.
+    const std::string alias = AliasStore::normalize(text);
+    LauncherResult editor;
+    editor.id = "alias";
+    editor.providerId = std::string(kAliasEditorProviderId);
+    editor.title = alias.empty() ? i18n::tr("launcher.aliases.type", "name", m_aliasTarget->title)
+                                 : i18n::tr("launcher.aliases.set", "alias", alias, "name", m_aliasTarget->title);
+    editor.subtitle = alias.contains(' ') ? i18n::tr("launcher.aliases.no-spaces") : std::string();
+    editor.glyphName = "keyboard";
+    m_allResults.push_back(std::move(editor));
+    if (m_categoryFilter != nullptr) {
+      setCategoryFilterVisible(false);
+    }
+    m_activeCategoryType = All;
+    m_anyProviderLoading = false;
+    applyActiveCategory();
+    return;
+  }
 
   std::vector<LauncherCategory> newCategories;
   bool hasRecentlyUsed = false;
@@ -1676,6 +1808,9 @@ void LauncherPanel::onInputChanged(const std::string& text) {
         result.providerId = provider->id();
       }
       sortResultsByScore(m_allResults);
+      if (provider->showsPreview()) {
+        m_previewProvider = provider.get();
+      }
       break;
     }
   } else {
@@ -1729,6 +1864,9 @@ void LauncherPanel::onInputChanged(const std::string& text) {
       }
       sortResultsByScore(m_allResults);
       newCategories = activeProvider->categories();
+      if (activeProvider->showsPreview()) {
+        m_previewProvider = activeProvider;
+      }
     } else if (startsWithLauncherPrefix(text)) {
       m_allResults = providerOverviewResults(text);
     } else {
@@ -1765,6 +1903,7 @@ void LauncherPanel::onInputChanged(const std::string& text) {
         }
       }
       sortResultsByScore(m_allResults);
+      applyAliases(queryText);
     }
   }
 
@@ -1787,6 +1926,13 @@ void LauncherPanel::onInputChanged(const std::string& text) {
   }
 
   updatePinnedApplicationState();
+
+  for (auto& result : m_allResults) {
+    const LauncherProvider* provider = providerFor(result.providerId);
+    if (provider != nullptr && provider->supportsAliases()) {
+      result.alias = aliasForResult(result);
+    }
+  }
 
   bool categoriesChanged = newCategories.size() != m_currentCategories.size();
   if (!categoriesChanged) {
@@ -2060,6 +2206,8 @@ void LauncherPanel::refreshResults() {
   bindDetailResult();
   applyEmptyState();
   syncFooter();
+  m_previewKey.clear();
+  syncPreview();
 }
 
 void LauncherPanel::applyEmptyState() {
@@ -2108,21 +2256,186 @@ void LauncherPanel::bindDetailResult() {
   m_detailScroll->setScrollOffset(0.0F);
 }
 
-bool LauncherPanel::openAppActionsMenu(std::size_t index, float anchorX, float anchorY) {
-  if (index >= m_results.size()) {
-    return false;
-  }
-  const LauncherResult& base = m_results[index];
-
-  const DesktopEntry* match = nullptr;
-  for (const auto& e : desktopEntries()) {
-    if (e.path == base.desktopEntryPath) {
-      match = &e;
-      break;
+LauncherProvider* LauncherPanel::providerFor(std::string_view providerId) const {
+  for (const auto& provider : m_providers) {
+    if (provider->id() == providerId) {
+      return provider.get();
     }
   }
-  if (match == nullptr) {
+  return nullptr;
+}
+
+std::string LauncherPanel::primaryActionLabelFor(const LauncherResult& result) const {
+  if (const LauncherProvider* provider = providerFor(result.providerId)) {
+    std::string label = provider->primaryActionLabel(result);
+    if (!label.empty()) {
+      return label;
+    }
+  }
+  return i18n::tr(result.desktopEntryPath.empty() ? "launcher.footer.open" : "launcher.footer.open-application");
+}
+
+bool LauncherPanel::hasActions(const LauncherResult& result) const {
+  if (!result.desktopEntryPath.empty()) {
+    return true;
+  }
+  const LauncherProvider* provider = providerFor(result.providerId);
+  return provider != nullptr && (provider->supportsAliases() || !provider->actions(result).empty());
+}
+
+std::string LauncherPanel::specFor(const LauncherResult& result) {
+  if (!result.alias.empty()) {
+    return result.alias;
+  }
+  return result.providerId + ":" + result.id;
+}
+
+std::optional<LauncherResult> LauncherPanel::resolveAliasTarget(const AliasStore::Target& target) const {
+  LauncherProvider* provider = providerFor(target.providerId);
+  if (provider == nullptr) {
+    return std::nullopt;
+  }
+  std::string resultId = target.resultId;
+  if (target.providerId == kApplicationsProviderId && !resultId.starts_with('/')) {
+    // A desktop entry id from config ("firefox" or "firefox.desktop").
+    const std::string withSuffix = resultId.ends_with(".desktop") ? resultId : resultId + ".desktop";
+    const auto& entries = desktopEntries();
+    const auto it = std::ranges::find_if(entries, [&](const DesktopEntry& entry) {
+      return entry.id == resultId || entry.id == withSuffix;
+    });
+    if (it == entries.end()) {
+      return std::nullopt;
+    }
+    resultId = it->path;
+  }
+  auto result = provider->resultForId(resultId);
+  if (result.has_value()) {
+    result->providerId = std::string(provider->id());
+  }
+  return result;
+}
+
+std::string LauncherPanel::aliasForResult(const LauncherResult& result) {
+  std::string alias = m_aliases.aliasFor(result.providerId, result.id);
+  if (!alias.empty() || result.providerId != kApplicationsProviderId) {
+    return alias;
+  }
+  // Config aliases name apps by desktop id ("firefox" or "firefox.desktop") rather than by path.
+  const auto& entries = desktopEntries();
+  const auto it = std::ranges::find(entries, result.id, &DesktopEntry::path);
+  if (it == entries.end()) {
+    return {};
+  }
+  alias = m_aliases.aliasFor(result.providerId, it->id);
+  if (alias.empty()) {
+    alias = m_aliases.aliasFor(result.providerId, it->id + ".desktop");
+  }
+  return alias;
+}
+
+void LauncherPanel::applyAliases(std::string_view queryText) {
+  const auto target = m_aliases.find(queryText);
+  if (!target.has_value()) {
+    return;
+  }
+  auto result = resolveAliasTarget(*target);
+  if (!result.has_value()) {
+    return;
+  }
+  std::erase_if(m_allResults, [&](const LauncherResult& existing) {
+    return existing.providerId == result->providerId && existing.id == result->id;
+  });
+  result->score = kAliasScore;
+  m_allResults.insert(m_allResults.begin(), std::move(*result));
+}
+
+void LauncherPanel::beginAliasEdit(const LauncherResult& result) {
+  m_aliasTarget = result;
+  if (m_input != nullptr) {
+    m_input->setPlaceholder(i18n::tr("launcher.aliases.placeholder", "name", result.title));
+  }
+  setQuery(result.alias);
+}
+
+void LauncherPanel::endAliasEdit() {
+  m_aliasTarget.reset();
+  m_currentCategories.clear();
+  if (m_input != nullptr) {
+    m_input->setPlaceholder(
+        m_scopedPlaceholder.empty() ? i18n::tr("launcher.search-placeholder") : m_scopedPlaceholder
+    );
+  }
+  setQuery({});
+}
+
+void LauncherPanel::runProviderAction(const LauncherResult& result, std::string_view actionId) {
+  LauncherProvider* provider = providerFor(result.providerId);
+  if (provider == nullptr) {
+    return;
+  }
+  switch (provider->runAction(result, actionId)) {
+  case LauncherActionOutcome::Failed:
+    return;
+  case LauncherActionOutcome::Done:
+    finishActivation(*provider, result.id, false);
+    return;
+  case LauncherActionOutcome::Pasted:
+    finishActivation(*provider, result.id, true);
+    return;
+  case LauncherActionOutcome::KeepOpen:
+    reapplyCurrentQuery();
+    return;
+  }
+}
+
+bool LauncherPanel::runSecondaryAction() {
+  if (m_selectedIndex >= m_results.size()) {
     return false;
+  }
+  const LauncherResult result = m_results[m_selectedIndex];
+  const LauncherProvider* provider = providerFor(result.providerId);
+  if (provider == nullptr) {
+    return false;
+  }
+  const auto actions = provider->actions(result);
+  if (actions.empty()) {
+    return false;
+  }
+  runProviderAction(result, actions.front().id);
+  return true;
+}
+
+bool LauncherPanel::openSelectedActionsMenu() {
+  float anchorX = 0.0F;
+  float anchorY = 0.0F;
+  if (m_grid == nullptr || !m_grid->absoluteAnchorForIndex(m_selectedIndex, anchorX, anchorY)) {
+    if (m_grid != nullptr) {
+      Node::absolutePosition(m_grid, anchorX, anchorY);
+      anchorX += m_grid->width() * 0.5F;
+      anchorY += m_grid->height() * 0.5F;
+    }
+  }
+  return openActionsMenu(m_selectedIndex, anchorX, anchorY);
+}
+
+bool LauncherPanel::openActionsMenu(std::size_t index, float anchorX, float anchorY) {
+  if (index >= m_results.size() || m_aliasTarget.has_value()) {
+    return false;
+  }
+  const LauncherResult base = m_results[index];
+  LauncherProvider* provider = providerFor(base.providerId);
+  if (provider == nullptr) {
+    return false;
+  }
+
+  const DesktopEntry* match = nullptr;
+  if (!base.desktopEntryPath.empty()) {
+    for (const auto& e : desktopEntries()) {
+      if (e.path == base.desktopEntryPath) {
+        match = &e;
+        break;
+      }
+    }
   }
 
   WaylandConnection* wl = PanelManager::instance().wayland();
@@ -2140,59 +2453,57 @@ bool LauncherPanel::openAppActionsMenu(std::size_t index, float anchorX, float a
     m_actionsMenu = std::make_unique<ContextMenuPopup>(*wl, *rc);
   }
 
-  std::vector<DesktopAction> actionsCopy = match->actions;
-  const bool launcherPinned =
-      m_config != nullptr && shell::dock::pinned_apps::containsEntry(m_config->config().shell.launcher.pinned, *match);
-  const bool canPin = m_config != nullptr && !launcherPinned;
-  const bool canUnpin = m_config != nullptr && launcherPinned;
-
+  // Ids: desktop actions use their index; provider actions start at kProviderActionBase; the rest are
+  // the launcher's own entries below.
   constexpr std::int32_t kActionOpen = -1;
   constexpr std::int32_t kActionPin = -2;
   constexpr std::int32_t kActionUnpin = -3;
+  constexpr std::int32_t kActionSetAlias = -4;
+  constexpr std::int32_t kActionRemoveAlias = -5;
+  constexpr std::int32_t kActionCopyHotkey = -6;
+  constexpr std::int32_t kProviderActionBase = 1000;
 
+  std::vector<DesktopAction> desktopActions = match != nullptr ? match->actions : std::vector<DesktopAction>{};
+  const std::vector<LauncherAction> providerActions = provider->actions(base);
+  const bool launcherPinned = match != nullptr
+      && m_config != nullptr
+      && shell::dock::pinned_apps::containsEntry(m_config->config().shell.launcher.pinned, *match);
+
+  const auto entry = [](std::int32_t id, std::string label) {
+    return ContextMenuControlEntry{.id = id, .label = std::move(label), .enabled = true};
+  };
+  const auto separator = []() { return ContextMenuControlEntry{.id = 0, .enabled = false, .separator = true}; };
+
+  // Raycast's action panel: the result's name, its primary action, then everything else.
   std::vector<ContextMenuControlEntry> entries;
-  entries.reserve(actionsCopy.size() + 2);
-  entries.push_back(
-      ContextMenuControlEntry{
-          .id = kActionOpen,
-          .label = i18n::tr("launcher.context-menu.open"),
-          .enabled = true,
-          .separator = false,
-          .hasSubmenu = false,
-      }
-  );
-  // Desktop actions sit above pin/unpin so pin stays last in the menu.
-  for (std::int32_t i = 0; i < static_cast<std::int32_t>(actionsCopy.size()); ++i) {
-    entries.push_back(
-        ContextMenuControlEntry{
-            .id = i,
-            .label = actionsCopy[static_cast<std::size_t>(i)].name,
-            .enabled = true,
-            .separator = false,
-            .hasSubmenu = false,
-        }
-    );
+  entries.push_back(ContextMenuControlEntry{.id = 0, .label = base.title, .enabled = false, .header = true});
+  entries.push_back(entry(kActionOpen, primaryActionLabelFor(base)));
+  for (std::int32_t i = 0; i < static_cast<std::int32_t>(providerActions.size()); ++i) {
+    entries.push_back(entry(kProviderActionBase + i, providerActions[static_cast<std::size_t>(i)].label));
+  }
+  for (std::int32_t i = 0; i < static_cast<std::int32_t>(desktopActions.size()); ++i) {
+    entries.push_back(entry(i, desktopActions[static_cast<std::size_t>(i)].name));
+  }
+  const bool canPin = match != nullptr && m_config != nullptr;
+  if (canPin || provider->supportsAliases()) {
+    entries.push_back(separator());
   }
   if (canPin) {
     entries.push_back(
-        ContextMenuControlEntry{
-            .id = kActionPin,
-            .label = i18n::tr("launcher.context-menu.pin"),
-            .enabled = true,
-            .separator = false,
-            .hasSubmenu = false,
-        }
+        launcherPinned ? entry(kActionUnpin, i18n::tr("launcher.context-menu.unpin"))
+                       : entry(kActionPin, i18n::tr("launcher.context-menu.pin"))
     );
-  } else if (canUnpin) {
-    entries.push_back(
-        ContextMenuControlEntry{
-            .id = kActionUnpin,
-            .label = i18n::tr("launcher.context-menu.unpin"),
-            .enabled = true,
-            .separator = false,
-            .hasSubmenu = false,
-        }
-    );
+  }
+  if (provider->supportsAliases()) {
+    entries.push_back(entry(
+        kActionSetAlias, i18n::tr(base.alias.empty() ? "launcher.actions.set-alias" : "launcher.actions.change-alias")
+    ));
+    if (!base.alias.empty()) {
+      entries.push_back(entry(kActionRemoveAlias, i18n::tr("launcher.actions.remove-alias")));
+    }
+    if (m_copyText) {
+      entries.push_back(entry(kActionCopyHotkey, i18n::tr("launcher.actions.copy-hotkey-command")));
+    }
   }
 
   const float scale = contentScale();
@@ -2210,52 +2521,63 @@ bool LauncherPanel::openAppActionsMenu(std::size_t index, float anchorX, float a
     PanelManager::instance().endAttachedPopup(parentSurface);
   });
 
-  m_actionsMenu->setOnActivate([this, base, actionsCopy = std::move(actionsCopy),
-                                entryForPin = *match](const ContextMenuControlEntry& entry) {
+  std::optional<DesktopEntry> entryForPin = match != nullptr ? std::optional<DesktopEntry>(*match) : std::nullopt;
+  m_actionsMenu->setOnActivate([this, base, desktopActions = std::move(desktopActions), providerActions,
+                                entryForPin = std::move(entryForPin)](const ContextMenuControlEntry& chosen) {
     LauncherResult result = base;
-    if (entry.id == kActionPin) {
-      if (m_config == nullptr
-          || entryForPin.id.empty()
-          || shell::dock::pinned_apps::containsEntry(m_config->config().shell.launcher.pinned, entryForPin)) {
-        return;
+    if (chosen.id >= kProviderActionBase) {
+      const auto actionIndex = static_cast<std::size_t>(chosen.id - kProviderActionBase);
+      if (actionIndex < providerActions.size()) {
+        runProviderAction(result, providerActions[actionIndex].id);
       }
+      return;
+    }
+    if ((chosen.id == kActionPin || chosen.id == kActionUnpin) && entryForPin.has_value() && m_config != nullptr) {
       std::vector<std::string> pinned = m_config->config().shell.launcher.pinned;
-      pinned.push_back(entryForPin.id);
+      if (chosen.id == kActionPin) {
+        if (entryForPin->id.empty() || shell::dock::pinned_apps::containsEntry(pinned, *entryForPin)) {
+          return;
+        }
+        pinned.push_back(entryForPin->id);
+      } else {
+        shell::dock::pinned_apps::removeEntry(pinned, *entryForPin);
+      }
       if (m_config->setOverride({"shell", "launcher", "pinned"}, std::move(pinned))) {
         reapplyCurrentQuery();
       }
       return;
     }
-    if (entry.id == kActionUnpin) {
-      if (m_config == nullptr) {
-        return;
-      }
-      std::vector<std::string> pinned = m_config->config().shell.launcher.pinned;
-      shell::dock::pinned_apps::removeEntry(pinned, entryForPin);
-      if (m_config->setOverride({"shell", "launcher", "pinned"}, std::move(pinned))) {
+    if (chosen.id == kActionSetAlias) {
+      beginAliasEdit(result);
+      return;
+    }
+    if (chosen.id == kActionRemoveAlias) {
+      if (m_aliases.removeFor(result.providerId, result.id)) {
         reapplyCurrentQuery();
       }
       return;
     }
-    if (entry.id >= 0 && entry.id < static_cast<std::int32_t>(actionsCopy.size())) {
-      const DesktopAction& action = actionsCopy[static_cast<std::size_t>(entry.id)];
+    if (chosen.id == kActionCopyHotkey) {
+      if (m_copyText) {
+        m_copyText("noctalia msg launcher-run " + specFor(result));
+        notify::info("Noctalia", i18n::tr("launcher.hotkey.copied"), i18n::tr("launcher.hotkey.copied-body"));
+      }
+      PanelManager::instance().closePanel(false);
+      return;
+    }
+    if (chosen.id >= 0 && chosen.id < static_cast<std::int32_t>(desktopActions.size())) {
+      const DesktopAction& action = desktopActions[static_cast<std::size_t>(chosen.id)];
       result.id = AppProvider::actionResultId(result.desktopEntryPath, action.id);
       result.desktopActionId = action.id;
-    } else if (entry.id != kActionOpen) {
+    } else if (chosen.id != kActionOpen) {
       return;
     }
 
-    for (auto& provider : m_providers) {
-      if (provider->id() != std::string_view(result.providerId)) {
-        continue;
-      }
-      if (!provider->activate(result)) {
-        return;
-      }
-      finishActivation(*provider, result.id, provider->supportsAutoPaste());
+    LauncherProvider* target = providerFor(result.providerId);
+    if (target == nullptr || !target->activate(result)) {
       return;
     }
-    return;
+    finishActivation(*target, result.id, target->supportsAutoPaste());
   });
 
   const float inset = std::round(std::max(4.0F, Style::spaceXs * scale));
@@ -2269,7 +2591,7 @@ bool LauncherPanel::openAppActionsMenu(std::size_t index, float anchorX, float a
           .entries = std::move(entries),
           .minMenuWidth = minMenuWidth,
           .maxMenuWidth = Style::menuAutoMaxWidth * scale,
-          .maxVisible = 12,
+          .maxVisible = 14,
           .anchor =
               PopupAnchorRect{
                   .x = ax,
@@ -2286,6 +2608,41 @@ bool LauncherPanel::openAppActionsMenu(std::size_t index, float anchorX, float a
   return true;
 }
 
+std::string LauncherPanel::runFromSpec(std::string_view spec) {
+  const std::string trimmed = StringUtils::trim(spec);
+  if (trimmed.empty()) {
+    return "error: launcher-run requires an alias or <provider>:<id>\n";
+  }
+  for (auto& provider : m_providers) {
+    applyProviderConfig(*provider);
+  }
+  if (m_config != nullptr) {
+    m_aliases.setConfigAliases(m_config->config().shell.launcher.aliases);
+  }
+  std::optional<AliasStore::Target> target = m_aliases.find(trimmed);
+  if (!target.has_value()) {
+    target = AliasStore::parseSpec(trimmed);
+  }
+  if (!target.has_value()) {
+    return "error: unknown alias\n";
+  }
+  const auto result = resolveAliasTarget(*target);
+  if (!result.has_value()) {
+    return "error: no launcher result for \"" + trimmed + "\"\n";
+  }
+  LauncherProvider* provider = providerFor(result->providerId);
+  if (provider == nullptr || !provider->activate(*result)) {
+    return "error: could not run \"" + result->title + "\"\n";
+  }
+  if (shouldTrackUsage() && provider->trackUsage()) {
+    m_usageTracker.record(provider->id(), result->id);
+  }
+  if (PanelManager::instance().isOpenPanel("launcher")) {
+    PanelManager::instance().closePanel(false);
+  }
+  return "ok\n";
+}
+
 void LauncherPanel::activateAt(std::size_t index) {
   if (index >= m_results.size()) {
     return;
@@ -2300,6 +2657,19 @@ void LauncherPanel::activateSelected() {
   }
 
   const auto& result = m_results[m_selectedIndex];
+  if (result.providerId == kAliasEditorProviderId) {
+    if (m_aliasTarget.has_value()) {
+      const std::string alias = AliasStore::normalize(m_query);
+      if (alias.empty() || alias.contains(' ')) {
+        return;
+      }
+      (void)m_aliases.set(
+          alias, AliasStore::Target{.providerId = m_aliasTarget->providerId, .resultId = m_aliasTarget->id}
+      );
+    }
+    endAliasEdit();
+    return;
+  }
   if (result.providerId == kProviderOverviewProviderId && result.id.starts_with(kProviderOverviewResultPrefix)) {
     std::string prefix = result.id.substr(kProviderOverviewResultPrefix.size());
     if (!prefix.empty()) {
@@ -2409,20 +2779,22 @@ bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
     return true;
   }
 
-  // Validate+Shift opens the app context menu (Shift layered on the configured
-  // Validate chord). Menu navigation uses the Up/Down/Validate/Cancel keybinds.
+  if (m_aliasTarget.has_value() && KeybindMatcher::matches(KeybindAction::Cancel, sym, modifiers)) {
+    endAliasEdit();
+    return true;
+  }
+
+  // Validate+Shift opens the actions menu (Shift layered on the configured Validate chord; Raycast's
+  // Cmd+K is the field's kill-line). Menu navigation uses the Up/Down/Validate/Cancel keybinds.
   if ((modifiers & KeyMod::Shift) != 0
       && KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers & ~KeyMod::Shift)) {
-    float anchorX = 0.0F;
-    float anchorY = 0.0F;
-    if (m_grid == nullptr || !m_grid->absoluteAnchorForIndex(m_selectedIndex, anchorX, anchorY)) {
-      if (m_grid != nullptr) {
-        Node::absolutePosition(m_grid, anchorX, anchorY);
-        anchorX += m_grid->width() * 0.5F;
-        anchorY += m_grid->height() * 0.5F;
-      }
-    }
-    return openAppActionsMenu(m_selectedIndex, anchorX, anchorY);
+    return openSelectedActionsMenu();
+  }
+
+  // Validate+Ctrl runs the first extra action, like Raycast's Cmd+Return.
+  if ((modifiers & KeyMod::Ctrl) != 0
+      && KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers & ~KeyMod::Ctrl)) {
+    return runSecondaryAction();
   }
 
   if (KeybindMatcher::matches(KeybindAction::Validate, sym, modifiers)) {
@@ -2529,13 +2901,18 @@ void LauncherPanel::syncFooter() {
     return;
   }
   const LauncherResult& selected = m_results[std::min(m_selectedIndex, m_results.size() - 1)];
-  m_footerKind->setText(selected.kind.empty() ? sectionTitleFor(selected.providerId) : selected.kind);
-  const bool isApp = !selected.desktopEntryPath.empty();
-  m_footerPrimary->setText(i18n::tr(isApp ? "launcher.footer.open-application" : "launcher.footer.open"));
-  m_footerActions->setVisible(isApp);
-  m_footerActions->setParticipatesInLayout(isApp);
-  m_footerActionsSeparator->setVisible(isApp);
-  m_footerActionsSeparator->setParticipatesInLayout(isApp);
+  if (selected.providerId == kAliasEditorProviderId) {
+    m_footerKind->setText(i18n::tr("launcher.aliases.footer"));
+    m_footerPrimary->setText(i18n::tr("launcher.actions.save-alias"));
+  } else {
+    m_footerKind->setText(selected.kind.empty() ? sectionTitleFor(selected.providerId) : selected.kind);
+    m_footerPrimary->setText(primaryActionLabelFor(selected));
+  }
+  const bool actions = selected.providerId != kAliasEditorProviderId && hasActions(selected);
+  m_footerActions->setVisible(actions);
+  m_footerActions->setParticipatesInLayout(actions);
+  m_footerActionsSeparator->setVisible(actions);
+  m_footerActionsSeparator->setParticipatesInLayout(actions);
 }
 
 std::string LauncherPanel::sectionTitleFor(std::string_view providerId) const {
@@ -2598,25 +2975,212 @@ void LauncherPanel::assignSections() {
     return;
   }
 
-  // Raycast: one ranked list of results, with files after it in their own section.
+  // Raycast: one ranked list of results, files after it in their own section, and the fallbacks
+  // ("Search the web for …") last under "Use “query” with…".
   std::vector<LauncherResult> ordered;
   ordered.reserve(m_results.size());
   for (LauncherResult& result : m_results) {
-    if (result.providerId != "Files") {
+    if (result.providerId != "Files" && !result.fallback) {
       ordered.push_back(std::move(result));
     }
   }
   const std::size_t fileStart = ordered.size();
   for (LauncherResult& result : m_results) {
-    if (result.providerId == "Files") {
+    if (result.providerId == "Files" && !result.fallback) {
+      ordered.push_back(std::move(result));
+    }
+  }
+  const std::size_t fallbackStart = ordered.size();
+  for (LauncherResult& result : m_results) {
+    if (result.fallback) {
       ordered.push_back(std::move(result));
     }
   }
   if (fileStart > 0) {
     ordered.front().section = i18n::tr("launcher.sections.results");
   }
-  if (fileStart < ordered.size()) {
+  if (fileStart < fallbackStart) {
     ordered[fileStart].section = i18n::tr("launcher.sections.files");
   }
+  if (fallbackStart < ordered.size()) {
+    ordered[fallbackStart].section = i18n::tr("launcher.sections.fallback", "query", StringUtils::trim(m_query));
+  }
   m_results = std::move(ordered);
+}
+
+std::unique_ptr<Node> LauncherPanel::buildPreviewPane(float scale) {
+  constexpr std::size_t kMetadataRows = 6;
+  const float captionSize = Style::fontSizeCaption * scale;
+  auto pane = ui::column({
+      .out = &m_previewPane,
+      .align = FlexAlign::Stretch,
+      .gap = Style::spaceSm * scale,
+      .paddingV = Style::spaceXs * scale,
+      .paddingH = Style::spaceSm * scale,
+      .fillHeight = true,
+      .visible = false,
+      .participatesInLayout = false,
+  });
+  pane->addChild(
+      ui::image({
+          .out = &m_previewImage,
+          .fit = ImageFit::Contain,
+          .radius = Style::radiusSm * scale,
+          .height = 168.0F * scale,
+          .visible = false,
+          .participatesInLayout = false,
+      })
+  );
+  pane->addChild(
+      ui::label({
+          .out = &m_previewBadge,
+          .fontSize = 64.0F * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurface),
+          .maxLines = 1,
+          .textAlign = TextAlign::Center,
+          .visible = false,
+          .participatesInLayout = false,
+      })
+  );
+  pane->addChild(
+      ui::label({
+          .out = &m_previewTitle,
+          .fontSize = Style::fontSizeBody * scale,
+          .fontWeight = FontWeight::SemiBold,
+          .color = colorSpecFromRole(ColorRole::OnSurface),
+          .maxLines = 2,
+          .ellipsize = TextEllipsize::End,
+          .visible = false,
+          .participatesInLayout = false,
+      })
+  );
+  auto bodyScroll = ui::scrollView({
+      .contentScale = scale,
+      .scrollbarVisible = true,
+      .flexGrow = 1.0F,
+  });
+  auto* bodyContent = bodyScroll->content();
+  bodyContent->setDirection(FlexDirection::Vertical);
+  bodyContent->setAlign(FlexAlign::Stretch);
+  bodyContent->addChild(
+      ui::label({
+          .out = &m_previewBody,
+          .fontSize = Style::fontSizeCaption * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurface),
+          .maxLines = 0,
+      })
+  );
+  pane->addChild(std::move(bodyScroll));
+  pane->addChild(
+      ui::separator({
+          .out = &m_previewMetaDivider,
+          .color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+          .thickness = 1.0F,
+          .spacing = 0.0F,
+      })
+  );
+  m_previewMetaRows.clear();
+  m_previewMetaLabels.clear();
+  m_previewMetaValues.clear();
+  for (std::size_t i = 0; i < kMetadataRows; ++i) {
+    Flex* row = nullptr;
+    Label* label = nullptr;
+    Label* value = nullptr;
+    auto metaRow = ui::row({
+        .out = &row,
+        .align = FlexAlign::Center,
+        .justify = FlexJustify::SpaceBetween,
+        .gap = Style::spaceSm * scale,
+        .visible = false,
+        .participatesInLayout = false,
+    });
+    metaRow->addChild(
+        ui::label({
+            .out = &label,
+            .fontSize = captionSize,
+            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+            .maxLines = 1,
+        })
+    );
+    metaRow->addChild(
+        ui::label({
+            .out = &value,
+            .fontSize = captionSize,
+            .color = colorSpecFromRole(ColorRole::OnSurface),
+            .maxLines = 1,
+            .ellipsize = TextEllipsize::Middle,
+        })
+    );
+    pane->addChild(std::move(metaRow));
+    m_previewMetaRows.push_back(row);
+    m_previewMetaLabels.push_back(label);
+    m_previewMetaValues.push_back(value);
+  }
+  return pane;
+}
+
+void LauncherPanel::syncPreview() {
+  if (m_previewPane == nullptr || m_previewDivider == nullptr) {
+    return;
+  }
+  const bool show = m_previewProvider != nullptr && !m_results.empty() && m_aliasTarget == std::nullopt;
+  const bool wasShown = m_previewPane->visible();
+  m_previewPane->setVisible(show);
+  m_previewPane->setParticipatesInLayout(show);
+  m_previewDivider->setVisible(show);
+  m_previewDivider->setParticipatesInLayout(show);
+  if (wasShown != show && m_container != nullptr) {
+    m_container->markLayoutDirty();
+  }
+  if (!show) {
+    m_previewKey.clear();
+    return;
+  }
+
+  const LauncherResult& selected = m_results[std::min(m_selectedIndex, m_results.size() - 1)];
+  const std::string key = selected.providerId + "\n" + selected.id;
+  if (key == m_previewKey) {
+    return;
+  }
+  m_previewKey = key;
+
+  const std::optional<LauncherPreview> preview = m_previewProvider->preview(selected);
+  const LauncherPreview empty{};
+  const LauncherPreview& data = preview.has_value() ? *preview : empty;
+
+  // Images decode in doLayout, where the renderer is at hand.
+  const bool hasImage = !data.imagePath.empty() || !data.imageBytes.empty();
+  m_previewImage->setVisible(false);
+  m_previewImage->setParticipatesInLayout(hasImage);
+  m_pendingPreviewImagePath = data.imagePath;
+  m_pendingPreviewImageBytes = data.imageBytes;
+  m_previewImageDirty = hasImage;
+
+  const bool hasBadge = !data.badge.empty();
+  m_previewBadge->setVisible(hasBadge);
+  m_previewBadge->setParticipatesInLayout(hasBadge);
+  m_previewBadge->setText(data.badge);
+
+  const bool hasTitle = !data.title.empty();
+  m_previewTitle->setVisible(hasTitle);
+  m_previewTitle->setParticipatesInLayout(hasTitle);
+  m_previewTitle->setText(data.title);
+
+  m_previewBody->setText(data.body);
+
+  const bool hasMeta = !data.metadata.empty();
+  m_previewMetaDivider->setVisible(hasMeta);
+  m_previewMetaDivider->setParticipatesInLayout(hasMeta);
+  for (std::size_t i = 0; i < m_previewMetaRows.size(); ++i) {
+    const bool used = i < data.metadata.size();
+    m_previewMetaRows[i]->setVisible(used);
+    m_previewMetaRows[i]->setParticipatesInLayout(used);
+    if (used) {
+      m_previewMetaLabels[i]->setText(data.metadata[i].first);
+      m_previewMetaValues[i]->setText(data.metadata[i].second);
+    }
+  }
+  if (m_container != nullptr) {
+    m_container->markLayoutDirty();
+  }
 }

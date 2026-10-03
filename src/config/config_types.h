@@ -1175,6 +1175,29 @@ struct DmenuEntryConfig {
   bool operator==(const DmenuEntryConfig&) const = default;
 };
 
+// A launcher quicklink: a URL opened by name, or a search URL whose {query} the launcher fills in
+// from the text typed after its keyword (e.g. "gh noctalia").
+struct LauncherQuicklinkConfig {
+  std::string id; // [shell.launcher.quicklinks.<id>] table key
+  std::string name;
+  std::string url;
+  std::string keyword;
+  std::string glyph;
+
+  bool operator==(const LauncherQuicklinkConfig&) const = default;
+};
+
+// A launcher snippet: saved text pasted by name or keyword. {date}, {time}, {datetime} and
+// {clipboard} are expanded when it is pasted.
+struct LauncherSnippetConfig {
+  std::string id; // [shell.launcher.snippets.<id>] table key
+  std::string name;
+  std::string keyword;
+  std::string text;
+
+  bool operator==(const LauncherSnippetConfig&) const = default;
+};
+
 struct LauncherProviderConfig {
   std::string name;
   std::string prefix;
@@ -1680,6 +1703,17 @@ struct ShellConfig {
     } panels;
 
     std::vector<LauncherProviderConfig> providers;
+
+    // Search URL for the "Search the web" fallback; {query} is replaced by the typed text.
+    std::string webSearchUrl = "https://duckduckgo.com/?q={query}";
+    // Quicklinks and snippets from config. With no quicklinks configured a small built-in set is used.
+    std::vector<LauncherQuicklinkConfig> quicklinks;
+    std::vector<LauncherSnippetConfig> snippets;
+    // Alias -> target, where target is a desktop entry id ("firefox") or "<provider>:<result id>".
+    // Aliases set from the launcher's actions menu are kept in its state file instead.
+    std::unordered_map<std::string, std::string> aliases;
+    // Folders scanned for script commands. Empty means $XDG_CONFIG_HOME/noctalia/scripts.
+    std::vector<std::string> scriptDirectories;
 
     bool operator==(const LauncherConfig&) const = default;
   };

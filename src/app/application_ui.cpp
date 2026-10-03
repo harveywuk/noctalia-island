@@ -39,13 +39,20 @@
 #include "i18n/i18n_service.h"
 #include "ipc/ipc_arg_parse.h"
 #include "launcher/app_provider.h"
+#include "launcher/clipboard_provider.h"
 #include "launcher/dmenu_provider.h"
 #include "launcher/emoji_provider.h"
 #include "launcher/file_provider.h"
 #include "launcher/math_provider.h"
 #include "launcher/panel_provider.h"
 #include "launcher/plugin_launcher_provider.h"
+#include "launcher/quicklink_provider.h"
+#include "launcher/script_provider.h"
 #include "launcher/session_provider.h"
+#include "launcher/snippet_provider.h"
+#include "launcher/snippet_store.h"
+#include "launcher/system_provider.h"
+#include "launcher/time_provider.h"
 #include "launcher/wallpaper_provider.h"
 #include "launcher/window_provider.h"
 #include "notification/notifications.h"
@@ -642,7 +649,21 @@ void Application::initPanelManagerAndPanels() {
     launcherPanel->addProvider(std::make_unique<SessionProvider>(&m_configService, &m_sessionActionRunner));
     launcherPanel->addProvider(std::make_unique<MathProvider>(&m_clipboardService, &m_configService, &m_httpClient));
     launcherPanel->addProvider(std::make_unique<EmojiProvider>(&m_clipboardService));
-    launcherPanel->addProvider(std::make_unique<FileProvider>());
+    launcherPanel->addProvider(std::make_unique<FileProvider>(&m_clipboardService));
+    m_launcherSnippets = std::make_shared<SnippetStore>();
+    launcherPanel->addProvider(
+        std::make_unique<ClipboardProvider>(&m_clipboardService, &m_configService, m_launcherSnippets.get())
+    );
+    launcherPanel->addProvider(std::make_unique<QuicklinkProvider>(&m_configService, &m_clipboardService));
+    launcherPanel->addProvider(
+        std::make_unique<SnippetProvider>(&m_configService, &m_clipboardService, m_launcherSnippets.get())
+    );
+    launcherPanel->addProvider(std::make_unique<ScriptProvider>(&m_configService));
+    launcherPanel->addProvider(std::make_unique<SystemProvider>(&m_ipcService));
+    launcherPanel->addProvider(std::make_unique<TimeProvider>(&m_clipboardService));
+    launcherPanel->setCopyTextCallback([this](std::string text) {
+      (void)m_clipboardService.copyText(std::move(text));
+    });
     launcherPanel->setCopiedActivationCallback([this]() {
       const ClipboardAutoPasteMode mode = m_configService.config().shell.launcher.autoPaste;
       if (mode == ClipboardAutoPasteMode::Off) {

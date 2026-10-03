@@ -55,10 +55,16 @@ namespace settings {
 
     constexpr auto kLauncherProviderSettings = std::to_array<LauncherProviderSettingSpec>({
         {.name = "calculator", .prefixPlaceholder = "calc", .globalByDefault = true},
+        {.name = "clipboard", .prefixPlaceholder = "clip"},
         {.name = "emoji", .prefixPlaceholder = "emo"},
         {.name = "files", .prefixPlaceholder = "file", .globalByDefault = true},
         {.name = "panels", .prefixPlaceholder = "pan"},
+        {.name = "quicklinks", .prefixPlaceholder = "link", .globalByDefault = true},
+        {.name = "scripts", .prefixPlaceholder = "script", .globalByDefault = true},
         {.name = "session", .prefixPlaceholder = "session"},
+        {.name = "snippets", .prefixPlaceholder = "snip", .globalByDefault = true},
+        {.name = "system", .prefixPlaceholder = "sys", .globalByDefault = true},
+        {.name = "time", .prefixPlaceholder = "time", .globalByDefault = true},
         {.name = "wallpaper", .prefixPlaceholder = "wall"},
         {.name = "windows", .prefixPlaceholder = "win"},
     });

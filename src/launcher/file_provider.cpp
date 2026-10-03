@@ -3,14 +3,19 @@
 #include "core/deferred_call.h"
 #include "core/process/process.h"
 #include "i18n/i18n.h"
+#include "launcher/launcher_util.h"
+#include "system/terminal_launch.h"
+#include "time/time_format.h"
 #include "util/fuzzy_match.h"
 #include "util/string_utils.h"
+#include "wayland/clipboard_service.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <mutex>
 #include <string_view>
 #include <system_error>
@@ -25,6 +30,7 @@ namespace {
   constexpr std::size_t kPrefixedResults = 50;
   constexpr auto kIndexMaxAge = std::chrono::minutes(5);
   constexpr std::string_view kResultPrefix = "file:";
+  constexpr std::size_t kPreviewTextBytes = 4096;
 
   // Build output and dependency trees that would bury real documents.
   constexpr std::array<std::string_view, 9> kSkippedDirs = {
@@ -83,6 +89,21 @@ namespace {
     return {"text-x-generic", "file"};
   }
 
+  [[nodiscard]] bool isPreviewableImage(std::string_view nameLower) {
+    const std::string ext = extensionLower(nameLower);
+    return ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "gif" || ext == "webp" || ext == "bmp";
+  }
+
+  [[nodiscard]] bool isTextFile(std::string_view nameLower) {
+    static constexpr std::array<std::string_view, 34> kText = {
+        "txt", "md",   "markdown", "rst", "org",  "log", "csv", "tsv", "json", "toml", "yaml", "yml",
+        "ini", "conf", "cfg",      "xml", "html", "css", "js",  "ts",  "tsx",  "jsx",  "py",   "sh",
+        "zsh", "fish", "c",        "h",   "cpp",  "hpp", "rs",  "go",  "lua",  "nix",
+    };
+    const std::string ext = extensionLower(nameLower);
+    return std::ranges::find(kText, ext) != kText.end();
+  }
+
   [[nodiscard]] std::string homeDir() {
     const char* home = std::getenv("HOME");
     return home != nullptr ? std::string(home) : std::string();
@@ -111,8 +132,9 @@ struct FileProvider::State {
   std::function<void()> onChanged;
 };
 
-FileProvider::FileProvider(std::filesystem::path root)
-    : m_root(root.empty() ? std::filesystem::path(homeDir()) : std::move(root)), m_state(std::make_shared<State>()) {}
+FileProvider::FileProvider(ClipboardService* clipboard, std::filesystem::path root)
+    : m_clipboard(clipboard), m_root(root.empty() ? std::filesystem::path(homeDir()) : std::move(root)),
+      m_state(std::make_shared<State>()) {}
 
 FileProvider::~FileProvider() { m_state->alive = false; }
 
@@ -270,10 +292,124 @@ std::vector<LauncherResult> FileProvider::queryPrefixed(std::string_view text) c
   return run(text, kPrefixedResults);
 }
 
+std::string FileProvider::primaryActionLabel(const LauncherResult& /*result*/) const {
+  return i18n::tr("launcher.actions.open");
+}
+
+std::vector<LauncherAction> FileProvider::actions(const LauncherResult& result) const {
+  if (!result.id.starts_with(kResultPrefix)) {
+    return {};
+  }
+  const std::filesystem::path path = result.id.substr(kResultPrefix.size());
+  std::error_code ec;
+  const bool isDir = std::filesystem::is_directory(path, ec);
+  std::vector<LauncherAction> actions;
+  actions.push_back({.id = "show", .label = i18n::tr("launcher.actions.show-in-folder")});
+  if (isDir) {
+    actions.push_back({.id = "terminal", .label = i18n::tr("launcher.actions.open-in-terminal")});
+  }
+  if (m_clipboard != nullptr) {
+    actions.push_back({.id = "copy-path", .label = i18n::tr("launcher.actions.copy-path")});
+    actions.push_back({.id = "copy-file", .label = i18n::tr("launcher.actions.copy-file")});
+  }
+  if (process::commandExists("gio")) {
+    actions.push_back({.id = "trash", .label = i18n::tr("launcher.actions.move-to-trash")});
+  }
+  return actions;
+}
+
+LauncherActionOutcome FileProvider::runAction(const LauncherResult& result, std::string_view actionId) {
+  if (!result.id.starts_with(kResultPrefix)) {
+    return LauncherActionOutcome::Failed;
+  }
+  const std::filesystem::path path = result.id.substr(kResultPrefix.size());
+  const auto outcome = [](bool ok) { return ok ? LauncherActionOutcome::Done : LauncherActionOutcome::Failed; };
+  if (actionId == "show") {
+    return outcome(launcher_util::showInFolder(path));
+  }
+  if (actionId == "terminal") {
+    const auto terminal = terminal_launch::prepareOpen();
+    return outcome(terminal.has_value() && process::runAsync(*terminal, {}, path.string()));
+  }
+  if (actionId == "copy-path" && m_clipboard != nullptr) {
+    return outcome(m_clipboard->copyText(path.string()));
+  }
+  if (actionId == "copy-file" && m_clipboard != nullptr) {
+    // A file manager pastes a text/uri-list selection as the file itself.
+    return outcome(m_clipboard->copyText(launcher_util::fileUri(path), "text/uri-list"));
+  }
+  if (actionId == "trash") {
+    if (!process::runSync(std::vector<std::string>{"gio", "trash", path.string()})) {
+      return LauncherActionOutcome::Failed;
+    }
+    // Drop it from the index so it leaves the results straight away.
+    {
+      std::scoped_lock lock(m_state->mutex);
+      if (m_state->index != nullptr) {
+        auto pruned = std::make_shared<std::vector<Entry>>(*m_state->index);
+        std::erase_if(*pruned, [&path](const Entry& entry) {
+          return entry.path == path.string() || entry.path.starts_with(path.string() + "/");
+        });
+        m_state->index = std::move(pruned);
+      }
+    }
+    return LauncherActionOutcome::KeepOpen;
+  }
+  return LauncherActionOutcome::Failed;
+}
+
+std::optional<LauncherPreview> FileProvider::preview(const LauncherResult& result) const {
+  if (!result.id.starts_with(kResultPrefix)) {
+    return std::nullopt;
+  }
+  const std::filesystem::path path = result.id.substr(kResultPrefix.size());
+  std::error_code ec;
+  const auto status = std::filesystem::status(path, ec);
+  if (ec) {
+    return std::nullopt;
+  }
+  const bool isDir = std::filesystem::is_directory(status);
+  const std::string nameLower = StringUtils::toLower(path.filename().string());
+
+  LauncherPreview preview;
+  preview.title = path.filename().string();
+  if (!isDir && isPreviewableImage(nameLower)) {
+    preview.imagePath = path.string();
+  } else if (!isDir && isTextFile(nameLower)) {
+    std::ifstream file(path, std::ios::binary);
+    std::string text(kPreviewTextBytes, '\0');
+    file.read(text.data(), static_cast<std::streamsize>(text.size()));
+    text.resize(static_cast<std::size_t>(file.gcount()));
+    if (!text.contains('\0')) {
+      preview.body = std::move(text);
+    }
+  }
+
+  preview.metadata.emplace_back(i18n::tr("launcher.preview.kind"), result.kind);
+  if (isDir) {
+    std::size_t items = 0;
+    for (auto it = std::filesystem::directory_iterator(path, ec); !ec && it != std::filesystem::directory_iterator();
+         it.increment(ec)) {
+      ++items;
+    }
+    preview.metadata.emplace_back(i18n::tr("launcher.preview.items"), std::to_string(items));
+  } else {
+    preview.metadata.emplace_back(
+        i18n::tr("launcher.preview.size"), launcher_util::formatByteSize(std::filesystem::file_size(path, ec))
+    );
+  }
+  const auto modified = std::filesystem::last_write_time(path, ec);
+  if (!ec) {
+    preview.metadata.emplace_back(i18n::tr("launcher.preview.modified"), formatFileTime(modified));
+  }
+  preview.metadata.emplace_back(i18n::tr("launcher.preview.where"), result.subtitle);
+  return preview;
+}
+
 bool FileProvider::activate(const LauncherResult& result) {
   if (!result.id.starts_with(kResultPrefix)) {
     return false;
   }
   const std::string path = result.id.substr(kResultPrefix.size());
-  return process::runAsync({"xdg-open", path.c_str()});
+  return launcher_util::openUri(path);
 }
