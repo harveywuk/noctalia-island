@@ -21,7 +21,7 @@
     "up-next": {
       "untitled": "Untitled event",
       "now": "Now",
-      "starts-in": "Starts in",
+      "starts-in": "Starts in {time}",
       "started": "Started",
       "join": "Join",
       "dismiss": "Dismiss",

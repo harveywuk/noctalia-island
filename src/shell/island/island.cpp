@@ -180,6 +180,8 @@ struct Island::Instance {
     std::string plugin;
     Label* label;
     std::function<void(float)> setFraction;
+    // An up-next row's label reads "Starts in 4:07" rather than the bare time.
+    bool eventStatus = false;
   };
   std::vector<TimerUi> timerUi;
   struct DownloadUi {
@@ -219,6 +221,10 @@ namespace {
   // Up-next events read "Now" once they start; plugin timers keep their clock.
   std::string countdownTime(const island::Countdown& timer) {
     return timer.event && timer.remaining <= 0 ? i18n::tr("island.up-next.now") : timer.time();
+  }
+  std::string eventStatus(const island::Countdown& timer) {
+    return timer.remaining > 0 ? i18n::tr("island.up-next.starts-in", "time", timer.time())
+                               : i18n::tr("island.up-next.started");
   }
   std::string countdownTitle(const island::Countdown& timer) {
     return timer.event && !timer.title.empty() ? timer.title : i18n::tr(timer.titleKey);
@@ -1305,7 +1311,7 @@ void Island::prepare(Instance& inst) {
       const auto timer = std::ranges::find(timers, ui.plugin, &island::Countdown::plugin);
       if (timer == timers.end())
         continue;
-      ui.label->setText(countdownTime(*timer));
+      ui.label->setText(ui.eventStatus ? eventStatus(*timer) : countdownTime(*timer));
       ui.label->measure(renderer);
       ui.setFraction(timer->fraction());
     }
@@ -2114,18 +2120,24 @@ void Island::prepare(Instance& inst) {
       // Cupertino keeps the controls on the timer's row as round buttons; the theme look
       // lists them as a row of text buttons below.
       const float controlsWidth = gCupertino ? 3 * 32 + 2 * 8 + 10 : 0;
-      label(countdownTitle(timer), 70, h + 3, w - 165 - controlsWidth, 13);
-      auto* remaining = label(countdownTime(timer), w - 94 - controlsWidth, h + 3, 72, 16, foreground, true);
-      inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
-      label(
-          i18n::tr(
-              timer.event          ? (timer.remaining > 0 ? "island.up-next.starts-in" : "island.up-next.started")
-                  : timer.finished ? "island.timer.finished"
-                  : timer.running  ? "island.timer.running"
-                                   : "island.timer.paused"
-          ),
-          70, h + 25, w - 92, 11, muted
-      );
+      if (timer.event) {
+        // The title takes the row; the countdown reads as its status line.
+        label(countdownTitle(timer), 70, h + 3, w - 92 - controlsWidth, 13, foreground, false, 1, FontWeight::SemiBold);
+        auto* status = label(eventStatus(timer), 70, h + 25, w - 92 - controlsWidth, 11, muted);
+        inst.timerUi.push_back({timer.plugin, status, [ringPtr](float value) { ringPtr->setProgress(value); }, true});
+      } else {
+        label(countdownTitle(timer), 70, h + 3, w - 165 - controlsWidth, 13);
+        auto* remaining = label(countdownTime(timer), w - 94 - controlsWidth, h + 3, 72, 16, foreground, true);
+        inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
+        label(
+            i18n::tr(
+                timer.finished      ? "island.timer.finished"
+                    : timer.running ? "island.timer.running"
+                                    : "island.timer.paused"
+            ),
+            70, h + 25, w - 92, 11, muted
+        );
+      }
       // Events trade pause and cancel for joining the call and dismissing the countdown.
       const auto join = [url = timer.url] { (void)net::openInBrowser(url); };
       const auto dismiss = [this, key = timer.plugin] {
