@@ -15,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -27,6 +28,7 @@ struct BarServices;
 class PipeWireSpectrum;
 class SessionBus;
 class DownloadProgressService;
+struct DownloadProgress;
 class UPowerService;
 class BluetoothService;
 namespace island {
@@ -65,6 +67,16 @@ public:
   bool focusKeyboard();
   bool onKeyboardEvent(const KeyboardEvent&);
   void hideDndSuppressed();
+  // Live activities posted by scripts (`noctalia msg island-activity-*`). They join the
+  // downloads activity, so they share its compact ring, expanded card and priority.
+  // progress: unset keeps it, an empty value shows a spinner, otherwise 0..1. An empty title or
+  // icon keeps the current one. Returns false for an unknown id on update or end.
+  bool startScriptActivity(const std::string& id, const std::string& title, const std::string& icon);
+  bool updateScriptActivity(
+      const std::string& id, std::optional<std::optional<double>> progress, const std::string& title,
+      const std::string& icon
+  );
+  bool endScriptActivity(const std::string& id);
   [[nodiscard]] bool enabled() const;
   [[nodiscard]] bool osdVisible() const;
   std::function<void(wl_output*, const std::string&)> openPanel;
@@ -97,6 +109,9 @@ private:
   std::vector<island::Battery> batteries(const IslandConfig&, wl_output*) const;
   std::vector<island::PrivacyActivity> privacy() const;
   std::vector<island::Countdown> countdowns() const;
+  // Desktop downloads followed by script activities.
+  std::vector<DownloadProgress> progressActivities() const;
+  void expireScriptActivities();
   void timerCommand(const island::Countdown&, const std::string& command);
   WaylandConnection* m_wayland = nullptr;
   ConfigService* m_config = nullptr;
@@ -114,6 +129,16 @@ private:
   CalendarService* m_calendar = nullptr;
   // Up-next events the user dismissed, keyed by countdown id.
   std::unordered_set<std::string> m_dismissedEvents;
+  struct ScriptActivity {
+    std::string id;
+    std::string title;
+    std::string icon;
+    std::optional<double> progress;
+    std::chrono::steady_clock::time_point updated;
+  };
+  // In start order. A script that dies without ending its activity has it expire after an hour.
+  std::vector<ScriptActivity> m_scriptActivities;
+  Timer m_scriptActivityExpiry;
   std::unique_ptr<WidgetFactory> m_widgetFactory;
   noctalia::bar::WidgetActionDispatcher m_widgetActions;
   std::vector<std::unique_ptr<Instance>> m_instances;
