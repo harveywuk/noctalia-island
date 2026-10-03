@@ -563,14 +563,18 @@ void NotificationToast::onOutputChange() {
   requestLayout();
 }
 
-void NotificationToast::hideDndSuppressed() {
-  std::erase_if(m_pendingAdds, [](const Notification& pending) {
-    return pending.dndPolicy == NotificationDndPolicy::Respect;
+void NotificationToast::hideDndSuppressed() { hideBanners(true); }
+
+void NotificationToast::hideAllBanners() { hideBanners(false); }
+
+void NotificationToast::hideBanners(bool dndSuppressedOnly) {
+  std::erase_if(m_pendingAdds, [dndSuppressedOnly](const Notification& pending) {
+    return !dndSuppressedOnly || pending.dndPolicy == NotificationDndPolicy::Respect;
   });
 
   for (std::size_t index = m_entries.size(); index-- > 0;) {
     const auto& entry = m_entries[index];
-    if (entry.dndPolicy != NotificationDndPolicy::Respect) {
+    if (dndSuppressedOnly && entry.dndPolicy != NotificationDndPolicy::Respect) {
       continue;
     }
 
@@ -641,6 +645,7 @@ void NotificationToast::onNotificationEvent(const Notification& n, NotificationE
         m_entries[i].body = n.body;
         m_entries[i].actions = n.actions;
         m_entries[i].icon = n.icon;
+        m_entries[i].desktopEntry = n.desktopEntry;
         m_entries[i].imageData = n.imageData;
         m_entries[i].receivedAt = n.receivedWallClock.value_or(m_entries[i].receivedAt);
         m_entries[i].dndPolicy = n.dndPolicy;
@@ -860,6 +865,7 @@ void NotificationToast::addPopup(const Notification& n) {
   entry.body = n.body;
   entry.actions = n.actions;
   entry.icon = n.icon;
+  entry.desktopEntry = n.desktopEntry;
   entry.imageData = n.imageData;
   entry.receivedAt = n.receivedWallClock.value_or(WallClock::now());
   entry.urgency = n.urgency;
@@ -2435,7 +2441,17 @@ InputArea* NotificationToast::buildCard(
     }
 
     if (!iconAssigned) {
-      const std::string iconPath = resolveNotificationIconPath(entry);
+      std::string iconPath = resolveNotificationIconPath(entry);
+      // Fall back to the sending app's own icon, as the Island and history do, before the bell.
+      for (const std::string& name :
+           {entry.desktopEntry.value_or(std::string{}), StringUtils::toLower(entry.appName)}) {
+        if (!iconPath.empty()) {
+          break;
+        }
+        if (!name.empty()) {
+          iconPath = m_iconResolver.resolve(name, static_cast<int>(std::round(iconSize)));
+        }
+      }
       if (!iconPath.empty()) {
         auto appIcon = ui::image({
             .fit = ImageFit::Cover,

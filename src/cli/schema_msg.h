@@ -167,6 +167,10 @@ namespace noctalia::cli {
       Positional{"summary", {}, {}, true, false, false},
       Positional{"body", {}, {}, true, false, true},
   };
+  inline constexpr std::array kMsgOsdShowPositionals{
+      Positional{"icon", "A Tabler glyph name such as clipboard-check", {}, true, false, false},
+      Positional{"text", {}, {}, true, false, true},
+  };
   inline constexpr std::array kMsgIslandActivityStartPositionals{
       Positional{"id", "A name for the activity, used to update or end it", {}, true, false, false},
       Positional{"title", "Text shown in the Island", {}, false, false, true},
@@ -626,6 +630,17 @@ namespace noctalia::cli {
                                               false};
     inline constexpr Command osdDisable{"osd-disable", "Disable OSD popups", {}, {}, {}, {}, {}, false};
     inline constexpr Command osdEnable{"osd-enable", "Enable OSD popups", {}, {}, {}, {}, {}, false};
+    inline constexpr Command osdShow{
+        "osd-show",
+        "Flash a short status pill with an icon and text",
+        "It appears in the Island when the Island is on, otherwise as a regular OSD, and fades after a "
+        "moment. It shows even when the OSD kinds hide the built-in ones.",
+        "Example: noctalia msg osd-show clipboard-check Copied",
+        {},
+        kMsgOsdShowPositionals,
+        {},
+        false
+    };
     inline constexpr Command osdToggle{"osd-toggle", "Toggle OSD popups", {}, {}, {}, {}, {}, false};
     inline constexpr Command panelClose{
         "panel-close",
@@ -966,6 +981,7 @@ namespace noctalia::cli {
       msg::notificationShow,
       msg::osdDisable,
       msg::osdEnable,
+      msg::osdShow,
       msg::osdToggle,
       msg::panelClose,
       msg::panelOpen,

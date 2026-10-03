@@ -185,6 +185,9 @@ public:
   void registerIpc(IpcService& ipc);
 
 private:
+  // Notification Centre is its own panel: a request for the Control Center's notifications
+  // tab opens it instead (and drops the tab context).
+  [[nodiscard]] std::string routedPanelId(const std::string& panelId, PanelOpenRequest& request) const;
   static PanelManager* s_instance;
 
   bool openIslandPanel(wl_output* output, std::string_view sourceBarName);

@@ -47,6 +47,8 @@ public:
   void onConfigReload();
   void onOutputChange();
   void hideDndSuppressed();
+  // Takes every banner off screen without closing its notification (Notification Centre opening).
+  void hideAllBanners();
   void requestLayout();
   void requestRedraw();
 
@@ -65,6 +67,7 @@ private:
     std::string body;
     std::vector<std::string> actions;
     std::optional<std::string> icon;
+    std::optional<std::string> desktopEntry;
     std::optional<NotificationImageData> imageData;
     WallTimePoint receivedAt; // drives the "now" / "5m ago" stamp
     Urgency urgency = Urgency::Normal;
@@ -127,6 +130,7 @@ private:
     float lastPointerY = 0.0F;
   };
 
+  void hideBanners(bool dndSuppressedOnly);
   void onNotificationEvent(const Notification& n, NotificationEvent event);
   void schedulePendingAdds();
   void flushPendingAdds();
