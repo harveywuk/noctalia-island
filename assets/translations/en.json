@@ -5,6 +5,17 @@
       "downloads": "Downloads",
       "timers": "Timers"
     },
+    "status": {
+      "dnd": "Do Not Disturb",
+      "charging": "Charging",
+      "on": "On",
+      "off": "Off"
+    },
+    "split": {
+      "media": "Show Now Playing",
+      "downloads": "Show downloads",
+      "timers": "Show timer"
+    },
     "timer": {
       "title": "Timer",
       "pomodoro": "Pomodoro",
@@ -969,6 +980,7 @@
       "off": "Caffeine Off",
       "on": "Caffeine On"
     },
+    "charging": "Charging",
     "dnd": {
       "off": "DND Off",
       "on": "DND On"
@@ -3375,6 +3387,10 @@
           "description": "Show an OSD popup when the caffeine (idle inhibitor) state changes",
           "label": "Caffeine"
         },
+        "osd-kinds-charging": {
+          "description": "Show an OSD popup when a charger is plugged in",
+          "label": "Charging"
+        },
         "osd-kinds-dnd": {
           "description": "Show an OSD popup when Do Not Disturb is toggled",
           "label": "Do Not Disturb"
@@ -3734,9 +3750,13 @@
           "label": "Activity order",
           "description": "Show the first active item in this order. Cycling follows the same order and skips inactive items."
         },
+        "split_activities": {
+          "label": "Split activities",
+          "description": "Show a second activity in a small bubble beside the Island. Click the bubble to swap the two."
+        },
         "cycle_activities": {
           "label": "Cycle activities",
-          "description": "Rotate compact activities. Pause while hovering, using a panel, hidden, or showing an alert."
+          "description": "Rotate compact activities when they are not split. Pause while hovering, using a panel, hidden, or showing an alert."
         },
         "activity_cycle_seconds": {
           "label": "Cycle interval (seconds)",
