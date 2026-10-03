@@ -277,31 +277,31 @@ std::unique_ptr<Flex> MediaTab::create() {
 
   // Track text sits under the progress bar; hovering it reveals the transport controls in its place.
   auto trackText = ui::column(
-          {.out = &m_trackText, .align = FlexAlign::Stretch, .gap = Style::spaceSm * scale},
-          ui::label({
-              .out = &m_trackTitle,
-              .text = i18n::tr("control-center.media.nothing-playing"),
-              .fontSize = Style::fontSizeTitle * scale,
-              .fontWeight = FontWeight::Bold,
-              .color = colorSpecFromRole(ColorRole::Primary),
-              .textAlign = TextAlign::Center,
-          }),
-          ui::label({
-              .out = &m_trackArtist,
-              .text = i18n::tr("control-center.media.start-playback"),
-              .fontSize = Style::fontSizeBody * scale,
-              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-              .textAlign = TextAlign::Center,
-          }),
-          ui::label({
-              .out = &m_trackAlbum,
-              .text = "",
-              .fontSize = Style::fontSizeCaption * scale,
-              .color = colorSpecFromRole(ColorRole::Secondary),
-              .textAlign = TextAlign::Center,
-              .visible = false,
-          })
-      );
+      {.out = &m_trackText, .align = FlexAlign::Stretch, .gap = Style::spaceSm * scale},
+      ui::label({
+          .out = &m_trackTitle,
+          .text = i18n::tr("control-center.media.nothing-playing"),
+          .fontSize = Style::fontSizeTitle * scale,
+          .fontWeight = FontWeight::Bold,
+          .color = colorSpecFromRole(ColorRole::OnSurface),
+          .textAlign = TextAlign::Center,
+      }),
+      ui::label({
+          .out = &m_trackArtist,
+          .text = i18n::tr("control-center.media.start-playback"),
+          .fontSize = Style::fontSizeBody * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          .textAlign = TextAlign::Center,
+      }),
+      ui::label({
+          .out = &m_trackAlbum,
+          .text = "",
+          .fontSize = Style::fontSizeCaption * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          .textAlign = TextAlign::Center,
+          .visible = false,
+      })
+  );
 
   mediaStack->addChild(
       ui::slider({
@@ -803,9 +803,9 @@ void MediaTab::applyOverlay(bool overlay) {
       label->setColor(overlay ? white(alpha) : theme);
   };
   colour(m_nowLabel, 0.9F, colorSpecFromRole(ColorRole::OnSurface));
-  colour(m_trackTitle, 1.0F, colorSpecFromRole(ColorRole::Primary));
+  colour(m_trackTitle, 1.0F, colorSpecFromRole(ColorRole::OnSurface));
   colour(m_trackArtist, 0.72F, colorSpecFromRole(ColorRole::OnSurfaceVariant));
-  colour(m_trackAlbum, 0.55F, colorSpecFromRole(ColorRole::Secondary));
+  colour(m_trackAlbum, 0.55F, colorSpecFromRole(ColorRole::OnSurfaceVariant));
   for (auto* button : {m_playerMenuButton, m_repeatButton, m_prevButton, m_playPauseButton, m_nextButton, m_shuffleButton}) {
     if (button == nullptr)
       continue;

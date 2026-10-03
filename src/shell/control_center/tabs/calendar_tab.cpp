@@ -42,7 +42,7 @@ namespace {
   constexpr float kCalendarWeekColumnMinFontScale = 1.45F;
 
   std::string formatShellDate(const ConfigService* config) {
-    const char* format = config != nullptr ? config->config().shell.dateFormat.c_str() : "%A, %x";
+    const char* format = config != nullptr ? config->config().shell.dateFormat.c_str() : "%A %-d %B";
     return formatLocalTime(format);
   }
 } // namespace
@@ -99,7 +99,7 @@ std::unique_ptr<Flex> CalendarTab::create() {
           .text = formatShellDate(m_config),
           .fontSize = Style::fontSizeTitle * scale,
           .fontWeight = FontWeight::Medium,
-          .color = colorSpecFromRole(ColorRole::Secondary),
+          .color = colorSpecFromRole(ColorRole::OnSurface),
           .maxLines = 1,
           .configure = [this](Label& label) {
             label.setHitTestVisible(true);

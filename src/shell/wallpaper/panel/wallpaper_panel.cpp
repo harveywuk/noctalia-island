@@ -431,7 +431,7 @@ void WallpaperPanel::create() {
           .text = i18n::tr("wallpaper.panel.title"),
           .fontSize = Style::fontSizeTitle * scale,
           .fontWeight = FontWeight::Bold,
-          .color = colorSpecFromRole(ColorRole::Primary),
+          .color = colorSpecFromRole(ColorRole::OnSurface),
       })
   );
 

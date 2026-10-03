@@ -298,7 +298,7 @@ void ControlCenterPanel::create() {
             .text = i18n::tr("control-center.tabs.home"),
             .fontSize = Style::fontSizeTitle * scale,
             .fontWeight = FontWeight::Bold,
-            .color = colorSpecFromRole(ColorRole::Primary),
+            .color = colorSpecFromRole(ColorRole::OnSurface),
             .flexGrow = 1.0F,
         })
     );

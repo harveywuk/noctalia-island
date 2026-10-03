@@ -509,6 +509,15 @@ void Input::setInvalid(bool invalid) {
   markPaintDirty();
 }
 
+void Input::setFrameOnFocus(bool enabled) {
+  if (m_frameOnFocus == enabled) {
+    return;
+  }
+  m_frameOnFocus = enabled;
+  applyVisualState();
+  markPaintDirty();
+}
+
 void Input::setFrameVisible(bool visible) {
   if (m_frameVisible == visible) {
     return;
@@ -1522,7 +1531,8 @@ void Input::applyVisualState() {
   const bool readOnly = isReadOnlyVisual();
   const float chromeScale = chromeScaleForControlHeight(m_controlHeight);
 
-  if (m_frameVisible) {
+  const bool frameShown = m_frameVisible || (m_frameOnFocus && (focused || m_invalid));
+  if (frameShown) {
     m_background->setVisible(true);
     const Color fill = focused ? resolved(ColorRole::Surface, m_surfaceOpacity)
                                : resolved(ColorRole::SurfaceVariant, m_surfaceOpacity);
@@ -1553,7 +1563,7 @@ void Input::applyVisualState() {
     m_background->setVisible(false);
   }
 
-  if ((m_embeddedOnSolidPrimary || m_contentColor.has_value()) && !m_frameVisible) {
+  if ((m_embeddedOnSolidPrimary || m_contentColor.has_value()) && !frameShown) {
     // Content colour overrides the on-primary pairing; the caret and selection follow it.
     const auto content = [this](float alpha) {
       if (m_contentColor.has_value()) {

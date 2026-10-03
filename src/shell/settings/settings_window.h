@@ -200,6 +200,9 @@ private:
       bool rebuildWhenUnchanged = false
   );
   void openActionsMenu();
+  void setShowAdvanced(bool value);
+  void setShowOverriddenOnly(bool value);
+  void applyFilterChange();
   void openConfigExportDialog();
   void openBarWidgetAddPopup(const std::vector<std::string>& lanePath);
   // Request is taken by value because opening the popup can close the sheet that owns the forwarding control.

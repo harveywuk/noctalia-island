@@ -22,7 +22,10 @@
 
 namespace {
 
-  constexpr float kDefaultMinWidth = 100.0F;
+  constexpr float kDefaultMinWidth = 72.0F;
+  constexpr float kArrowWidth = 18.0F;
+  constexpr float kArrowHeight = 13.0F;
+  constexpr float kArrowGlyphSize = 10.0F;
   // Matches Input's internal text viewport inset so the layout minimum reserves
   // the visible text box, not just ink.
   constexpr float kInputTextInnerInset = 3.0F;
@@ -55,23 +58,24 @@ namespace {
 } // namespace
 
 Stepper::Stepper() {
+  // macOS layout: a text field with a small stacked up/down arrow pair beside it.
   setDirection(FlexDirection::Horizontal);
-  setAlign(FlexAlign::Stretch);
+  setAlign(FlexAlign::Center);
   setJustify(FlexJustify::Start);
-  setGap(0.0F);
+  setGap(Style::spaceXs);
   setPadding(0.0F);
   setMinWidth(kDefaultMinWidth);
-  setFill(colorSpecFromRole(ColorRole::SurfaceVariant, m_surfaceOpacity));
+  clearFill();
   clearBorder();
-  setRadius(Style::scaledRadiusMd());
 
   auto makeStepButton = [this](bool increment) -> std::unique_ptr<Button> {
     auto btn = std::make_unique<Button>();
     btn->setVariant(ButtonVariant::Tab);
-    btn->setGlyph(increment ? "plus" : "minus");
-    btn->setGlyphSize(Style::fontSizeBody);
-    btn->setMinHeight(Style::controlHeight);
-    btn->setPadding(Style::spaceXs, Style::spaceMd);
+    btn->setGlyph(increment ? "chevron-up" : "chevron-down");
+    btn->setGlyphSize(kArrowGlyphSize);
+    btn->setMinHeight(kArrowHeight);
+    btn->setMinWidth(kArrowWidth);
+    btn->setPadding(0.0F, 0.0F);
     btn->setContentAlign(ButtonContentAlign::Center);
     btn->setFlexGrow(0.0F);
     btn->setCursorShape(WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER);
@@ -88,18 +92,6 @@ Stepper::Stepper() {
   };
 
   {
-    auto dec = makeStepButton(false);
-    m_decrement = dec.get();
-    addChild(std::move(dec));
-  }
-
-  {
-    auto sep = makeStepperSeparator(m_scale);
-    m_separatorBeforeValue = sep.get();
-    addChild(std::move(sep));
-  }
-
-  {
     auto track = std::make_unique<Flex>();
     track->setDirection(FlexDirection::Horizontal);
     track->setAlign(FlexAlign::Stretch);
@@ -107,17 +99,14 @@ Stepper::Stepper() {
     track->setGap(0.0F);
     track->setPadding(0.0F);
     track->setFlexGrow(1.0F);
-    track->setMinHeight(Style::controlHeight);
     track->clearFill();
     track->clearBorder();
-    track->setRadii(Radii{});
     m_valueTrack = track.get();
 
     auto field = std::make_unique<Input>();
-    field->setFrameVisible(false);
-    field->setTextAlign(TextAlign::Center);
+    field->setTextAlign(TextAlign::End);
     field->setFontSize(Style::fontSizeBody);
-    field->setControlHeight(Style::controlHeight);
+    field->setControlHeight(Style::controlHeightSm);
     field->setHorizontalPadding(valueInputHorizontalPadding(m_scale));
     field->setFlexGrow(1.0F);
     field->setOnSubmit([this](const std::string& /*text*/) { commitValueField(); });
@@ -129,15 +118,27 @@ Stepper::Stepper() {
   }
 
   {
-    auto sep = makeStepperSeparator(m_scale);
-    m_separatorAfterValue = sep.get();
-    addChild(std::move(sep));
-  }
+    auto arrows = std::make_unique<Flex>();
+    arrows->setDirection(FlexDirection::Vertical);
+    arrows->setAlign(FlexAlign::Stretch);
+    arrows->setGap(0.0F);
+    arrows->setPadding(0.0F);
+    arrows->setFlexGrow(0.0F);
+    m_arrows = arrows.get();
 
-  {
     auto inc = makeStepButton(true);
     m_increment = inc.get();
-    addChild(std::move(inc));
+    arrows->addChild(std::move(inc));
+
+    auto sep = makeStepperSeparator(m_scale);
+    sep->setOrientation(SeparatorOrientation::HorizontalRule);
+    m_separatorBeforeValue = sep.get();
+    arrows->addChild(std::move(sep));
+
+    auto dec = makeStepButton(false);
+    m_decrement = dec.get();
+    arrows->addChild(std::move(dec));
+    addChild(std::move(arrows));
   }
 
   syncValueField();
@@ -223,27 +224,21 @@ void Stepper::setValueSuffix(std::string suffix) {
 
 void Stepper::setScale(float scale) {
   m_scale = std::max(0.1F, scale);
-  setGap(0.0F);
+  setGap(Style::spaceXs * m_scale);
   setPadding(0.0F);
   setMinWidth(kDefaultMinWidth * m_scale);
   clearBorder();
-  if (m_valueTrack != nullptr) {
-    m_valueTrack->setMinHeight(Style::controlHeight * m_scale);
-  }
   if (m_valueInput != nullptr) {
     m_valueInput->setFontSize(Style::fontSizeBody * m_scale);
-    m_valueInput->setControlHeight(Style::controlHeight * m_scale);
+    m_valueInput->setControlHeight(Style::controlHeightSm * m_scale);
     m_valueInput->setHorizontalPadding(valueInputHorizontalPadding(m_scale));
   }
-  if (m_decrement != nullptr) {
-    m_decrement->setGlyphSize(Style::fontSizeBody * m_scale);
-    m_decrement->setMinHeight(Style::controlHeight * m_scale);
-    m_decrement->setPadding(Style::spaceXs * m_scale, Style::spaceMd * m_scale);
-  }
-  if (m_increment != nullptr) {
-    m_increment->setGlyphSize(Style::fontSizeBody * m_scale);
-    m_increment->setMinHeight(Style::controlHeight * m_scale);
-    m_increment->setPadding(Style::spaceXs * m_scale, Style::spaceMd * m_scale);
+  for (Button* arrow : {m_increment, m_decrement}) {
+    if (arrow != nullptr) {
+      arrow->setGlyphSize(kArrowGlyphSize * m_scale);
+      arrow->setMinHeight(kArrowHeight * m_scale);
+      arrow->setMinWidth(kArrowWidth * m_scale);
+    }
   }
   refreshSegmentStyle();
   markLayoutDirty();
@@ -419,27 +414,25 @@ void Stepper::refreshButtons() {
 }
 
 void Stepper::refreshSegmentStyle() {
-  const float r = Style::scaledRadiusMd(m_scale);
-  setFill(colorSpecFromRole(ColorRole::SurfaceVariant, m_surfaceOpacity));
+  const float r = Style::scaledRadiusSm(m_scale);
+  clearFill();
   clearBorder();
-  setRadius(r);
-  if (m_decrement != nullptr) {
-    m_decrement->setVariant(ButtonVariant::Tab);
-    m_decrement->setRadii({r, 0.0F, 0.0F, r});
+  if (m_arrows != nullptr) {
+    m_arrows->setFill(colorSpecFromRole(ColorRole::SurfaceVariant, m_surfaceOpacity));
+    m_arrows->setBorder(
+        colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha), std::max(1.0F, Style::borderWidth * m_scale)
+    );
+    m_arrows->setRadius(r);
   }
   if (m_increment != nullptr) {
     m_increment->setVariant(ButtonVariant::Tab);
-    m_increment->setRadii({0.0F, r, r, 0.0F});
+    m_increment->setRadii({r, r, 0.0F, 0.0F});
   }
-  if (m_valueTrack != nullptr) {
-    m_valueTrack->setRadii(Radii{});
-    m_valueTrack->clearFill();
+  if (m_decrement != nullptr) {
+    m_decrement->setVariant(ButtonVariant::Tab);
+    m_decrement->setRadii({0.0F, 0.0F, r, r});
   }
-  const float ruleW = std::max(1.0F, Style::borderWidth * m_scale);
   if (m_separatorBeforeValue != nullptr) {
-    m_separatorBeforeValue->setThickness(ruleW);
-  }
-  if (m_separatorAfterValue != nullptr) {
-    m_separatorAfterValue->setThickness(ruleW);
+    m_separatorBeforeValue->setThickness(std::max(1.0F, Style::borderWidth * m_scale));
   }
 }

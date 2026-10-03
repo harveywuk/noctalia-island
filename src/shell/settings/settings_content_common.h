@@ -55,6 +55,10 @@ namespace settings {
   // (search results) that must never start hidden and hold no expanded state.
   [[nodiscard]] Flex* addSettingsCard(Flex& parent, std::string_view title, float scale);
 
+  // True once a container holds a row. A filled card also owns its background rect as a child,
+  // so children().empty() is never true for one and its first row would get a separator above it.
+  [[nodiscard]] bool hasLaidOutChildren(const Flex& container);
+
   [[nodiscard]] std::optional<std::size_t>
   optionIndex(const std::vector<SelectOption>& options, std::string_view value);
   [[nodiscard]] std::string optionLabel(const std::vector<SelectOption>& options, std::string_view value);
