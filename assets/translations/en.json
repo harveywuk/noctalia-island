@@ -834,7 +834,8 @@
       "set-alias": "Set Alias…",
       "show-in-folder": "Show in Folder",
       "switch-to-window": "Switch to Window",
-      "unpin": "Unpin"
+      "unpin": "Unpin",
+      "quit-application": "Quit Application"
     },
     "aliases": {
       "footer": "Return saves the alias, Esc cancels",
@@ -892,7 +893,7 @@
     "forms": {
       "create-quicklink": "Create Quicklink",
       "create-snippet": "Create Snippet",
-      "create-snippet-help": "Save text you paste often. Give it a keyword to find it in a couple of keystrokes. {date}, {time} and {clipboard} are filled in when it’s pasted.",
+      "create-snippet-help": "Save text you paste often. Give it a keyword to find it in a couple of keystrokes. {date}, {time}, {clipboard}, {uuid} and {cursor} are filled in when it’s pasted.",
       "edit-quicklink": "Edit Quicklink",
       "edit-snippet": "Edit Snippet",
       "errors": {
@@ -916,7 +917,7 @@
         "quicklink-url": "Link, with {query} where the search goes",
         "snippet-keyword": "Optional keyword that finds this snippet",
         "snippet-name": "Snippet name, like Email signature",
-        "snippet-text": "Text to paste. Type \\n for a new line; {date}, {time} and {clipboard} work"
+        "snippet-text": "Text to paste. Type \\n for a new line; {date}, {time}, {clipboard} and {uuid} work"
       },
       "quicklink-keywords": "new add link bookmark url",
       "required": "Required",
@@ -1021,6 +1022,9 @@
       },
       "window": {
         "title": "Windows"
+      },
+      "window-management": {
+        "title": "Window Management"
       }
     },
     "quicklinks": {
@@ -1039,7 +1043,8 @@
       "favourites": "Favourites",
       "files": "Files",
       "results": "Results",
-      "windows": "Windows"
+      "windows": "Windows",
+      "suggestions": "Suggestions"
     },
     "snippets": {
       "saved": "Saved as snippet",
@@ -1118,12 +1123,130 @@
       "toggle-wifi": {
         "keywords": "wifi wireless network internet",
         "title": "Toggle Wi-Fi"
+      },
+      "volume-up": {
+        "title": "Volume Up",
+        "keywords": "volume sound audio louder increase"
+      },
+      "volume-down": {
+        "title": "Volume Down",
+        "keywords": "volume sound audio quieter decrease"
+      },
+      "brightness-up": {
+        "title": "Brightness Up",
+        "keywords": "brightness screen display brighter increase"
+      },
+      "brightness-down": {
+        "title": "Brightness Down",
+        "keywords": "brightness screen display dimmer decrease"
+      },
+      "reload-config": {
+        "title": "Reload Configuration",
+        "keywords": "config reload settings refresh noctalia"
       }
     },
     "time": {
       "local": "Local",
       "tomorrow": "Tomorrow",
       "yesterday": "Yesterday"
+    },
+    "fallback": {
+      "search-with": "Search {provider} for “{query}”"
+    },
+    "wm": {
+      "left-half": {
+        "title": "Left Half",
+        "keywords": "window left half tile"
+      },
+      "right-half": {
+        "title": "Right Half",
+        "keywords": "window right half tile"
+      },
+      "top-half": {
+        "title": "Top Half",
+        "keywords": "window top half tile"
+      },
+      "bottom-half": {
+        "title": "Bottom Half",
+        "keywords": "window bottom half tile"
+      },
+      "top-left-quarter": {
+        "title": "Top Left Quarter",
+        "keywords": "window quarter corner"
+      },
+      "top-right-quarter": {
+        "title": "Top Right Quarter",
+        "keywords": "window quarter corner"
+      },
+      "bottom-left-quarter": {
+        "title": "Bottom Left Quarter",
+        "keywords": "window quarter corner"
+      },
+      "bottom-right-quarter": {
+        "title": "Bottom Right Quarter",
+        "keywords": "window quarter corner"
+      },
+      "first-third": {
+        "title": "First Third",
+        "keywords": "window third left"
+      },
+      "center-third": {
+        "title": "Center Third",
+        "keywords": "window third middle"
+      },
+      "last-third": {
+        "title": "Last Third",
+        "keywords": "window third right"
+      },
+      "first-two-thirds": {
+        "title": "First Two Thirds",
+        "keywords": "window thirds left"
+      },
+      "last-two-thirds": {
+        "title": "Last Two Thirds",
+        "keywords": "window thirds right"
+      },
+      "maximize": {
+        "title": "Maximize",
+        "keywords": "window maximize fill screen"
+      },
+      "almost-maximize": {
+        "title": "Almost Maximize",
+        "keywords": "window maximize large centre"
+      },
+      "center": {
+        "title": "Center",
+        "keywords": "window centre center middle"
+      },
+      "make-larger": {
+        "title": "Make Larger",
+        "keywords": "window bigger grow resize"
+      },
+      "make-smaller": {
+        "title": "Make Smaller",
+        "keywords": "window smaller shrink resize"
+      },
+      "toggle-fullscreen": {
+        "title": "Toggle Fullscreen",
+        "keywords": "window fullscreen full screen"
+      },
+      "toggle-floating": {
+        "title": "Toggle Floating",
+        "keywords": "window floating tiled float"
+      },
+      "pin-window": {
+        "title": "Pin Window",
+        "keywords": "window pin always on top sticky"
+      },
+      "next-display": {
+        "title": "Next Display",
+        "keywords": "window move monitor display next"
+      },
+      "previous-display": {
+        "title": "Previous Display",
+        "keywords": "window move monitor display previous"
+      },
+      "no-window": "No focused window to arrange"
     }
   },
   "location": {
@@ -3329,6 +3452,14 @@
         "home-stacked": {
           "label": "Stack Home cards",
           "description": "Show cards at full width in the order above. Turn off for the dashboard layout."
+        },
+        "launcher-prefix-windowmanagement": {
+          "label": "Window Management Prefix",
+          "description": "Trigger prefix for window management commands (Hyprland)"
+        },
+        "launcher-global-windowmanagement": {
+          "label": "Window Management in Global Search",
+          "description": "Also show window management commands in unprefixed search"
         }
       },
       "power": {

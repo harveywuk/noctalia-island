@@ -11,10 +11,13 @@
 #include "launcher/snippet_provider.h"
 #include "launcher/snippet_store.h"
 #include "launcher/time_provider.h"
+#include "launcher/usage_tracker.h"
+#include "launcher/window_management_provider.h"
 #include "tests/test_check.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <unistd.h>
@@ -39,7 +42,9 @@ namespace {
 
     // The clipboard image action: {path} gets the export, otherwise the image is piped in.
     TEST_CHECK(ClipboardProvider::imageActionCommand("gimp {path}", "/tmp/a b.png") == "gimp '/tmp/a b.png'");
-    TEST_CHECK(ClipboardProvider::imageActionCommand("satty -f {stdin}", "/tmp/x.png") == "cat -- '/tmp/x.png' | satty -f -");
+    TEST_CHECK(
+        ClipboardProvider::imageActionCommand("satty -f {stdin}", "/tmp/x.png") == "cat -- '/tmp/x.png' | satty -f -"
+    );
     TEST_CHECK(ClipboardProvider::imageActionCommand("gradia", "/tmp/x.png") == "cat -- '/tmp/x.png' | gradia");
   }
 
@@ -110,6 +115,13 @@ namespace {
 
     // With nothing configured, the built-in set is used.
     TEST_CHECK(!QuicklinkProvider::effectiveQuicklinks(nullptr).empty());
+
+    // Fallback commands: the named search quicklinks offer the query, plain links are skipped.
+    const auto fallbacks = QuicklinkProvider::fallbacks(links, {"news", "GitHub"}, " island ");
+    TEST_CHECK(fallbacks.size() == 1);
+    TEST_CHECK(fallbacks[0].id == "link:github" && fallbacks[0].fallback);
+    TEST_CHECK(fallbacks[0].query == std::optional<std::string>("island"));
+    TEST_CHECK(QuicklinkProvider::fallbacks(links, {"github"}, "").empty());
   }
 
   void testSnippets() {
@@ -119,6 +131,13 @@ namespace {
     const std::string expanded = SnippetProvider::expand("Hi {clipboard}, see you {date}", now, "Sam");
     TEST_CHECK(expanded.starts_with("Hi Sam, see you 2026-10-0"));
     TEST_CHECK(SnippetProvider::expand("no placeholders", now, "x") == "no placeholders");
+    // Raycast's other placeholders: a fresh UUID each time, the caret marker dropped, calendar parts.
+    const std::string uuids = SnippetProvider::expand("{uuid} {uuid}", now, "");
+    TEST_CHECK(uuids.size() == 73 && uuids[36] == ' ' && uuids.substr(0, 36) != uuids.substr(37));
+    TEST_CHECK(uuids[14] == '4' && uuids[8] == '-' && uuids[23] == '-');
+    TEST_CHECK(SnippetProvider::expand("Dear {cursor},", now, "") == "Dear ,");
+    TEST_CHECK(SnippetProvider::expand("{year}", now, "").starts_with("202"));
+    TEST_CHECK(!SnippetProvider::expand("{weekday} {month} {day}", now, "").contains('{'));
 
     const fs::path path = fs::temp_directory_path() / ("noctalia-snippets-" + std::to_string(::getpid()) + ".json");
     fs::remove(path);
@@ -219,6 +238,60 @@ echo "$1"
     TEST_CHECK(results.size() == 1 && results[0].title == "10:00");
   }
 
+  void testWindowManagement() {
+    using window_management::Layout;
+    using window_management::Rect;
+    // A 1920x1080 monitor at (0,0) with a 40px bar reserved at the top.
+    const Rect area{.x = 0, .y = 40, .width = 1920, .height = 1040};
+    const Rect window{.x = 100, .y = 100, .width = 800, .height = 600};
+    TEST_CHECK((window_management::frameFor(Layout::LeftHalf, area, window) == Rect{0, 40, 960, 1040}));
+    TEST_CHECK((window_management::frameFor(Layout::RightHalf, area, window) == Rect{960, 40, 960, 1040}));
+    TEST_CHECK((window_management::frameFor(Layout::BottomRightQuarter, area, window) == Rect{960, 560, 960, 520}));
+    TEST_CHECK((window_management::frameFor(Layout::CenterThird, area, window) == Rect{640, 40, 640, 1040}));
+    TEST_CHECK((window_management::frameFor(Layout::LastTwoThirds, area, window) == Rect{640, 40, 1280, 1040}));
+    TEST_CHECK((window_management::frameFor(Layout::Maximize, area, window) == Rect{0, 40, 1920, 1040}));
+    // Center keeps the size; the second monitor's offset carries into the frame.
+    const Rect second{.x = 1920, .y = 0, .width = 2560, .height = 1440};
+    TEST_CHECK((window_management::frameFor(Layout::Center, second, window) == Rect{2800, 420, 800, 600}));
+    // Growing stops at the work area, shrinking at a usable minimum.
+    const Rect huge{.x = 0, .y = 0, .width = 5000, .height = 5000};
+    TEST_CHECK((window_management::frameFor(Layout::MakeLarger, area, huge) == Rect{0, 40, 1920, 1040}));
+    const Rect tiny{.x = 0, .y = 0, .width = 50, .height = 50};
+    const Rect smaller = window_management::frameFor(Layout::MakeSmaller, area, tiny);
+    TEST_CHECK(smaller.width == 200 && smaller.height == 200);
+    TEST_CHECK(window_management::frameFor(Layout::AlmostMaximize, area, window).width == 1728);
+
+    // Every command has a layout or a dispatcher, and a unique id.
+    const auto commands = WindowManagementProvider::commands();
+    for (const auto& command : commands) {
+      TEST_CHECK(command.layout.has_value() || !command.dispatcher.empty());
+      TEST_CHECK(std::ranges::count(commands, command.id, &WindowManagementProvider::Command::id) == 1);
+    }
+  }
+
+  void testRecent() {
+    // The tracker keeps a short cross-provider history for Suggestions, newest first, de-duplicated.
+    const fs::path dir = fs::temp_directory_path() / ("noctalia-usage-" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    ::setenv("NOCTALIA_STATE_HOME", dir.c_str(), 1);
+    {
+      UsageTracker tracker;
+      tracker.clear();
+      tracker.recordRecent("System", "toggle-dark-mode");
+      tracker.recordRecent("Applications", "/usr/share/applications/foot.desktop");
+      tracker.recordRecent("System", "toggle-dark-mode");
+      const auto& recent = tracker.recent();
+      TEST_CHECK(recent.size() == 2);
+      TEST_CHECK(recent[0].first == "System" && recent[0].second == "toggle-dark-mode");
+      TEST_CHECK(recent[1].first == "Applications");
+    }
+    UsageTracker reloaded;
+    TEST_CHECK(reloaded.recent().size() == 2 && reloaded.recent()[0].first == "System");
+    reloaded.clear();
+    TEST_CHECK(reloaded.recent().empty());
+    fs::remove_all(dir);
+  }
+
   void testAliases() {
     TEST_CHECK(AliasStore::normalize("  FF ") == "ff");
     const auto spec = AliasStore::parseSpec("System:toggle-dark-mode");
@@ -257,6 +330,8 @@ int main() {
   testSnippets();
   testScripts();
   testTime();
+  testWindowManagement();
+  testRecent();
   testAliases();
   return 0;
 }

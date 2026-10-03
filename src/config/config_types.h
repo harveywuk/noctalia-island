@@ -1722,6 +1722,9 @@ struct ShellConfig {
 
     // Search URL for the "Search the web" fallback; {query} is replaced by the typed text.
     std::string webSearchUrl = "https://duckduckgo.com/?q={query}";
+    // Raycast's fallback commands: provider names ("files", "emoji", …) and quicklink ids ("github")
+    // offered under "Use “query” with…" after the results, beside the web search.
+    std::vector<std::string> fallbacks{"files"};
     // Quicklinks and snippets from config. With no quicklinks configured a small built-in set is used.
     std::vector<LauncherQuicklinkConfig> quicklinks;
     std::vector<LauncherSnippetConfig> snippets;

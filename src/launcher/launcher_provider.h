@@ -10,13 +10,22 @@
 #include <vector>
 
 namespace launcher {
-  inline constexpr std::array kBuiltinProviders = {std::string_view("calculator"), std::string_view("clipboard"),
-                                                   std::string_view("emoji"),      std::string_view("files"),
-                                                   std::string_view("panels"),     std::string_view("quicklinks"),
-                                                   std::string_view("scripts"),    std::string_view("session"),
-                                                   std::string_view("snippets"),   std::string_view("system"),
-                                                   std::string_view("time"),       std::string_view("wallpaper"),
-                                                   std::string_view("windows")};
+  inline constexpr std::array kBuiltinProviders = {
+      std::string_view("calculator"),
+      std::string_view("clipboard"),
+      std::string_view("emoji"),
+      std::string_view("files"),
+      std::string_view("panels"),
+      std::string_view("quicklinks"),
+      std::string_view("scripts"),
+      std::string_view("session"),
+      std::string_view("snippets"),
+      std::string_view("system"),
+      std::string_view("time"),
+      std::string_view("wallpaper"),
+      std::string_view("windowmanagement"),
+      std::string_view("windows")
+  };
 } // namespace launcher
 
 struct LauncherCategory {
@@ -57,6 +66,8 @@ struct LauncherResult {
   bool fallback = false;
   int recentlyUsedIndex = 0; // Higher is more recent. <=0 means no record or too old.
   bool pinned = false;       // Set by LauncherPanel for launcher-owned pinned applications.
+  // Set by LauncherPanel: a recently used result shown under Suggestions when nothing is typed.
+  bool suggested = false;
 };
 
 // An extra action offered for a result in the actions menu (Shift+Return, or right click).
@@ -185,6 +196,10 @@ public:
   [[nodiscard]] virtual std::vector<LauncherResult> queryPrefixed(std::string_view text) const { return query(text); }
 
   virtual bool activate(const LauncherResult& result) = 0;
+
+  // Text that Tab puts in the search field for this result (a quicklink's keyword, a provider's
+  // prefix), like Raycast's autocomplete. Empty when there is nothing to complete.
+  [[nodiscard]] virtual std::string completion(const LauncherResult& /*result*/) const { return {}; }
 
   // The primary action's name, shown in the action bar and at the top of the actions menu.
   // Empty means the launcher's generic "Open".

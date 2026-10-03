@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+struct wl_display;
 struct wl_seat;
 struct zwp_virtual_keyboard_manager_v1;
 struct zwp_virtual_keyboard_v1;
@@ -22,7 +23,9 @@ public:
   VirtualKeyboardService(const VirtualKeyboardService&) = delete;
   VirtualKeyboardService& operator=(const VirtualKeyboardService&) = delete;
 
-  bool bind(zwp_virtual_keyboard_manager_v1* manager, wl_seat* seat);
+  // `display` is flushed after a paste chord so the keys leave before the launcher's own close
+  // round-trip; it may be null, in which case the main loop's next flush sends them.
+  bool bind(zwp_virtual_keyboard_manager_v1* manager, wl_seat* seat, wl_display* display = nullptr);
   void cleanup();
 
   [[nodiscard]] bool isAvailable() const noexcept;
@@ -37,6 +40,7 @@ private:
 
   zwp_virtual_keyboard_manager_v1* m_manager = nullptr;
   wl_seat* m_seat = nullptr;
+  wl_display* m_display = nullptr;
   zwp_virtual_keyboard_v1* m_keyboard = nullptr;
   xkb_context* m_xkbContext = nullptr;
   xkb_keymap* m_xkbKeymap = nullptr;

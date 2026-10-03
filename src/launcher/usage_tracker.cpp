@@ -8,12 +8,15 @@
 
 namespace {
   constexpr std::size_t kMaxRecentlyUsedCount = 20;
-}
+  // Raycast's Suggestions draw on a short history of everything run, across providers.
+  constexpr std::size_t kMaxRecentResults = 30;
+} // namespace
 
 UsageTracker::UsageTracker() {
   const std::string dir = FileUtils::stateDir();
   m_usageCountsPath = (dir.empty() ? "." : dir) + "/usage_counts.json";
   m_recentlyUsedPath = (dir.empty() ? "." : dir) + "/recently_used.json";
+  m_recentResultsPath = (dir.empty() ? "." : dir) + "/recent_results.json";
 }
 
 void UsageTracker::record(std::string_view providerId, std::string_view resultId) {
@@ -36,10 +39,27 @@ void UsageTracker::record(std::string_view providerId, std::string_view resultId
   save();
 }
 
+void UsageTracker::recordRecent(std::string_view providerId, std::string_view resultId) {
+  ensureLoaded();
+  std::pair<std::string, std::string> key{std::string(providerId), std::string(resultId)};
+  std::erase(m_recent, key);
+  m_recent.insert(m_recent.begin(), std::move(key));
+  if (m_recent.size() > kMaxRecentResults) {
+    m_recent.resize(kMaxRecentResults);
+  }
+  save();
+}
+
+const std::vector<std::pair<std::string, std::string>>& UsageTracker::recent() {
+  ensureLoaded();
+  return m_recent;
+}
+
 void UsageTracker::clear() {
   m_counts.clear();
   m_recentlyUsed.clear();
   m_recentlyUsedIndex.clear();
+  m_recent.clear();
   m_loaded = true;
   save();
 }
@@ -108,6 +128,23 @@ void UsageTracker::ensureLoaded() {
       }
     }
   }
+  {
+    std::ifstream file(m_recentResultsPath);
+    if (file.is_open()) {
+      try {
+        const auto json = nlohmann::json::parse(file);
+        for (const auto& item : json) {
+          const std::string provider = item.value("provider", "");
+          const std::string id = item.value("id", "");
+          if (!provider.empty() && !id.empty()) {
+            m_recent.emplace_back(provider, id);
+          }
+        }
+      } catch (const nlohmann::json::exception&) {
+        // Ignore malformed file — starts fresh
+      }
+    }
+  }
 }
 
 void UsageTracker::save() const {
@@ -124,6 +161,14 @@ void UsageTracker::save() const {
   {
     nlohmann::json json = m_recentlyUsed;
     std::ofstream file(m_recentlyUsedPath, std::ios::trunc);
+    file << json.dump(2) << '\n';
+  }
+  {
+    nlohmann::json json = nlohmann::json::array();
+    for (const auto& [provider, id] : m_recent) {
+      json.push_back({{"provider", provider}, {"id", id}});
+    }
+    std::ofstream file(m_recentResultsPath, std::ios::trunc);
     file << json.dump(2) << '\n';
   }
 }

@@ -18,13 +18,19 @@ Type `/` by itself to show a lightweight overview of available prefixed provider
 
 ### Sections and the action bar
 
-Like Raycast, a global search lists everything it found under **Results**, ranked by relevance, with matching files after them under **Files**. With nothing typed, pinned apps appear under **Favourites** above the other applications. Prefixed searches keep a single list.
+Like Raycast, a global search lists everything it found under **Results**, ranked by relevance, with matching files after them under **Files**. With nothing typed, pinned apps appear under **Favourites**, the last few things you ran (apps, system commands, quicklinks, snippets, scripts, panels) follow under **Suggestions**, and the other applications come after. Prefixed searches keep a single list.
 
-The bar along the bottom names the selected result's kind and its keys: **Return** runs the primary action (its name, such as **Open Application** or **Paste Snippet**, is shown there) and **Shift + Return** opens the actions menu. When a search has a query, a **Use "…" with…** section at the end offers to search the web for it.
+The bar along the bottom names the selected result's kind and its keys: **Return** runs the primary action (its name, such as **Open Application** or **Paste Snippet**, is shown there) and **Shift + Return** opens the actions menu. When a search has a query, a **Use "…" with…** section at the end offers the fallback commands: **Search the Web**, **Search Files for "…"**, and any search quicklinks listed in `shell.launcher.fallbacks` (for example `["files", "github"]`).
+
+### Navigation
+
+- **Up** / **Down**, or **Ctrl + P** / **Ctrl + N**, move the selection; **Page Up** / **Page Down** move by a page.
+- **Tab** autocompletes the selected result: a provider row from the `/` overview puts its prefix in the field, a search quicklink puts its keyword in (`gh `), and a fallback row carries your query into that provider.
+- **Esc** inside a provider view you reached from the root search (for example after typing `/clip`) goes back to the root search; **Esc** at the root, or in a view the launcher opened with (the clipboard shortcut), closes the launcher.
 
 ### Actions menu
 
-**Shift + Return** (or a right click) lists everything you can do with the selected result, Raycast-style: the primary action first, then the result's own actions (for example **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. **Ctrl + Return** runs the first of the result's own actions directly.
+**Shift + Return** (or a right click) lists everything you can do with the selected result, Raycast-style: the primary action first, then the result's own actions (for example **Quit Application** and **Copy Name** for a running application, **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. **Ctrl + Return** runs the first of the result's own actions directly.
 
 ### Aliases and hotkeys
 
@@ -159,6 +165,7 @@ Search everything you've copied, with a preview of the selected entry.
 - **Prefix**: `/clip ` (not in global search)
 - **Source**: The shell's clipboard history (`shell.clipboard_enabled`), newest first, pinned entries kept.
 - **Functionality**: Return pastes the entry, following `shell.clipboard_auto_paste` (or copies it when that is `off`). Actions: **Copy to Clipboard**, **Open in Browser** for links, **Edit Image** for images when `shell.clipboard_image_action_command` is set, **Pin**/**Unpin**, **Save as Snippet**, **Delete Entry** and **Clear History** (pinned entries stay).
+- **Type filter**: Press **F6** to show the **Text**, **Link** and **Image** filters, like Raycast's type menu, and **F6** again to move between them.
 - **Replaces the Clipboard panel**: the clipboard bar widget, the Control Center shortcut and `noctalia msg panel-toggle clipboard` open the launcher here.
 
 ### Quicklinks and web search
@@ -178,7 +185,7 @@ Paste saved text by name or keyword.
 - **Prefix**: `/snip ` (also in global search)
 - **Source**: `[shell.launcher.snippets.<id>]` in your config, plus snippets made in the launcher (kept in `~/.local/state/noctalia/launcher_snippets.json`).
 - **Creating**: Run **Create Snippet** (first in `/snip`, or search "create snippet") to fill in a name, the text and an optional keyword. Type `\n` for a new line. **Save as Snippet** in clipboard history opens the same form with the copied text filled in, and **Edit Snippet…** changes one made here.
-- **Placeholders**: `{date}`, `{time}`, `{datetime}` and `{clipboard}` are filled in when the snippet is pasted.
+- **Placeholders**: `{date}`, `{time}`, `{datetime}`, `{day}`, `{weekday}`, `{month}`, `{year}`, `{clipboard}` and `{uuid}` are filled in when the snippet is pasted, as in Raycast. `{cursor}` is accepted and removed; the launcher can't place the caret in another app.
 - **Limits**: Snippets are pasted from the launcher; they don't expand automatically as you type in other apps.
 
 ### Script commands
@@ -204,8 +211,18 @@ See the time anywhere, or convert a time between places.
 Toggle settings and run system actions.
 
 - **Prefix**: `/sys ` (also in global search)
-- **Commands**: Toggle Dark Mode, Do Not Disturb, Wi-Fi, Bluetooth, Keep Awake, Night Light, Mute and Microphone; Take Screenshot, Screenshot and Annotate, Record Screen, Stop Recording, Turn Off Displays, Clear Clipboard History, Clear Notifications, Empty Trash and Eject All Disks.
+- **Commands**: Toggle Dark Mode, Do Not Disturb, Wi-Fi, Bluetooth, Keep Awake, Night Light, Mute and Microphone; Volume Up and Down, Brightness Up and Down; Take Screenshot, Screenshot and Annotate, Record Screen, Stop Recording, Turn Off Displays, Clear Clipboard History, Clear Notifications, Empty Trash, Eject All Disks and Reload Configuration.
 - **Matching**: In global search every word you type must start a word of the command's name or keywords, so short queries don't pull in unrelated commands.
+
+### Window management
+
+Arrange the focused window from the keyboard, with Raycast's Window Management commands.
+
+- **Prefix**: `/wm ` (also in global search)
+- **Compositor**: Hyprland only; the provider is empty elsewhere. It talks to Hyprland's own IPC, so it needs no plugin.
+- **Layouts**: Left Half, Right Half, Top Half, Bottom Half; the four quarters; First, Center and Last Third; First and Last Two Thirds; Maximize, Almost Maximize, Center, Make Larger and Make Smaller. A layout floats the window first (as every macOS window is "floating") and sizes it inside the monitor's work area, below the Island or bar.
+- **Other commands**: Toggle Fullscreen, Toggle Floating, Pin Window (keep on every workspace, above other windows), Next Display and Previous Display.
+- **Hotkeys**: Use **Copy Hotkey Command** to bind one, for example `bind = SUPER, Left, exec, noctalia msg launcher-run WindowManagement:left-half`.
 
 ---
 

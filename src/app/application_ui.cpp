@@ -55,6 +55,7 @@
 #include "launcher/system_provider.h"
 #include "launcher/time_provider.h"
 #include "launcher/wallpaper_provider.h"
+#include "launcher/window_management_provider.h"
 #include "launcher/window_provider.h"
 #include "notification/notifications.h"
 #include "pipewire/pipewire_poll_source.h"
@@ -635,9 +636,12 @@ void Application::initPanelManagerAndPanels() {
   }
   {
     auto launcherPanel = std::make_unique<LauncherPanel>(&m_configService, &m_asyncTextureCache);
-    launcherPanel->addProvider(std::make_unique<AppProvider>(&m_configService, &m_compositorPlatform));
+    launcherPanel->addProvider(
+        std::make_unique<AppProvider>(&m_configService, &m_compositorPlatform, &m_clipboardService)
+    );
     launcherPanel->addProvider(std::make_unique<WallpaperProvider>(&m_configService, &m_wayland, &m_themeService));
     launcherPanel->addProvider(std::make_unique<WindowProvider>(&m_compositorPlatform));
+    launcherPanel->addProvider(std::make_unique<WindowManagementProvider>(&m_compositorPlatform));
     launcherPanel->addProvider(
         std::make_unique<PanelProvider>(&m_panelManager, controlCenterPanelPtr, &m_configService)
     );

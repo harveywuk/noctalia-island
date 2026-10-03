@@ -35,6 +35,7 @@ public:
   bool activate(const LauncherResult& result) override;
 
   [[nodiscard]] std::string primaryActionLabel(const LauncherResult& result) const override;
+  [[nodiscard]] std::string completion(const LauncherResult& result) const override;
   [[nodiscard]] std::vector<LauncherAction> actions(const LauncherResult& result) const override;
   LauncherActionOutcome runAction(const LauncherResult& result, std::string_view actionId) override;
   [[nodiscard]] std::optional<LauncherResult> resultForId(std::string_view resultId) const override;
@@ -53,6 +54,11 @@ public:
   // Results for `text` against `links`; exposed for tests.
   [[nodiscard]] static std::vector<LauncherResult>
   match(const std::vector<LauncherQuicklinkConfig>& links, std::string_view text, bool listAll);
+  // Fallback rows ("Search GitHub for …") for the search quicklinks named in `fallbackIds`; exposed for tests.
+  [[nodiscard]] static std::vector<LauncherResult> fallbacks(
+      const std::vector<LauncherQuicklinkConfig>& links, const std::vector<std::string>& fallbackIds,
+      std::string_view query
+  );
 
 private:
   [[nodiscard]] std::string urlFor(const LauncherResult& result) const;

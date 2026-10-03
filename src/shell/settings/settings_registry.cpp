@@ -66,6 +66,7 @@ namespace settings {
         {.name = "system", .prefixPlaceholder = "sys", .globalByDefault = true},
         {.name = "time", .prefixPlaceholder = "time", .globalByDefault = true},
         {.name = "wallpaper", .prefixPlaceholder = "wall"},
+        {.name = "windowmanagement", .prefixPlaceholder = "wm", .globalByDefault = true},
         {.name = "windows", .prefixPlaceholder = "win"},
     });
 

@@ -6,9 +6,11 @@
 #include "i18n/i18n.h"
 #include "launcher/launcher_provider.h"
 #include "shell/panel/panel_manager.h"
+#include "system/app_identity.h"
 #include "system/desktop_entry_launch.h"
 #include "util/fuzzy_match.h"
 #include "util/string_utils.h"
+#include "wayland/clipboard_service.h"
 
 #include <algorithm>
 #include <array>
@@ -190,8 +192,8 @@ namespace {
 
 } // namespace
 
-AppProvider::AppProvider(ConfigService* config, CompositorPlatform* platform)
-    : m_config(config), m_platform(platform) {}
+AppProvider::AppProvider(ConfigService* config, CompositorPlatform* platform, ClipboardService* clipboard)
+    : m_config(config), m_platform(platform), m_clipboard(clipboard) {}
 
 std::string AppProvider::actionResultId(std::string_view desktopEntryPath, std::string_view desktopActionId) {
   constexpr std::string_view prefix = "desktop-action:";
@@ -380,4 +382,65 @@ bool AppProvider::activate(const LauncherResult& result) {
   }
   kLog.warn("launcher activate: no desktop entry for '{}'", result.id);
   return false;
+}
+
+const DesktopEntry* AppProvider::entryFor(const LauncherResult& result) const {
+  refreshEntriesIfNeeded();
+  for (const auto& entry : m_entries) {
+    if (entry.path == result.desktopEntryPath) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+std::vector<ToplevelInfo> AppProvider::windowsFor(const DesktopEntry& entry) const {
+  if (m_platform == nullptr) {
+    return {};
+  }
+  const std::string entryIdLower = StringUtils::toLower(entry.id);
+  for (const auto& run : app_identity::resolveRunningApps(m_platform->runningAppIds(), m_entries)) {
+    if (StringUtils::toLower(run.entry.id) != entryIdLower) {
+      continue;
+    }
+    const std::string wmClass = entry.startupWmClassLower.empty() ? run.runningLower : entry.startupWmClassLower;
+    return m_platform->enrichedWindowsForApp(run.runningLower, wmClass);
+  }
+  return {};
+}
+
+std::vector<LauncherAction> AppProvider::actions(const LauncherResult& result) const {
+  std::vector<LauncherAction> actions;
+  const DesktopEntry* entry = entryFor(result);
+  if (entry == nullptr || !result.desktopActionId.empty()) {
+    return actions;
+  }
+  if (!windowsFor(*entry).empty()) {
+    actions.push_back({.id = "quit", .label = i18n::tr("launcher.actions.quit-application")});
+  }
+  if (m_clipboard != nullptr) {
+    actions.push_back({.id = "copy-name", .label = i18n::tr("launcher.actions.copy-name")});
+  }
+  return actions;
+}
+
+LauncherActionOutcome AppProvider::runAction(const LauncherResult& result, std::string_view actionId) {
+  const DesktopEntry* entry = entryFor(result);
+  if (entry == nullptr) {
+    return LauncherActionOutcome::Failed;
+  }
+  if (actionId == "quit") {
+    const auto windows = windowsFor(*entry);
+    if (windows.empty()) {
+      return LauncherActionOutcome::Failed;
+    }
+    for (const auto& window : windows) {
+      m_platform->closeToplevelInfo(window);
+    }
+    return LauncherActionOutcome::Done;
+  }
+  if (actionId == "copy-name" && m_clipboard != nullptr) {
+    return m_clipboard->copyText(entry->name) ? LauncherActionOutcome::Done : LauncherActionOutcome::Failed;
+  }
+  return LauncherActionOutcome::Failed;
 }

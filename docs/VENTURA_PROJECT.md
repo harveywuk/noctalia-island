@@ -55,6 +55,7 @@ Every PR below is merged into `feature/orbit-island`. The merged branch builds, 
 | #18 | Settings, controls | Closes the remaining Ventura gaps: column width, separators, header switches, slider boxes, buttons, stepper, panel titles, Control Center date and profile card, tray drawer |
 | #19 | Island | Up-next meeting: the next calendar event counts down in the Island |
 | #21 | Island | Screenshot thumbnail: a new screenshot pops out of the Island with Markup. Enter opens it, Esc dismisses it. |
+| #23 | Launcher | Raycast parity pass: Suggestions (recent results across providers) on the root search, Esc back to root from a provider view, Ctrl+N/P, Tab autocomplete, fallback commands (`shell.launcher.fallbacks`), Window Management commands on Hyprland, Quit Application / Copy Name on apps, clipboard type filter, more snippet placeholders, Volume/Brightness/Reload Configuration system commands. Also builds against libwayland 1.22 again. |
 
 ## Next steps
 

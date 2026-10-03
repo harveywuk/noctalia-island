@@ -23,7 +23,7 @@ namespace {
   // Long enough for the launcher's close animation to finish.
   constexpr auto kAfterCloseDelay = std::chrono::milliseconds(260);
 
-  constexpr std::array<SystemProvider::Command, 17> kCommands = {{
+  constexpr std::array<SystemProvider::Command, 22> kCommands = {{
       {.id = "toggle-dark-mode", .glyph = "moon", .ipc = "theme-mode-toggle"},
       {.id = "toggle-dnd", .glyph = "bell-off", .ipc = "notification-dnd-toggle"},
       {.id = "toggle-wifi", .glyph = "wifi", .ipc = "wifi-toggle"},
@@ -31,7 +31,11 @@ namespace {
       {.id = "toggle-keep-awake", .glyph = "coffee", .ipc = "caffeine-toggle"},
       {.id = "toggle-night-light", .glyph = "sun-moon", .ipc = "nightlight-force-toggle"},
       {.id = "toggle-mute", .glyph = "volume-3", .ipc = "volume-mute"},
+      {.id = "volume-up", .glyph = "volume", .ipc = "volume-up"},
+      {.id = "volume-down", .glyph = "volume-2", .ipc = "volume-down"},
       {.id = "toggle-mic", .glyph = "microphone-off", .ipc = "mic-mute"},
+      {.id = "brightness-up", .glyph = "brightness-up", .ipc = "brightness-up"},
+      {.id = "brightness-down", .glyph = "brightness-down", .ipc = "brightness-down"},
       {.id = "screenshot", .glyph = "screenshot", .ipc = "screenshot-region", .afterClose = true},
       {.id = "annotate", .glyph = "pencil", .ipc = "screenshot-annotate", .afterClose = true},
       {.id = "record", .glyph = "video", .ipc = "record-region", .afterClose = true},
@@ -39,6 +43,7 @@ namespace {
       {.id = "displays-off", .glyph = "device-desktop-off", .ipc = "dpms-off", .afterClose = true},
       {.id = "clear-clipboard", .glyph = "clipboard-x", .ipc = "clipboard-clear"},
       {.id = "clear-notifications", .glyph = "bell-x", .ipc = "notification-clear-history"},
+      {.id = "reload-config", .glyph = "refresh", .ipc = "config-reload"},
       {.id = "empty-trash", .glyph = "trash", .ipc = {}},
       {.id = "eject-all", .glyph = "player-eject", .ipc = {}},
   }};

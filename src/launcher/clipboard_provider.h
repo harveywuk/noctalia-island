@@ -23,6 +23,8 @@ public:
   [[nodiscard]] bool supportsAutoPaste() const override { return true; }
   [[nodiscard]] bool showsPreview() const override { return true; }
 
+  // Raycast's type filter (Text, Links, Images), for the launcher's category filter (F6).
+  [[nodiscard]] std::vector<LauncherCategory> categories() const override;
   [[nodiscard]] std::vector<LauncherResult> query(std::string_view text) const override;
   bool activate(const LauncherResult& result) override;
 

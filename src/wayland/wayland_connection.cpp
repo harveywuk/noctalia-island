@@ -463,10 +463,8 @@ void WaylandConnection::notifySurfaceOutputLeave(wl_surface* surface, wl_output*
     std::erase(outputs, output);
     if (outputs.empty()) {
       m_surfaceOutputs.erase(it);
-    } else if (
-        auto current = m_surfaceOutputMap.find(surface);
-        current != m_surfaceOutputMap.end() && current->second == output
-    ) {
+    } else if (auto current = m_surfaceOutputMap.find(surface);
+               current != m_surfaceOutputMap.end() && current->second == output) {
       current->second = outputs.back();
     }
   }
@@ -1357,7 +1355,7 @@ void WaylandConnection::bindVirtualKeyboardService() {
   if (m_virtualKeyboardManager == nullptr || m_seat == nullptr) {
     return;
   }
-  m_virtualKeyboardService->bind(m_virtualKeyboardManager, m_seat);
+  m_virtualKeyboardService->bind(m_virtualKeyboardManager, m_seat, m_display);
 }
 
 void WaylandConnection::cleanup() {
