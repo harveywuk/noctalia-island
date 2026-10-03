@@ -911,7 +911,7 @@ namespace {
     auto* host = hostForState(L);
     std::string format = host != nullptr ? host->api().dateFormat() : std::string{};
     if (format.empty()) {
-      format = "%A, %x";
+      format = "%A %-d %B";
     }
     lua_pushlstring(L, format.data(), format.size());
     return 1;

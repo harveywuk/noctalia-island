@@ -1809,7 +1809,7 @@ struct ShellConfig {
   std::string fontFamily = font_defaults::kFamily;
   std::string lang; // empty = auto-detect from $LC_ALL/$LC_MESSAGES/$LANG
   std::string timeFormat = "{:%H:%M}";
-  std::string dateFormat = "%A, %x";
+  std::string dateFormat = "%A %-d %B";
   bool offlineMode = false;
   /// Bar name panels attach to when opened without a source bar (IPC, shortcuts, dock).
   /// Empty keeps per-source resolution (widget click bar, else first enabled bar).

@@ -12,7 +12,7 @@ class Input;
 class Separator;
 class Renderer;
 
-// Horizontal numeric stepper styled like Segmented (shared SurfaceVariant track, Tab-style ends + center).
+// Numeric field with a macOS-style stacked up/down arrow pair beside it.
 class Stepper : public Flex {
 public:
   Stepper();
@@ -56,7 +56,7 @@ private:
   Button* m_decrement = nullptr;
   Separator* m_separatorBeforeValue = nullptr;
   Flex* m_valueTrack = nullptr;
-  Separator* m_separatorAfterValue = nullptr;
+  Flex* m_arrows = nullptr;
   Button* m_increment = nullptr;
   Input* m_valueInput = nullptr;
 

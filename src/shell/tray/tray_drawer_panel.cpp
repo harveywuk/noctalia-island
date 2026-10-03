@@ -2,10 +2,13 @@
 
 #include "config/config_service.h"
 #include "dbus/tray/tray_service.h"
+#include "i18n/i18n.h"
 #include "shell/bar/widgets/tray_widget.h"
 #include "shell/panel/panel_manager.h"
 #include "shell/tray/tray_identifier.h"
 #include "shell/tray/tray_settings.h"
+#include "ui/builders.h"
+#include "ui/palette.h"
 #include "util/string_utils.h"
 
 #include <algorithm>
@@ -46,6 +49,9 @@ float TrayDrawerPanel::resolvedItemGap() const {
 }
 
 float TrayDrawerPanel::preferredWidth() const {
+  if (m_showingEmpty) {
+    return scaled(kEmptyWidth);
+  }
   const float itemSize = scaled(currentDrawerItemSize().value_or(Style::baseGlyphSize));
   const float gap = resolvedItemGap();
   const std::size_t drawerColumns = currentDrawerColumns();
@@ -56,6 +62,9 @@ float TrayDrawerPanel::preferredWidth() const {
 }
 
 float TrayDrawerPanel::preferredHeight() const {
+  if (m_showingEmpty) {
+    return scaled(Style::controlHeight) + scaled(Style::panelPadding) * 2.0F;
+  }
   const float itemSize = scaled(currentDrawerItemSize().value_or(Style::baseGlyphSize));
   const float gap = resolvedItemGap();
   const std::size_t count = std::max<std::size_t>(1, visibleItemCount());
@@ -68,6 +77,22 @@ float TrayDrawerPanel::preferredHeight() const {
 
 void TrayDrawerPanel::create() {
   if (m_config == nullptr) {
+    return;
+  }
+
+  // An empty drawer would otherwise open as a bare, contentless bubble.
+  m_showingEmpty = visibleItemCount() == 0;
+  if (m_showingEmpty) {
+    auto empty = ui::column(
+        {.out = &m_emptyLayout, .align = FlexAlign::Center, .justify = FlexJustify::Center},
+        ui::label({
+            .text = i18n::tr("tray.drawer.empty"),
+            .fontSize = Style::fontSizeBody * contentScale(),
+            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+            .maxLines = 1,
+        })
+    );
+    setRoot(std::move(empty));
     return;
   }
 
@@ -121,6 +146,8 @@ void TrayDrawerPanel::create() {
 
 void TrayDrawerPanel::onClose() {
   m_drawerWidget.reset();
+  m_emptyLayout = nullptr;
+  m_showingEmpty = false;
   clearReleasedRoot();
 }
 
@@ -132,6 +159,11 @@ void TrayDrawerPanel::setAnimationManager(AnimationManager* mgr) noexcept {
 }
 
 void TrayDrawerPanel::doLayout(Renderer& renderer, float width, float height) {
+  if (m_emptyLayout != nullptr) {
+    m_emptyLayout->setSize(width, height);
+    m_emptyLayout->layout(renderer);
+    return;
+  }
   if (m_drawerWidget == nullptr || m_drawerWidget->root() == nullptr) {
     return;
   }

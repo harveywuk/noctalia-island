@@ -2184,7 +2184,7 @@ namespace settings {
     entries.push_back(makeEntry(
         SettingsSection::Shell, "general", tr("settings.schema.shell.date-format.label"),
         tr("settings.schema.shell.date-format.description"), {"shell", "date_format"},
-        TextSetting{.value = cfg.shell.dateFormat, .placeholder = "%A, %x", .browseFileExtensions = {}},
+        TextSetting{.value = cfg.shell.dateFormat, .placeholder = "%A %-d %B", .browseFileExtensions = {}},
         "calendar date format strftime chrono"
     ));
     entries.push_back(makeEntry(

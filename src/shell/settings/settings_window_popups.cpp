@@ -57,6 +57,8 @@ namespace {
 
   constexpr std::int32_t kActionSupportReport = 1;
   constexpr std::int32_t kActionExportConfig = 2;
+  constexpr std::int32_t kActionShowAdvanced = 3;
+  constexpr std::int32_t kActionShowChangedOnly = 4;
   constexpr std::string_view kCalendarDiscoveryOwner = "calendar_discovery";
 
   std::string calendarCredentialError(CalendarService::CredentialOperationResult result) {
@@ -330,6 +332,18 @@ void SettingsWindow::openActionsMenu() {
         }
         DeferredCall::callLater([this]() { openConfigExportDialog(); });
         break;
+      case kActionShowAdvanced:
+        if (m_actionsMenuPopup != nullptr) {
+          m_actionsMenuPopup->close();
+        }
+        DeferredCall::callLater([this]() { setShowAdvanced(!m_showAdvanced); });
+        break;
+      case kActionShowChangedOnly:
+        if (m_actionsMenuPopup != nullptr) {
+          m_actionsMenuPopup->close();
+        }
+        DeferredCall::callLater([this]() { setShowOverriddenOnly(!m_showOverriddenOnly); });
+        break;
       default:
         break;
       }
@@ -339,7 +353,21 @@ void SettingsWindow::openActionsMenu() {
     return;
   }
 
+  // The view filters live here, as in a macOS View menu, rather than as switches in the page header.
   std::vector<ContextMenuControlEntry> entries;
+  entries.push_back(
+      {.id = kActionShowAdvanced,
+       .label = i18n::tr("settings.window.show-advanced"),
+       .checkmark = true,
+       .toggleState = m_showAdvanced ? 1 : 0}
+  );
+  entries.push_back(
+      {.id = kActionShowChangedOnly,
+       .label = i18n::tr("settings.window.show-changed-only"),
+       .checkmark = true,
+       .toggleState = m_showOverriddenOnly ? 1 : 0}
+  );
+  entries.push_back({.separator = true});
   entries.push_back(
       {.id = kActionSupportReport,
        .label = i18n::tr("settings.window.support-report"),
@@ -387,6 +415,31 @@ void SettingsWindow::openActionsMenu() {
           },
       }
   );
+}
+
+void SettingsWindow::setShowAdvanced(bool value) {
+  if (m_config != nullptr && !m_config->setOverride({"shell", "settings_show_advanced"}, value)) {
+    markSettingsWriteError(i18n::tr("settings.errors.write"));
+    return;
+  }
+  m_showAdvanced = value;
+  applyFilterChange();
+}
+
+void SettingsWindow::setShowOverriddenOnly(bool value) {
+  m_showOverriddenOnly = value;
+  applyFilterChange();
+}
+
+void SettingsWindow::applyFilterChange() {
+  const bool hadPendingReset = !m_pendingResetPageScope.empty() || !m_pendingResetSettingPaths.empty();
+  m_pendingResetPageScope.clear();
+  m_pendingResetSettingPaths.clear();
+  if (hadPendingReset) {
+    requestSceneRebuild();
+  } else {
+    requestContentRebuild();
+  }
 }
 
 void SettingsWindow::openConfigExportDialog() {
