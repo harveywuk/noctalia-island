@@ -34,63 +34,66 @@ namespace settings {
     constexpr float kIconTileGlyphSize = 14.0F;
 
     // System Settings gives each pane a coloured rounded tile with a white symbol. Colours follow
-    // the panes they resemble on macOS (Notifications red, Displays blue, Battery green, …).
+    // the panes they resemble on macOS (Notifications red, Displays blue, Battery green, …), and
+    // neighbouring rows get different colours so the list stays easy to scan.
     [[nodiscard]] std::uint32_t iconTileColor(SettingsSection section) {
       constexpr std::uint32_t kGraphite = 0x636366;
-      constexpr std::uint32_t kGrey = 0x8E8E93;
       constexpr std::uint32_t kBlue = 0x0A7AFF;
       constexpr std::uint32_t kIndigo = 0x5856D6;
       constexpr std::uint32_t kPurple = 0xAF52DE;
       constexpr std::uint32_t kCyan = 0x30B0E0;
+      constexpr std::uint32_t kTeal = 0x30A8B8;
       constexpr std::uint32_t kRed = 0xFF3B30;
       constexpr std::uint32_t kPink = 0xFF2D55;
       constexpr std::uint32_t kOrange = 0xFF9500;
       constexpr std::uint32_t kGreen = 0x34C759;
+      constexpr std::uint32_t kBrown = 0xA2845E;
       switch (section) {
       case SettingsSection::Appearance:
-      case SettingsSection::Desktop:
-      case SettingsSection::Dock:
       case SettingsSection::Bar:
       case SettingsSection::WindowBehaviour:
-      case SettingsSection::Session:
       case SettingsSection::Island:
         return kGraphite;
       case SettingsSection::Wallpaper:
         return kCyan;
       case SettingsSection::Templates:
+      case SettingsSection::Screenshot:
         return kPurple;
+      case SettingsSection::Dock:
       case SettingsSection::Launcher:
       case SettingsSection::Workspaces:
       case SettingsSection::WorkspaceTiling:
       case SettingsSection::AppPlacement:
+      case SettingsSection::System:
         return kIndigo;
       case SettingsSection::Notifications:
       case SettingsSection::Calendar:
         return kRed;
       case SettingsSection::Osd:
+      case SettingsSection::InputMotion:
         return kPink;
+      case SettingsSection::Desktop:
       case SettingsSection::Displays:
       case SettingsSection::Security:
       case SettingsSection::Location:
         return kBlue;
       case SettingsSection::Power:
+      case SettingsSection::Shell:
         return kGreen;
+      case SettingsSection::ControlCenter:
+      case SettingsSection::Session:
       case SettingsSection::Hooks:
       case SettingsSection::Plugins:
         return kOrange;
       case SettingsSection::Panels:
-      case SettingsSection::ControlCenter:
-      case SettingsSection::Screenshot:
-      case SettingsSection::Shell:
-      case SettingsSection::Keybinds:
-      case SettingsSection::InputMotion:
-      case SettingsSection::System:
       case SettingsSection::Services:
       case SettingsSection::Niri:
       case SettingsSection::Umbriel:
-        return kGrey;
+        return kTeal;
+      case SettingsSection::Keybinds:
+        return kBrown;
       }
-      return kGrey;
+      return kGraphite;
     }
 
     [[nodiscard]] std::unique_ptr<Flex> makeIconTile(SettingsSection section, float scale) {
