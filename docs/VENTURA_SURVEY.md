@@ -62,3 +62,14 @@ Looked at and left:
 - The Island OSD pill from `noctalia msg osd-show` shows only icon and text, as that command is a status message; the real volume and brightness popups draw the level bar under the label (`volume_show_percentage` hides the number), which is the notch HUD look.
 - "Clear All" in the Notification Centre sits flush with the cards' right edge, a 16 px margin from the screen edge, which is where macOS puts its group controls.
 - The lock screen after the Cupertino tweaks: large time over the date, avatar ring, centred password pill, Sleep / Restart / Shut Down (see [assets/lockscreen](assets/lockscreen/)).
+
+## Fourth pass (3 October 2026, late): motion
+
+The springs are faster than a software `grim` capture, so this pass ran with `shell.animation.speed = 0.12` and took frame bursts of the Island hosting Control Center and the launcher (open and close), a banner arriving and leaving, Control Center's tab switch, the launcher changing height for a provider view, the session panel, the OSD pill, and the dock's menu and tooltips.
+
+Fixed on this branch:
+
+- **The Island changed colour at the wrong moment.** The hosted panel's card was the panel surface colour (near white in light mode) from the first frame, so opening snapped a light card onto the black pill and closing shrank a light card down to pill size before the black Island reappeared, which read as a flash. The card now blends from the Island's own colour to the surface as it grows and back before it lands, while the content fades as before; a resize between two panel sizes stays on the surface.
+- **The dock's menu opened with its first item already highlighted**, a full-width accent bar under a pointer that wasn't over it, and the icon's tooltip stayed on top of the menu. Context menus now open with nothing highlighted until the pointer enters a row or the arrow keys move (Down lands on the first row, Up on the last); the dock hides the tooltip when its menu opens; and the menu's minimum width follows its contents (168 px) instead of 240 px.
+
+Looked at and left: the launcher's height change to a provider view, the session panel's open, the Control Center tab switch and the OSD pill all read as one capsule changing shape; the banner buds out of the pill, fills, and returns to the compact state.

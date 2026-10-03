@@ -52,6 +52,9 @@ public:
   void setHighlightedIndex(std::size_t index);
   [[nodiscard]] bool moveHighlight(int delta);
   [[nodiscard]] bool activateHighlighted();
+  // No row highlighted: a menu opened with the pointer starts this way, as on macOS, until the
+  // pointer enters a row or the arrow keys move.
+  static constexpr std::size_t kNoHighlight = static_cast<std::size_t>(-1);
   [[nodiscard]] std::size_t highlightedIndex() const noexcept { return m_highlightedIndex; }
   [[nodiscard]] std::size_t entryCount() const noexcept { return m_entries.size(); }
   [[nodiscard]] float rowTop(std::size_t index) const noexcept;
