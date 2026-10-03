@@ -1212,6 +1212,7 @@ widget_spacing = 8
     reveal_on_track_change = true
     track_preview_monitor = "all"
     track_preview_seconds = 5
+    up_next_minutes = 10
     volume_bar_height = 18.0
     volume_show_percentage = false
 
@@ -1303,6 +1304,7 @@ widget_spacing = 8
         reveal_on_track_change = true
         track_preview_monitor = "all"
         track_preview_seconds = 5
+        up_next_minutes = 10
         volume_bar_height = 18.0
         volume_show_percentage = false
 
