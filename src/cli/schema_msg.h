@@ -126,6 +126,9 @@ namespace noctalia::cli {
       Positional{"target", {}, {}, false, false, false},
       Positional{"step", {}, {}, false, false, false},
   };
+  inline constexpr std::array kMsgLauncherRunPositionals{
+      Positional{"alias", "A launcher alias, or <provider>:<result id>", {}, true, false, true},
+  };
   inline constexpr std::array kMsgClipboardCopyPositionals{
       Positional{"text", {}, {}, true, false, false},
   };
@@ -488,6 +491,16 @@ namespace noctalia::cli {
     };
     inline constexpr Command keyboardLayoutCycle{
         "keyboard-layout-cycle", "Switch to the next keyboard layout", {}, {}, {}, {}, {}, false
+    };
+    inline constexpr Command launcherRun{
+        "launcher-run",
+        "Run a launcher result by its alias without opening the launcher",
+        {},
+        {},
+        {},
+        kMsgLauncherRunPositionals,
+        {},
+        false
     };
     inline constexpr Command lockscreenWidgetsEdit{
         "lockscreen-widgets-edit", "Open the lockscreen widgets editor", {}, {}, {}, {}, {}, false
@@ -934,6 +947,7 @@ namespace noctalia::cli {
       msg::keyboardBacklightToggle,
       msg::keyboardBacklightUp,
       msg::keyboardLayoutCycle,
+      msg::launcherRun,
       msg::lockscreenWidgetsEdit,
       msg::lockscreenWidgetsExit,
       msg::lockscreenWidgetsToggleEdit,
