@@ -40,12 +40,14 @@
 #include "ipc/ipc_arg_parse.h"
 #include "launcher/app_provider.h"
 #include "launcher/clipboard_provider.h"
+#include "launcher/date_provider.h"
 #include "launcher/dmenu_provider.h"
 #include "launcher/emoji_provider.h"
 #include "launcher/file_provider.h"
 #include "launcher/math_provider.h"
 #include "launcher/panel_provider.h"
 #include "launcher/plugin_launcher_provider.h"
+#include "launcher/process_provider.h"
 #include "launcher/quicklink_provider.h"
 #include "launcher/quicklink_store.h"
 #include "launcher/script_provider.h"
@@ -54,6 +56,7 @@
 #include "launcher/snippet_store.h"
 #include "launcher/system_provider.h"
 #include "launcher/time_provider.h"
+#include "launcher/timer_provider.h"
 #include "launcher/wallpaper_provider.h"
 #include "launcher/window_management_provider.h"
 #include "launcher/window_provider.h"
@@ -663,6 +666,9 @@ void Application::initPanelManagerAndPanels() {
     launcherPanel->addProvider(std::make_unique<ScriptProvider>(&m_configService));
     launcherPanel->addProvider(std::make_unique<SystemProvider>(&m_ipcService));
     launcherPanel->addProvider(std::make_unique<TimeProvider>(&m_clipboardService));
+    launcherPanel->addProvider(std::make_unique<DateProvider>(&m_clipboardService));
+    launcherPanel->addProvider(std::make_unique<TimerProvider>(&m_ipcService));
+    launcherPanel->addProvider(std::make_unique<ProcessProvider>());
     launcherPanel->setCopyTextCallback([this](std::string text) {
       (void)m_clipboardService.copyText(std::move(text));
     });

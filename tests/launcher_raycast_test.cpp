@@ -4,13 +4,17 @@
 
 #include "launcher/alias_store.h"
 #include "launcher/clipboard_provider.h"
+#include "launcher/date_provider.h"
 #include "launcher/launcher_util.h"
+#include "launcher/math_provider.h"
+#include "launcher/process_provider.h"
 #include "launcher/quicklink_provider.h"
 #include "launcher/quicklink_store.h"
 #include "launcher/script_provider.h"
 #include "launcher/snippet_provider.h"
 #include "launcher/snippet_store.h"
 #include "launcher/time_provider.h"
+#include "launcher/timer_provider.h"
 #include "launcher/usage_tracker.h"
 #include "launcher/window_management_provider.h"
 #include "tests/test_check.h"
@@ -18,6 +22,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <deque>
 #include <filesystem>
 #include <string>
 #include <unistd.h>
@@ -269,6 +274,100 @@ echo "$1"
     }
   }
 
+  void testTimers() {
+    using namespace std::chrono;
+    auto request = TimerProvider::parse("timer 10m", false);
+    TEST_CHECK(request.has_value() && request->duration == minutes(10) && request->label.empty());
+    request = TimerProvider::parse("set timer 1h30 tea", false);
+    TEST_CHECK(request.has_value() && request->duration == minutes(90) && request->label == "Tea");
+    request = TimerProvider::parse("15 min stretch timer", false);
+    TEST_CHECK(request.has_value() && request->duration == minutes(15) && request->label == "Stretch");
+    request = TimerProvider::parse("25 minutes focus", true);
+    TEST_CHECK(request.has_value() && request->duration == minutes(25) && request->label == "Focus");
+    request = TimerProvider::parse("2h", true);
+    TEST_CHECK(request.has_value() && request->duration == hours(2));
+    request = TimerProvider::parse("90", true);
+    TEST_CHECK(request.has_value() && request->duration == minutes(90));
+    // Without its prefix the word "timer" is required, and plain searches are left alone.
+    TEST_CHECK(!TimerProvider::parse("10 min", false).has_value());
+    TEST_CHECK(!TimerProvider::parse("firefox", true).has_value());
+    TEST_CHECK(!TimerProvider::parse("timer 0m", false).has_value());
+    TEST_CHECK(!TimerProvider::parse("timer 48h", false).has_value());
+    TEST_CHECK(TimerProvider::formatRemaining(seconds(299)) == "4:59");
+    TEST_CHECK(TimerProvider::formatRemaining(seconds(3661)) == "1:01:01");
+    TEST_CHECK(TimerProvider::formatRemaining(seconds(7)) == "0:07");
+  }
+
+  void testProcesses() {
+    const auto stat = ProcessProvider::parseStat(
+        "1234 (my (odd) name) S 1 1234 1234 0 -1 4194560 100 0 0 0 250 50 0 0 20 0 1 0 98765 1000000 300 "
+        "18446744073709551615 1 1 0 0 0 0 0 0 0 0 0 0 17 0 0 0 0 0 0"
+    );
+    TEST_CHECK(stat.has_value());
+    TEST_CHECK(stat->comm == "my (odd) name" && stat->state == 'S');
+    TEST_CHECK(stat->utime == 250 && stat->stime == 50 && stat->starttime == 98765);
+    TEST_CHECK(!ProcessProvider::parseStat("garbage").has_value());
+    // The live scan lists this test's own parent shell, never the test itself.
+    const auto processes = ProcessProvider::scan();
+    TEST_CHECK(std::ranges::none_of(processes, [](const ProcessProvider::Process& p) { return p.pid == ::getpid(); }));
+    for (const auto& process : processes) {
+      TEST_CHECK(!process.name.empty() && process.pid > 0);
+    }
+  }
+
+  void testDates() {
+    using namespace std::chrono;
+    const year_month_day today = 2026y / October / 3; // a Saturday
+    const auto ymd = [](int y, unsigned m, unsigned d) { return year{y} / month{m} / day{d}; };
+
+    auto a = DateProvider::answer("3 days from now", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 10, 6));
+    a = DateProvider::answer("2 weeks ago", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 9, 19));
+    a = DateProvider::answer("in 1 month", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 11, 3));
+    a = DateProvider::answer("days until 25 dec", today, false);
+    TEST_CHECK(a.has_value() && a->count == 83 && a->unit == "days");
+    a = DateProvider::answer("weeks since 2026-01-03", today, false);
+    TEST_CHECK(a.has_value() && a->count == 39 && a->unit == "weeks");
+    a = DateProvider::answer("next friday", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 10, 9));
+    a = DateProvider::answer("last monday", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 9, 28));
+    a = DateProvider::answer("today + 10 days", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 10, 13));
+    a = DateProvider::answer("25 dec - 2 weeks", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 12, 11));
+    // Month ends clamp: 31 Oct + 1 month is 30 Nov.
+    a = DateProvider::answer("1 month from 31 oct", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 11, 30));
+    // A past day without a year means next year's.
+    TEST_CHECK(DateProvider::parseDate("1 jan", today) == std::optional(ymd(2027, 1, 1)));
+    TEST_CHECK(DateProvider::parseDate("25/12", today) == std::optional(ymd(2026, 12, 25)));
+    TEST_CHECK(DateProvider::parseDate("december 25th 2027", today) == std::optional(ymd(2027, 12, 25)));
+    TEST_CHECK(DateProvider::parseDate("friday", today) == std::optional(ymd(2026, 10, 9)));
+    // Plain searches, maths and times are not dates.
+    TEST_CHECK(!DateProvider::answer("firefox", today, false).has_value());
+    TEST_CHECK(!DateProvider::answer("2+2", today, false).has_value());
+    TEST_CHECK(!DateProvider::answer("3pm in tokyo", today, false).has_value());
+    TEST_CHECK(!DateProvider::answer("today", today, false).has_value());
+    TEST_CHECK(DateProvider::answer("today", today, true).has_value());
+    TEST_CHECK(DateProvider::formatDate(ymd(2026, 12, 25)) == "Friday, 25 December 2026");
+  }
+
+  void testCalculatorHistory() {
+    const fs::path path = fs::temp_directory_path() / ("noctalia-calc-" + std::to_string(::getpid()) + ".json");
+    fs::remove(path);
+    TEST_CHECK(MathProvider::loadHistory(path.string()).empty());
+    std::deque<MathProvider::HistoryEntry> history;
+    history.push_front({.expression = "2+2", .result = "4"});
+    history.push_front({.expression = "10 cm to in", .result = "3.937 in"});
+    MathProvider::saveHistory(path.string(), history);
+    const auto loaded = MathProvider::loadHistory(path.string());
+    TEST_CHECK(loaded.size() == 2 && loaded.front().result == "3.937 in" && loaded.back().expression == "2+2");
+    fs::remove(path);
+  }
+
   void testRecent() {
     // The tracker keeps a short cross-provider history for Suggestions, newest first, de-duplicated.
     const fs::path dir = fs::temp_directory_path() / ("noctalia-usage-" + std::to_string(::getpid()));
@@ -332,6 +431,10 @@ int main() {
   testTime();
   testWindowManagement();
   testRecent();
+  testTimers();
+  testProcesses();
+  testDates();
+  testCalculatorHistory();
   testAliases();
   return 0;
 }

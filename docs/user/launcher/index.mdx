@@ -28,9 +28,9 @@ The bar along the bottom names the selected result's kind and its keys: **Return
 - **Tab** autocompletes the selected result: a provider row from the `/` overview puts its prefix in the field, a search quicklink puts its keyword in (`gh `), and a fallback row carries your query into that provider.
 - **Esc** inside a provider view you reached from the root search (for example after typing `/clip`) goes back to the root search; **Esc** at the root, or in a view the launcher opened with (the clipboard shortcut), closes the launcher.
 
-### Actions menu
+### Action panel
 
-**Shift + Return** (or a right click) lists everything you can do with the selected result, Raycast-style: the primary action first, then the result's own actions (for example **Quit Application** and **Copy Name** for a running application, **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. **Ctrl + Return** runs the first of the result's own actions directly.
+**Shift + Return** (or a right click) opens the action panel over the bottom-right of the results, like Raycast's ⌘K panel: the primary action first with its **↵** hint, then the result's own actions (the first of which **Ctrl + Return** runs directly; for example **Quit Application** and **Copy Name** for a running application, **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. While the panel is open the search field filters the actions; **Up** / **Down** move, **Return** runs, **Esc** or **Shift + Return** closes it and brings the search back.
 
 ### Aliases and hotkeys
 
@@ -110,6 +110,7 @@ A built-in expression evaluator powered by [`libqalculate`](https://qalculate.gi
   unit conversion (`10 cm to in`, `5 ft in cm`, `100 km/h to mph`, `70F in C`), number bases (`0xff`), and currency conversion
   (`10 USD to EUR`, `20 GBP in JPY`). Both `to` and `in` work. Decimal and thousands separators follow the system numeric locale
   (for example `10000,50+2000,25` under `pt_BR`). Pressing **Enter** copies the result to your clipboard.
+- **History**: `/calc` with nothing typed lists the last answers you copied, newest first, each with **Copy Answer** and **Copy Expression**; **Clear History** is at the end. The list is kept in `~/.local/state/noctalia/calculator_history.json`.
 - **Currency rates**: Exchange rates are cached locally and refreshed in the background from libqalculate's
   ECB/global providers when `shell.launcher.fetch_exchange_rates` is enabled (the default). Refresh is also
   skipped when `[shell].offline_mode` is enabled; in either case the last cached rates are used.
@@ -211,8 +212,30 @@ See the time anywhere, or convert a time between places.
 Toggle settings and run system actions.
 
 - **Prefix**: `/sys ` (also in global search)
-- **Commands**: Toggle Dark Mode, Do Not Disturb, Wi-Fi, Bluetooth, Keep Awake, Night Light, Mute and Microphone; Volume Up and Down, Brightness Up and Down; Take Screenshot, Screenshot and Annotate, Record Screen, Stop Recording, Turn Off Displays, Clear Clipboard History, Clear Notifications, Empty Trash, Eject All Disks and Reload Configuration.
+- **Commands**: Toggle Dark Mode, Do Not Disturb, Wi-Fi, Bluetooth, Keep Awake, Night Light, Mute and Microphone; Volume Up and Down, Brightness Up and Down; Take Screenshot, Screenshot and Annotate, Record Screen, Pick Color (with `hyprpicker`), Stop Recording, Turn Off Displays, Clear Clipboard History, Clear Notifications, Empty Trash, Eject All Disks and Reload Configuration.
 - **Matching**: In global search every word you type must start a word of the command's name or keywords, so short queries don't pull in unrelated commands.
+
+### Timers
+
+Start a countdown that lives in the Dynamic Island.
+
+- **Prefix**: `/timer ` (also in global search when the word "timer" is typed)
+- **Examples**: `timer 10m`, `set timer 1h30 tea`, `15 min stretch timer`; after the prefix just `25` or `2h focus`.
+- **Functionality**: The timer counts down as a live activity in the Island, a ring that empties, with its label and the time left. A notification says when it is done. `/timer` lists running timers; their actions are **Cancel Timer** and **Add 1 Minute**. Timers live in the shell process and don't survive a restart.
+
+### Kill Process
+
+- **Prefix**: `/kill ` (never in global search)
+- **Source**: Your own processes from `/proc`, busiest first, with their PID, average CPU share and resident memory.
+- **Functionality**: Search by name, command line or PID. **Return** sends SIGTERM; **Force Kill** in the action panel sends SIGKILL.
+
+### Dates
+
+Date arithmetic in the search field, like Raycast's calculator.
+
+- **Prefix**: `/date ` (also in global search)
+- **Examples**: `3 days from now`, `2 weeks ago`, `in 1 month`, `days until 25 dec`, `weeks since 2026-01-01`, `next friday`, `last monday`, `today + 10 days`, `25 dec - 2 weeks`, `1 month from 31 oct`.
+- **Functionality**: Shows the resulting date with how far away it is, or the number of days or weeks between two dates. Dates are read day first (`25/12`, `25 dec`, `december 25th 2027`, `2026-12-25`); a day without a year means the next one. Return copies the answer.
 
 ### Window management
 
@@ -345,7 +368,7 @@ So `provider_prefix = "/"` with a trigger word of `emo` gives `/emo`. Changing `
 
 Each provider type gets its trigger word from a different place:
 
-- **Built-in providers** (Calculator, Clipboard, Emoji, Files, Panels, Quicklinks, Scripts, Session, Snippets, System, Time, Wallpaper, Windows): `[shell.launcher.providers.<name>]`.
+- **Built-in providers** (Calculator, Clipboard, Date, Emoji, Files, Panels, Processes, Quicklinks, Scripts, Session, Snippets, System, Time, Timer, Wallpaper, WindowManagement, Windows): `[shell.launcher.providers.<name>]`.
 - **Dmenu providers**: the `prefix`/`global` keys on the entry's `[shell.launcher.dmenu.entry.<id>]` table.
 - **Plugin providers**: the `[[launcher_provider]]` manifest `prefix`, optionally overridden per-user via `[shell.launcher.providers."<pluginId>:<entry>"]`.
 

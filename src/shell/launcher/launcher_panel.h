@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-class ContextMenuPopup;
 class Flex;
 class Glyph;
 class Image;
@@ -121,8 +120,30 @@ private:
   // Esc inside a provider view reached from the root search goes back to it; returns false to close.
   bool popToRoot();
   void recordActivation(const LauncherProvider& provider, const std::string& resultId);
+  // Raycast's action panel: a searchable list of the selected result's actions, with key hints,
+  // floating over the results. The search field filters it while it is open.
+  struct ActionEntry {
+    std::string label;
+    std::string hint;
+    std::function<void()> run;
+  };
+  struct ActionRow {
+    Flex* row = nullptr;
+    InputArea* area = nullptr;
+    Label* label = nullptr;
+    Flex* hintCap = nullptr;
+    Label* hint = nullptr;
+  };
+  [[nodiscard]] std::vector<ActionEntry> actionEntriesFor(const LauncherResult& result);
   [[nodiscard]] bool openActionsMenu(std::size_t index, float anchorX, float anchorY);
   [[nodiscard]] bool openSelectedActionsMenu();
+  void closeActionPanel(bool restoreQuery);
+  void refreshActionPanel();
+  void runActionPanelSelection();
+  [[nodiscard]] bool actionPanelKey(std::uint32_t sym, std::uint32_t modifiers);
+  [[nodiscard]] float actionPanelHeight(float scale) const;
+  void layoutActionPanel(Renderer& renderer, float width, float height);
+  [[nodiscard]] bool dismissTransientUi() override;
   // Runs the first extra action of the selected result (Ctrl+Return, Raycast's secondary action).
   bool runSecondaryAction();
   void runProviderAction(const LauncherResult& result, std::string_view actionId);
@@ -232,7 +253,19 @@ private:
   std::uint64_t m_desktopEntriesVersion = 0;
   ConfigService* m_config = nullptr;
   AsyncTextureCache* m_asyncTextures = nullptr;
-  std::unique_ptr<ContextMenuPopup> m_actionsMenu;
+  bool m_actionPanelOpen = false;
+  LauncherResult m_actionResult;
+  std::vector<ActionEntry> m_actionEntries;
+  std::vector<std::size_t> m_actionVisible;
+  std::size_t m_actionSelected = 0;
+  std::string m_actionFilter;
+  std::string m_actionReturnQuery;
+  std::size_t m_actionReturnIndex = 0;
+  Flex* m_actionPanel = nullptr;
+  Label* m_actionTitle = nullptr;
+  Flex* m_actionList = nullptr;
+  Label* m_actionEmpty = nullptr;
+  std::vector<ActionRow> m_actionRows;
   Signal<>::ScopedConnection m_appIconColorizeConn;
   std::function<void(const LauncherProvider&)> m_onCopiedActivation;
   std::function<void(std::string)> m_copyText;
