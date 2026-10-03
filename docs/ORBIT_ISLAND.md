@@ -96,6 +96,14 @@ byte counts are not reliable live percentages, so this reader shows activity
 instead of an estimated percentage. Native desktop progress, if Steam publishes
 it, takes precedence over the log reader.
 
+## Screenshot thumbnail
+
+When the shell saves a screenshot, its "Screenshot saved" notification carries a
+thumbnail at the card's right, like a macOS screenshot thumbnail. Clicking the card
+opens the image, and its buttons are Markup (the shell's annotator) and Show in
+Folder. `noctalia msg island-focus` reaches the same buttons from the keyboard:
+Tab to one, Enter to use it, Escape to dismiss.
+
 ## Battery indicators
 
 The island reuses Noctalia's UPower and Bluetooth battery services. A system
