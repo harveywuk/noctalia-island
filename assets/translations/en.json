@@ -40,6 +40,8 @@
     },
     "downloads": {
       "title": "Downloads",
+      "in-progress": "In Progress",
+      "working": "Working…",
       "downloading": "Downloading",
       "installing": "Installing",
       "preparing": "Preparing download",

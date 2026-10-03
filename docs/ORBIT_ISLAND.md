@@ -108,6 +108,47 @@ byte counts are not reliable live percentages, so this reader shows activity
 instead of an estimated percentage. Native desktop progress, if Steam publishes
 it, takes precedence over the log reader.
 
+## Script activities
+
+Scripts and keybinds can post their own live activity. It shows like a download:
+a ring around its icon with its title in the capsule, and a row in the hover card.
+With Split activities on, a second job (or a download) sits in the bubble beside
+the capsule; clicking the bubble swaps them.
+
+```sh
+noctalia msg island-activity-start backup "Backing up Documents"
+noctalia msg island-activity-update backup 40           # 40 %
+noctalia msg island-activity-update backup - "Verifying" # spinner, new title
+noctalia msg island-activity-end backup
+```
+
+`start` begins with a spinner; `update` takes a percentage from 0 to 100, or `-`
+for a spinner, and an optional new title. Each command also accepts one JSON
+object, which is the only way to pick an icon:
+
+```sh
+noctalia msg island-activity-start '{"id":"build","title":"Building","icon":"hammer","progress":75}'
+```
+
+Icons are the shell's Tabler glyph names. Starting an id that already exists
+restarts it. An activity nobody updates for an hour is dropped, so a script that
+dies doesn't leave it behind. Script activities share the downloads slot in the
+activity priority setting, and the card's heading reads "In Progress" when one is
+present. Without an icon, a script activity shows a terminal symbol.
+
+## Quick pills
+
+Scripts and keybinds can flash a short pill, like the Focus pill, with any icon:
+
+```sh
+noctalia msg osd-show clipboard-check Copied
+noctalia msg osd-show shield-lock "VPN connected"
+```
+
+The icon is a Tabler glyph name. The pill fades after a moment. With the Island off
+it shows as a regular OSD, and it shows even when `[osd.kinds]` hides the built-in
+OSDs.
+
 ## Battery indicators
 
 The island reuses Noctalia's UPower and Bluetooth battery services. A system
