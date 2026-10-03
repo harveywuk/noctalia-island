@@ -1,6 +1,7 @@
 #include "shell/settings/settings_sidebar.h"
 
 #include "i18n/i18n.h"
+#include "render/core/color.h"
 #include "render/core/renderer.h"
 #include "shell/settings/settings_registry.h"
 #include "ui/builders.h"
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <string_view>
@@ -27,6 +29,90 @@ namespace settings {
     constexpr float kPrimaryNavGlyphSize = 18.0F;
     constexpr float kPrimaryNavGap = 6.0F;
     constexpr float kPrimaryNavPaddingH = 10.0F;
+    constexpr float kIconTileSize = 22.0F;
+    constexpr float kIconTileRadius = 6.0F;
+    constexpr float kIconTileGlyphSize = 14.0F;
+
+    // System Settings gives each pane a coloured rounded tile with a white symbol. Colours follow
+    // the panes they resemble on macOS (Notifications red, Displays blue, Battery green, …), and
+    // neighbouring rows get different colours so the list stays easy to scan.
+    [[nodiscard]] std::uint32_t iconTileColor(SettingsSection section) {
+      constexpr std::uint32_t kGraphite = 0x636366;
+      constexpr std::uint32_t kBlue = 0x0A7AFF;
+      constexpr std::uint32_t kIndigo = 0x5856D6;
+      constexpr std::uint32_t kPurple = 0xAF52DE;
+      constexpr std::uint32_t kCyan = 0x30B0E0;
+      constexpr std::uint32_t kTeal = 0x30A8B8;
+      constexpr std::uint32_t kRed = 0xFF3B30;
+      constexpr std::uint32_t kPink = 0xFF2D55;
+      constexpr std::uint32_t kOrange = 0xFF9500;
+      constexpr std::uint32_t kGreen = 0x34C759;
+      constexpr std::uint32_t kBrown = 0xA2845E;
+      switch (section) {
+      case SettingsSection::Appearance:
+      case SettingsSection::Bar:
+      case SettingsSection::WindowBehaviour:
+      case SettingsSection::Island:
+        return kGraphite;
+      case SettingsSection::Wallpaper:
+        return kCyan;
+      case SettingsSection::Templates:
+      case SettingsSection::Screenshot:
+        return kPurple;
+      case SettingsSection::Dock:
+      case SettingsSection::Launcher:
+      case SettingsSection::Workspaces:
+      case SettingsSection::WorkspaceTiling:
+      case SettingsSection::AppPlacement:
+      case SettingsSection::System:
+        return kIndigo;
+      case SettingsSection::Notifications:
+      case SettingsSection::Calendar:
+        return kRed;
+      case SettingsSection::Osd:
+      case SettingsSection::InputMotion:
+        return kPink;
+      case SettingsSection::Desktop:
+      case SettingsSection::Displays:
+      case SettingsSection::Security:
+      case SettingsSection::Location:
+        return kBlue;
+      case SettingsSection::Power:
+      case SettingsSection::Shell:
+        return kGreen;
+      case SettingsSection::ControlCenter:
+      case SettingsSection::Session:
+      case SettingsSection::Hooks:
+      case SettingsSection::Plugins:
+        return kOrange;
+      case SettingsSection::Panels:
+      case SettingsSection::Services:
+      case SettingsSection::Niri:
+      case SettingsSection::Umbriel:
+        return kTeal;
+      case SettingsSection::Keybinds:
+        return kBrown;
+      }
+      return kGraphite;
+    }
+
+    [[nodiscard]] std::unique_ptr<Flex> makeIconTile(SettingsSection section, float scale) {
+      return ui::row(
+          {
+              .align = FlexAlign::Center,
+              .justify = FlexJustify::Center,
+              .fill = fixedColorSpec(rgbHex(iconTileColor(section))),
+              .radius = kIconTileRadius * scale,
+              .width = kIconTileSize * scale,
+              .height = kIconTileSize * scale,
+          },
+          ui::glyph({
+              .glyph = std::string(sectionGlyph(section)),
+              .glyphSize = kIconTileGlyphSize * scale,
+              .color = fixedColorSpec(rgbHex(0xFFFFFF)),
+          })
+      );
+    }
 
     void addNavButton(RovingListNavHost& nav, std::unique_ptr<Button> button, std::function<void()> onClick) {
       Button* raw = button.get();
@@ -65,13 +151,11 @@ namespace settings {
 
     // Primary sidebar nav style: top-level section rows with a bolder label.
     std::unique_ptr<Button> makePrimaryNavButton(
-        std::string_view glyph, std::string text, float scale, bool selected, std::function<void()> onClick
+        SettingsSection section, std::string text, float scale, bool selected, std::function<void()> onClick
     ) {
       return ui::button({
           .text = std::move(text),
-          .glyph = std::string(glyph),
           .fontSize = Style::fontSizeBody * scale,
-          .glyphSize = kPrimaryNavGlyphSize * scale,
           .contentAlign = ButtonContentAlign::Start,
           .variant = selected ? ButtonVariant::TabActive : ButtonVariant::Tab,
           .minHeight = Style::controlHeightSm * scale,
@@ -80,9 +164,10 @@ namespace settings {
           .gap = kPrimaryNavGap * scale,
           .radius = Style::scaledRadiusMd(scale),
           .onClick = std::move(onClick),
-          .configure = [](Button& button) {
+          .configure = [section, scale](Button& button) {
             makeButtonLabelBold(button);
             button.setTabStop(false);
+            button.insertChildAt(0, makeIconTile(section, scale));
           },
       });
     }
@@ -249,10 +334,7 @@ namespace settings {
           requestRebuild();
         };
         addNavButton(
-            *nav,
-            makePrimaryNavButton(
-                sectionGlyph(section), i18n::tr(settingsSectionLabelKey(section)), scale, selected, onClick
-            ),
+            *nav, makePrimaryNavButton(section, i18n::tr(settingsSectionLabelKey(section)), scale, selected, onClick),
             onClick
         );
       }
@@ -279,8 +361,8 @@ namespace settings {
       addNavButton(
           *nav,
           makePrimaryNavButton(
-              sectionGlyph(SettingsSection::Bar), i18n::tr("settings.entities.bar.label", "name", barName), scale,
-              barSelected, onBarClick
+              SettingsSection::Bar, i18n::tr("settings.entities.bar.label", "name", barName), scale, barSelected,
+              onBarClick
           ),
           onBarClick
       );

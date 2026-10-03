@@ -71,6 +71,9 @@ public:
   [[nodiscard]] virtual bool fillsWidth() const noexcept { return false; }
   [[nodiscard]] virtual bool fillsHeight() const noexcept { return false; }
   [[nodiscard]] virtual bool hasDecoration() const { return true; }
+  // False keeps the panel out of the Dynamic Island even when the Island hosts panels, for
+  // panels that belong to a screen edge (Notification Centre).
+  [[nodiscard]] virtual bool islandHostable() const noexcept { return true; }
   [[nodiscard]] virtual LayerShellLayer layer() const { return LayerShellLayer::Top; }
   // Keyboard focus policy. `None` means the panel never takes keyboard focus, so the
   // app the user is typing into keeps it — that also rules out outside-click

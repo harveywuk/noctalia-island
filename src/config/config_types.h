@@ -98,6 +98,8 @@ struct IslandConfig {
   bool outerProgressRing = false;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
+  // A second running activity detaches into a round bubble beside the capsule, as on iPhone.
+  bool splitActivities = true;
   bool cycleActivities = false;
   int activityCycleSeconds = 5;
   int hoverOpenDelayMs = 110;
@@ -137,6 +139,7 @@ struct IslandMonitorOverride {
   std::optional<bool> outerProgressRing;
   std::optional<float> mediaArtworkSize;
   std::optional<IslandActivityPriority> activityPriority;
+  std::optional<bool> splitActivities;
   std::optional<bool> cycleActivities;
   std::optional<int> activityCycleSeconds;
   std::optional<int> hoverOpenDelayMs;
@@ -194,6 +197,8 @@ inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOv
     base.mediaArtworkSize = *override.mediaArtworkSize;
   if (override.activityPriority)
     base.activityPriority = *override.activityPriority;
+  if (override.splitActivities)
+    base.splitActivities = *override.splitActivities;
   if (override.cycleActivities)
     base.cycleActivities = *override.cycleActivities;
   if (override.activityCycleSeconds)
@@ -848,6 +853,8 @@ struct DockConfig {
   // Inside outline for the dock background.
   ColorSpec border = colorSpecFromRole(ColorRole::Outline);
   float borderWidth = 0.0F;
+  // Faint hairline around the dock's glass, as on macOS; drawn when border_width is 0.
+  bool hairlineBorder = true;
   // Defaults float a fully rounded dock above the screen edge, like macOS.
   std::int32_t radius = static_cast<std::int32_t>(Style::radiusXl); // dock background corner radius
   std::int32_t radiusTopLeft = static_cast<std::int32_t>(Style::radiusXl);
@@ -878,6 +885,7 @@ struct DockConfig {
   float inactiveOpacity = 1.0F;      // non-focused app icon opacity
   bool showDots = true;              // show a dot below apps that are running
   bool showInstanceCount = false;    // show a badge with count when app has >1 window
+  bool showBadges = true;            // red unread-count badges that apps publish (LauncherEntry)
   DockLauncherPosition launcherPosition = DockLauncherPosition::None;
   std::string launcherIcon = "grid-dots";   // Tabler glyph name
   std::string launcherCustomImage = "";     // image path; overrides launcherIcon glyph when set
@@ -952,6 +960,7 @@ struct OsdKindsConfig {
   bool media = true;
   bool privacy = true;
   bool keyboardBacklight = true;
+  bool charging = true;
   bool operator==(const OsdKindsConfig&) const = default;
 };
 
