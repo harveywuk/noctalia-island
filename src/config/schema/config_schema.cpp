@@ -65,6 +65,7 @@ namespace noctalia::config::schema {
         field(&OsdKindsConfig::media, "media"),
         field(&OsdKindsConfig::privacy, "privacy"),
         field(&OsdKindsConfig::keyboardBacklight, "keyboard_backlight"),
+        field(&OsdKindsConfig::charging, "charging"),
     };
     return s;
   }
@@ -97,6 +98,7 @@ namespace noctalia::config::schema {
         field(&IslandConfig::outerProgressRing, "outer_progress_ring"),
         field(&IslandConfig::mediaArtworkSize, "media_artwork_size", Range<float>{40.0F, 80.0F}),
         enumField(&IslandConfig::activityPriority, "activity_priority", kIslandActivityPriority),
+        field(&IslandConfig::splitActivities, "split_activities"),
         field(&IslandConfig::cycleActivities, "cycle_activities"),
         field(&IslandConfig::activityCycleSeconds, "activity_cycle_seconds", Range<std::int64_t>{1, 30}),
         field(&IslandConfig::hoverOpenDelayMs, "hover_open_delay_ms", Range<std::int64_t>{0, 2000}),
@@ -2826,6 +2828,7 @@ namespace noctalia::config::schema {
         optionalBoolField(&IslandMonitorOverride::outerProgressRing, "outer_progress_ring"),
         optionalFloatField(&IslandMonitorOverride::mediaArtworkSize, "media_artwork_size", Range<float>{40, 80}),
         optionalEnumField(&IslandMonitorOverride::activityPriority, "activity_priority", kIslandActivityPriority),
+        optionalBoolField(&IslandMonitorOverride::splitActivities, "split_activities"),
         optionalBoolField(&IslandMonitorOverride::cycleActivities, "cycle_activities"),
         optionalIntField(
             &IslandMonitorOverride::activityCycleSeconds, "activity_cycle_seconds", Range<std::int64_t>{1, 30}

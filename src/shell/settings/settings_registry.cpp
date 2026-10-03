@@ -1180,6 +1180,7 @@ namespace settings {
       auto priority = enumSelect(kIslandActivityPriority, island.activityPriority);
       priority.preferredWidth = 280;
       islandSetting("activities", "activity_priority", std::move(priority));
+      islandSetting("activities", "split_activities", ToggleSetting{island.splitActivities});
       islandSetting("activities", "cycle_activities", ToggleSetting{island.cycleActivities});
       islandSetting("activities", "activity_cycle_seconds", SliderSetting{island.activityCycleSeconds, 1, 30, 1, true});
       islandSetting("hover-timing", "hover_open_delay_ms", SliderSetting{island.hoverOpenDelayMs, 0, 2000, 10, true});
@@ -2606,6 +2607,11 @@ namespace settings {
         SettingsSection::Osd, "kinds", tr("settings.schema.shell.osd-kinds-keyboard-backlight.label"),
         tr("settings.schema.shell.osd-kinds-keyboard-backlight.description"), {"osd", "kinds", "keyboard_backlight"},
         ToggleSetting{cfg.osd.kinds.keyboardBacklight}, "hud overlay keyboard backlight kbd"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Osd, "kinds", tr("settings.schema.shell.osd-kinds-charging.label"),
+        tr("settings.schema.shell.osd-kinds-charging.description"), {"osd", "kinds", "charging"},
+        ToggleSetting{cfg.osd.kinds.charging}, "hud overlay battery power charger plugged ac"
     ));
     // Gate every OSD entry after the master toggle on osd.enabled, preserving any per-entry visibility.
     for (std::size_t i = osdGatedStart; i < entries.size(); ++i) {

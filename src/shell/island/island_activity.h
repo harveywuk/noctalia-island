@@ -37,6 +37,14 @@ namespace island {
     return Activity::None;
   }
 
+  // The split Island's bubble: the first other running activity in priority order.
+  constexpr Activity secondaryActivity(Activities available, ActivityOrder order, Activity primary) {
+    for (const auto activity : order)
+      if (activity != primary && available.contains(activity))
+        return activity;
+    return Activity::None;
+  }
+
   class CompactActivity {
   public:
     using Clock = std::chrono::steady_clock;
@@ -50,6 +58,14 @@ namespace island {
         m_paused = now;
     }
 
+    // Brings an activity into the capsule (a click on the split bubble) until it ends.
+    void promote(Activity activity) {
+      m_promoted = activity;
+      m_selected = activity;
+      m_next.reset();
+      m_paused.reset();
+    }
+
     void
     update(Activities available, IslandActivityPriority priority, bool cycle, int seconds, bool paused, TimePoint now) {
       const auto order = activityOrder(priority);
@@ -58,8 +74,10 @@ namespace island {
       m_priority = priority;
       m_cycle = cycle;
       m_interval = interval;
+      if (!available.contains(m_promoted))
+        m_promoted = Activity::None;
       if (changed || !cycle || !available.contains(m_selected)) {
-        m_selected = preferredActivity(available, order);
+        m_selected = preferredActivity(available, order, m_promoted);
         m_next.reset();
         m_paused.reset();
       }
@@ -95,6 +113,7 @@ namespace island {
 
   private:
     Activity m_selected = Activity::None;
+    Activity m_promoted = Activity::None;
     IslandActivityPriority m_priority = IslandActivityPriority::TimersDownloadsMedia;
     bool m_cycle = false;
     std::chrono::seconds m_interval{5};
