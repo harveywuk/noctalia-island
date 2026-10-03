@@ -24,6 +24,12 @@ public:
 
   bool activate(const LauncherResult& result) override;
 
+  [[nodiscard]] bool showsPreview() const override { return true; }
+  [[nodiscard]] std::optional<LauncherPreview> preview(const LauncherResult& result) const override;
+  [[nodiscard]] std::string primaryActionLabel(const LauncherResult& result) const override;
+  [[nodiscard]] std::vector<LauncherAction> actions(const LauncherResult& result) const override;
+  LauncherActionOutcome runAction(const LauncherResult& result, std::string_view actionId) override;
+
 private:
   struct EmojiEntry {
     std::string emoji;

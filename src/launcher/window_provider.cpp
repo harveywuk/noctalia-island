@@ -7,6 +7,7 @@
 #include "system/internal_app_metadata.h"
 #include "util/fuzzy_match.h"
 #include "util/string_utils.h"
+#include "wayland/wayland_toplevels.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -139,4 +140,29 @@ bool WindowProvider::activate(const LauncherResult& result) {
 
   m_platform->focusCompositorWindow(result.id);
   return true;
+}
+
+std::string WindowProvider::primaryActionLabel(const LauncherResult& /*result*/) const {
+  return i18n::tr("launcher.actions.switch-to-window");
+}
+
+std::vector<LauncherAction> WindowProvider::actions(const LauncherResult& /*result*/) const {
+  return {{.id = "close", .label = i18n::tr("launcher.actions.close-window")}};
+}
+
+LauncherActionOutcome WindowProvider::runAction(const LauncherResult& result, std::string_view actionId) {
+  if (actionId != "close" || m_platform == nullptr) {
+    return LauncherActionOutcome::Failed;
+  }
+  // Match the toplevel by its compositor id, or by title when ids are not exact.
+  const std::string appId = StringUtils::toLower(result.subtitle);
+  auto windows =
+      appId.empty() ? m_platform->enrichedWindowsWithoutAppId() : m_platform->enrichedWindowsForApp(appId, appId);
+  const auto byId = std::ranges::find(windows, result.id, &ToplevelInfo::identifier);
+  const auto match = byId != windows.end() ? byId : std::ranges::find(windows, result.title, &ToplevelInfo::title);
+  if (match == windows.end()) {
+    return LauncherActionOutcome::Failed;
+  }
+  m_platform->closeToplevelInfo(*match);
+  return LauncherActionOutcome::KeepOpen;
 }

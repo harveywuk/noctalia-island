@@ -39,12 +39,21 @@
 #include "i18n/i18n_service.h"
 #include "ipc/ipc_arg_parse.h"
 #include "launcher/app_provider.h"
+#include "launcher/clipboard_provider.h"
 #include "launcher/dmenu_provider.h"
 #include "launcher/emoji_provider.h"
+#include "launcher/file_provider.h"
 #include "launcher/math_provider.h"
 #include "launcher/panel_provider.h"
 #include "launcher/plugin_launcher_provider.h"
+#include "launcher/quicklink_provider.h"
+#include "launcher/quicklink_store.h"
+#include "launcher/script_provider.h"
 #include "launcher/session_provider.h"
+#include "launcher/snippet_provider.h"
+#include "launcher/snippet_store.h"
+#include "launcher/system_provider.h"
+#include "launcher/time_provider.h"
 #include "launcher/wallpaper_provider.h"
 #include "launcher/window_provider.h"
 #include "notification/notifications.h"
@@ -62,7 +71,6 @@
 #include "scripting/plugin_panel_shell.h"
 #include "scripting/plugin_registry.h"
 #include "scripting/plugin_runtime_context.h"
-#include "shell/clipboard/clipboard_panel.h"
 #include "shell/clipboard/clipboard_paste.h"
 #include "shell/control_center/control_center_panel.h"
 #include "shell/greeter/greeter_appearance_sync.h"
@@ -569,28 +577,17 @@ void Application::initPanelManagerAndPanels() {
       m_settingsWindow.onExternalOptionsChanged();
     });
   });
-  auto clipboardPanel = std::make_unique<ClipboardPanel>(&m_clipboardService, &m_configService, &m_asyncTextureCache);
-  clipboardPanel->setActivateCallback([this](const ClipboardEntry& entry) {
-    const ClipboardAutoPasteMode mode = m_configService.config().shell.clipboardAutoPaste;
-    if (mode == ClipboardAutoPasteMode::Off) {
-      m_panelManager.close();
-      return;
+  // The Clipboard panel is retired in favour of the launcher's clipboard history, Raycast-style.
+  // Its bar widget, Control Center shortcut and `panel-toggle clipboard` open the launcher on it.
+  m_panelManager.registerPanelRedirect("clipboard", "launcher", [this]() {
+    const auto& launcher = m_configService.config().shell.launcher;
+    std::string trigger = "clip";
+    const auto it = std::ranges::find(launcher.providers, std::string("clipboard"), &LauncherProviderConfig::name);
+    if (it != launcher.providers.end() && !it->prefix.empty()) {
+      trigger = it->prefix;
     }
-    // Auto-paste injects a keystroke into whatever holds keyboard focus. The animated close keeps
-    // the panel surface (and its keyboard focus) alive for the duration of the reveal animation, so
-    // the keys would land on the closing panel instead of the target window. Close without animation
-    // so focus returns to the toplevel before we paste, mirroring the launcher's app-launch close.
-    m_panelManager.closePanel(false);
-    const bool isImage = entry.isImage();
-    m_clipboardAutoPasteTimer.stop();
-    m_clipboardAutoPasteTimer.start(std::chrono::milliseconds(Style::animFast + 30), [this, isImage]() {
-      DeferredCall::callLater([this, isImage]() {
-        const ClipboardAutoPasteMode activeMode = m_configService.config().shell.clipboardAutoPaste;
-        (void)clipboard_paste::pasteEntry(isImage, activeMode, m_virtualKeyboardService);
-      });
-    });
+    return launcher.providerPrefix + trigger + " ";
   });
-  m_panelManager.registerPanel("clipboard", std::move(clipboardPanel));
   syncClipboardService();
   m_panelManager.registerPanel("session", std::make_unique<SessionPanel>(&m_configService, m_sessionActionRunner));
   m_panelManager.registerPanel("test", std::make_unique<TestPanel>());
@@ -647,16 +644,40 @@ void Application::initPanelManagerAndPanels() {
     launcherPanel->addProvider(std::make_unique<SessionProvider>(&m_configService, &m_sessionActionRunner));
     launcherPanel->addProvider(std::make_unique<MathProvider>(&m_clipboardService, &m_configService, &m_httpClient));
     launcherPanel->addProvider(std::make_unique<EmojiProvider>(&m_clipboardService));
-    launcherPanel->setCopiedActivationCallback([this]() {
-      const ClipboardAutoPasteMode mode = m_configService.config().shell.launcher.autoPaste;
-      if (mode == ClipboardAutoPasteMode::Off) {
+    launcherPanel->addProvider(std::make_unique<FileProvider>(&m_clipboardService));
+    m_launcherSnippets = std::make_shared<SnippetStore>();
+    m_launcherQuicklinks = std::make_shared<QuicklinkStore>();
+    launcherPanel->addProvider(
+        std::make_unique<ClipboardProvider>(&m_clipboardService, &m_configService, m_launcherSnippets.get())
+    );
+    launcherPanel->addProvider(
+        std::make_unique<QuicklinkProvider>(&m_configService, &m_clipboardService, m_launcherQuicklinks.get())
+    );
+    launcherPanel->addProvider(
+        std::make_unique<SnippetProvider>(&m_configService, &m_clipboardService, m_launcherSnippets.get())
+    );
+    launcherPanel->addProvider(std::make_unique<ScriptProvider>(&m_configService));
+    launcherPanel->addProvider(std::make_unique<SystemProvider>(&m_ipcService));
+    launcherPanel->addProvider(std::make_unique<TimeProvider>(&m_clipboardService));
+    launcherPanel->setCopyTextCallback([this](std::string text) {
+      (void)m_clipboardService.copyText(std::move(text));
+    });
+    launcherPanel->setCopiedActivationCallback([this](const LauncherProvider& provider) {
+      // Clipboard history keeps the clipboard's own paste setting, and images paste with their own chord.
+      const auto* clipboard = dynamic_cast<const ClipboardProvider*>(&provider);
+      const bool fromClipboard = clipboard != nullptr;
+      const bool isImage = fromClipboard && clipboard->lastCopyWasImage();
+      const auto modeNow = [this, fromClipboard]() {
+        const auto& shell = m_configService.config().shell;
+        return fromClipboard ? shell.clipboardAutoPaste : shell.launcher.autoPaste;
+      };
+      if (modeNow() == ClipboardAutoPasteMode::Off) {
         return;
       }
       m_launcherAutoPasteTimer.stop();
-      m_launcherAutoPasteTimer.start(std::chrono::milliseconds(Style::animFast + 30), [this]() {
-        DeferredCall::callLater([this]() {
-          const ClipboardAutoPasteMode activeMode = m_configService.config().shell.launcher.autoPaste;
-          (void)clipboard_paste::pasteEntry(false, activeMode, m_virtualKeyboardService);
+      m_launcherAutoPasteTimer.start(std::chrono::milliseconds(Style::animFast + 30), [this, isImage, modeNow]() {
+        DeferredCall::callLater([this, isImage, modeNow]() {
+          (void)clipboard_paste::pasteEntry(isImage, modeNow(), m_virtualKeyboardService);
         });
       });
     });

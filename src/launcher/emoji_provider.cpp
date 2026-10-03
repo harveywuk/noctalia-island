@@ -161,3 +161,45 @@ bool EmojiProvider::activate(const LauncherResult& result) {
   std::string emoji = result.id.substr(6);
   return m_clipboard != nullptr && m_clipboard->copyText(std::move(emoji));
 }
+
+std::optional<LauncherPreview> EmojiProvider::preview(const LauncherResult& result) const {
+  if (!result.id.starts_with("emoji-")) {
+    return std::nullopt;
+  }
+  const std::string emoji = result.id.substr(6);
+  const auto it = std::ranges::find(m_entries, emoji, &EmojiEntry::emoji);
+  LauncherPreview preview;
+  preview.badge = emoji;
+  preview.title = result.title;
+  preview.metadata.emplace_back(i18n::tr("launcher.preview.category"), result.subtitle);
+  if (it != m_entries.end() && !it->keywords.empty()) {
+    std::string keywords;
+    for (const auto& keyword : it->keywords) {
+      if (!keywords.empty()) {
+        keywords += ", ";
+      }
+      keywords += keyword;
+    }
+    preview.metadata.emplace_back(i18n::tr("launcher.preview.keywords"), keywords);
+  }
+  return preview;
+}
+
+std::string EmojiProvider::primaryActionLabel(const LauncherResult& /*result*/) const {
+  return i18n::tr("launcher.actions.paste-emoji");
+}
+
+std::vector<LauncherAction> EmojiProvider::actions(const LauncherResult& /*result*/) const {
+  return {
+      {.id = "copy", .label = i18n::tr("launcher.actions.copy-emoji")},
+      {.id = "copy-name", .label = i18n::tr("launcher.actions.copy-name")},
+  };
+}
+
+LauncherActionOutcome EmojiProvider::runAction(const LauncherResult& result, std::string_view actionId) {
+  if (m_clipboard == nullptr || !result.id.starts_with("emoji-")) {
+    return LauncherActionOutcome::Failed;
+  }
+  std::string text = actionId == "copy-name" ? result.title : result.id.substr(6);
+  return m_clipboard->copyText(std::move(text)) ? LauncherActionOutcome::Done : LauncherActionOutcome::Failed;
+}

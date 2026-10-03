@@ -86,6 +86,11 @@ public:
   // Anchored by itemTooltipAnchorInsets().
   [[nodiscard]] virtual std::string overlayTooltip(std::size_t /*index*/) const { return {}; }
 
+  // Optional space above an item, honoured only in single-column layouts. The tile is
+  // sized to include it so it can draw a section header there; hit testing, hover and
+  // the tooltip area cover only the item below it.
+  [[nodiscard]] virtual float itemLeadingSpace(std::size_t /*index*/) const { return 0.0F; }
+
   // Optional: secondary button press (e.g. context menu). Anchor coordinates are in the panel scene graph
   // (surface-local).
   virtual void onSecondaryActivate(std::size_t /*index*/, float /*anchorX*/, float /*anchorY*/) {}
@@ -158,6 +163,10 @@ private:
     return Style::rtl() ? m_layoutColumns - 1 - col : col;
   }
   void setOverlayHoveredForIndex(std::size_t index, bool hovered);
+  // Row geometry from the latest layout; uniform unless the adapter reserves leading space.
+  [[nodiscard]] float rowTop(std::size_t row) const noexcept;
+  [[nodiscard]] float rowLeadingSpace(std::size_t row) const noexcept;
+  [[nodiscard]] std::size_t rowAtOffset(float y) const noexcept;
 
   ScrollView* m_scroll = nullptr;
   Canvas* m_canvas = nullptr;
@@ -193,6 +202,8 @@ private:
   float m_cellHeightResolved = 0.0F;
   float m_virtualWidth = 0.0F;
   float m_virtualHeight = 0.0F;
+  // Top of each row plus one past the end, filled only when some row has leading space.
+  std::vector<float> m_rowTops;
   std::size_t m_visibleStartIndex = 0;
   std::size_t m_itemCount = 0;
   bool m_pendingScrollToIndex = false;
