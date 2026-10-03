@@ -1039,6 +1039,7 @@ void Application::initWidgetControllersAndCallbacks() {
   auto shouldRefreshControlCenter = [this]() { return m_panelManager.isOpenPanel("control-center"); };
 
   m_dock.initialize(m_compositorPlatform, &m_configService, &m_renderContext);
+  m_dock.setSessionBus(m_bus.get());
   const DesktopWidgetScriptDeps desktopWidgetScriptDeps{
       .scriptApi = &m_scriptApi,
       .fileWatcher = &m_fileWatcher,

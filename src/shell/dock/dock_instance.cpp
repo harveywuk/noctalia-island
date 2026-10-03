@@ -11,12 +11,14 @@
 #include "shell/surface/shadow.h"
 #include "shell/tooltip/tooltip_manager.h"
 #include "ui/builders.h"
+#include "ui/material.h"
 #include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/layer_surface.h"
 #include "wayland/surface.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace shell::dock {
@@ -312,7 +314,7 @@ namespace shell::dock {
     }
 
     // Panel
-    applyPanelPalette(instance, cfg);
+    applyPanelPalette(instance, deps.config.config());
     instance.panel->setPosition(
         panelGeometry.panelX - concave.logicalInset.left, panelGeometry.panelY - concave.logicalInset.top
     );
@@ -342,7 +344,7 @@ namespace shell::dock {
 
     // Palette reactivity.
     instance.paletteConn = paletteChanged().connect([inst = &instance, &config = deps.config] {
-      applyPanelPalette(*inst, config.config().dock);
+      applyPanelPalette(*inst, config.config());
       if (inst->surface)
         inst->surface->requestRedraw();
     });
@@ -352,12 +354,23 @@ namespace shell::dock {
     }
   }
 
-  void applyPanelPalette(DockInstance& instance, const DockConfig& cfg) {
+  void applyPanelPalette(DockInstance& instance, const Config& config) {
     if (instance.panel == nullptr)
       return;
-    const float opacity = cfg.backgroundOpacity;
+    const auto& cfg = config.dock;
+    // The configured opacity caps the shared panel glass tint, so Solid (or no blur) keeps it as set.
+    const float opacity = std::min(
+        cfg.backgroundOpacity, ui::material::tintOpacity(ui::material::Kind::Panel, config.shell.panel.transparencyMode)
+    );
     instance.panel->setFill(colorSpecFromRole(ColorRole::Surface, opacity));
-    instance.panel->setBorder(cfg.border, cfg.borderWidth);
+    if (cfg.borderWidth > 0.0F || !cfg.hairlineBorder) {
+      instance.panel->setBorder(cfg.border, cfg.borderWidth);
+    } else {
+      // Same hairline as the shell's glass panels, faded with the tint.
+      instance.panel->setBorder(
+          colorSpecFromRole(ColorRole::Outline, opacity * Style::hairlineAlpha), Style::borderWidth
+      );
+    }
   }
 
   void resizeSurface(DockInstance& instance, const DockConfig& cfg, const ShellConfig::ShadowConfig& shadowConfig) {

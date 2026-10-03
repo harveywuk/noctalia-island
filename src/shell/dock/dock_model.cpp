@@ -3,6 +3,7 @@
 #include "compositors/compositor_platform.h"
 #include "config/config_types.h"
 #include "core/log.h"
+#include "dbus/launcher/launcher_badge_service.h"
 #include "shell/dock/pinned_apps.h"
 #include "system/app_identity.h"
 #include "util/string_utils.h"
@@ -133,6 +134,9 @@ namespace shell::dock {
       dockItem.active = !snapshot.activeAppIdLower.empty() && snapshot.activeAppIdLower == dockItem.idLower;
       if (deps.config.showInstanceCount) {
         dockItem.instanceCount = windowsForDockItem(deps.platform, dockItem, snapshot.filterOutput).size();
+      }
+      if (deps.config.showBadges && deps.badges != nullptr) {
+        dockItem.badgeCount = deps.badges->count(entry.id);
       }
       snapshot.items.push_back(std::move(dockItem));
     }

@@ -2461,6 +2461,10 @@
           "label": "Hide Delay (ms)",
           "description": "Wait after the pointer leaves before hiding; returning cancels the delay"
         },
+        "hairline-border": {
+          "label": "Hairline Edge",
+          "description": "Draw a faint edge around the dock's glass when Border Width is 0"
+        },
         "magnification-scale": {
           "description": "Maximum icon scale multiplier at the pointer center (1.0 disables magnification)",
           "label": "Magnification Scale"
@@ -2488,6 +2492,10 @@
         "show-dots": {
           "description": "Show a dot below apps that are running",
           "label": "Show Dots"
+        },
+        "show-badges": {
+          "description": "Show red badges with the unread counts that apps report",
+          "label": "Show Badges"
         },
         "show-instance-count": {
           "description": "Show a badge with the number of open instances",
