@@ -26,8 +26,6 @@
 #include <numbers>
 #include <string>
 
-#include <unistd.h>
-
 namespace {
 
   int wrappedLineCount(std::string_view text, int charsPerLine, int maxLines) {
@@ -86,7 +84,6 @@ namespace {
     std::string title;
     std::string prompt;
     std::string supplementary;
-    std::string userName;
     bool needsInput = false;
     bool promptIsError = false;
     bool invalidPassword = false;
@@ -102,30 +99,11 @@ namespace {
     return lowered.empty() || lowered == "password";
   }
 
-  // The account polkit authenticates as: the current user when offered, else the first user.
-  std::string identityUserName(const PolkitRequest& request) {
-    const auto selfUid = static_cast<std::uint32_t>(::geteuid());
-    const PolkitRequestIdentity* first = nullptr;
-    for (const auto& identity : request.identities) {
-      if (identity.kind != "unix-user") {
-        continue;
-      }
-      if (identity.uid == selfUid) {
-        return identity.userName;
-      }
-      if (first == nullptr) {
-        first = &identity;
-      }
-    }
-    return first != nullptr ? first->userName : std::string{};
-  }
-
   AlertText alertText(PolkitAgent& agent) {
     AlertText out;
     const PolkitRequest request = agent.pendingRequest();
     out.needsInput = agent.isResponseRequired();
     out.title = wrapLongRuns(request.message.empty() ? i18n::tr("auth.polkit.title") : request.message);
-    out.userName = identityUserName(request);
 
     const std::string supplementaryRaw = agent.supplementaryMessage();
     const bool supplementaryError = agent.supplementaryIsError();
@@ -187,8 +165,7 @@ float PolkitPanel::preferredHeight() const {
       height += gapSm + static_cast<float>(wrappedLineCount(text.prompt, captionChars, 3)) * captionLine;
     }
     if (text.needsInput) {
-      const float fields = text.userName.empty() ? 1.0F : 2.0F;
-      height += gap + fields * Style::controlHeight * scale + (fields - 1.0F) * gapSm;
+      height += gap + Style::controlHeight * scale;
     }
     if (!text.supplementary.empty()) {
       height += gapSm + static_cast<float>(wrappedLineCount(text.supplementary, captionChars, 4)) * captionLine;
@@ -308,18 +285,6 @@ void PolkitPanel::create() {
   });
   fields->addChild(
       ui::input({
-          .out = &m_userInput,
-          .placeholder = i18n::tr("auth.polkit.user-name-placeholder"),
-          .surfaceOpacity = panelCardOpacity(),
-          .visible = false,
-      })
-  );
-  // The account is polkit's choice, so the field shows it without taking focus or edits.
-  if (m_userInput->inputArea() != nullptr) {
-    m_userInput->inputArea()->setFocusable(false);
-  }
-  fields->addChild(
-      ui::input({
           .out = &m_input,
           .placeholder = i18n::tr("auth.polkit.password-placeholder"),
           .passwordMode = true,
@@ -426,7 +391,6 @@ void PolkitPanel::onClose() {
   m_titleLabel = nullptr;
   m_promptLabel = nullptr;
   m_supplementaryLabel = nullptr;
-  m_userInput = nullptr;
   m_input = nullptr;
   m_submitButton = nullptr;
   m_cancelButton = nullptr;
@@ -513,7 +477,6 @@ void PolkitPanel::doUpdate(Renderer& renderer) {
       || m_promptLabel == nullptr
       || m_supplementaryLabel == nullptr
       || m_submitButton == nullptr
-      || m_userInput == nullptr
       || m_input == nullptr
       || m_icon == nullptr
       || m_fallbackIcon == nullptr) {
@@ -535,10 +498,6 @@ void PolkitPanel::doUpdate(Renderer& renderer) {
   m_promptLabel->setVisible(!text.prompt.empty());
   m_supplementaryLabel->setText(text.supplementary);
   m_supplementaryLabel->setVisible(!text.supplementary.empty());
-  if (m_userInput->value() != text.userName) {
-    m_userInput->setValue(text.userName);
-  }
-  m_userInput->setVisible(needsInput && !text.userName.empty());
   m_input->setVisible(needsInput);
   if (m_fields != nullptr) {
     m_fields->setVisible(needsInput || !text.supplementary.empty());
@@ -677,8 +636,5 @@ bool PolkitPanel::handleInputKeyEvent(std::uint32_t sym, std::uint32_t modifiers
 void PolkitPanel::onPanelCardOpacityChanged(float opacity) {
   if (m_input != nullptr) {
     m_input->setSurfaceOpacity(opacity);
-  }
-  if (m_userInput != nullptr) {
-    m_userInput->setSurfaceOpacity(opacity);
   }
 }
