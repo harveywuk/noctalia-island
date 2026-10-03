@@ -22,7 +22,7 @@ class Renderer;
 class ConfigService;
 
 // The password prompt, laid out like the macOS Ventura authentication alert: a centred app icon
-// with a padlock badge, a bold title, a short hint, the user name and password fields, and two
+// with a padlock badge, a bold title, a short hint, the password field, and two
 // equal-width buttons. A wrong password shakes the alert.
 class PolkitPanel : public Panel {
 public:
@@ -65,7 +65,6 @@ private:
   Label* m_titleLabel = nullptr;
   Label* m_promptLabel = nullptr;
   Label* m_supplementaryLabel = nullptr;
-  Input* m_userInput = nullptr;
   Input* m_input = nullptr;
   Button* m_submitButton = nullptr;
   Button* m_cancelButton = nullptr;
