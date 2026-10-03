@@ -237,6 +237,26 @@ Date arithmetic in the search field, like Raycast's calculator.
 - **Examples**: `3 days from now`, `2 weeks ago`, `in 1 month`, `days until 25 dec`, `weeks since 2026-01-01`, `next friday`, `last monday`, `today + 10 days`, `25 dec - 2 weeks`, `1 month from 31 oct`.
 - **Functionality**: Shows the resulting date with how far away it is, or the number of days or weeks between two dates. Dates are read day first (`25/12`, `25 dec`, `december 25th 2027`, `2026-12-25`); a day without a year means the next one. Return copies the answer.
 
+### Dictionary
+
+- **Prefix**: `/define ` (also in global search as `define …`, `def …` or `meaning of …`)
+- **Source**: The free [dictionaryapi.dev](https://dictionaryapi.dev) service, asked once you pause typing. Nothing is fetched when `[shell].offline_mode` is on.
+- **Functionality**: Lists the word's meanings by part of speech, with its pronunciation on the first. Return copies the definition; the action panel offers **Copy Word** and **Copy Example**. While the lookup is in flight, or when the word isn't found or the service is unreachable, a status row takes its place and Return searches the web for the word instead.
+
+### Screenshots
+
+- **Prefix**: `/shot `
+- **Source**: Image files in the screenshot folder (`shell.screenshot.directory`, or your Pictures folder), newest first, with a preview pane.
+- **Functionality**: Return opens the screenshot. Actions: **Copy Image** (the PNG itself, other formats as a file reference), **Show in Folder**, **Copy Path** and **Move to Trash**.
+
+### Quick notes
+
+The capture half of Raycast's Floating Notes: jot something down without leaving the keyboard.
+
+- **Prefix**: `/note ` (also in global search as `note …`)
+- **File**: `shell.launcher.notes_file`, or `~/Documents/Notes.md` (falling back to `~/Notes.md`). Each note is a Markdown list item with a time stamp, so the file reads well anywhere.
+- **Functionality**: `note call the dentist` offers **Save note**; `/note` lists the latest notes newest first with a preview, **Copy Note**, **Delete Note** and **Open Notes File**. The floating note window itself is not part of the shell.
+
 ### Window management
 
 Arrange the focused window from the keyboard, with Raycast's Window Management commands.
@@ -368,7 +388,7 @@ So `provider_prefix = "/"` with a trigger word of `emo` gives `/emo`. Changing `
 
 Each provider type gets its trigger word from a different place:
 
-- **Built-in providers** (Calculator, Clipboard, Date, Emoji, Files, Panels, Processes, Quicklinks, Scripts, Session, Snippets, System, Time, Timer, Wallpaper, WindowManagement, Windows): `[shell.launcher.providers.<name>]`.
+- **Built-in providers** (Calculator, Clipboard, Date, Dictionary, Emoji, Files, Notes, Panels, Processes, Quicklinks, Screenshots, Scripts, Session, Snippets, System, Time, Timer, Wallpaper, WindowManagement, Windows): `[shell.launcher.providers.<name>]`.
 - **Dmenu providers**: the `prefix`/`global` keys on the entry's `[shell.launcher.dmenu.entry.<id>]` table.
 - **Plugin providers**: the `[[launcher_provider]]` manifest `prefix`, optionally overridden per-user via `[shell.launcher.providers."<pluginId>:<entry>"]`.
 

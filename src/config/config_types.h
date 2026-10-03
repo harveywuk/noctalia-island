@@ -1725,6 +1725,8 @@ struct ShellConfig {
     // Raycast's fallback commands: provider names ("files", "emoji", …) and quicklink ids ("github")
     // offered under "Use “query” with…" after the results, beside the web search.
     std::vector<std::string> fallbacks{"files"};
+    // Markdown file quick notes are appended to; empty means ~/Documents/Notes.md (or ~/Notes.md).
+    std::string notesFile;
     // Quicklinks and snippets from config. With no quicklinks configured a small built-in set is used.
     std::vector<LauncherQuicklinkConfig> quicklinks;
     std::vector<LauncherSnippetConfig> snippets;

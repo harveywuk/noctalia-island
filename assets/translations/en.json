@@ -842,7 +842,14 @@
       "kill-process": "Kill Process",
       "force-kill": "Force Kill",
       "copy-date": "Copy Date",
-      "run-action": "Run Action"
+      "run-action": "Run Action",
+      "copy-definition": "Copy Definition",
+      "copy-word": "Copy Word",
+      "copy-example": "Copy Example",
+      "copy-image": "Copy Image",
+      "save-note": "Save Note",
+      "copy-note": "Copy Note",
+      "delete-note": "Delete Note"
     },
     "aliases": {
       "footer": "Return saves the alias, Esc cancels",
@@ -953,7 +960,10 @@
       "window": "Window",
       "timer": "Timer",
       "process": "Process",
-      "date": "Date"
+      "date": "Date",
+      "definition": "Definition",
+      "screenshot": "Screenshot",
+      "note": "Note"
     },
     "origins": {
       "appimage": "AppImage",
@@ -976,7 +986,8 @@
       "size": "Size",
       "source": "Source",
       "type": "Type",
-      "where": "Where"
+      "where": "Where",
+      "written": "Written"
     },
     "providers": {
       "applications": {
@@ -1045,6 +1056,15 @@
       },
       "date": {
         "title": "Dates"
+      },
+      "dictionary": {
+        "title": "Dictionary"
+      },
+      "screenshots": {
+        "title": "Screenshots"
+      },
+      "notes": {
+        "title": "Quick Notes"
       }
     },
     "quicklinks": {
@@ -1318,6 +1338,26 @@
       "empty": "No matching actions",
       "return": "↵",
       "ctrl-return": "Ctrl ↵"
+    },
+    "dictionary": {
+      "hint": "Type a word to define",
+      "hint-subtitle": "Definitions come from dictionaryapi.dev",
+      "offline": "Dictionary lookups are off in offline mode",
+      "failed": "The dictionary could not be reached",
+      "not-found": "No definition found for “{word}”",
+      "looking-up": "Looking up “{word}”…"
+    },
+    "screenshots": {
+      "just-now": "Just now",
+      "minutes-ago": "{count} minute ago",
+      "minutes-ago-plural": "{count} minutes ago",
+      "hours-ago": "{count} hour ago",
+      "hours-ago-plural": "{count} hours ago"
+    },
+    "notes": {
+      "add": "Save note: {text}",
+      "open": "Open Notes File",
+      "preview-title": "New note"
     }
   },
   "location": {
@@ -3555,6 +3595,30 @@
         "launcher-global-processes": {
           "label": "Kill Process in Global Search",
           "description": "Also list processes in unprefixed search"
+        },
+        "launcher-prefix-dictionary": {
+          "label": "Dictionary Prefix",
+          "description": "Trigger prefix for word definitions"
+        },
+        "launcher-global-dictionary": {
+          "label": "Dictionary in Global Search",
+          "description": "Also define words typed as “define …” in unprefixed search"
+        },
+        "launcher-prefix-notes": {
+          "label": "Quick Notes Prefix",
+          "description": "Trigger prefix for quick notes"
+        },
+        "launcher-global-notes": {
+          "label": "Quick Notes in Global Search",
+          "description": "Also save notes typed as “note …” in unprefixed search"
+        },
+        "launcher-prefix-screenshots": {
+          "label": "Screenshots Prefix",
+          "description": "Trigger prefix for the screenshot list"
+        },
+        "launcher-global-screenshots": {
+          "label": "Screenshots in Global Search",
+          "description": "Also list screenshots in unprefixed search"
         }
       },
       "power": {

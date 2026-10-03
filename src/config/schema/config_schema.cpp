@@ -1871,6 +1871,7 @@ namespace noctalia::config::schema {
           ),
           field(&ShellConfig::LauncherConfig::webSearchUrl, "web_search_url"),
           field(&ShellConfig::LauncherConfig::fallbacks, "fallbacks"),
+          field(&ShellConfig::LauncherConfig::notesFile, "notes_file"),
           namedMap<ShellConfig::LauncherConfig, LauncherQuicklinkConfig>(
               &ShellConfig::LauncherConfig::quicklinks, "quicklinks", launcherQuicklinkSchema(),
               [](LauncherQuicklinkConfig& elem, std::string_view name) { elem.id = std::string(name); },

@@ -41,15 +41,18 @@
 #include "launcher/app_provider.h"
 #include "launcher/clipboard_provider.h"
 #include "launcher/date_provider.h"
+#include "launcher/define_provider.h"
 #include "launcher/dmenu_provider.h"
 #include "launcher/emoji_provider.h"
 #include "launcher/file_provider.h"
 #include "launcher/math_provider.h"
+#include "launcher/notes_provider.h"
 #include "launcher/panel_provider.h"
 #include "launcher/plugin_launcher_provider.h"
 #include "launcher/process_provider.h"
 #include "launcher/quicklink_provider.h"
 #include "launcher/quicklink_store.h"
+#include "launcher/screenshot_provider.h"
 #include "launcher/script_provider.h"
 #include "launcher/session_provider.h"
 #include "launcher/snippet_provider.h"
@@ -669,6 +672,9 @@ void Application::initPanelManagerAndPanels() {
     launcherPanel->addProvider(std::make_unique<DateProvider>(&m_clipboardService));
     launcherPanel->addProvider(std::make_unique<TimerProvider>(&m_ipcService));
     launcherPanel->addProvider(std::make_unique<ProcessProvider>());
+    launcherPanel->addProvider(std::make_unique<DefineProvider>(&m_clipboardService, &m_configService, &m_httpClient));
+    launcherPanel->addProvider(std::make_unique<ScreenshotProvider>(&m_clipboardService, &m_configService));
+    launcherPanel->addProvider(std::make_unique<NotesProvider>(&m_clipboardService, &m_configService));
     launcherPanel->setCopyTextCallback([this](std::string text) {
       (void)m_clipboardService.copyText(std::move(text));
     });

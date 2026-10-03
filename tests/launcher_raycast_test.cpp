@@ -5,11 +5,14 @@
 #include "launcher/alias_store.h"
 #include "launcher/clipboard_provider.h"
 #include "launcher/date_provider.h"
+#include "launcher/define_provider.h"
 #include "launcher/launcher_util.h"
 #include "launcher/math_provider.h"
+#include "launcher/notes_provider.h"
 #include "launcher/process_provider.h"
 #include "launcher/quicklink_provider.h"
 #include "launcher/quicklink_store.h"
+#include "launcher/screenshot_provider.h"
 #include "launcher/script_provider.h"
 #include "launcher/snippet_provider.h"
 #include "launcher/snippet_store.h"
@@ -24,6 +27,7 @@
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <unistd.h>
 
@@ -368,6 +372,56 @@ echo "$1"
     fs::remove(path);
   }
 
+  void testDictionary() {
+    TEST_CHECK(DefineProvider::wordFor("define serendipity", false) == "serendipity");
+    TEST_CHECK(DefineProvider::wordFor("Def Apple", false) == "apple");
+    TEST_CHECK(DefineProvider::wordFor("meaning of life", false) == "life");
+    TEST_CHECK(DefineProvider::wordFor("serendipity", false).empty());
+    TEST_CHECK(DefineProvider::wordFor("serendipity", true) == "serendipity");
+    TEST_CHECK(DefineProvider::wordFor("define 2 words", false).empty());
+    TEST_CHECK(DefineProvider::urlFor("ice cream") == "https://api.dictionaryapi.dev/api/v2/entries/en/ice%20cream");
+    const auto entry = DefineProvider::parse(R"([{"word":"serendipity","phonetic":"/ˌsɛɹənˈdɪpɪti/",
+      "meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A happy accident.","example":"Pure serendipity."},
+      {"definition":"Finding valuable things not sought for."}]}]}])");
+    TEST_CHECK(entry.has_value() && entry->word == "serendipity" && entry->phonetic == "/ˌsɛɹənˈdɪpɪti/");
+    TEST_CHECK(entry->meanings.size() == 2 && entry->meanings[0].partOfSpeech == "noun");
+    TEST_CHECK(entry->meanings[0].example == "Pure serendipity." && entry->meanings[1].example.empty());
+    TEST_CHECK(!DefineProvider::parse(R"({"title":"No Definitions Found"})").has_value());
+    TEST_CHECK(!DefineProvider::parse("not json").has_value());
+  }
+
+  void testScreenshotsAndNotes() {
+    const fs::path dir = fs::temp_directory_path() / ("noctalia-shots-" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    const auto write = [&](const char* name) { std::ofstream(dir / name) << "x"; };
+    write("screenshot_20261003_120000.png");
+    write("notes.txt");
+    write("later.jpg");
+    fs::last_write_time(dir / "later.jpg", fs::file_time_type::clock::now() + std::chrono::hours(1));
+    const auto shots = ScreenshotProvider::scan(dir);
+    TEST_CHECK(shots.size() == 2);
+    TEST_CHECK(shots[0].path.filename() == "later.jpg" && shots[1].path.filename() == "screenshot_20261003_120000.png");
+
+    const fs::path notes = dir / "Notes.md";
+    TEST_CHECK(NotesProvider::append(notes, "Call the dentist"));
+    TEST_CHECK(NotesProvider::append(notes, "  Buy milk  "));
+    TEST_CHECK(!NotesProvider::append(notes, "   "));
+    auto read = NotesProvider::read(notes);
+    TEST_CHECK(read.size() == 2 && read[0].text == "Buy milk" && read[1].text == "Call the dentist");
+    TEST_CHECK(read[0].stamp.size() == 16 && read[0].line == 1);
+    TEST_CHECK(NotesProvider::remove(notes, read[1].line));
+    read = NotesProvider::read(notes);
+    TEST_CHECK(read.size() == 1 && read[0].text == "Buy milk");
+    // A notes provider pointed at the file lists the note and offers to add a new one.
+    NotesProvider provider(nullptr, nullptr, notes);
+    const auto listed = provider.queryPrefixed("");
+    TEST_CHECK(listed.size() == 2 && listed[0].title == "Buy milk" && listed[1].id == "open");
+    const auto adding = provider.query("note water the plants");
+    TEST_CHECK(adding.size() == 1 && adding[0].query == std::optional<std::string>("water the plants"));
+    TEST_CHECK(provider.query("firefox").empty());
+    fs::remove_all(dir);
+  }
+
   void testRecent() {
     // The tracker keeps a short cross-provider history for Suggestions, newest first, de-duplicated.
     const fs::path dir = fs::temp_directory_path() / ("noctalia-usage-" + std::to_string(::getpid()));
@@ -435,6 +489,8 @@ int main() {
   testProcesses();
   testDates();
   testCalculatorHistory();
+  testDictionary();
+  testScreenshotsAndNotes();
   testAliases();
   return 0;
 }
