@@ -299,18 +299,12 @@ namespace settings {
         return "general";
       }
     };
-    const auto heading = [&](std::string_view id) {
-      nav->addChild(
-          ui::column(
-              {.align = FlexAlign::Start, .paddingV = Style::spaceMd * scale, .paddingH = Style::spaceSm * scale},
-              ui::label(
-                  {.text = i18n::tr("settings.navigation.categories." + std::string(id)),
-                   .fontSize = Style::fontSizeCaption * scale,
-                   .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-                   .textAlign = TextAlign::Start}
-              )
-          )
-      );
+    // Ventura's sidebar separates groups with space rather than headings.
+    bool firstGroup = true;
+    const auto heading = [&](std::string_view /*id*/) {
+      if (!std::exchange(firstGroup, false)) {
+        nav->addChild(ui::column({.height = Style::spaceMd * scale}));
+      }
     };
     for (const auto group : {"personalise", "devices", "windows", "general", "extensions"}) {
       bool hasHeading = false;

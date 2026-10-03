@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <random>
@@ -59,9 +60,9 @@ namespace {
 
   [[nodiscard]] std::size_t themeModeSegmentIndex(ThemeMode mode) {
     switch (mode) {
-    case ThemeMode::Dark:
-      return 0;
     case ThemeMode::Light:
+      return 0;
+    case ThemeMode::Dark:
       return 1;
     case ThemeMode::Auto:
     default:
@@ -72,9 +73,9 @@ namespace {
   [[nodiscard]] ThemeMode themeModeFromSegmentIndex(std::size_t index) {
     switch (index) {
     case 0:
-      return ThemeMode::Dark;
-    case 1:
       return ThemeMode::Light;
+    case 1:
+      return ThemeMode::Dark;
     default:
       return ThemeMode::Auto;
     }
@@ -710,8 +711,8 @@ void WallpaperPanel::create() {
           .out = &m_favoriteThemeSegmented,
           .options =
               std::vector<ui::SegmentedOption>{
-                  {.label = i18n::tr("settings.options.theme.mode.dark")},
                   {.label = i18n::tr("settings.options.theme.mode.light")},
+                  {.label = i18n::tr("settings.options.theme.mode.dark")},
                   {.label = i18n::tr("common.states.auto")},
               },
           .selectedIndex = static_cast<std::size_t>(0),
@@ -819,6 +820,33 @@ void WallpaperPanel::create() {
               .text = i18n::tr("wallpaper.panel.loading"),
               .fontSize = Style::fontSizeBody * scale,
               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          })
+      )
+  );
+
+  // Empty state, like a macOS picker: say what is missing instead of showing a blank grid.
+  root->addChild(
+      ui::column(
+          {
+              .out = &m_emptyBox,
+              .align = FlexAlign::Center,
+              .justify = FlexJustify::Center,
+              .gap = Style::spaceSm * scale,
+              .fillWidth = true,
+              .flexGrow = 1.0F,
+              .visible = false,
+          },
+          ui::label({
+              .text = i18n::tr("wallpaper.panel.empty-title"),
+              .fontSize = Style::fontSizeTitle * scale,
+              .fontWeight = FontWeight::SemiBold,
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          }),
+          ui::label({
+              .out = &m_emptyHint,
+              .fontSize = Style::fontSizeBody * scale,
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .textAlign = TextAlign::Center,
           })
       )
   );
@@ -955,6 +983,8 @@ void WallpaperPanel::onClose() {
   m_favoritePaletteDetailSelect = nullptr;
   m_grid = nullptr;
   m_loadingBox = nullptr;
+  m_emptyBox = nullptr;
+  m_emptyHint = nullptr;
   m_spinner = nullptr;
   m_scanPending = false;
 
@@ -1375,6 +1405,29 @@ void WallpaperPanel::syncLoadingState() {
       m_spinner->stop();
     }
   }
+  syncEmptyState();
+}
+
+void WallpaperPanel::syncEmptyState() {
+  const bool empty = !m_scanPending && m_visibleEntries.empty();
+  if (m_emptyBox != nullptr) {
+    m_emptyBox->setVisible(empty);
+  }
+  if (m_grid != nullptr && !m_scanPending) {
+    m_grid->setVisible(!empty);
+  }
+  if (!empty || m_emptyHint == nullptr) {
+    return;
+  }
+  if (!m_filterQuery.empty()) {
+    m_emptyHint->setText(i18n::tr("wallpaper.panel.empty-filter", "query", m_filterQuery));
+  } else {
+    std::string folder = activeDirectoryForSelection().string();
+    if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0' && folder.starts_with(home)) {
+      folder = "~" + folder.substr(std::string_view(home).size());
+    }
+    m_emptyHint->setText(i18n::tr("wallpaper.panel.empty-folder", "folder", folder));
+  }
 }
 
 void WallpaperPanel::applyFilter() {
@@ -1419,6 +1472,7 @@ void WallpaperPanel::rebindGrid(bool resetScroll) {
     m_adapter->setCurrentWallpaperPath(currentWallpaperPathForSelection());
   }
   m_grid->notifyDataChanged();
+  syncEmptyState();
   if (resetScroll || m_visibleEntries.empty()) {
     m_grid->scrollView().setScrollOffset(0.0F);
   }

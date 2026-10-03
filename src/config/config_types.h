@@ -2189,8 +2189,8 @@ enum class ThemeMode : std::uint8_t {
 };
 
 constexpr EnumOption<ThemeMode> kThemeModes[] = {
-    {ThemeMode::Dark, "dark", "settings.options.theme.mode.dark"},
     {ThemeMode::Light, "light", "settings.options.theme.mode.light"},
+    {ThemeMode::Dark, "dark", "settings.options.theme.mode.dark"},
     {ThemeMode::Auto, "auto", "common.states.auto"},
 };
 
@@ -2205,8 +2205,8 @@ enum class ShellThemeMode : std::uint8_t {
 
 constexpr EnumOption<ShellThemeMode> kShellThemeModes[] = {
     {ShellThemeMode::Follow, "follow", "settings.options.theme.shell-mode.follow"},
-    {ShellThemeMode::Dark, "dark", "settings.options.theme.mode.dark"},
     {ShellThemeMode::Light, "light", "settings.options.theme.mode.light"},
+    {ShellThemeMode::Dark, "dark", "settings.options.theme.mode.dark"},
     {ShellThemeMode::Auto, "auto", "common.states.auto"},
 };
 

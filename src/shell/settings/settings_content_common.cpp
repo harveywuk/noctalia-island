@@ -5,6 +5,7 @@
 #include "i18n/i18n.h"
 #include "shell/settings/settings_content.h"
 #include "ui/builders.h"
+#include "ui/controls/button.h"
 #include "ui/controls/collapsible.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -24,6 +25,19 @@ namespace settings {
     // partway toward Surface keeps the palette hue and still reads distinct from those controls.
     constexpr float kCardFillOpacity = 0.4F;
   } // namespace
+
+  void addTrailingDisclosureChevron(Button& button, float scale) {
+    if (button.label() != nullptr) {
+      button.label()->setFlexGrow(1.0F);
+    }
+    button.addChild(
+        ui::glyph({
+            .glyph = Style::rtl() ? "chevron-left" : "chevron-right",
+            .glyphSize = Style::fontSizeBody * scale,
+            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+        })
+    );
+  }
 
   bool isMonitorOverrideSettingPath(const std::vector<std::string>& path) {
     return path.size() >= 5 && path[0] == "bar" && path[2] == "monitor";

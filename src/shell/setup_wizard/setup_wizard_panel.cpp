@@ -299,7 +299,7 @@ void SetupWizardPanel::create() {
       row->addChild(std::move(label));
 
       std::size_t modeIdx = 0;
-      if (cfg.theme.mode == ThemeMode::Light) {
+      if (cfg.theme.mode == ThemeMode::Dark) {
         modeIdx = 1;
       } else if (cfg.theme.mode == ThemeMode::Auto) {
         modeIdx = 2;
@@ -309,7 +309,7 @@ void SetupWizardPanel::create() {
               .out = &m_modeSelect,
               .options =
                   std::vector<std::string>{
-                      i18n::tr("settings.options.theme.mode.dark"), i18n::tr("settings.options.theme.mode.light"),
+                      i18n::tr("settings.options.theme.mode.light"), i18n::tr("settings.options.theme.mode.dark"),
                       i18n::tr("common.states.auto")
                   },
               .selectedIndex = modeIdx,
@@ -318,7 +318,7 @@ void SetupWizardPanel::create() {
               .horizontalPadding = Style::spaceMd * scale,
               .onSelectionChanged =
                   [this](std::size_t index, std::string_view /*label*/) {
-                    static constexpr const char* kModes[] = {"dark", "light", "auto"};
+                    static constexpr const char* kModes[] = {"light", "dark", "auto"};
                     if (index < 3) {
                       m_config->setOverride({"theme", "mode"}, std::string(kModes[index]));
                     }

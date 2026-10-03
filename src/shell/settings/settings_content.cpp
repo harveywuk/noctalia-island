@@ -1318,13 +1318,14 @@ namespace settings {
             card->addChild(ui::separator());
           card->addChild(
               ui::button({
-                  .text = groupLabel(group) + "   ›",
+                  .text = groupLabel(group),
                   .fontSize = Style::fontSizeBody * scale,
                   .contentAlign = ButtonContentAlign::Start,
                   .variant = ButtonVariant::Ghost,
                   .minHeight = 52.0F * scale,
                   .paddingH = Style::spaceMd * scale,
                   .onClick = [navigate = ctx.navigateGroup, group] { navigate(group); },
+                  .configure = [scale](Button& button) { addTrailingDisclosureChevron(button, scale); },
               })
           );
         }

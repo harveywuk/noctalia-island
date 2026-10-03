@@ -110,6 +110,8 @@ private:
   Flex* m_userMain = nullptr;
   InputArea* m_userAvatarArea = nullptr;
   Image* m_userAvatar = nullptr;
+  Flex* m_userMonogram = nullptr;
+  Label* m_userInitials = nullptr;
 
   Label* m_timeLabel = nullptr;
   Label* m_dateLabel = nullptr;
