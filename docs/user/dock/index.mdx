@@ -69,12 +69,7 @@ Shadow blur, offset, and alpha are global under `[shell.shadow]`. The dock only 
 
 ## `pinned` matching
 
-Each entry in `pinned` is matched against desktop entries using these rules in order:
-
-1. Desktop entry ID stem (`"firefox"` matches `firefox.desktop` and `org.mozilla.Firefox.desktop`)
-2. `StartupWMClass` field of the desktop entry
-3. App `Name` field (case-insensitive)
-4. Full desktop entry path
+Each entry in `pinned` names a desktop entry by its id, which is the file name without the folder: `"firefox"` for `firefox.desktop`, `"org.mozilla.firefox"` for `org.mozilla.firefox.desktop`. Writing the id with the `.desktop` suffix matches the same file, and the full path of the file (`/usr/share/applications/firefox.desktop`) is accepted too. Matching is exact otherwise: `StartupWMClass` and `Name` are not consulted, so two entries with similar names never swap places.
 
 If no match is found, a placeholder slot is reserved so the dock position is preserved.
 

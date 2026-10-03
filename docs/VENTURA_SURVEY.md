@@ -45,3 +45,19 @@ Fixed on this branch:
 - An empty provider view said "No results found" with nothing typed; it now says "Nothing in Clipboard History yet".
 
 Still as before, and fine: the launcher card, section headers, kind labels and the action bar match Raycast's proportions in both themes; Control Center, the notification stack, session cards, the wallpaper picker, Settings and the dock read as Ventura. The sway title bar above Settings and the missing dock magnification are the headless compositor, not the shell.
+
+## Third pass (3 October 2026, night): the whole shell after the Raycast, AI and lock screen work
+
+Headless Sway at 1920x1080, Inter, Papirus, light and dark: desktop and Island, the launcher's root and provider views, Control Center, the notification banner and centre, session, wallpaper, Settings (index, Appearance, Launcher), the dock, the OSD pill, an internal notification, and the lock screen. Dark mode matches light everywhere.
+
+Fixed on this branch:
+
+- **Internal notifications had no icon.** A banner from the shell itself ("Noctalia") started its text at the edge where every app banner leads with an icon. Internal notifications now carry the shell's own icon and desktop id, so the Island banner, the toast and the history show the owl like any app's icon.
+- **Dock pins written with `.desktop` showed a blank tile.** Desktop entry ids are file stems, so `org.codeberg.dnkl.foot.desktop` never matched. A pin now matches with or without the suffix, or by the file's full path; the docs described `StartupWMClass` and `Name` matching that the code never did, and now describe what it does.
+- **The Control Center's power tile read "Power" under a balance-scale glyph** (the balanced profile's icon). It reads "Power Mode" now.
+
+Looked at and left:
+
+- The Island OSD pill from `noctalia msg osd-show` shows only icon and text, as that command is a status message; the real volume and brightness popups draw the level bar under the label (`volume_show_percentage` hides the number), which is the notch HUD look.
+- "Clear All" in the Notification Centre sits flush with the cards' right edge, a 16 px margin from the screen edge, which is where macOS puts its group controls.
+- The lock screen after the Cupertino tweaks: large time over the date, avatar ring, centred password pill, Sleep / Restart / Shut Down (see [assets/lockscreen](assets/lockscreen/)).

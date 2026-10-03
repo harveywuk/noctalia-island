@@ -45,6 +45,13 @@ int main() {
   const DesktopEntry chat = sampleEntry();
 
   TEST_CHECK(shell::dock::pinned_apps::matchesEntry(chat, "sample-chat.desktop"));
+  TEST_CHECK(shell::dock::pinned_apps::matchesEntry(chat, "sample-chat")); // the id with or without .desktop
+  DesktopEntry foot;
+  foot.id = "org.codeberg.dnkl.foot";
+  foot.path = "/usr/share/applications/org.codeberg.dnkl.foot.desktop";
+  TEST_CHECK(shell::dock::pinned_apps::matchesEntry(foot, "org.codeberg.dnkl.foot.desktop"));
+  TEST_CHECK(shell::dock::pinned_apps::matchesEntry(foot, "/usr/share/applications/org.codeberg.dnkl.foot.desktop"));
+  TEST_CHECK(!shell::dock::pinned_apps::matchesEntry(foot, "foot"));
   TEST_CHECK(!shell::dock::pinned_apps::matchesEntry(chat, "SampleChat"));
   TEST_CHECK(!shell::dock::pinned_apps::matchesEntry(chat, "sample chat"));
   TEST_CHECK(!shell::dock::pinned_apps::matchesEntry(chat, "sample_chat_desktop"));

@@ -523,7 +523,7 @@
         "scheduled-night": "Running"
       },
       "notification": "DND",
-      "power-profile": "Power",
+      "power-profile": "Power Mode",
       "screen-time": "Screen Time",
       "session": "Session",
       "system": "System",
