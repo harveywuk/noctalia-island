@@ -1197,6 +1197,7 @@ namespace settings {
       islandSetting("clock", "clock_offset", SliderSetting{island.clockOffset, -12, 12, 1, true});
       islandSetting("clock", "expanded_clock_offset", SliderSetting{island.expandedClockOffset, -12, 12, 1, true});
       islandSetting("calendar", "calendar_labels", enumSelect(kIslandCalendarLabels, island.calendarLabels));
+      islandSetting("calendar", "up_next_minutes", SliderSetting{island.upNextMinutes, 0, 60, 5, true});
       islandSetting("media", "media_artwork_size", SliderSetting{island.mediaArtworkSize, 40, 80, 1, true});
       islandSetting("media", "track_preview_seconds", SliderSetting{island.trackPreviewSeconds, 0, 30, 1, true});
       islandSetting("media", "paused_media_seconds", SliderSetting{island.pausedMediaSeconds, 0, 30, 1, true});

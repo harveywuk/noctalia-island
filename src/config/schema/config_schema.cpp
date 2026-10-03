@@ -107,6 +107,7 @@ namespace noctalia::config::schema {
         field(&IslandConfig::pausedMediaSeconds, "paused_media_seconds", Range<std::int64_t>{0, 30}),
         field(&IslandConfig::bluetoothPreviewSeconds, "bluetooth_preview_seconds", Range<std::int64_t>{0, 30}),
         field(&IslandConfig::revealOnTrackChange, "reveal_on_track_change"),
+        field(&IslandConfig::upNextMinutes, "up_next_minutes", Range<std::int64_t>{0, 60}),
         field(&IslandConfig::trackPreviewMonitor, "track_preview_monitor"),
         field(&IslandConfig::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
         field(&IslandConfig::volumeBarHeight, "volume_bar_height", Range<float>{5.0F, 24.0F}),

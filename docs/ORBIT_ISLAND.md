@@ -208,6 +208,17 @@ timers afresh on shell/service restart and do not persist an in-progress countdo
 Tests use copies of the actual upstream plugins in a private session, with a
 test-only state observer; production plugin files are not patched.
 
+## Up next
+
+When the shell's calendar is set up (Settings → Calendar: Google, CalDAV or local
+vdir calendars), the next timed event counts down in the timers slot. It appears
+`up_next_minutes` before it starts (default 10; 0 turns it off), with a blue ring
+that empties as the start nears, and reads "Now" for its first five minutes.
+Hover shows the event with Join (its meeting link, when it has one), Dismiss and
+Open Calendar. All-day events are skipped. It shares the timers slot in the
+activity priority setting, and the calendar's own reminder notifications still
+fire as before.
+
 ## Crowded activity layouts
 
 Expanded activity views keep their main content fixed and scroll the extra timer,

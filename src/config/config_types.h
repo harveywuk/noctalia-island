@@ -108,6 +108,8 @@ struct IslandConfig {
   int pausedMediaSeconds = 3;
   int bluetoothPreviewSeconds = 5;
   bool revealOnTrackChange = true;
+  // Minutes before a calendar event starts that its countdown appears; 0 turns it off.
+  int upNextMinutes = 10;
   std::string trackPreviewMonitor = "all";
   std::string bluetoothPreviewMonitor = "all";
   float volumeBarHeight = 18.0F;

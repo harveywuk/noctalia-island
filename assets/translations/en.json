@@ -29,6 +29,15 @@
       "cancel": "Cancel",
       "open": "Open"
     },
+    "up-next": {
+      "untitled": "Untitled event",
+      "now": "Now",
+      "starts-in": "Starts in {time}",
+      "started": "Started",
+      "join": "Join",
+      "dismiss": "Dismiss",
+      "open": "Open Calendar"
+    },
     "privacy": {
       "audio-controls": "Open audio controls"
     },
@@ -4175,6 +4184,10 @@
         "calendar_labels": {
           "label": "Weekday labels",
           "description": "Choose single letters or abbreviated day names. Columns stay aligned."
+        },
+        "up_next_minutes": {
+          "label": "Up next (minutes)",
+          "description": "Count down to the next calendar event this many minutes before it starts. Set to 0 to turn it off."
         },
         "preview-monitors": {
           "all": "All monitors",

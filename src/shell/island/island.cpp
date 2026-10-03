@@ -1,5 +1,6 @@
 #include "shell/island/island.h"
 
+#include "calendar/calendar_service.h"
 #include "capture/screen_recorder.h"
 #include "config/config_service.h"
 #include "core/deferred_call.h"
@@ -10,6 +11,7 @@
 #include "dbus/mpris/mpris_art.h"
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
+#include "net/url_open.h"
 #include "notification/notification_manager.h"
 #include "pipewire/pipewire_spectrum.h"
 #include "render/animation/motion_service.h"
@@ -197,6 +199,8 @@ struct Island::Instance {
     std::string plugin;
     Label* label;
     std::function<void(float)> setFraction;
+    // An up-next row's label reads "Starts in 4:07" rather than the bare time.
+    bool eventStatus = false;
   };
   std::vector<TimerUi> timerUi;
   struct DownloadUi {
@@ -240,6 +244,20 @@ namespace {
 
   // The gap between the capsule and the split bubble scales with the Island's height.
   [[nodiscard]] float splitGap(float height) { return std::round(height * 0.16F); }
+
+  // Up-next events read "Now" once they start; plugin timers keep their clock.
+  std::string countdownTime(const island::Countdown& timer) {
+    return timer.event && timer.remaining <= 0 ? i18n::tr("island.up-next.now") : timer.time();
+  }
+  std::string eventStatus(const island::Countdown& timer) {
+    return timer.remaining > 0 ? i18n::tr("island.up-next.starts-in", "time", timer.time())
+                               : i18n::tr("island.up-next.started");
+  }
+  std::string countdownTitle(const island::Countdown& timer) {
+    return timer.event && !timer.title.empty() ? timer.title : i18n::tr(timer.titleKey);
+  }
+  // Calendar countdowns take the system blue, so they read apart from orange timers.
+  Color countdownTint(const island::Countdown& timer) { return timer.event ? kAppleBlue : kAppleOrange; }
 
   [[nodiscard]] ColorSpec islandFixed(Color color, float alpha) {
     ColorSpec spec = fixedColorSpec(color);
@@ -509,6 +527,15 @@ std::vector<island::Countdown> Island::countdowns() const {
             value("thepunkoff/pomodoro", "pomodoro.state"), value("thepunkoff/pomodoro", "pomodoro.sessionData")
         ))
       result.push_back(*timer);
+  if (m_calendar != nullptr && m_calendar->enabled() && m_calendar->hasData()) {
+    int minutes = 0;
+    for (const auto& inst : m_instances)
+      minutes = std::max(minutes, inst->config.upNextMinutes);
+    if (auto event = island::upNextSnapshot(
+            m_calendar->snapshot().events, std::chrono::system_clock::now(), minutes, m_dismissedEvents
+        ))
+      result.push_back(std::move(*event));
+  }
   std::ranges::stable_sort(result, [](const auto& a, const auto& b) {
     if (a.active != b.active)
       return a.active;
@@ -1351,8 +1378,8 @@ void Island::prepare(Instance& inst) {
   if (expandedView || view == island::View::TimerActivity)
     for (const auto& timer : timers)
       signature += std::format(
-          "|timer:{}|{}|{}|{}|{}|{}|{}", timer.plugin, timer.titleKey, timer.running, timer.active, timer.finished,
-          timer.duration, timer.session
+          "|timer:{}|{}|{}|{}|{}|{}|{}|{}|{}", timer.plugin, countdownTitle(timer), timer.running, timer.active,
+          timer.finished, timer.duration, timer.session, timer.url, timer.event && timer.remaining <= 0
       );
   for (const auto& activity : privacyList)
     signature += std::format("|privacy:{}:{}", static_cast<int>(activity.kind), activity.appNames());
@@ -1397,7 +1424,7 @@ void Island::prepare(Instance& inst) {
     bool charging = false;
     if (outlineTimer) {
       fraction = timers.front().fraction();
-      fill = islandTint(kAppleOrange, ColorRole::Primary);
+      fill = islandTint(countdownTint(timers.front()), ColorRole::Primary);
     } else if (outlineDownload) {
       fill = islandTint(kAppleBlue, ColorRole::Primary);
       // Each download gets equal weight; one unknown total makes the group indeterminate.
@@ -1562,7 +1589,7 @@ void Island::prepare(Instance& inst) {
       const auto timer = std::ranges::find(timers, ui.plugin, &island::Countdown::plugin);
       if (timer == timers.end())
         continue;
-      ui.label->setText(timer->time());
+      ui.label->setText(ui.eventStatus ? eventStatus(*timer) : countdownTime(*timer));
       ui.label->measure(renderer);
       ui.setFraction(timer->fraction());
     }
@@ -1960,7 +1987,9 @@ void Island::prepare(Instance& inst) {
     );
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
-    const auto clockText = timerView ? timers.front().time() : scriptTitle ? capsuleDownloads.front().name : time;
+    const auto clockText = timerView ? countdownTime(timers.front())
+        : scriptTitle                ? capsuleDownloads.front().name
+                                     : time;
     const float textSize = scriptTitle ? std::min(cfg.clockSize, 16.0F) : cfg.clockSize;
     const auto metrics = renderer.measureText(
         clockText, textSize * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
@@ -1980,7 +2009,7 @@ void Island::prepare(Instance& inst) {
             std::max(0.0F, cfg.height * s - clockLabel->height())
         )
     );
-    if (timerView && !showBattery && privacyList.empty()) {
+    if (timerView && !showBattery && privacyList.empty() && !timers.front().event) {
       glyph(
           timers.front().running        ? "player-pause"
               : timers.front().finished ? "check"
@@ -2482,27 +2511,78 @@ void Island::prepare(Instance& inst) {
       if (!timer.active)
         continue;
       const float sectionTop = h;
-      auto ring = std::make_unique<DownloadRing>(
-          36 * s, 2.5F * s, timer.fraction(), islandTint(kAppleOrange, ColorRole::Primary)
-      );
+      const Color tint = countdownTint(timer);
+      auto ring =
+          std::make_unique<DownloadRing>(36 * s, 2.5F * s, timer.fraction(), islandTint(tint, ColorRole::Primary));
       auto* ringPtr = ring.get();
       ring->setPosition(22 * s, (h + 6) * s);
       canvas->addChild(std::move(ring));
-      glyph(timer.icon, 31, h + 15, 18, islandTint(kAppleOrange, ColorRole::Primary));
+      glyph(timer.icon, 31, h + 15, 18, islandTint(tint, ColorRole::Primary));
       // Cupertino keeps the controls on the timer's row as round buttons; the theme look
       // lists them as a row of text buttons below.
       const float controlsWidth = gCupertino ? 3 * 32 + 2 * 8 + 10 : 0;
-      label(i18n::tr(timer.titleKey), 70, h + 3, w - 165 - controlsWidth, 13);
-      auto* remaining = label(timer.time(), w - 94 - controlsWidth, h + 3, 72, 16, foreground, true);
-      inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
-      label(
-          i18n::tr(
-              timer.finished      ? "island.timer.finished"
-                  : timer.running ? "island.timer.running"
-                                  : "island.timer.paused"
-          ),
-          70, h + 25, w - 92, 11, muted
-      );
+      if (timer.event) {
+        // The title takes the row; the countdown reads as its status line.
+        label(countdownTitle(timer), 70, h + 3, w - 92 - controlsWidth, 13, foreground, false, 1, FontWeight::SemiBold);
+        auto* status = label(eventStatus(timer), 70, h + 25, w - 92 - controlsWidth, 11, muted);
+        inst.timerUi.push_back({timer.plugin, status, [ringPtr](float value) { ringPtr->setProgress(value); }, true});
+      } else {
+        label(countdownTitle(timer), 70, h + 3, w - 165 - controlsWidth, 13);
+        auto* remaining = label(countdownTime(timer), w - 94 - controlsWidth, h + 3, 72, 16, foreground, true);
+        inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
+        label(
+            i18n::tr(
+                timer.finished      ? "island.timer.finished"
+                    : timer.running ? "island.timer.running"
+                                    : "island.timer.paused"
+            ),
+            70, h + 25, w - 92, 11, muted
+        );
+      }
+      // Events trade pause and cancel for joining the call and dismissing the countdown.
+      const auto join = [url = timer.url] { (void)net::openInBrowser(url); };
+      const auto dismiss = [this, key = timer.plugin] {
+        m_dismissedEvents.insert(key);
+        refresh();
+      };
+      if (gCupertino && timer.event) {
+        const float x = w - 22 - controlsWidth + 10;
+        auto* joinButton =
+            control(x, h + 8, 32, 32, "", "video", i18n::tr("island.up-next.join"), 16, !timer.url.empty(), join);
+        joinButton->inputArea()->setTabFocusKey(timer.plugin + "-join");
+        roundButton(joinButton, kAppleGreen);
+        auto* dismissButton =
+            control(x + 40, h + 8, 32, 32, "", "x", i18n::tr("island.up-next.dismiss"), 16, true, dismiss);
+        dismissButton->inputArea()->setTabFocusKey(timer.plugin + "-dismiss");
+        roundButton(dismissButton);
+        auto* open = control(
+            x + 80, h + 8, 32, 32, "", "chevron-right", i18n::tr("island.up-next.open"), 16, true,
+            [panel, timer] { panel(timer.panel); }
+        );
+        open->inputArea()->setTabFocusKey(timer.plugin + "-open");
+        roundButton(open);
+        h += 56;
+        sectionCard(sectionTop, h);
+        continue;
+      }
+      if (timer.event) {
+        h += 48;
+        const float buttonWidth = (w - 60) / 3;
+        auto* joinButton =
+            control(22, h, buttonWidth, 30, i18n::tr("island.up-next.join"), "", "", 0, !timer.url.empty(), join);
+        joinButton->inputArea()->setTabFocusKey(timer.plugin + "-join");
+        auto* dismissButton =
+            control(30 + buttonWidth, h, buttonWidth, 30, i18n::tr("island.up-next.dismiss"), "", "", 0, true, dismiss);
+        dismissButton->inputArea()->setTabFocusKey(timer.plugin + "-dismiss");
+        auto* open = control(
+            38 + 2 * buttonWidth, h, buttonWidth, 30, i18n::tr("island.up-next.open"), "", "", 0, true,
+            [panel, timer] { panel(timer.panel); }
+        );
+        open->inputArea()->setTabFocusKey(timer.plugin + "-open");
+        h += 38;
+        sectionCard(sectionTop, h);
+        continue;
+      }
       if (gCupertino) {
         const float x = w - 22 - controlsWidth + 10;
         const bool toggleAvailable = !timer.finished && timer.remaining > 0;
