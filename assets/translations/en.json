@@ -1690,6 +1690,7 @@
           "floating": "Floating"
         },
         "panel-transparency": {
+          "auto": "Auto",
           "glass": "Glass",
           "soft": "Soft",
           "solid": "Solid"
@@ -2450,7 +2451,7 @@
           "description": "Cast the global surface shadow from the dock"
         },
         "show-dots": {
-          "description": "Show running window dots below dock icons",
+          "description": "Show a dot below apps that are running",
           "label": "Show Dots"
         },
         "show-instance-count": {
@@ -2958,7 +2959,7 @@
           "description": "Cast the global surface shadow from panel surfaces"
         },
         "transparency-mode": {
-          "description": "Panel glass style, including floating panel opacity and card translucency",
+          "description": "Panel, notification and OSD material. Auto uses Glass when the compositor can blur behind the shell, and Solid otherwise",
           "label": "Transparency"
         },
         "home-cards": {
@@ -3547,7 +3548,7 @@
           "label": "Expand All Settings Groups"
         },
         "settings-window-translucent": {
-          "description": "Make the Settings background translucent for compositor effects",
+          "description": "Let the Settings window use the panel transparency material, with compositor blur behind it",
           "label": "Settings Translucent Background"
         },
         "show-location": {

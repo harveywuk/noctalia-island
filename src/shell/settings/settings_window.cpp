@@ -27,6 +27,7 @@
 #include "ui/controls/label.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/controls/select_dropdown_popup.h"
+#include "ui/material.h"
 #include "ui/palette.h"
 #include "ui/split_pane_focus.h"
 #include "ui/style.h"
@@ -500,6 +501,7 @@ void SettingsWindow::open(std::string context) {
   m_pointerInside = false;
   m_lastSceneWidth = 0;
   m_lastSceneHeight = 0;
+  m_backgroundBlurApplied = false;
 }
 
 void SettingsWindow::openToBarWidget(std::string barName, std::string widgetName) {
@@ -649,6 +651,7 @@ void SettingsWindow::destroyWindow() {
   m_minHeightHint = 0;
   m_lastSceneWidth = 0;
   m_lastSceneHeight = 0;
+  m_backgroundBlurApplied = false;
   m_settingsRegistry.clear();
   m_rebuildRequested = false;
   m_contentRebuildRequested = false;
@@ -692,6 +695,23 @@ void SettingsWindow::destroyWindow() {
   // zero-ref residents once the scene (and with it every Image) is gone.
   if (m_asyncTextures != nullptr) {
     DeferredCall::callLater([asyncTextures = m_asyncTextures]() { asyncTextures->trimUnused(0); });
+  }
+}
+
+void SettingsWindow::updateBackgroundBlur(std::uint32_t width, std::uint32_t height) {
+  const bool translucent =
+      m_config != nullptr && ui::material::settingsWindowOpacity(m_config->config().shell) < 1.0F;
+  if (translucent == m_backgroundBlurApplied
+      && (!translucent || (width == m_backgroundBlurWidth && height == m_backgroundBlurHeight))) {
+    return;
+  }
+  m_backgroundBlurApplied = translucent;
+  m_backgroundBlurWidth = width;
+  m_backgroundBlurHeight = height;
+  if (translucent) {
+    m_surface->setBlurRegion({{0, 0, static_cast<int>(width), static_cast<int>(height)}});
+  } else {
+    m_surface->clearBlurRegion();
   }
 }
 
@@ -751,6 +771,8 @@ void SettingsWindow::prepareFrame(bool needsUpdate, bool needsLayout) {
     m_minHeightHint = newMinH;
     logSettingsProfile("prepareFrame updateMinSize", phaseProfileWatch);
   }
+
+  updateBackgroundBlur(width, height);
 
   if (needRebuild) {
     phaseProfileWatch.reset();

@@ -31,6 +31,7 @@ namespace shell::dock {
     wl_output* filterOutput = nullptr;
     std::string activeAppIdLower;
     std::vector<DockItemModel> items;
+    std::size_t pinnedCount = 0; // leading items that come from the pinned list
     std::uint64_t sourceSerial = 0;
   };
 

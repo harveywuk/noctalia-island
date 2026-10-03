@@ -2,6 +2,7 @@
 
 #include "config/config_types.h"
 #include "render/core/render_styles.h"
+#include "ui/style.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -38,10 +39,16 @@ namespace shell::dock {
 
   [[nodiscard]] DockConcaveShape dockConcaveShape(const DockConfig& cfg);
 
+  // Hairline between pinned apps and other running apps, as in the macOS dock.
+  inline constexpr float kDockDividerThickness = Style::borderWidth;
+  inline constexpr float kDockDividerSpacing = Style::spaceXs; // clear space on each side of the line
+  [[nodiscard]] std::int32_t dockDividerMainSize();
+
   [[nodiscard]] std::uint32_t positionToAnchor(DockEdge edge);
   [[nodiscard]] bool isVerticalEdge(DockEdge edge);
   void shiftAlongEdge(DockEdge edge, float& x, float& y, float amount);
-  [[nodiscard]] std::int32_t dockContentSize(const DockConfig& cfg, std::size_t itemCount);
+  [[nodiscard]] std::int32_t
+  dockContentSize(const DockConfig& cfg, std::size_t itemCount, std::size_t dividerCount = 0);
   [[nodiscard]] std::int32_t dockThickness(const DockConfig& cfg);
   // Extra cross-axis surface padding so magnified icons (and badges) are not clipped.
   [[nodiscard]] std::int32_t dockHoverZoomCrossPad(const DockConfig& cfg);
@@ -53,7 +60,8 @@ namespace shell::dock {
   // screen edge by a logical pixel there, because the compositor can otherwise round the edge a
   // device pixel short and leave a gap.
   [[nodiscard]] DockSurfaceGeometry computeSurfaceGeometry(
-      const DockConfig& cfg, const ShellConfig::ShadowConfig& shadow, std::size_t itemCount, bool fractionalScale
+      const DockConfig& cfg, const ShellConfig::ShadowConfig& shadow, std::size_t itemCount, bool fractionalScale,
+      std::size_t dividerCount = 0
   );
   [[nodiscard]] LayerSurfaceConfig makeLayerSurfaceConfig(
       const DockConfig& cfg, const ShellConfig::ShadowConfig& shadow, std::size_t itemCount, bool fractionalScale
