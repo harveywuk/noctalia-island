@@ -167,6 +167,18 @@ namespace noctalia::cli {
       Positional{"summary", {}, {}, true, false, false},
       Positional{"body", {}, {}, true, false, true},
   };
+  inline constexpr std::array kMsgIslandActivityStartPositionals{
+      Positional{"id", "A name for the activity, used to update or end it", {}, true, false, false},
+      Positional{"title", "Text shown in the Island", {}, false, false, true},
+  };
+  inline constexpr std::array kMsgIslandActivityUpdatePositionals{
+      Positional{"id", "The activity's name from island-activity-start", {}, true, false, false},
+      Positional{"percent", "Progress from 0 to 100, or - for a spinner", {}, false, false, false},
+      Positional{"title", "New text, or omit to keep the current title", {}, false, false, true},
+  };
+  inline constexpr std::array kMsgIslandActivityEndPositionals{
+      Positional{"id", "The activity's name from island-activity-start", {}, true, false, false},
+  };
   inline constexpr std::array kMsgPanelClosePositionals{
       Positional{"id", {}, {}, false, false, false},
   };
@@ -546,8 +558,35 @@ namespace noctalia::cli {
     inline constexpr Command notificationClearActive{
         "notification-clear-active", "Dismiss all currently active notifications", {}, {}, {}, {}, {}, false
     };
-    inline constexpr Command islandFocus{"island-focus", "Focus the island for keyboard navigation", {}, {}, {}, {}, {},
-                                         false};
+    inline constexpr Command islandFocus{
+        "island-focus", "Focus the island for keyboard navigation", {}, {}, {}, {}, {}, false
+    };
+    inline constexpr Command islandActivityStart{
+        "island-activity-start",
+        "Show a live activity in the Island for a script or keybind",
+        "It shows with a spinner until island-activity-update reports progress. Starting an id that is already "
+        "running restarts it. An activity that is not updated or ended for an hour is removed. Instead of the "
+        "positional arguments, pass a JSON object such as {\"id\":\"backup\",\"title\":\"Backing up\","
+        "\"icon\":\"cloud-upload\",\"progress\":40}; icon is a Tabler icon name.",
+        "Example: noctalia msg island-activity-start backup Backing up",
+        {},
+        kMsgIslandActivityStartPositionals,
+        {},
+        false
+    };
+    inline constexpr Command islandActivityUpdate{
+        "island-activity-update",
+        "Update a live activity's progress or title",
+        "Also accepts the JSON object form of island-activity-start.",
+        "Example: noctalia msg island-activity-update backup 40",
+        {},
+        kMsgIslandActivityUpdatePositionals,
+        {},
+        false
+    };
+    inline constexpr Command islandActivityEnd{
+        "island-activity-end", "End a live activity", {}, {}, {}, kMsgIslandActivityEndPositionals, {}, false
+    };
     inline constexpr Command notificationClearHistory{
         "notification-clear-history", "Clear notification history", {}, {}, {}, {}, {}, false
     };
@@ -916,6 +955,9 @@ namespace noctalia::cli {
       msg::nightlightToggle,
       msg::notificationClearActive,
       msg::islandFocus,
+      msg::islandActivityStart,
+      msg::islandActivityUpdate,
+      msg::islandActivityEnd,
       msg::notificationClearHistory,
       msg::notificationDndSet,
       msg::notificationDndStatus,

@@ -108,6 +108,32 @@ byte counts are not reliable live percentages, so this reader shows activity
 instead of an estimated percentage. Native desktop progress, if Steam publishes
 it, takes precedence over the log reader.
 
+## Script activities
+
+Scripts and keybinds can post their own live activity. It shows like a download:
+a ring around its icon in the capsule, and a row in the hover card.
+
+```sh
+noctalia msg island-activity-start backup "Backing up Documents"
+noctalia msg island-activity-update backup 40           # 40 %
+noctalia msg island-activity-update backup - "Verifying" # spinner, new title
+noctalia msg island-activity-end backup
+```
+
+`start` begins with a spinner; `update` takes a percentage from 0 to 100, or `-`
+for a spinner, and an optional new title. Each command also accepts one JSON
+object, which is the only way to pick an icon:
+
+```sh
+noctalia msg island-activity-start '{"id":"build","title":"Building","icon":"hammer","progress":75}'
+```
+
+Icons are the shell's Tabler glyph names. Starting an id that already exists
+restarts it. An activity nobody updates for an hour is dropped, so a script that
+dies doesn't leave it behind. Script activities share the downloads slot in the
+activity priority setting, and the card's heading reads "In Progress" when one is
+present.
+
 ## Battery indicators
 
 The island reuses Noctalia's UPower and Bluetooth battery services. A system
