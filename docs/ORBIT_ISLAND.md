@@ -111,7 +111,9 @@ it, takes precedence over the log reader.
 ## Script activities
 
 Scripts and keybinds can post their own live activity. It shows like a download:
-a ring around its icon in the capsule, and a row in the hover card.
+a ring around its icon with its title in the capsule, and a row in the hover card.
+With Split activities on, a second job (or a download) sits in the bubble beside
+the capsule; clicking the bubble swaps them.
 
 ```sh
 noctalia msg island-activity-start backup "Backing up Documents"
@@ -132,7 +134,7 @@ Icons are the shell's Tabler glyph names. Starting an id that already exists
 restarts it. An activity nobody updates for an hour is dropped, so a script that
 dies doesn't leave it behind. Script activities share the downloads slot in the
 activity priority setting, and the card's heading reads "In Progress" when one is
-present.
+present. Without an icon, a script activity shows a terminal symbol.
 
 ## Battery indicators
 

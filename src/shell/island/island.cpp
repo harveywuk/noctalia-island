@@ -59,6 +59,7 @@
 #include <glib.h>
 #include <linux/input-event-codes.h>
 #include <ranges>
+#include <span>
 
 using namespace std::chrono_literals;
 
@@ -155,6 +156,11 @@ struct Island::Instance {
   float splitReveal = 0;
   AnimationManager::Id splitMorph = 0;
   bool splitHovered = false;
+  // Several jobs in the downloads lane split among themselves: the bubble holds the next job,
+  // and clicking it makes that job the capsule's lead.
+  bool splitLane = false;
+  std::string splitNext;
+  std::string splitLead;
   island::PrivacyRotation privacyRotation;
   // Icon last shown in the compact indicator slot, to animate the change to the next one.
   std::string slotIcon;
@@ -522,7 +528,7 @@ std::vector<DownloadProgress> Island::progressActivities() const {
         .progress = activity.progress.value_or(0.0),
         .determinate = activity.progress.has_value(),
         .phase = "working",
-        .icon = activity.icon.empty() ? "progress" : activity.icon,
+        .icon = activity.icon.empty() ? "terminal-2" : activity.icon,
     });
   return result;
 }
@@ -1144,7 +1150,11 @@ void Island::prepare(Instance& inst) {
   const auto player = m_mpris ? m_mpris->activePlayer() : std::nullopt;
   const bool playing = player && player->playbackStatus == "Playing";
   const std::string announcement = player && trackPreview(cfg, inst.output) ? player->title : "";
-  const auto downloads = progressActivities();
+  auto downloads = progressActivities();
+  // A bubble click put this job in the capsule; it stays there while it runs.
+  if (const auto lead = std::ranges::find(downloads, inst.splitLead, &DownloadProgress::desktopId);
+      lead != downloads.end())
+    std::rotate(downloads.begin(), lead, lead + 1);
   const auto timers = countdowns();
   const bool timerActive = !timers.empty() && timers.front().active;
   const bool recording = ScreenRecorder::instance().active();
@@ -1190,13 +1200,25 @@ void Island::prepare(Instance& inst) {
       : view == island::View::DownloadActivity                ? island::Activity::Downloads
       : view == island::View::TimerActivity                   ? island::Activity::Timers
                                                               : island::Activity::None;
-  const auto splitActivity = cfg.splitActivities && !recording && primaryActivity != island::Activity::None
+  const auto otherActivity = cfg.splitActivities && !recording && primaryActivity != island::Activity::None
       ? island::secondaryActivity(
             {player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
              !downloads.empty(), timerActive},
             island::activityOrder(cfg.activityPriority), primaryActivity
         )
       : island::Activity::None;
+  // With nothing else running, two jobs in the downloads lane split between capsule and bubble.
+  const bool laneSplit = cfg.splitActivities
+      && !recording
+      && primaryActivity == island::Activity::Downloads
+      && otherActivity == island::Activity::None
+      && downloads.size() > 1;
+  const auto splitActivity = laneSplit ? island::Activity::Downloads : otherActivity;
+  const std::span<const DownloadProgress> capsuleDownloads =
+      laneSplit ? std::span<const DownloadProgress>(downloads).first(1) : std::span<const DownloadProgress>(downloads);
+  const std::span<const DownloadProgress> bubbleDownloads = laneSplit
+      ? std::span<const DownloadProgress>(downloads).subspan(1)
+      : std::span<const DownloadProgress>(downloads);
   // Cupertino focuses an expanded activity on that activity alone, like Apple's Dynamic
   // Island; batteries, unread history and hover widgets stay in the idle (calendar) view.
   // Privacy indicators always show.
@@ -1307,6 +1329,7 @@ void Island::prepare(Instance& inst) {
   case island::View::DownloadActivity:
   case island::View::Downloads:
     signature += view == island::View::Downloads ? std::to_string(player.has_value()) : time;
+    signature += laneSplit ? "|lane" : "";
     for (const auto& download : downloads)
       signature += std::format(
           "|{}|{}|{}|{}|{}|{}", download.desktopId, download.name,
@@ -1407,13 +1430,20 @@ void Island::prepare(Instance& inst) {
     std::optional<float> fraction;
     if (splitActivity == island::Activity::Timers)
       fraction = timers.front().fraction();
-    else if (splitActivity == island::Activity::Downloads
-             && std::ranges::all_of(downloads, [](const auto& item) { return item.determinate; })) {
+    else if (splitActivity == island::Activity::Downloads && std::ranges::all_of(bubbleDownloads, [](const auto& item) {
+               return item.determinate;
+             })) {
       float total = 0;
-      for (const auto& item : downloads)
+      for (const auto& item : bubbleDownloads)
         total += static_cast<float>(item.progress);
-      fraction = total / static_cast<float>(downloads.size());
+      fraction = total / static_cast<float>(bubbleDownloads.size());
     }
+    // A lone job in the bubble shows its own symbol; a group shows the download arrow.
+    const std::string bubbleIcon = bubbleDownloads.size() == 1 && !bubbleDownloads.front().icon.empty()
+        ? bubbleDownloads.front().icon
+        : "download";
+    inst.splitLane = laneSplit;
+    inst.splitNext = laneSplit ? bubbleDownloads.front().desktopId : "";
     // A retracting bubble keeps its last content until it is tucked away.
     if (splitActivity != island::Activity::None) {
       std::string bubbleSignature = std::format("{}|{}|{}|{}", static_cast<int>(splitActivity), d, s, gCupertino);
@@ -1422,7 +1452,7 @@ void Island::prepare(Instance& inst) {
       else if (splitActivity == island::Activity::Timers)
         bubbleSignature += "|" + timers.front().plugin + "|" + timers.front().icon;
       else
-        bubbleSignature += std::format("|{}", fraction.has_value());
+        bubbleSignature += std::format("|{}|{}|{}", fraction.has_value(), bubbleIcon, inst.splitNext);
       if (bubbleSignature != inst.splitSignature) {
         m_renderContext->makeCurrent(inst.surface->renderTarget());
         inst.splitSignature = bubbleSignature;
@@ -1469,14 +1499,18 @@ void Island::prepare(Instance& inst) {
           centred(std::move(ring));
           if (fraction)
             inst.splitProgress = [ringPtr](float value) { ringPtr->setProgress(value); };
-          symbol(timer ? timers.front().icon : "download", tint);
+          symbol(timer ? timers.front().icon : bubbleIcon, tint);
         }
         inst.splitContent = inst.splitArea->addChild(std::move(content));
-        inst.splitArea->setTooltip(i18n::tr(
-            splitActivity == island::Activity::Media       ? "island.split.media"
-                : splitActivity == island::Activity::Timers ? "island.split.timers"
-                                                            : "island.split.downloads"
-        ));
+        inst.splitArea->setTooltip(
+            laneSplit && bubbleDownloads.size() == 1
+                ? bubbleDownloads.front().name
+                : i18n::tr(
+                      splitActivity == island::Activity::Media        ? "island.split.media"
+                          : splitActivity == island::Activity::Timers ? "island.split.timers"
+                                                                      : "island.split.downloads"
+                  )
+        );
       }
       if (inst.splitProgress && fraction)
         inst.splitProgress(*fraction);
@@ -1621,7 +1655,10 @@ void Island::prepare(Instance& inst) {
     area->setOnClick([this, &inst](const InputArea::PointerData&) {
       if (inst.splitActivity == island::Activity::None)
         return;
-      inst.compactActivity.promote(inst.splitActivity);
+      if (inst.splitLane)
+        inst.splitLead = inst.splitNext;
+      else
+        inst.compactActivity.promote(inst.splitActivity);
       refresh();
     });
     inst.splitArea = static_cast<InputArea*>(bubble->addChild(std::move(area)));
@@ -1897,8 +1934,8 @@ void Island::prepare(Instance& inst) {
   if (view == island::View::DownloadActivity || view == island::View::TimerActivity) {
     const bool timerView = view == island::View::TimerActivity;
     const auto fraction = timerView ? std::optional{timers.front().fraction()}
-        : downloads.size() == 1 && downloads.front().determinate
-        ? std::optional{static_cast<float>(downloads.front().progress)}
+        : capsuleDownloads.size() == 1 && capsuleDownloads.front().determinate
+        ? std::optional{static_cast<float>(capsuleDownloads.front().progress)}
         : std::nullopt;
     DownloadRing* ringPtr = nullptr;
     if (!(outlineTimer || outlineDownload)) {
@@ -1908,18 +1945,26 @@ void Island::prepare(Instance& inst) {
       ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
       canvas->addChild(std::move(ring));
     }
-    const auto downloadIcon =
-        downloads.size() == 1 && !downloads.front().icon.empty() ? downloads.front().icon : "download";
+    const auto downloadIcon = capsuleDownloads.size() == 1 && !capsuleDownloads.front().icon.empty()
+        ? capsuleDownloads.front().icon
+        : "download";
+    // A lone script activity names itself where the clock would be, like a Live Activity.
+    const bool scriptTitle = !timerView
+        && capsuleDownloads.size() == 1
+        && !capsuleDownloads.front().icon.empty()
+        && !capsuleDownloads.front().name.empty();
     glyph(
         timerView ? timers.front().icon : downloadIcon, 23, (cfg.height - 18) / 2, 18, islandRole(ColorRole::Primary)
     );
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
-    const auto clockText = timerView ? timers.front().time() : time;
+    const auto clockText = timerView ? timers.front().time() : scriptTitle ? capsuleDownloads.front().name : time;
+    const float textSize = scriptTitle ? std::min(cfg.clockSize, 16.0F) : cfg.clockSize;
     const auto metrics = renderer.measureText(
-        clockText, cfg.clockSize * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+        clockText, textSize * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
     );
-    const float clockSize = cfg.clockSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
+    const float clockSize =
+        scriptTitle ? textSize : textSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
     auto* clockLabel = label(clockText, inset, 0, available, clockSize, foreground, true);
     if (timerView)
       inst.timerUi.push_back({timers.front().plugin, clockLabel, [ringPtr](float value) {
@@ -1941,10 +1986,14 @@ void Island::prepare(Instance& inst) {
           w - (showUnread ? 80 : 46), (cfg.height - 18) / 2, 18, muted
       );
     } else if (
-        !timerView && !showBattery && privacyList.empty() && (downloads.size() > 1 || downloads.front().determinate)
+        !timerView
+        && !showBattery
+        && privacyList.empty()
+        && (capsuleDownloads.size() > 1 || capsuleDownloads.front().determinate)
     ) {
-      const auto value = downloads.size() == 1 ? std::format("{}%", std::lround(downloads.front().progress * 100))
-                                               : std::to_string(downloads.size());
+      const auto value = capsuleDownloads.size() == 1
+          ? std::format("{}%", std::lround(capsuleDownloads.front().progress * 100))
+          : std::to_string(capsuleDownloads.size());
       auto* status = label(value, w - (showUnread ? 91 : 70), 0, 50, 12, muted, true);
       status->setPosition(status->x(), (cfg.height * s - status->height()) / 2);
     }
@@ -1956,7 +2005,7 @@ void Island::prepare(Instance& inst) {
   } else if (view == island::View::Downloads) {
     // Script activities share this card; it is "In Progress" unless every row is a download.
     const bool onlyDownloads = std::ranges::all_of(downloads, [](const auto& item) { return item.icon.empty(); });
-    glyph(onlyDownloads ? "download" : "progress", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
+    glyph(onlyDownloads ? "download" : "stack-2", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
     label(
         i18n::tr(onlyDownloads ? "island.downloads.title" : "island.downloads.in-progress"), 56, 17, w - 78,
         Style::fontSizeTitle, foreground, false, 1, FontWeight::SemiBold
