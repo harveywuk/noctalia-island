@@ -38,6 +38,10 @@ bind = SUPER, N, exec, noctalia msg launcher-run notes
 bind = SUPER SHIFT, D, exec, noctalia msg launcher-run System:toggle-dark-mode
 ```
 
+### Forms
+
+**Create Quicklink**, **Create Snippet** and their **Edit** actions show a short form in place of the results, Raycast-style. The search field edits the highlighted field: **Return** or **Tab** moves to the next field, **Shift + Tab** or **Up** goes back, and **Return** on the last row saves. **Esc** cancels. A problem, such as a keyword that's already taken, shows beside the save row.
+
 ### Preview pane
 
 Scoped searches for clipboard history, snippets and files show a preview pane beside the list: the full text or image, the first lines of a text file, and details such as size, type and when it was modified.
@@ -162,7 +166,8 @@ Open a URL, or search a site, from a keyword.
 
 - **Prefix**: `/link ` (also in global search)
 - **Built in**: `g` Google, `ddg` DuckDuckGo, `gh` GitHub, `yt` YouTube, `wiki` Wikipedia, `aw` ArchWiki and `maps` OpenStreetMap.
-- **Functionality**: Type a keyword, a space and your query (`gh noctalia`) to search that site. Activating a search quicklink with no query fills in its keyword so you can type one. Add your own under `[shell.launcher.quicklinks.<id>]`; a URL containing `{query}` becomes a search.
+- **Functionality**: Type a keyword, a space and your query (`gh noctalia`) to search that site. Activating a search quicklink with no query fills in its keyword so you can type one.
+- **Creating**: Run **Create Quicklink** (first in `/link`, or search "create quicklink") to fill in a name, a link and an optional keyword. A link containing `{query}` becomes a search. **Edit Quicklink…** and **Delete Quicklink** in the actions menu change ones made here; editing a built-in saves your version in its place. They are kept in `~/.local/state/noctalia/launcher_quicklinks.json`. Quicklinks can also go under `[shell.launcher.quicklinks.<id>]` in your config, and those are edited there.
 - **Web search**: Any query of two or more characters also offers **Search the Web** at the end of the results, using `shell.launcher.web_search_url`.
 
 ### Snippets
@@ -170,7 +175,8 @@ Open a URL, or search a site, from a keyword.
 Paste saved text by name or keyword.
 
 - **Prefix**: `/snip ` (also in global search)
-- **Source**: `[shell.launcher.snippets.<id>]` in your config, plus entries saved from clipboard history with **Save as Snippet** (kept in `~/.local/state/noctalia/launcher_snippets.json`).
+- **Source**: `[shell.launcher.snippets.<id>]` in your config, plus snippets made in the launcher (kept in `~/.local/state/noctalia/launcher_snippets.json`).
+- **Creating**: Run **Create Snippet** (first in `/snip`, or search "create snippet") to fill in a name, the text and an optional keyword. Type `\n` for a new line. **Save as Snippet** in clipboard history opens the same form with the copied text filled in, and **Edit Snippet…** changes one made here.
 - **Placeholders**: `{date}`, `{time}`, `{datetime}` and `{clipboard}` are filled in when the snippet is pasted.
 - **Limits**: Snippets are pasted from the launcher; they don't expand automatically as you type in other apps.
 
