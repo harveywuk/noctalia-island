@@ -851,6 +851,8 @@ struct DockConfig {
   // Inside outline for the dock background.
   ColorSpec border = colorSpecFromRole(ColorRole::Outline);
   float borderWidth = 0.0F;
+  // Faint hairline around the dock's glass, as on macOS; drawn when border_width is 0.
+  bool hairlineBorder = true;
   // Defaults float a fully rounded dock above the screen edge, like macOS.
   std::int32_t radius = static_cast<std::int32_t>(Style::radiusXl); // dock background corner radius
   std::int32_t radiusTopLeft = static_cast<std::int32_t>(Style::radiusXl);
@@ -881,6 +883,7 @@ struct DockConfig {
   float inactiveOpacity = 1.0F;      // non-focused app icon opacity
   bool showDots = true;              // show a dot below apps that are running
   bool showInstanceCount = false;    // show a badge with count when app has >1 window
+  bool showBadges = true;            // red unread-count badges that apps publish (LauncherEntry)
   DockLauncherPosition launcherPosition = DockLauncherPosition::None;
   std::string launcherIcon = "grid-dots";   // Tabler glyph name
   std::string launcherCustomImage = "";     // image path; overrides launcherIcon glyph when set

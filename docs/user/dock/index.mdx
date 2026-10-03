@@ -20,7 +20,8 @@ cross_axis_padding  = 4          # inner padding perpendicular to the icon row
 item_spacing        = 2          # gap between items in pixels
 background_opacity  = 0.88
 border              = "outline"  # color role or #RRGGBB for the dock outline
-border_width        = 0.0        # inside outline width in pixels; 0 disables it
+border_width        = 0.0        # inside outline width in pixels; 0 uses the hairline below
+hairline_border     = true       # faint glass edge, as on macOS (only when border_width = 0)
 shadow              = true       # cast the global [shell.shadow]
 radius              = 16
 radius_top_left     = 16         # optional per-corner overrides
@@ -45,6 +46,7 @@ active_opacity      = 1.0
 inactive_opacity    = 1.0
 show_instance_count = false      # badge with window count when an app has 2+ windows
 show_dots           = true       # a dot below each running app
+show_badges         = true       # red unread-count badges that apps report
 
 launcher_position   = "none"     # none | start | end - optional launcher button on the dock
 launcher_icon       = "grid-dots" # Tabler glyph for the launcher button
@@ -97,6 +99,10 @@ By default every icon is drawn at full size and opacity, as in the macOS dock. L
 ## Running apps
 
 With `show_dots = true` (default), a small dot under an icon marks an app that is running, however many windows it has. Running apps that are not pinned follow the pinned apps, after a thin divider.
+
+## Badges
+
+With `show_badges = true` (default), an app that reports an unread count gets a red badge at the top-right of its icon, as on macOS. Counts above 99 show as **99+**. Apps report counts through the `com.canonical.Unity.LauncherEntry` D-Bus interface (`count` and `count-visible`), the same one many mail, chat and calendar apps already use for other docks. An unread badge takes the corner before the window-count badge (`show_instance_count`).
 
 ## Magnification
 

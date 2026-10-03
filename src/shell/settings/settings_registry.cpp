@@ -1311,6 +1311,11 @@ namespace settings {
         ToggleSetting{cfg.dock.showInstanceCount}, "badge windows"
     ));
     entries.push_back(makeEntry(
+        SettingsSection::Dock, "behavior", tr("settings.schema.dock.show-badges.label"),
+        tr("settings.schema.dock.show-badges.description"), {"dock", "show_badges"}, ToggleSetting{cfg.dock.showBadges},
+        "badge unread notifications count"
+    ));
+    entries.push_back(makeEntry(
         SettingsSection::Dock, "layout", tr("settings.schema.dock.launcher-position.label"),
         tr("settings.schema.dock.launcher-position.description"), {"dock", "launcher_position"},
         asSegmented(enumSelect(kDockLauncherPositions, cfg.dock.launcherPosition)), "launcher apps grid"
@@ -1433,6 +1438,11 @@ namespace settings {
         SettingsSection::Dock, "shape", tr("settings.schema.dock.border-width.label"),
         tr("settings.schema.dock.border-width.description"), {"dock", "border_width"},
         sliderFor(cfg.dock.borderWidth, noctalia::config::schema::kDockBorderWidthRange, false), "outline stroke", true
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Dock, "shape", tr("settings.schema.dock.hairline-border.label"),
+        tr("settings.schema.dock.hairline-border.description"), {"dock", "hairline_border"},
+        ToggleSetting{cfg.dock.hairlineBorder}, "outline edge glass"
     ));
     entries.push_back(makeEntry(
         SettingsSection::Dock, "effects", tr("settings.schema.shared.background-opacity.label"),
