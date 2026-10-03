@@ -136,6 +136,19 @@ dies doesn't leave it behind. Script activities share the downloads slot in the
 activity priority setting, and the card's heading reads "In Progress" when one is
 present. Without an icon, a script activity shows a terminal symbol.
 
+## Quick pills
+
+Scripts and keybinds can flash a short pill, like the Focus pill, with any icon:
+
+```sh
+noctalia msg osd-show clipboard-check Copied
+noctalia msg osd-show shield-lock "VPN connected"
+```
+
+The icon is a Tabler glyph name. The pill fades after a moment. With the Island off
+it shows as a regular OSD, and it shows even when `[osd.kinds]` hides the built-in
+OSDs.
+
 ## Screenshot thumbnail
 
 When the shell saves a screenshot, its "Screenshot saved" notification carries a
