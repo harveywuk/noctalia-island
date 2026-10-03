@@ -55,6 +55,7 @@ Fixed on this branch:
 - **Internal notifications had no icon.** A banner from the shell itself ("Noctalia") started its text at the edge where every app banner leads with an icon. Internal notifications now carry the shell's own icon and desktop id, so the Island banner, the toast and the history show the owl like any app's icon.
 - **Dock pins written with `.desktop` showed a blank tile.** Desktop entry ids are file stems, so `org.codeberg.dnkl.foot.desktop` never matched. A pin now matches with or without the suffix, or by the file's full path; the docs described `StartupWMClass` and `Name` matching that the code never did, and now describe what it does.
 - **The Control Center's power tile read "Power" under a balance-scale glyph** (the balanced profile's icon). It reads "Power Mode" now.
+- **Settings opened with its page floating mid-way between the sidebar and the window's edge.** The page column is capped (System Settings keeps its rows a fixed width) but was centred in the space beside the sidebar, so a tiled window showed a gap as wide as the page before the first control. The column now starts beside the sidebar and may grow to 860 px; the spare width of a wide window stays on the right, where macOS leaves it too.
 
 Looked at and left:
 
