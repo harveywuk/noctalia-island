@@ -2299,8 +2299,9 @@ void Island::prepare(Instance& inst) {
   } else if (view == island::View::Notification && m_notification) {
     const auto n = *m_notification;
     const bool expanded = inst.expandedNotification == n.id;
-    // The sending app's icon leads its name, as on macOS; the name sits alone when none resolves.
-    const float appIconSize = 18.0F;
+    // The sending app's icon leads the banner at full size, as on a macOS banner, with the app
+    // name, title and body in a column beside it; the text starts at the edge when none resolves.
+    const float appIconSize = 36.0F;
     // A screenshot's image is its thumbnail, not the sender's icon.
     const bool screenshot = n.category == kScreenshotNotificationCategory
         && n.imageData
@@ -2311,8 +2312,9 @@ void Island::prepare(Instance& inst) {
     Notification iconSource = n;
     if (screenshot)
       iconSource.imageData.reset();
-    const bool hasAppIcon = notificationIcon(iconSource, 22, 12, appIconSize);
-    const float appLabelX = hasAppIcon ? 22 + appIconSize + 6 : 22;
+    const bool hasAppIcon = notificationIcon(iconSource, 24, 20, appIconSize);
+    const float textX = hasAppIcon ? 24 + appIconSize + 12 : 22;
+    const float appLabelX = textX;
     // "now" / "5m ago" closes the header row, as on the notification banners.
     constexpr float timeWidth = 56.0F;
     auto* appLabel =
@@ -2349,9 +2351,10 @@ void Island::prepare(Instance& inst) {
               120.0F, thumbnailHeight * static_cast<float>(n.imageData->width) / static_cast<float>(n.imageData->height)
           )
         : 0.0F;
-    const float textWidth = w - (expanded ? 64.0F : 44.0F) - (screenshot ? thumbnailWidth + 12.0F : 0.0F);
+    const float textWidth =
+        w - (expanded ? 64.0F : 44.0F) - (textX - 22.0F) - (screenshot ? thumbnailWidth + 12.0F : 0.0F);
     auto* summary =
-        label(n.summary, 22, 37, textWidth, Style::fontSizeTitle, foreground, false, 0, FontWeight::SemiBold);
+        label(n.summary, textX, 37, textWidth, Style::fontSizeTitle, foreground, false, 0, FontWeight::SemiBold);
     const float fullSummaryHeight = summary->height();
     // Pango's line limit is per paragraph. Flatten hard breaks only in the
     // compact preview so many short paragraphs cannot exceed its height cap.
@@ -2377,7 +2380,7 @@ void Island::prepare(Instance& inst) {
     Label* body = nullptr;
     if (hasBody) {
       const float bodyY = contentBottom + 8.0F;
-      body = label(n.body, 22, bodyY, textWidth, 13, muted, false, 0);
+      body = label(n.body, textX, bodyY, textWidth, 13, muted, false, 0);
       const float fullBodyHeight = body->height();
       if (!expanded) {
         body->setText(previewText(n.body));
@@ -2420,11 +2423,13 @@ void Island::prepare(Instance& inst) {
       const float viewportHeight = std::min(contentBottom - 37.0F, std::max(1.0F, textBottom - 37.0F));
       auto* scrollView = scroll.get();
       inst.content->addChild(std::move(scroll));
-      scrollView->setSize((w - 44) * s, viewportHeight * s);
+      scrollView->setSize((w - 22 - textX) * s, viewportHeight * s);
       scrollView->layout(renderer);
-      scrollView->setPosition(22 * s, 37 * s);
+      scrollView->setPosition(textX * s, 37 * s);
       contentBottom = 37.0F + viewportHeight;
     }
+    if (hasAppIcon)
+      contentBottom = std::max(contentBottom, 20.0F + appIconSize);
     const auto toggleExpanded = [this, &inst, id = n.id] {
       if (inst.expandedNotification == id)
         inst.expandedNotification.reset();

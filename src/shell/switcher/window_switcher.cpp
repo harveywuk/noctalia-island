@@ -715,6 +715,12 @@ void WindowSwitcher::show(wl_output* output) {
   m_output = output;
   const auto focusedId = m_platform->focusedCompositorWindowId();
   refreshWindows();
+  // Like Cmd+Tab, there is nothing to switch to with no windows open, so stay hidden rather
+  // than showing an empty strip until the modifier is released.
+  if (!wasActive && m_windows.empty()) {
+    m_output = nullptr;
+    return;
+  }
 
   if (wasActive) {
     cycleSelection(1);

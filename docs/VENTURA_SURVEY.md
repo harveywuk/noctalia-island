@@ -12,7 +12,9 @@ After screenshots: [monogram](assets/merged-survey/fixes/control-center-monogram
 3. **Settings index rows put the chevron next to the word.** Appearance's index reads "Theme  ›", "Interface  ›" with the chevron right after the label ([settings-appearance-index.png](assets/merged-survey/settings-appearance-index.png)). In System Settings the chevron sits at the right edge of the row. Same on the Plugins page.
 4. **The wallpaper panel opens to a blank box when the folder has no images** ([wallpaper-empty.png](assets/merged-survey/wallpaper-empty.png)). macOS always says what's missing. Fix: a "No Wallpapers" message naming the folder it looked in.
 
-## Worth a decision
+## Picked by harvey (also fixed on this branch)
+
+After screenshots: [banner icon](assets/merged-survey/fixes/island-banner-large-icon.png), [sidebar without headings](assets/merged-survey/fixes/settings-sidebar-no-headings.png). The switcher now stays hidden when no windows are open.
 
 5. **Island notification banner icon is tiny.** The banner shows a 16 px icon beside the app name ([island-banner-icons.png](assets/merged-survey/island-banner-icons.png)); a macOS banner leads with a large app icon (about 38 px) next to the title and body. Proposal: a larger leading icon, keeping the black capsule.
 6. **Settings sidebar has group headings** ("Personalise", "Devices", "Windows & workspaces", "General"). Ventura's sidebar has no headings, only gaps between groups. Proposal: drop the headings and keep the gaps.

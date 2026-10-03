@@ -2361,7 +2361,7 @@
           "label": "Shell Theme Mode"
         },
         "theme-mode": {
-          "description": "Choose Dark, Light, or Auto based on time of day; also applies to apps through templates",
+          "description": "Choose Light, Dark, or Auto based on time of day; also applies to apps through templates",
           "label": "Theme Mode"
         },
         "ui-scale": {
