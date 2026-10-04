@@ -86,11 +86,12 @@ public:
   void setInputRegion(const std::vector<InputRect>& rects);
   void setBlurRegion(const std::vector<InputRect>& rects);
   void clearBlurRegion();
-  // Compositor glass that trims a coarse blur region to the surface's own alpha (hyprglass with
-  // layers:alpha_coverage) gets one bounding box per shape instead of a stack of strips: its
-  // edges then follow the drawn, antialiased curve. Changing it resends every surface's region.
-  static void setBlurRegionsAsBoxes(bool boxes);
-  [[nodiscard]] static bool blurRegionsAsBoxes() noexcept;
+  // Compositor glass that takes a limited number of region rectangles (hyprglass: 64 with
+  // layers:alpha_coverage) gets each region coarsened to fit, still hugging its shapes; the drawn,
+  // antialiased curve then shapes the glass edge. 0 sends regions exactly. Changing it resends
+  // every surface's region.
+  static void setBlurRegionRectLimit(std::size_t limit);
+  [[nodiscard]] static std::size_t blurRegionRectLimit() noexcept;
   void setDebugName(std::string name);
 
   // Approximates a rounded rectangle as a stack of horizontal axis-aligned strips

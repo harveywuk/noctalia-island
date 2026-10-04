@@ -309,7 +309,7 @@ namespace {
 
 namespace {
 
-  bool g_blurRegionsAsBoxes = false;
+  std::size_t g_blurRegionRectLimit = 0;
 
   // Live surfaces, so a change in how blur regions are sent can resend them all.
   std::vector<Surface*>& liveSurfaces() {
@@ -317,56 +317,90 @@ namespace {
     return surfaces;
   }
 
-  // One bounding box per connected group of rects (strips that touch or overlap form one
-  // shape). The 16-rect limit of compositor glass is kept by merging everything past it.
-  std::vector<InputRect> boundingBoxesOf(const std::vector<InputRect>& rects) {
-    std::vector<InputRect> boxes;
-    for (const auto& r : rects) {
-      if (r.width <= 0 || r.height <= 0)
-        continue;
-      InputRect box = r;
-      bool merged = true;
-      while (merged) {
-        merged = false;
-        for (auto it = boxes.begin(); it != boxes.end(); ++it) {
-          const bool touches = box.x <= it->x + it->width && it->x <= box.x + box.width
-              && box.y <= it->y + it->height && it->y <= box.y + box.height;
-          if (!touches)
-            continue;
-          const int x0 = std::min(box.x, it->x);
-          const int y0 = std::min(box.y, it->y);
-          const int x1 = std::max(box.x + box.width, it->x + it->width);
-          const int y1 = std::max(box.y + box.height, it->y + it->height);
-          box = InputRect{x0, y0, x1 - x0, y1 - y0};
-          boxes.erase(it);
-          merged = true;
-          break;
-        }
-      }
-      boxes.push_back(box);
-    }
-    constexpr std::size_t kMaxBoxes = 16;
-    while (boxes.size() > kMaxBoxes) {
-      auto& a = boxes[boxes.size() - 2];
-      const auto& b = boxes.back();
+  // Coarsens a blur region to at most maxRects rectangles that still cover it, keeping close to
+  // the shapes: strips of one shape merge with their neighbours,
+  // cheapest first (the merge that adds the least area), so curves stay traced instead of
+  // becoming bounding boxes. A box's corners would take in whatever the surface draws there,
+  // such as the Island's capture glow, and glass it.
+  std::vector<InputRect> coarsenedRegion(const std::vector<InputRect>& rects, std::size_t kMaxRects) {
+    const auto bounds = [](const InputRect& a, const InputRect& b) {
       const int x0 = std::min(a.x, b.x);
       const int y0 = std::min(a.y, b.y);
       const int x1 = std::max(a.x + a.width, b.x + b.width);
       const int y1 = std::max(a.y + a.height, b.y + b.height);
-      a = InputRect{x0, y0, x1 - x0, y1 - y0};
-      boxes.pop_back();
+      return InputRect{x0, y0, x1 - x0, y1 - y0};
+    };
+    const auto area = [](const InputRect& r) { return static_cast<long long>(r.width) * r.height; };
+    const auto touches = [](const InputRect& a, const InputRect& b) {
+      return a.x <= b.x + b.width && b.x <= a.x + a.width && a.y <= b.y + b.height && b.y <= a.y + a.height;
+    };
+
+    // Connected shapes, each a vertical run of strips.
+    std::vector<std::vector<InputRect>> shapes;
+    for (const auto& r : rects) {
+      if (r.width <= 0 || r.height <= 0)
+        continue;
+      std::vector<InputRect> joined{r};
+      for (auto it = shapes.begin(); it != shapes.end();) {
+        if (std::ranges::any_of(*it, [&](const InputRect& other) { return touches(r, other); })) {
+          joined.insert(joined.end(), it->begin(), it->end());
+          it = shapes.erase(it);
+        } else {
+          ++it;
+        }
+      }
+      shapes.push_back(std::move(joined));
     }
-    return boxes;
+    std::size_t total = 0;
+    for (auto& shape : shapes) {
+      std::ranges::sort(shape, [](const InputRect& a, const InputRect& b) { return a.y < b.y; });
+      total += shape.size();
+    }
+
+    // Merge neighbouring strips within a shape, cheapest first, until the region fits.
+    while (total > kMaxRects) {
+      std::size_t bestShape = shapes.size();
+      std::size_t bestIndex = 0;
+      long long bestCost = 0;
+      for (std::size_t s = 0; s < shapes.size(); ++s) {
+        for (std::size_t i = 0; i + 1 < shapes[s].size(); ++i) {
+          const auto& a = shapes[s][i];
+          const auto& b = shapes[s][i + 1];
+          const long long cost = area(bounds(a, b)) - area(a) - area(b);
+          if (bestShape == shapes.size() || cost < bestCost) {
+            bestShape = s;
+            bestIndex = i;
+            bestCost = cost;
+          }
+        }
+      }
+      if (bestShape == shapes.size())
+        break; // every shape is one rect already; merge whole shapes below
+      auto& shape = shapes[bestShape];
+      shape[bestIndex] = bounds(shape[bestIndex], shape[bestIndex + 1]);
+      shape.erase(shape.begin() + static_cast<std::ptrdiff_t>(bestIndex) + 1);
+      --total;
+    }
+
+    std::vector<InputRect> out;
+    for (const auto& shape : shapes)
+      out.insert(out.end(), shape.begin(), shape.end());
+    // More separate shapes than the limit: fold the last ones together.
+    while (out.size() > kMaxRects) {
+      out[out.size() - 2] = bounds(out[out.size() - 2], out.back());
+      out.pop_back();
+    }
+    return out;
   }
 
 } // namespace
 
 Surface::Surface(WaylandConnection& connection) : m_connection(connection) { liveSurfaces().push_back(this); }
 
-void Surface::setBlurRegionsAsBoxes(bool boxes) {
-  if (g_blurRegionsAsBoxes == boxes)
+void Surface::setBlurRegionRectLimit(std::size_t limit) {
+  if (g_blurRegionRectLimit == limit)
     return;
-  g_blurRegionsAsBoxes = boxes;
+  g_blurRegionRectLimit = limit;
   for (Surface* surface : liveSurfaces()) {
     if (surface->m_requestedBlurRegion && surface->m_backgroundEffect != nullptr) {
       const auto rects = *surface->m_requestedBlurRegion;
@@ -376,7 +410,7 @@ void Surface::setBlurRegionsAsBoxes(bool boxes) {
   }
 }
 
-bool Surface::blurRegionsAsBoxes() noexcept { return g_blurRegionsAsBoxes; }
+std::size_t Surface::blurRegionRectLimit() noexcept { return g_blurRegionRectLimit; }
 
 Surface::~Surface() {
   std::erase(liveSurfaces(), this);
@@ -775,7 +809,8 @@ void Surface::setBlurRegion(const std::vector<InputRect>& requested) {
     return;
   }
   m_requestedBlurRegion = requested;
-  const std::vector<InputRect> rects = g_blurRegionsAsBoxes ? boundingBoxesOf(requested) : requested;
+  const std::vector<InputRect> rects =
+      g_blurRegionRectLimit > 0 ? coarsenedRegion(requested, g_blurRegionRectLimit) : requested;
 
   // Hyprland renders a fully off-surface non-empty blur region as full-surface blur, so send null instead.
   const bool hasVisibleRegion = regionIntersectsBounds(rects, m_width, m_height);

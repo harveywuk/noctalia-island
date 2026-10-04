@@ -490,9 +490,12 @@ hyprglass draws layer glass inside each surface's blur region, and up to v0.9.1 
 so all-or-nothing per pixel, with at most 16 region rectangles. Rounded shapes therefore
 end on a jagged edge. The local `noctalia/alpha-coverage` branch of hyprglass adds
 `layers:alpha_coverage` (default 0.45), which fades the glass with the surface's own
-alpha. When the shell finds that option it sends one box per glass shape and lets
-the drawn, antialiased outline shape the glass. Without it, the shell keeps exact
-strip regions. The wallpaper opts out with an empty region.
+alpha, and takes 64 region rectangles instead of 16. When the shell finds that option it
+merges each glass region down to 64 rectangles, choosing the merges that add the least
+area, so the region hugs the curve within a pixel or two and the drawn, antialiased
+outline shapes the glass edge. A
+bounding box would also glass whatever is drawn in its corners, such as the capture
+glow. Without the option, the shell keeps exact strip regions. The wallpaper opts out with an empty region.
 
 ## Home layout
 

@@ -3657,7 +3657,7 @@ void Island::updateGlass(Instance& inst, float x, float y, float radius) {
     if (split.bubble)
       split.bubble->setFill(islandRole(ColorRole::Surface, glass));
   // The compositor blurs (and hyprglass glasses) this shape behind the capsule and the split
-  // bubble; see Surface::setBlurRegionsAsBoxes for how hyprglass gets smooth edges from it.
+  // bubble; see Surface::setBlurRegionRectLimit for how hyprglass gets smooth edges from it.
   std::vector<InputRect> rects;
   if (glass < 1.0F && inst.visibility > 0.01F) {
     rects = Surface::tessellateRoundedRect(

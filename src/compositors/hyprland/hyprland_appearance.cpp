@@ -787,15 +787,16 @@ namespace compositors::hyprland {
   }
 
   void HyprlandAppearance::syncGlassMasking() {
-    // hyprglass with layers:alpha_coverage (> 0) trims layer glass to the surface's alpha, so
-    // shell surfaces can send a box per shape and get edges that follow their antialiased curve.
-    // Without it, keep the exact strip regions (Hyprland's own blur, or an unpatched hyprglass).
+    // hyprglass with layers:alpha_coverage (> 0) trims layer glass to the surface's alpha and takes
+    // 64 region rects (the same change raised it from 16), so shell surfaces send their regions
+    // coarsened to 64 and get edges that follow their antialiased curve. Without it, keep the
+    // exact strip regions (Hyprland's own blur, or an unpatched hyprglass).
     bool boxes = false;
     if (m_runtime.available() && m_config.glassManaged && m_config.glassEnabled && m_config.glassLayers) {
       const auto reply = m_runtime.requestJson("j/getoption plugin:hyprglass:layers:alpha_coverage");
       boxes = reply && reply->is_object() && reply->value("float", 0.0) > 0.0;
     }
-    Surface::setBlurRegionsAsBoxes(boxes);
+    Surface::setBlurRegionRectLimit(boxes ? 64 : 0);
   }
 
   void HyprlandAppearance::apply() {
