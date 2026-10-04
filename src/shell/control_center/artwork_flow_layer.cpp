@@ -18,6 +18,22 @@ namespace control_center {
 
   ArtworkFlowLayer::~ArtworkFlowLayer() { m_timer.stop(); }
 
+  void ArtworkFlowLayer::setHost(WithRenderer withRenderer, std::function<void()> requestRedraw) {
+    m_withRenderer = std::move(withRenderer);
+    m_requestRedraw = std::move(requestRedraw);
+  }
+
+  bool ArtworkFlowLayer::withRenderer(const std::function<void(Renderer&)>& fn) {
+    return m_withRenderer ? m_withRenderer(fn) : PanelManager::instance().withRenderer(fn);
+  }
+
+  void ArtworkFlowLayer::requestRedraw() {
+    if (m_requestRedraw)
+      m_requestRedraw();
+    else
+      PanelManager::instance().requestRedraw();
+  }
+
   void ArtworkFlowLayer::attach(Image* image) {
     m_image = image;
     if (m_image != nullptr)
@@ -53,15 +69,15 @@ namespace control_center {
       const auto now = std::chrono::steady_clock::now();
       m_seconds += std::chrono::duration<float>(now - m_lastTick).count();
       m_lastTick = now;
-      if (PanelManager::instance().withRenderer([this](Renderer& renderer) { upload(renderer); }))
-        PanelManager::instance().requestRedraw();
+      if (withRenderer([this](Renderer& renderer) { upload(renderer); }))
+        requestRedraw();
     });
   }
 
   void ArtworkFlowLayer::release() {
     m_timer.stop();
     if (m_texture.id != 0
-        && !PanelManager::instance().withRenderer([this](Renderer& renderer) {
+        && !withRenderer([this](Renderer& renderer) {
              renderer.textureManager().unload(m_texture);
            }))
       m_texture = {};

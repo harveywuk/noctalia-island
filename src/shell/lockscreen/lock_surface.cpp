@@ -169,6 +169,24 @@ LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) :
   m_wallpaper = static_cast<WallpaperNode*>(m_backgroundLayer->addChild(std::move(wallpaper)));
   m_wallpaper->setZIndex(0);
 
+  // Over the wallpaper and under the tint: the playing track's artwork gradient.
+  auto mediaFlow = std::make_unique<Image>();
+  mediaFlow->setFit(ImageFit::Cover);
+  mediaFlow->setHitTestVisible(false);
+  mediaFlow->setZIndex(0);
+  m_mediaFlowImage = static_cast<Image*>(m_backgroundLayer->addChild(std::move(mediaFlow)));
+  m_mediaFlow.attach(m_mediaFlowImage);
+  m_mediaFlow.setHost(
+      [this](const std::function<void(Renderer&)>& fn) {
+        if (renderContext() == nullptr || width() == 0 || height() == 0)
+          return false;
+        renderContext()->makeCurrent(renderTarget());
+        fn(renderTarget().renderer());
+        return true;
+      },
+      [this] { requestRedraw(); }
+  );
+
   m_backgroundLayer->addChild(
       ui::box({
           .out = &m_tintOverlay,
@@ -608,6 +626,7 @@ LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) :
 }
 
 LockSurface::~LockSurface() {
+  m_mediaFlow.release();
   m_aliveGuard.reset();
   releaseCaptureTextures();
   if (m_wallpaperTexture.id != 0) {
@@ -1169,6 +1188,7 @@ void LockSurface::prepareFrame(bool needsUpdate, bool needsLayout) {
     UiPhaseScope updatePhase(UiPhase::Update);
     updateCopy();
     syncRegularExtras(renderer);
+    syncMediaBackdrop(renderer);
   }
 
   if (needsUpdate || needsLayout) {
@@ -1272,6 +1292,8 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
 
   m_wallpaper->setPosition(0.0F, 0.0F);
   m_wallpaper->setSize(sw, sh);
+  m_mediaFlowImage->setPosition(0.0F, 0.0F);
+  m_mediaFlowImage->setSize(sw, sh);
   m_wallpaper->setFillMode(m_wallpaperFillMode);
   m_wallpaper->setFillColor(m_wallpaperFillColor);
 
@@ -2116,6 +2138,26 @@ void LockSurface::rebuildSessionButtons() {
     m_sessionButtons.push_back(button.get());
     m_sessionRow->addChild(std::move(button));
   }
+}
+
+void LockSurface::syncMediaBackdrop(Renderer& renderer) {
+  const auto active = m_mpris != nullptr ? m_mpris->activePlayer() : std::nullopt;
+  const bool playing = m_locked && !m_blackout && active.has_value() && active->playbackStatus == "Playing";
+  const std::string artUrl = playing ? mpris::effectiveArtUrl(*active) : std::string{};
+  if (artUrl != m_mediaFlowUrl) {
+    m_mediaFlowUrl = artUrl;
+    if (artUrl.empty()) {
+      m_mediaFlow.clear();
+    } else {
+      const std::string artPath = mpris::resolveArtworkSource(
+          m_httpClient, m_pendingArtDownloads, artUrl, [this] { requestUpdate(); }, m_aliveGuard
+      );
+      // Remote artwork may still be downloading; its completion asks for another update.
+      if (artPath.empty() || !m_mediaFlow.load(renderer, artPath))
+        m_mediaFlowUrl.clear();
+    }
+  }
+  m_mediaFlow.setAnimating(playing && m_mediaFlow.hasArtwork());
 }
 
 void LockSurface::syncRegularExtras(Renderer& renderer) {

@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,10 @@ namespace control_center {
 
     // The Image the flow is drawn into; hidden while there is no artwork.
     void attach(Image* image);
+    // Where frames are uploaded and redrawn between updates. Unset, that is PanelManager (an
+    // Island-hosted or ordinary panel); another surface, such as the lock screen, passes its own.
+    using WithRenderer = std::function<bool(const std::function<void(Renderer&)>&)>;
+    void setHost(WithRenderer withRenderer, std::function<void()> requestRedraw);
     // Decodes `path` and shows its first frame. False (and cleared) when it cannot be read.
     bool load(Renderer& renderer, const std::string& path);
     void clear();
@@ -38,6 +43,8 @@ namespace control_center {
 
   private:
     void upload(Renderer& renderer);
+    bool withRenderer(const std::function<void(Renderer&)>& fn);
+    void requestRedraw();
 
     visuals::ArtworkFlow m_flow;
     Image* m_image = nullptr;
@@ -46,6 +53,8 @@ namespace control_center {
     float m_seconds = 0.0F;
     std::chrono::steady_clock::time_point m_lastTick;
     Timer m_timer;
+    WithRenderer m_withRenderer;
+    std::function<void()> m_requestRedraw;
   };
 
 } // namespace control_center

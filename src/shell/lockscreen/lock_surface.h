@@ -10,6 +10,7 @@
 #include "render/core/texture_manager.h"
 #include "render/scene/input_dispatcher.h"
 #include "render/scene/node.h"
+#include "shell/control_center/artwork_flow_layer.h"
 #include "shell/lockscreen/lockscreen_login_box.h"
 #include "wayland/surface.h"
 
@@ -141,6 +142,7 @@ private:
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void updateCopy();
   void syncRegularExtras(Renderer& renderer);
+  void syncMediaBackdrop(Renderer& renderer);
   void rebuildSessionButtons();
   // Cupertino layout: clock at the top, identity block without a panel.
   void layoutCupertino(Renderer& renderer, float sw, float sh, const lockscreen_login_box::LoginBoxStyle& style);
@@ -248,6 +250,10 @@ private:
   std::unordered_set<std::string> m_pendingArtDownloads;
   std::shared_ptr<void> m_aliveGuard = std::make_shared<int>(0);
   std::string m_lastArtUrl;
+  // While media plays, the background is its artwork's flowing gradient, as on iOS.
+  Image* m_mediaFlowImage = nullptr;
+  control_center::ArtworkFlowLayer m_mediaFlow;
+  std::string m_mediaFlowUrl;
   std::string m_lastMediaTitle;
   std::string m_lastMediaArtist;
   std::string m_lastWeatherFingerprint;
