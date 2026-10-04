@@ -216,13 +216,31 @@ panel has already faded and shrunk by then, so that rebuild now drops the old vi
 desktop screen recording found it; the harness only catches it when the panel is opened
 by clicking the expanded Island, not with `panel-toggle`.
 
+### Glass performance
+
+The Island's layer surface used to cover the whole output, and hyprglass's layer glass clears a
+buffer and runs its composite over the full layer whenever the Island is redrawn. With a glass
+Island over moving content at 3440x1440@165 on the integrated GPU, Hyprland held about 111 fps
+(165 with glass off). The surface now spans the output's width but only the capsule's height
+(128 px at rest), and a hosted panel trims it to the panel's height (`41b69d234`). The same test
+holds 165 fps at rest and on hover and about 162 fps with the Control Center open. Window glass
+costs much less (about 8% of the integrated GPU for a full-screen window). The nested harness
+cannot render on the NVIDIA GPU (GBM allocation fails for headless outputs), so the numbers are
+from the integrated GPU, a worst case.
+
+### Failing smoke suites (not from this work)
+
+`--island-routing-only` (no capsule found on TEST-1 at `focused-first`), `--island-bars-only`
+(`KeyError: 'capsule'` reading overrides) and `--island-activity-cycle-only` (`cycle-third`
+shows media) fail identically on the build from before 4 October's Island changes. Every other
+`--island-*-only` suite passes.
+
 ## Proposed next priorities
 
 1. **Greeter check:** build `1.5.0.r3.g5a82d5c` (branch `feature/cupertino`, pushed to the
    fork `harveywuk/noctalia-greeter`) is installed as of 4 October. Verify it at the next login
    with the real synced wallpaper, which the test harness cannot read.
-2. **Glass performance:** measure Hyprland frame times with the glass Island expanding over
-   playing video, now that the shader takes up to 64 region rectangles per surface.
+2. **The three failing smoke suites** above: find out whether the tests or the features drifted.
 3. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
 4. **Remaining text fit and reduced-motion marquees:** carried over from 1 October
    (`--text-fit-only`).
