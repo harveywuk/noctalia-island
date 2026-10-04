@@ -1205,9 +1205,14 @@ void Island::geometry(Instance& inst) {
     inst.outgoing->setPosition((inst.width - inst.outgoingWidth) * s / 2, 0);
   if (inst.content) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
-    // Conceal content until the expanding capsule has room to contain it.
-    const float gap = std::max(std::abs(inst.width - inst.targetWidth), std::abs(inst.height - inst.targetHeight));
-    inst.content->setOpacity(std::clamp(1 - gap / 55, 0.0F, 1.0F) * inst.contentFade * (1 - inst.outgoingFade));
+    // Conceal content until the expanding capsule has room to contain it: the capsule clips its
+    // content square, so content larger than the capsule shows cut off with flat edges. A capsule
+    // still larger than its content (collapsing) only needs to be close, so the compact view
+    // doesn't float in an oversized capsule.
+    const float shortfall = std::max(inst.targetWidth - inst.width, inst.targetHeight - inst.height);
+    const float excess = std::max(inst.width - inst.targetWidth, inst.height - inst.targetHeight);
+    const float room = std::clamp(1 - shortfall / 10, 0.0F, 1.0F) * std::clamp(1 - excess / 55, 0.0F, 1.0F);
+    inst.content->setOpacity(room * inst.contentFade * (1 - inst.outgoingFade));
     inst.content->setHitTestVisible(inst.content->opacity() > 0.1F);
   }
   const std::array<int, 4> inputRegion{
