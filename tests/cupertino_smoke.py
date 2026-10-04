@@ -8,6 +8,8 @@ import subprocess
 import time
 import tomllib
 
+from PIL import Image, ImageChops
+
 
 def prepare(base, cfg, env):
     path = cfg/'config.toml'
@@ -45,24 +47,47 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
     def shot(name, monitor='TEST-1'):
         path = out/(name+'.png'); run(['grim', '-o', monitor, str(path)]); return path
     def words(name='current'):
+        # Settings captions and text on grey fields are at the edge of what OCR reads at 1x, so
+        # read a 2x upscale and report positions in screen pixels.
         tessdata = os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata'))
-        output = run(['tesseract', str(shot(name)), 'stdout', '--tessdata-dir', tessdata, '--psm', '11',
-                      '-c', 'tessedit_create_tsv=1', '-c', 'user_defined_dpi=96'])
-        return [r for r in csv.DictReader(io.StringIO(output), delimiter='\t', quoting=csv.QUOTE_NONE)
+        image = Image.open(shot(name))
+        upscaled = out/(name+'-ocr.png')
+        image.resize((image.width*2, image.height*2), Image.LANCZOS).save(upscaled)
+        output = run(['tesseract', str(upscaled), 'stdout', '--tessdata-dir', tessdata, '--psm', '11',
+                      '-c', 'tessedit_create_tsv=1', '-c', 'user_defined_dpi=192'])
+        rows = [r for r in csv.DictReader(io.StringIO(output), delimiter='\t', quoting=csv.QUOTE_NONE)
                 if r.get('text', '').strip()]
-    def click_text(text):
+        for r in rows:
+            for key in ('left', 'top', 'width', 'height'):
+                r[key] = str(int(r[key])//2)
+        return rows
+    def find_text(text):
+        """Centre of the first visible run of words matching `text`, scrolling down to find it."""
         target = text.lower().split()
         for _ in range(12):
             rows = words()
             for i in range(len(rows)-len(target)+1):
                 selected = rows[i:i+len(target)]
-                if [r['text'].lower() for r in selected] == target:
+                # OCR sometimes reads a stray quote or bar at a word's edge.
+                if [r['text'].lower().strip('‘’“”"\'|.,:;') for r in selected] == target:
                     x = int(selected[0]['left'])+int(selected[0]['width'])//2
                     y = int(selected[0]['top'])+int(selected[0]['height'])//2
                     if y < 640:
-                        click(x, y); return
+                        return x, y
             move(1000, 575); command(pointer, 'scroll 3'); time.sleep(.3)
         raise AssertionError('Missing control: '+text)
+    def click_text(text):
+        click(*find_text(text))
+    def click_row_control(description):
+        """Click the control at the right edge of the settings row whose description starts with
+        `description`. Text on the grey fields (pickers, segmented buttons) is too low in contrast
+        to OCR reliably; row descriptions are not, and unlike titles they don't recur in banners."""
+        _, y = find_text(description)
+        before = Image.open(shot('row-control-before')).convert('L')
+        click(1040, y-13); time.sleep(.4)
+        after = Image.open(shot('row-control-after')).convert('L')
+        changed = ImageChops.difference(before, after).point(lambda v: 255 if v > 40 else 0).getbbox()
+        assert changed, 'Clicking the row control for '+repr(description)+' opened nothing'
     def close():
         msg('panel-close'); msg('settings-close'); move(1100, 580); time.sleep(.4)
     def panel(name, context='', capture=None):
@@ -100,9 +125,9 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             assert 'design' in text and 'review' in text, text
             msg('notification-clear-active')
             close(); msg('settings-open', 'appearance'); time.sleep(.9); click_text('Theme')
-            click_text('macOS')
+            click_row_control('Choose a palette')
             shot(mode+'-community-preset')
-            # The trigger above was located from its rendered label; choose the sole
+            # The trigger above was located from its row's label; choose the sole
             # offline catalog entry through the real picker keyboard path.
             command(keyboard, 108); command(keyboard, 28); time.sleep(.5)
             assert msg('color-scheme-get') == 'community macOS'
