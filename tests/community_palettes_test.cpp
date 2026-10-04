@@ -50,6 +50,15 @@ int main(int argc, char** argv) {
   assert(mac != catalog.end() && mac->md5.empty());
   assert(!mac->preview.dark.accents.empty() && !mac->preview.light.accents.empty());
   assert(communityPaletteCatalogMd5("Remote") == "abc");
+  // Curated pickers hide catalog palettes, except the one already selected.
+  const auto listed = [](const std::vector<AvailablePalette>& palettes, std::string_view name) {
+    return std::ranges::count(palettes, name, &AvailablePalette::name) == 1;
+  };
+  assert(!listed(communityPalettesForPicker(true, ""), "Remote"));
+  assert(listed(communityPalettesForPicker(true, ""), "macOS"));
+  assert(communityPalettesForPicker(true, "").size() == bundledCatalog.size());
+  assert(listed(communityPalettesForPicker(true, "Remote"), "Remote"));
+  assert(listed(communityPalettesForPicker(false, ""), "Remote"));
 
   // Every bundled palette, not only macOS, has both modes and meets the same contrast pairs.
   assert(bundledCatalog.size() >= 5);

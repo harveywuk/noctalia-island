@@ -1322,6 +1322,7 @@ namespace noctalia::config::schema {
         enumField(&ThemeConfig::source, "source", kPaletteSources),
         field(&ThemeConfig::builtinPalette, "builtin"),
         field(&ThemeConfig::communityPalette, "community_palette"),
+        field(&ThemeConfig::curatedPalettes, "curated_palettes"),
         field(&ThemeConfig::customPalette, "custom_palette"),
         field(&ThemeConfig::wallpaperScheme, "wallpaper_scheme"),
         enumField(&ThemeConfig::mode, "mode", kThemeModes),

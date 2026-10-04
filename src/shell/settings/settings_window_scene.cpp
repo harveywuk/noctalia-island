@@ -762,7 +762,11 @@ settings::RegistryEnvironment SettingsWindow::buildRegistryEnvironment() const {
   env.greeterSyncAvailable =
       m_config != nullptr && greeter::appearanceSyncAvailable(m_config->config().shell.greeterSync);
   const ThemeMode previewMode = m_config != nullptr ? shellThemeMode(m_config->config().theme) : ThemeMode::Dark;
-  for (const auto& paletteInfo : noctalia::theme::availableCommunityPalettes()) {
+  const auto* themeConfig = m_config != nullptr ? &m_config->config().theme : nullptr;
+  for (const auto& paletteInfo : noctalia::theme::communityPalettesForPicker(
+           themeConfig == nullptr || themeConfig->curatedPalettes,
+           themeConfig != nullptr ? std::string_view(themeConfig->communityPalette) : std::string_view{}
+       )) {
     env.communityPalettes.push_back(
         settings::SelectOption{
             .value = paletteInfo.name,

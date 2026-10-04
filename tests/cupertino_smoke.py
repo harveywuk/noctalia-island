@@ -129,7 +129,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             shot(mode+'-community-preset')
             # The trigger above was located from its row's label; choose the sole
             # offline catalog entry through the real picker keyboard path.
-            command(keyboard, 108); command(keyboard, 28); time.sleep(.5)
+            # Several palettes are bundled, so filter to macOS first (m, a, c, o, s).
+            for code in (50, 30, 46, 24, 31):
+                command(keyboard, code)
+            time.sleep(.3); command(keyboard, 108); command(keyboard, 28); time.sleep(.5)
             assert msg('color-scheme-get') == 'community macOS'
             close()
 

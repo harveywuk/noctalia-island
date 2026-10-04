@@ -2655,6 +2655,10 @@
           "description": "Scale corner radius across shell UI containers and controls",
           "label": "Corner Roundness"
         },
+        "curated-palettes": {
+          "description": "List only the bundled palettes, which are checked for readable contrast in light and dark mode. Turn off to browse the full online catalogue.",
+          "label": "Curated Palettes Only"
+        },
         "custom-palette": {
           "description": "Choose a palette from ~/.config/noctalia/palettes/",
           "label": "Custom Palette",

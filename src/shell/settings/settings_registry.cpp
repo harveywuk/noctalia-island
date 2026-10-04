@@ -793,6 +793,11 @@ namespace settings {
           tr("settings.schema.appearance.community-palette.description"), {"theme", "community_palette"},
           std::move(communityPaletteControl), "community palette colors"
       ));
+      entries.push_back(makeEntry(
+          SettingsSection::Appearance, "theme", tr("settings.schema.appearance.curated-palettes.label"),
+          tr("settings.schema.appearance.curated-palettes.description"), {"theme", "curated_palettes"},
+          ToggleSetting{cfg.theme.curatedPalettes}, "curated bundled community palettes catalog contrast"
+      ));
     } else if (cfg.theme.source == PaletteSource::Custom) {
       SettingControl customPaletteControl =
           TextSetting{.value = cfg.theme.customPalette, .placeholder = "", .browseFileExtensions = {}};

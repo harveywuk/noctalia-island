@@ -155,6 +155,17 @@ namespace noctalia::theme {
     return catalog;
   }
 
+  std::vector<AvailablePalette> communityPalettesForPicker(bool curatedOnly, std::string_view selected) {
+    auto palettes = availableCommunityPalettes();
+    if (!curatedOnly)
+      return palettes;
+    const auto bundled = parseCatalogFile(paths::assetPath("community-palettes/catalog.json"));
+    std::erase_if(palettes, [&](const AvailablePalette& entry) {
+      return entry.name != selected && std::ranges::find(bundled, entry.name, &AvailablePalette::name) == bundled.end();
+    });
+    return palettes;
+  }
+
   std::filesystem::path bundledCommunityPalettePath(std::string_view name) {
     const auto bundled = parseCatalogFile(paths::assetPath("community-palettes/catalog.json"));
     if (std::ranges::find(bundled, name, &AvailablePalette::name) == bundled.end()) {

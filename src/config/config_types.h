@@ -2335,6 +2335,9 @@ struct ThemeConfig {
   PaletteSource source = PaletteSource::Builtin;
   std::string builtinPalette = "Noctalia";
   std::string communityPalette = "Oxocarbon";
+  // Offer only the bundled, contrast-checked community palettes rather than the whole online
+  // catalog (a palette already chosen from the catalog keeps working and stays listed).
+  bool curatedPalettes = true;
   std::string customPalette;
   std::string wallpaperScheme = "m3-content";
   ThemeMode mode = ThemeMode::Dark;

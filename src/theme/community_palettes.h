@@ -44,6 +44,11 @@ namespace noctalia::theme {
 
   [[nodiscard]] std::vector<AvailablePalette> availableCommunityPalettes();
 
+  // The palettes to offer in pickers: with curatedOnly, just the bundled presets (whose contrast is
+  // checked) plus `selected` when it is a catalog palette chosen earlier, so it stays visible;
+  // otherwise every available palette.
+  [[nodiscard]] std::vector<AvailablePalette> communityPalettesForPicker(bool curatedOnly, std::string_view selected);
+
   // Bundled community presets remain selectable offline and are never downloaded over.
   // Returns an empty path for names that are not in the bundled catalog.
   [[nodiscard]] std::filesystem::path bundledCommunityPalettePath(std::string_view name);

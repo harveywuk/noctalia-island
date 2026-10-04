@@ -1240,7 +1240,9 @@ void WallpaperPanel::rebuildFavoritePaletteDetailSelect(const WallpaperFavorite*
       selectedValue = favorite->wallpaperScheme;
       break;
     case PaletteSource::Community:
-      for (const auto& community : noctalia::theme::availableCommunityPalettes()) {
+      for (const auto& community : noctalia::theme::communityPalettesForPicker(
+               m_config == nullptr || m_config->config().theme.curatedPalettes, favorite->communityPalette
+           )) {
         m_favoritePaletteDetailValues.push_back(community.name);
         labels.push_back(community.name);
       }
