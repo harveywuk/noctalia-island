@@ -52,6 +52,11 @@ namespace {
       result.title = i18n::tr("launcher.quicklinks.search-for", "name", link.name, "query", std::string(query));
     } else {
       result.title = link.name;
+      if (takesQuery(link)) {
+        result.arguments.push_back(
+            {.id = "query", .placeholder = i18n::tr("launcher.quicklinks.query"), .required = true}
+        );
+      }
     }
     result.subtitle = link.keyword.empty() ? displayHost(link.url) : link.keyword;
     result.glyphName = glyphFor(link);
@@ -395,8 +400,12 @@ bool QuicklinkProvider::activate(const LauncherResult& result) {
     }
     return false; // the launcher stays open on the form
   }
+  LauncherResult filled = result;
+  if (!filled.query.has_value() && !filled.arguments.empty() && !filled.arguments.front().value.empty()) {
+    filled.query = filled.arguments.front().value; // typed in the launcher's argument bar
+  }
   // A search link picked without a query: put its keyword in the field so the query can follow.
-  if (result.id != kWebSearchId && !result.query.has_value()) {
+  if (filled.id != kWebSearchId && !filled.query.has_value()) {
     for (const auto& link : links()) {
       if (std::string(kLinkPrefix) + link.id == result.id
           && takesQuery(link)
@@ -407,7 +416,7 @@ bool QuicklinkProvider::activate(const LauncherResult& result) {
       }
     }
   }
-  return launcher_util::openUri(urlFor(result));
+  return launcher_util::openUri(urlFor(filled));
 }
 
 std::string QuicklinkProvider::primaryActionLabel(const LauncherResult& result) const {

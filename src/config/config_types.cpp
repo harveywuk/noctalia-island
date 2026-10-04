@@ -52,7 +52,7 @@ namespace {
 
 std::vector<ShortcutConfig> defaultControlCenterShortcuts() {
   return {
-      {"wifi"}, {"bluetooth"}, {"caffeine"}, {"nightlight"}, {"notification"}, {"power_profile"},
+      {"wifi"}, {"bluetooth"}, {"power_profile"}, {"notification"}, {"nightlight"}, {"caffeine"},
   };
 }
 

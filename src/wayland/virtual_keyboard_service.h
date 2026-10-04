@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 struct wl_display;
@@ -30,6 +31,8 @@ public:
 
   [[nodiscard]] bool isAvailable() const noexcept;
   [[nodiscard]] bool sendPasteShortcut(VirtualPasteShortcut shortcut);
+  // Presses Backspace `count` times (snippet expansion erasing the typed keyword).
+  [[nodiscard]] bool typeBackspaces(std::size_t count);
 
 private:
   [[nodiscard]] bool ensureKeyboard();

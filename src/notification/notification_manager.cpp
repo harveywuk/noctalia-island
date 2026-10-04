@@ -1,6 +1,7 @@
 #include "notification_manager.h"
 
 #include "core/deferred_call.h"
+#include "core/files/resource_paths.h"
 #include "core/log.h"
 #include "notification/notification_filter.h"
 #include "notification/notification_history_store.h"
@@ -473,6 +474,13 @@ uint32_t NotificationManager::addInternal(
     std::optional<std::string> icon, std::optional<NotificationImageData> imageData,
     std::optional<std::string> category, std::optional<std::string> desktopEntry, NotificationDndPolicy dndPolicy
 ) {
+  // The shell's own banners lead with its icon, as an app's do with theirs.
+  if (!icon.has_value() || icon->empty()) {
+    icon = paths::assetPath("noctalia.svg").string();
+  }
+  if (!desktopEntry.has_value() || desktopEntry->empty()) {
+    desktopEntry = "dev.noctalia.Noctalia";
+  }
   return addOrReplace(
       NotificationRequest{
           .appName = std::move(appName),

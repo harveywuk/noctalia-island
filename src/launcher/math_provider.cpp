@@ -2,14 +2,21 @@
 
 #include "config/config_service.h"
 #include "i18n/i18n.h"
+#include "launcher/date_provider.h"
 #include "launcher/time_provider.h"
+#include "launcher/timer_provider.h"
 #include "net/http_client.h"
+#include "util/file_utils.h"
 #include "wayland/clipboard_service.h"
 
 #include <cctype>
+#include <chrono>
+#include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <libqalculate/Calculator.h>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <regex>
 #include <string>
 
@@ -64,6 +71,10 @@ namespace {
   }
 
   bool shouldRefreshExchangeRateSource(std::string_view url) { return !url.contains("nbrb.by"); }
+
+  constexpr std::size_t kMaxHistory = 30;
+  constexpr std::string_view kHistoryPrefix = "history:";
+  constexpr std::string_view kClearHistoryId = "clear-history";
 
 } // namespace
 
@@ -128,12 +139,109 @@ std::vector<LauncherResult> MathProvider::query(std::string_view text) const {
   if (!looksLikeMath(text)) {
     return {};
   }
-  return evaluate(text);
+  // Timers and dates ("timer 10m tea", "3 days from now") read as unit expressions to libqalculate.
+  if (TimerProvider::parse(text, false).has_value()) {
+    return {};
+  }
+  const std::time_t now = std::time(nullptr);
+  std::tm local{};
+  localtime_r(&now, &local);
+  const std::chrono::year_month_day today{
+      std::chrono::year{local.tm_year + 1900}, std::chrono::month{static_cast<unsigned>(local.tm_mon + 1)},
+      std::chrono::day{static_cast<unsigned>(local.tm_mday)}
+  };
+  if (DateProvider::answer(text, today, false).has_value()) {
+    return {};
+  }
+  return evaluate(text, false);
 }
 
-std::vector<LauncherResult> MathProvider::queryPrefixed(std::string_view text) const { return evaluate(text); }
+std::vector<LauncherResult> MathProvider::queryPrefixed(std::string_view text) const {
+  if (trimmed(text).empty()) {
+    return historyResults();
+  }
+  return evaluate(text, true);
+}
 
-std::vector<LauncherResult> MathProvider::evaluate(std::string_view text) const {
+std::deque<MathProvider::HistoryEntry> MathProvider::loadHistory(const std::string& path) {
+  std::deque<HistoryEntry> history;
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return history;
+  }
+  try {
+    const auto json = nlohmann::json::parse(file);
+    for (const auto& item : json) {
+      HistoryEntry entry{.expression = item.value("expression", ""), .result = item.value("result", "")};
+      if (!entry.result.empty()) {
+        history.push_back(std::move(entry));
+      }
+    }
+  } catch (const nlohmann::json::exception&) {
+    history.clear();
+  }
+  return history;
+}
+
+void MathProvider::saveHistory(const std::string& path, const std::deque<HistoryEntry>& history) {
+  std::error_code ec;
+  std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+  nlohmann::json json = nlohmann::json::array();
+  for (const auto& entry : history) {
+    json.push_back({{"expression", entry.expression}, {"result", entry.result}});
+  }
+  std::ofstream file(path, std::ios::trunc);
+  file << json.dump(2) << '\n';
+}
+
+std::string MathProvider::historyPath() const {
+  const std::string dir = FileUtils::stateDir();
+  return (dir.empty() ? "." : dir) + "/calculator_history.json";
+}
+
+void MathProvider::remember(std::string expression, std::string result) {
+  if (!m_history.has_value()) {
+    m_history = loadHistory(historyPath());
+  }
+  std::erase_if(*m_history, [&](const HistoryEntry& entry) {
+    return entry.expression == expression && entry.result == result;
+  });
+  m_history->push_front({.expression = std::move(expression), .result = std::move(result)});
+  while (m_history->size() > kMaxHistory) {
+    m_history->pop_back();
+  }
+  saveHistory(historyPath(), *m_history);
+}
+
+std::vector<LauncherResult> MathProvider::historyResults() const {
+  if (!m_history.has_value()) {
+    m_history = loadHistory(historyPath());
+  }
+  std::vector<LauncherResult> results;
+  for (std::size_t i = 0; i < m_history->size(); ++i) {
+    const HistoryEntry& entry = (*m_history)[i];
+    LauncherResult r;
+    r.id = std::string(kHistoryPrefix) + std::to_string(i);
+    r.title = "= " + entry.result;
+    r.subtitle = entry.expression;
+    r.glyphName = "history";
+    r.kind = i18n::tr("launcher.calculator.history");
+    r.score = static_cast<double>(m_history->size() - i);
+    results.push_back(std::move(r));
+  }
+  if (!results.empty()) {
+    LauncherResult clear;
+    clear.id = std::string(kClearHistoryId);
+    clear.title = i18n::tr("launcher.calculator.clear-history");
+    clear.glyphName = "trash";
+    clear.kind = i18n::tr("launcher.kinds.command");
+    clear.score = 0.0;
+    results.push_back(std::move(clear));
+  }
+  return results;
+}
+
+std::vector<LauncherResult> MathProvider::evaluate(std::string_view text, bool prefixed) const {
   // Times and time zones ("3pm in tokyo") belong to the Time provider.
   if (TimeProvider::parse(text, false).has_value()) {
     return {};
@@ -162,14 +270,22 @@ std::vector<LauncherResult> MathProvider::evaluate(std::string_view text) const 
   std::string output = m_calc->calculateAndPrint(input, /*msecs=*/200, eo, po);
 
   bool hadError = false;
+  bool hadWarning = false;
   for (CalculatorMessage* m = m_calc->message(); m != nullptr; m = m_calc->nextMessage()) {
     if (m->type() == MESSAGE_ERROR) {
       hadError = true;
+    } else if (m->type() == MESSAGE_WARNING) {
+      hadWarning = true;
     }
   }
 
-  // Reject errors and no-ops (e.g. the user just typed a bare number).
+  // Reject errors and no-ops (e.g. the user just typed a bare number). In the global search also
+  // reject answers built from words libqalculate didn't know (it quotes them: 'tea'), which is
+  // what a plain phrase with a number in it produces.
   if (hadError || output.empty() || output == input || output == localized) {
+    return {};
+  }
+  if (!prefixed && (hadWarning || output.contains('\''))) {
     return {};
   }
 
@@ -184,30 +300,56 @@ std::vector<LauncherResult> MathProvider::evaluate(std::string_view text) const 
 }
 
 bool MathProvider::activate(const LauncherResult& result) {
-  if (result.id != "math") {
+  if (result.id == kClearHistoryId) {
+    m_history = std::deque<HistoryEntry>{};
+    saveHistory(historyPath(), *m_history);
+    return false; // the list refreshes through the actions path; Return here keeps the launcher open
+  }
+  if (result.id != "math" && !result.id.starts_with(kHistoryPrefix)) {
     return false;
   }
 
   std::string value = result.title.substr(2);
+  if (result.id == "math") {
+    remember(result.subtitle, value);
+  }
   return m_clipboard != nullptr && m_clipboard->copyText(std::move(value));
 }
 
-std::string MathProvider::primaryActionLabel(const LauncherResult& /*result*/) const {
+std::string MathProvider::primaryActionLabel(const LauncherResult& result) const {
+  if (result.id == kClearHistoryId) {
+    return i18n::tr("launcher.calculator.clear-history");
+  }
   const bool paste = m_config == nullptr || m_config->config().shell.launcher.autoPaste != ClipboardAutoPasteMode::Off;
   return i18n::tr(paste ? "launcher.actions.paste-answer" : "launcher.actions.copy-answer");
 }
 
-std::vector<LauncherAction> MathProvider::actions(const LauncherResult& /*result*/) const {
-  return {
+std::vector<LauncherAction> MathProvider::actions(const LauncherResult& result) const {
+  if (result.id == kClearHistoryId) {
+    return {};
+  }
+  std::vector<LauncherAction> actions{
       {.id = "copy-answer", .label = i18n::tr("launcher.actions.copy-answer")},
       {.id = "copy-expression", .label = i18n::tr("launcher.actions.copy-expression")},
   };
+  if (result.id.starts_with(kHistoryPrefix)) {
+    actions.push_back({.id = "clear-history", .label = i18n::tr("launcher.calculator.clear-history")});
+  }
+  return actions;
 }
 
 LauncherActionOutcome MathProvider::runAction(const LauncherResult& result, std::string_view actionId) {
-  if (m_clipboard == nullptr || result.id != "math") {
+  if (actionId == "clear-history") {
+    m_history = std::deque<HistoryEntry>{};
+    saveHistory(historyPath(), *m_history);
+    return LauncherActionOutcome::KeepOpen;
+  }
+  if (m_clipboard == nullptr || (result.id != "math" && !result.id.starts_with(kHistoryPrefix))) {
     return LauncherActionOutcome::Failed;
   }
   std::string value = actionId == "copy-expression" ? result.subtitle : result.title.substr(2);
+  if (result.id == "math") {
+    remember(result.subtitle, result.title.substr(2));
+  }
   return m_clipboard->copyText(std::move(value)) ? LauncherActionOutcome::Done : LauncherActionOutcome::Failed;
 }

@@ -14,13 +14,13 @@
 #include <string>
 #include <vector>
 
-class ContextMenuPopup;
 class Flex;
 class Glyph;
 class Image;
 class Input;
 class Label;
 class LauncherResultAdapter;
+class MarkdownView;
 class LauncherAppGridAdapter;
 class Renderer;
 class Segmented;
@@ -121,8 +121,46 @@ private:
   // Esc inside a provider view reached from the root search goes back to it; returns false to close.
   bool popToRoot();
   void recordActivation(const LauncherProvider& provider, const std::string& resultId);
+  // Raycast's action panel: a searchable list of the selected result's actions, with key hints,
+  // floating over the results. The search field filters it while it is open.
+  struct ActionEntry {
+    std::string label;
+    std::string hint;
+    std::function<void()> run;
+  };
+  struct ActionRow {
+    Flex* row = nullptr;
+    InputArea* area = nullptr;
+    Label* label = nullptr;
+    Flex* hintCap = nullptr;
+    Label* hint = nullptr;
+  };
+  [[nodiscard]] std::vector<ActionEntry> actionEntriesFor(const LauncherResult& result);
   [[nodiscard]] bool openActionsMenu(std::size_t index, float anchorX, float anchorY);
   [[nodiscard]] bool openSelectedActionsMenu();
+  void closeActionPanel(bool restoreQuery);
+  void refreshActionPanel();
+  void runActionPanelSelection();
+  [[nodiscard]] bool actionPanelKey(std::uint32_t sym, std::uint32_t modifiers);
+  [[nodiscard]] float actionPanelHeight(float scale) const;
+  void layoutActionPanel(Renderer& renderer, float width, float height);
+  [[nodiscard]] bool dismissTransientUi() override;
+  // Raycast's command arguments: once a command that takes arguments is picked (Tab, or Return
+  // while a required one is empty), its fields show in a bar under the search field and the
+  // field edits them one at a time; Return runs the command with the values.
+  struct ArgumentPill {
+    Flex* pill = nullptr;
+    Label* label = nullptr;
+  };
+  [[nodiscard]] static bool needsArguments(const LauncherResult& result);
+  void beginArguments(const LauncherResult& result, std::size_t field = 0);
+  void endArguments(bool restoreQuery);
+  void showArgument(std::size_t index);
+  void refreshArgumentBar();
+  [[nodiscard]] bool argumentKey(std::uint32_t sym, std::uint32_t modifiers);
+  void runWithArguments();
+  // Runs `result` through the provider that produced it and closes on success.
+  void dispatchActivation(const LauncherResult& result);
   // Runs the first extra action of the selected result (Ctrl+Return, Raycast's secondary action).
   bool runSecondaryAction();
   void runProviderAction(const LauncherResult& result, std::string_view actionId);
@@ -199,6 +237,7 @@ private:
   ScrollView* m_detailScroll = nullptr;
   Label* m_detailSubtitle = nullptr;
   Label* m_detailBody = nullptr;
+  MarkdownView* m_detailMarkdown = nullptr;
   Label* m_emptyLabel = nullptr;
   Flex* m_footer = nullptr;
   Label* m_footerKind = nullptr;
@@ -232,7 +271,27 @@ private:
   std::uint64_t m_desktopEntriesVersion = 0;
   ConfigService* m_config = nullptr;
   AsyncTextureCache* m_asyncTextures = nullptr;
-  std::unique_ptr<ContextMenuPopup> m_actionsMenu;
+  bool m_actionPanelOpen = false;
+  LauncherResult m_actionResult;
+  std::vector<ActionEntry> m_actionEntries;
+  std::vector<std::size_t> m_actionVisible;
+  std::size_t m_actionSelected = 0;
+  std::string m_actionFilter;
+  std::string m_actionReturnQuery;
+  std::size_t m_actionReturnIndex = 0;
+  Flex* m_actionPanel = nullptr;
+  Label* m_actionTitle = nullptr;
+  Flex* m_actionList = nullptr;
+  Label* m_actionEmpty = nullptr;
+  std::vector<ActionRow> m_actionRows;
+  std::optional<LauncherResult> m_argumentResult;
+  std::size_t m_argumentIndex = 0;
+  std::string m_argumentReturnQuery;
+  Flex* m_argumentBar = nullptr;
+  Glyph* m_argumentGlyph = nullptr;
+  Label* m_argumentTitle = nullptr;
+  Flex* m_argumentFields = nullptr;
+  std::vector<ArgumentPill> m_argumentPills;
   Signal<>::ScopedConnection m_appIconColorizeConn;
   std::function<void(const LauncherProvider&)> m_onCopiedActivation;
   std::function<void(std::string)> m_copyText;

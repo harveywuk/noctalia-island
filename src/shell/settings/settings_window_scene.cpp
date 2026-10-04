@@ -109,7 +109,7 @@ namespace {
     });
   }
 
-  constexpr float kSettingsContentMaxWidth = 760.0F;
+  constexpr float kSettingsContentMaxWidth = 860.0F;
 
   std::unique_ptr<Flex> centeredRow(std::unique_ptr<Flex> child) {
     child->setFlexGrow(1.0F);
@@ -1251,6 +1251,7 @@ std::unique_ptr<Flex> SettingsWindow::buildHeaderRow(float scale) {
           .glyph = "dots-circle-horizontal",
           .glyphSize = Style::fontSizeBody * scale,
           .variant = ButtonVariant::Ghost,
+          .tooltip = i18n::tr("settings.window.more-actions"),
           .minWidth = Style::controlHeightSm * scale,
           .minHeight = Style::controlHeightSm * scale,
           .padding = Style::spaceXs * scale,
@@ -1262,6 +1263,7 @@ std::unique_ptr<Flex> SettingsWindow::buildHeaderRow(float scale) {
           .glyph = "close",
           .glyphSize = Style::fontSizeBody * scale,
           .variant = ButtonVariant::Default,
+          .tooltip = i18n::tr("settings.window.close"),
           .minWidth = Style::controlHeightSm * scale,
           .minHeight = Style::controlHeightSm * scale,
           .padding = Style::spaceXs * scale,
@@ -1531,11 +1533,14 @@ std::unique_ptr<Flex> SettingsWindow::buildBody(
   rebuildSettingsContent();
 
   contentColumn->addChild(std::move(scroll));
+  // The column starts beside the sidebar, as in System Settings; a tiled window's spare width
+  // stays on the right instead of opening a gap between the navigation and the page.
   body->addChild(
       ui::row(
           {
               .align = FlexAlign::Stretch,
-              .justify = FlexJustify::Center,
+              .justify = FlexJustify::Start,
+              .paddingH = Style::spaceLg * scale,
               .flexGrow = 1.0F,
           },
           std::move(contentColumn)

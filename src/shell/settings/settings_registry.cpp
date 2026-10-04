@@ -54,17 +54,24 @@ namespace settings {
     };
 
     constexpr auto kLauncherProviderSettings = std::to_array<LauncherProviderSettingSpec>({
+        {.name = "ai", .prefixPlaceholder = "ai", .globalByDefault = true},
         {.name = "calculator", .prefixPlaceholder = "calc", .globalByDefault = true},
         {.name = "clipboard", .prefixPlaceholder = "clip"},
+        {.name = "date", .prefixPlaceholder = "date", .globalByDefault = true},
+        {.name = "dictionary", .prefixPlaceholder = "define", .globalByDefault = true},
         {.name = "emoji", .prefixPlaceholder = "emo"},
         {.name = "files", .prefixPlaceholder = "file", .globalByDefault = true},
+        {.name = "notes", .prefixPlaceholder = "note", .globalByDefault = true},
         {.name = "panels", .prefixPlaceholder = "pan"},
+        {.name = "processes", .prefixPlaceholder = "kill"},
         {.name = "quicklinks", .prefixPlaceholder = "link", .globalByDefault = true},
+        {.name = "screenshots", .prefixPlaceholder = "shot"},
         {.name = "scripts", .prefixPlaceholder = "script", .globalByDefault = true},
         {.name = "session", .prefixPlaceholder = "session"},
         {.name = "snippets", .prefixPlaceholder = "snip", .globalByDefault = true},
         {.name = "system", .prefixPlaceholder = "sys", .globalByDefault = true},
         {.name = "time", .prefixPlaceholder = "time", .globalByDefault = true},
+        {.name = "timer", .prefixPlaceholder = "timer", .globalByDefault = true},
         {.name = "wallpaper", .prefixPlaceholder = "wall"},
         {.name = "windowmanagement", .prefixPlaceholder = "wm", .globalByDefault = true},
         {.name = "windows", .prefixPlaceholder = "win"},
@@ -1645,6 +1652,40 @@ namespace settings {
         ToggleSetting{cfg.shell.launcher.categories}, "launcher categories filter"
     ));
     entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-provider.label"),
+        tr("settings.schema.panels.launcher-ai-provider.description"), {"shell", "launcher", "ai", "provider"},
+        asSegmented(enumSelect(kAiProviderKinds, cfg.shell.launcher.ai.provider)),
+        "launcher ai provider ollama openai anthropic online local"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-url.label"),
+        tr("settings.schema.panels.launcher-ai-url.description"), {"shell", "launcher", "ai", "url"},
+        TextSetting{
+            .value = cfg.shell.launcher.ai.url, .placeholder = "http://127.0.0.1:11434", .browseFileExtensions = {}
+        },
+        "launcher ai ollama url server local model"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-model.label"),
+        tr("settings.schema.panels.launcher-ai-model.description"), {"shell", "launcher", "ai", "model"},
+        TextSetting{.value = cfg.shell.launcher.ai.model, .placeholder = "llama3.2", .browseFileExtensions = {}},
+        "launcher ai ollama model name"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-ai-key-command.label"),
+        tr("settings.schema.panels.launcher-ai-key-command.description"),
+        {"shell", "launcher", "ai", "api_key_command"},
+        TextSetting{
+            .value = cfg.shell.launcher.ai.apiKeyCommand, .placeholder = "pass show openai", .browseFileExtensions = {}
+        },
+        "launcher ai api key command secret password manager"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-snippet-expansion.label"),
+        tr("settings.schema.panels.launcher-snippet-expansion.description"), {"shell", "launcher", "snippet_expansion"},
+        ToggleSetting{cfg.shell.launcher.snippetExpansion}, "launcher snippet expansion keyword typing"
+    ));
+    entries.push_back(makeEntry(
         SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-show-icons.label"),
         tr("settings.schema.panels.launcher-show-icons.description"), {"shell", "launcher", "show_icons"},
         ToggleSetting{cfg.shell.launcher.showIcons}, "launcher app icons hide"
@@ -1773,9 +1814,17 @@ namespace settings {
                 {{"profile", tr("settings.options.home-cards.profile")},
                  {"media", tr("settings.options.home-cards.media")},
                  {"clock", tr("settings.options.home-cards.clock")},
-                 {"shortcuts", tr("settings.options.home-cards.shortcuts")}}
+                 {"shortcuts", tr("settings.options.home-cards.shortcuts")},
+                 {"display", tr("settings.options.home-cards.display")},
+                 {"sound", tr("settings.options.home-cards.sound")}}
         },
-        "home cards visible hide show reorder profile music clock weather shortcuts"
+        "home cards visible hide show reorder profile music clock weather shortcuts display brightness sound volume"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-layout.label"),
+        tr("settings.schema.panels.home-layout.description"), {"control_center", "home", "layout"},
+        asSegmented(enumSelect(kControlCenterHomeLayouts, cfg.controlCenter.homeTab.layout)),
+        "home layout modules dashboard big sur macos control centre"
     ));
     entries.push_back(makeEntry(
         SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-stacked.label"),

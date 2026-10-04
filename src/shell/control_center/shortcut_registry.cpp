@@ -22,6 +22,7 @@
 #include "system/weather_service.h"
 #include "theme/theme_service.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <deque>
@@ -29,6 +30,14 @@
 #include <optional>
 #include <ranges>
 #include <vector>
+
+std::string Shortcut::tooltipText() const {
+  const std::string status = statusText();
+  if (status.empty()) {
+    return displayLabel();
+  }
+  return i18n::tr("control-center.shortcuts.tooltip", "label", defaultLabel(), "status", status);
+}
 
 namespace {
   void openTab(std::string_view tab) {
@@ -61,12 +70,26 @@ namespace {
     }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && m_svc->state().wirelessEnabled; }
+    std::string statusText() const override {
+      if (m_svc == nullptr) {
+        return {};
+      }
+      const NetworkState& state = m_svc->state();
+      if (!state.wirelessEnabled) {
+        return i18n::tr("control-center.shortcuts.status.off");
+      }
+      if (state.kind == NetworkConnectivity::Wireless && state.connected && !state.ssid.empty()) {
+        return state.ssid;
+      }
+      return i18n::tr("control-center.shortcuts.status.not-connected");
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         m_svc->setWirelessEnabled(!m_svc->state().wirelessEnabled);
       }
     }
     void onRightClick() override { openTab("network"); }
+    bool opensDetail() const override { return true; }
 
   private:
     INetworkService* m_svc;
@@ -81,12 +104,39 @@ namespace {
     std::string_view iconOff() const override { return "bluetooth-off"; }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && m_svc->state().powered; }
+    std::string statusText() const override {
+      if (m_svc == nullptr) {
+        return {};
+      }
+      if (!m_svc->state().powered) {
+        return i18n::tr("control-center.shortcuts.status.off");
+      }
+      std::string connected;
+      int count = 0;
+      for (const auto& device : m_svc->devices()) {
+        if (!device.connected) {
+          continue;
+        }
+        ++count;
+        if (count <= 2 && !device.alias.empty()) {
+          connected += connected.empty() ? device.alias : ", " + device.alias;
+        }
+      }
+      if (count == 0) {
+        return i18n::tr("control-center.shortcuts.status.on");
+      }
+      if (count > 2) {
+        connected += std::format(" +{}", count - 2);
+      }
+      return connected;
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         m_svc->setPowered(!m_svc->state().powered);
       }
     }
     void onRightClick() override { openTab("bluetooth"); }
+    bool opensDetail() const override { return true; }
 
   private:
     BluetoothService* m_svc;
@@ -122,6 +172,15 @@ namespace {
     std::string_view iconOff() const override { return "nightlight-off"; }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && (m_svc->forceEnabled() || m_svc->active()); }
+    std::string statusText() const override {
+      if (m_svc == nullptr) {
+        return {};
+      }
+      if (!m_svc->forceEnabled() && !m_svc->enabled()) {
+        return i18n::tr("control-center.shortcuts.status.off");
+      }
+      return displayLabel();
+    }
     void onClick() override {
       if (!enabled() || m_svc == nullptr) {
         return;
@@ -144,16 +203,26 @@ namespace {
     explicit NotificationShortcut(NotificationManager* svc) : m_svc(svc) {}
     std::string_view id() const override { return "notification"; }
     std::string defaultLabel() const override { return i18n::tr("control-center.shortcuts.notification"); }
-    std::string_view iconOn() const override { return "bell-off"; }
-    std::string_view iconOff() const override { return "bell"; }
+    // Focus's crescent, as macOS draws Do Not Disturb.
+    std::string_view iconOn() const override { return "moon"; }
+    std::string_view iconOff() const override { return "moon"; }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && m_svc->doNotDisturb(); }
+    std::string statusText() const override {
+      if (m_svc == nullptr) {
+        return {};
+      }
+      return i18n::tr(
+          m_svc->doNotDisturb() ? "control-center.shortcuts.status.on" : "control-center.shortcuts.status.off"
+      );
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         (void)m_svc->toggleDoNotDisturb();
       }
     }
     void onRightClick() override { openTab("notifications"); }
+    bool opensDetail() const override { return true; }
 
   private:
     NotificationManager* m_svc;
@@ -182,6 +251,26 @@ namespace {
     std::string_view iconOff() const override { return "theme-mode"; }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && m_svc->configuredMode() != ThemeMode::Light; }
+    std::string tooltipText() const override {
+      if (m_svc == nullptr) {
+        return displayLabel();
+      }
+      std::string_view mode = "control-center.shortcuts.status.dark";
+      switch (m_svc->configuredMode()) {
+      case ThemeMode::Dark:
+        break;
+      case ThemeMode::Light:
+        mode = "control-center.shortcuts.status.light";
+        break;
+      case ThemeMode::Auto:
+        mode = "control-center.shortcuts.status.auto";
+        break;
+      }
+      return i18n::tr(
+          "control-center.shortcuts.tooltip", "label", i18n::tr("control-center.shortcuts.appearance"), "status",
+          i18n::tr(mode)
+      );
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         m_svc->cycleMode();
@@ -201,6 +290,12 @@ namespace {
     std::string_view iconOff() const override { return "caffeine-off"; }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && m_svc->enabled(); }
+    std::string statusText() const override {
+      if (m_svc == nullptr) {
+        return {};
+      }
+      return i18n::tr(m_svc->enabled() ? "control-center.shortcuts.status.on" : "control-center.shortcuts.status.off");
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         m_svc->toggle();
@@ -210,6 +305,14 @@ namespace {
   private:
     IdleInhibitor* m_svc;
   };
+
+  // "Muted" or the level as a percentage, for the audio and microphone tooltips.
+  std::string volumeStatus(const AudioNode& node) {
+    if (node.muted) {
+      return i18n::tr("control-center.shortcuts.status.muted");
+    }
+    return std::format("{}%", static_cast<int>(std::lround(std::clamp(node.volume, 0.0F, 1.5F) * 100.0F)));
+  }
 
   class AudioShortcut final : public Shortcut {
   public:
@@ -226,6 +329,13 @@ namespace {
       const AudioNode* sink = m_svc->defaultSink();
       return sink != nullptr && sink->muted;
     }
+    std::string statusText() const override {
+      const AudioNode* sink = m_svc != nullptr ? m_svc->defaultSink() : nullptr;
+      if (sink == nullptr) {
+        return {};
+      }
+      return volumeStatus(*sink);
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         if (const AudioNode* sink = m_svc->defaultSink(); sink != nullptr) {
@@ -234,6 +344,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("audio"); }
+    bool opensDetail() const override { return true; }
 
   private:
     PipeWireService* m_svc;
@@ -254,6 +365,13 @@ namespace {
       const AudioNode* source = m_svc->defaultSource();
       return source != nullptr && source->muted;
     }
+    std::string statusText() const override {
+      const AudioNode* source = m_svc != nullptr ? m_svc->defaultSource() : nullptr;
+      if (source == nullptr) {
+        return {};
+      }
+      return volumeStatus(*source);
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         if (const AudioNode* source = m_svc->defaultSource(); source != nullptr) {
@@ -262,6 +380,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("audio"); }
+    bool opensDetail() const override { return true; }
 
   private:
     PipeWireService* m_svc;
@@ -285,6 +404,12 @@ namespace {
     bool isToggle() const override { return true; }
     bool active() const override {
       return m_svc != nullptr && !m_svc->activeProfile().empty() && m_svc->activeProfile() != "balanced";
+    }
+    std::string statusText() const override {
+      if (m_svc == nullptr || m_svc->activeProfile().empty()) {
+        return {};
+      }
+      return profileLabel(m_svc->activeProfile());
     }
     void onClick() override { cycle(1); }
     void onRightClick() override { cycle(-1); }
@@ -323,10 +448,26 @@ namespace {
       }
       return "weather-cloud";
     }
+    std::string statusText() const override {
+      if (m_svc == nullptr || !m_svc->enabled()) {
+        return m_svc == nullptr ? std::string{} : i18n::tr("control-center.shortcuts.status.off");
+      }
+      if (!m_svc->hasData()) {
+        return {};
+      }
+      const auto& snapshot = m_svc->snapshot();
+      std::string status =
+          std::format("{} {}", displayLabel(), WeatherService::shortDescriptionForCode(snapshot.current.weatherCode));
+      if (!snapshot.locationName.empty()) {
+        status += " · " + snapshot.locationName;
+      }
+      return status;
+    }
     std::string_view iconOn() const override { return "weather-cloud-sun"; }
     std::string_view iconOff() const override { return "weather-cloud-sun"; }
     void onClick() override { openTab("weather"); }
     void onRightClick() override { openTab("weather"); }
+    bool opensDetail() const override { return true; }
 
   private:
     WeatherService* m_svc;
@@ -345,6 +486,18 @@ namespace {
       }
       return resolveKeyboardLayoutLabel(
           layoutName, KeyboardLayoutDisplayMode::Short, m_config->config().shell.keyboardLayout.customLabels
+      );
+    }
+    std::string statusText() const override {
+      const std::string layoutName = resolvedLayoutName();
+      if (layoutName.empty()) {
+        return {};
+      }
+      if (m_config == nullptr) {
+        return formatKeyboardLayoutLabel(layoutName, KeyboardLayoutDisplayMode::Full);
+      }
+      return resolveKeyboardLayoutLabel(
+          layoutName, KeyboardLayoutDisplayMode::Full, m_config->config().shell.keyboardLayout.customLabels
       );
     }
     std::string_view iconOn() const override { return "keyboard"; }
@@ -393,12 +546,33 @@ namespace {
       const auto active = m_svc->activePlayer();
       return active.has_value() && active->playbackStatus == "Playing";
     }
+    std::string statusText() const override {
+      if (m_svc == nullptr) {
+        return {};
+      }
+      const auto player = m_svc->activePlayer();
+      if (!player.has_value()) {
+        return i18n::tr("control-center.shortcuts.status.nothing-playing");
+      }
+      std::string track = player->title;
+      if (!player->artists.empty() && !player->artists.front().empty()) {
+        track += track.empty() ? player->artists.front() : " – " + player->artists.front();
+      }
+      if (track.empty()) {
+        track = player->identity;
+      }
+      const bool playing = player->playbackStatus == "Playing";
+      const std::string state =
+          i18n::tr(playing ? "control-center.shortcuts.status.playing" : "control-center.shortcuts.status.paused");
+      return track.empty() ? state : std::format("{} · {}", state, track);
+    }
     void onClick() override {
       if (m_svc != nullptr) {
         (void)m_svc->playPauseActive();
       }
     }
     void onRightClick() override { openTab("media"); }
+    bool opensDetail() const override { return true; }
 
   private:
     MprisService* m_svc;
@@ -412,6 +586,7 @@ namespace {
     std::string_view iconOff() const override { return "activity"; }
     void onClick() override { openTab("system"); }
     void onRightClick() override { openTab("system"); }
+    bool opensDetail() const override { return true; }
   };
 
   class ScreenTimeShortcut final : public Shortcut {
@@ -422,6 +597,7 @@ namespace {
     std::string_view iconOff() const override { return "hourglass"; }
     void onClick() override { openTab("screen-time"); }
     void onRightClick() override { openTab("screen-time"); }
+    bool opensDetail() const override { return true; }
   };
 
   class WallpaperShortcut final : public Shortcut {

@@ -53,7 +53,6 @@
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
-#include <unistd.h>
 #include <array>
 #include <cmath>
 #include <ctime>
@@ -62,6 +61,7 @@
 #include <linux/input-event-codes.h>
 #include <ranges>
 #include <span>
+#include <unistd.h>
 
 using namespace std::chrono_literals;
 
@@ -1521,8 +1521,8 @@ void Island::prepare(Instance& inst) {
         if (splitActivity == island::Activity::Timers || splitActivity == island::Activity::Downloads) {
           // A progress ring around the activity's symbol, in its activity colour.
           const bool timer = splitActivity == island::Activity::Timers;
-          const auto tint = timer ? islandTint(kAppleOrange, ColorRole::Primary)
-                                  : islandTint(kAppleBlue, ColorRole::Primary);
+          const auto tint =
+              timer ? islandTint(kAppleOrange, ColorRole::Primary) : islandTint(kAppleBlue, ColorRole::Primary);
           auto ring = std::make_unique<DownloadRing>(std::round(d * 0.62F) * s, 2.5F * s, fraction, tint);
           auto* ringPtr = ring.get();
           centred(std::move(ring));
@@ -1869,13 +1869,13 @@ void Island::prepare(Instance& inst) {
           .bg = islandFixed(*tint, bg), .border = islandFixed(*tint, 0), .label = islandFixed(*tint, text)
       };
     };
-    button->setCustomPalette({
-        .normal = state(0.24F, 1.0F),
-        .hover = state(0.32F, 1.0F),
-        .pressed = state(0.4F, 1.0F),
-        .disabled = state(0.12F, 0.4F),
-        .selected = std::nullopt
-    });
+    button->setCustomPalette(
+        {.normal = state(0.24F, 1.0F),
+         .hover = state(0.32F, 1.0F),
+         .pressed = state(0.4F, 1.0F),
+         .disabled = state(0.12F, 0.4F),
+         .selected = std::nullopt}
+    );
   };
   // A round tinted badge behind a symbol, leading a row (downloads, unread notifications).
   const auto leadingBadge = [&](const std::string& icon, float x, float y, float size, Color tint, ColorRole theme) {
@@ -1909,8 +1909,12 @@ void Island::prepare(Instance& inst) {
     image->setPosition(x * s, y * s);
     const int pixels = static_cast<int>(std::ceil(size * s * 2.0F));
     bool loaded = false;
-    if (note.imageData && note.imageData->width > 0 && note.imageData->height > 0 && !note.imageData->data.empty()
-        && note.imageData->bitsPerSample == 8 && (note.imageData->channels == 3 || note.imageData->channels == 4)) {
+    if (note.imageData
+        && note.imageData->width > 0
+        && note.imageData->height > 0
+        && !note.imageData->data.empty()
+        && note.imageData->bitsPerSample == 8
+        && (note.imageData->channels == 3 || note.imageData->channels == 4)) {
       const auto& raw = *note.imageData;
       loaded = image->setSourceRaw(
           renderer, raw.data.data(), raw.data.size(), raw.width, raw.height, raw.rowStride,
@@ -2066,7 +2070,9 @@ void Island::prepare(Instance& inst) {
       h += 28;
     }
     if (player && cfg.hoverShowMedia && !showSwitcher) {
-      pill(control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true, [panel] { panel("media"); }));
+      pill(control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true, [panel] {
+        panel("media");
+      }));
       h += 38;
     }
 
@@ -2158,8 +2164,7 @@ void Island::prepare(Instance& inst) {
           char* shortName = g_utf8_substring(dayName, 0, abbreviated ? 3 : 1);
           const float x = stripX + static_cast<float>(day) * cellWidth;
           auto* weekday = label(
-              shortName, x, stripY, cellWidth, daySize, color, true, 1,
-              today ? FontWeight::Bold : FontWeight::SemiBold
+              shortName, x, stripY, cellWidth, daySize, color, true, 1, today ? FontWeight::Bold : FontWeight::SemiBold
           );
           weekday->setPosition(x * s, stripY * s + (dayHeight * s - weekday->height()) / 2.0F);
           g_free(shortName);
@@ -2251,25 +2256,55 @@ void Island::prepare(Instance& inst) {
     constexpr float badgeSize = 34.0F;
     const float badgeX = 16.0F;
     const std::string icon = charging ? "bolt" : on ? "moon" : "moon-off";
-    if (on)
-      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, tint, role);
-    else
-      leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, rgba(1.0F, 1.0F, 1.0F), ColorRole::OnSurfaceVariant);
-    const auto state = charging ? std::format("{}%", std::lround(m_osd->progress * 100))
-                                : i18n::tr(on ? "island.status.on" : "island.status.off");
-    const auto stateColor = on ? islandTint(tint, role) : muted;
-    const auto stateMetrics = renderer.measureText(
-        state, 15 * s, FontWeight::SemiBold, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
-    );
-    const float stateWidth = std::ceil(stateMetrics.width / s) + 2;
-    auto* stateLabel = label(state, w - 22 - stateWidth, 0, stateWidth, 15, stateColor, false, 1, FontWeight::SemiBold);
-    stateLabel->setPosition(stateLabel->x(), (h * s - stateLabel->height()) / 2);
-    const float titleX = badgeX + badgeSize + 12;
-    auto* title = label(
-        i18n::tr(charging ? "island.status.charging" : "island.status.dnd"), titleX, 0,
-        std::max(1.0F, w - 22 - stateWidth - 12 - titleX), 15, foreground, false, 1, FontWeight::SemiBold
-    );
-    title->setPosition(title->x(), (h * s - title->height()) / 2);
+    if (gCupertino) {
+      // Big Sur's Do Not Disturb tile: a solid round toggle, the name, and the state under it.
+      auto disc = std::make_unique<Box>();
+      disc->setFill(on ? islandFixed(tint, 1.0F) : islandRole(ColorRole::OnSurface, 0.18F));
+      disc->setRadius(badgeSize * s / 2);
+      disc->setSize(badgeSize * s, badgeSize * s);
+      disc->setPosition(badgeX * s, (h - badgeSize) / 2 * s);
+      disc->setHitTestVisible(false);
+      canvas->addChild(std::move(disc));
+      constexpr float symbolSize = 17.0F;
+      glyph(
+          icon, badgeX + (badgeSize - symbolSize) / 2, (h - symbolSize) / 2, symbolSize,
+          on ? islandFixed(rgba(1.0F, 1.0F, 1.0F), 1.0F) : muted
+      );
+      const float textX = badgeX + badgeSize + 12;
+      auto* name = label(
+          i18n::tr(charging ? "island.status.charging" : "island.status.dnd"), textX, 0, w - textX - 20, 15, foreground,
+          false, 1, FontWeight::SemiBold
+      );
+      auto* stateLine = label(
+          charging ? std::format("{}%", std::lround(m_osd->progress * 100))
+                   : i18n::tr(on ? "island.status.on" : "island.status.off"),
+          textX, 0, w - textX - 20, 12, muted
+      );
+      const float block = name->height() + 2 * s + stateLine->height();
+      name->setPosition(name->x(), (h * s - block) / 2);
+      stateLine->setPosition(stateLine->x(), (h * s - block) / 2 + name->height() + 2 * s);
+    } else {
+      if (on)
+        leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, tint, role);
+      else
+        leadingBadge(icon, badgeX, (h - badgeSize) / 2, badgeSize, rgba(1.0F, 1.0F, 1.0F), ColorRole::OnSurfaceVariant);
+      const auto state = charging ? std::format("{}%", std::lround(m_osd->progress * 100))
+                                  : i18n::tr(on ? "island.status.on" : "island.status.off");
+      const auto stateColor = on ? islandTint(tint, role) : muted;
+      const auto stateMetrics = renderer.measureText(
+          state, 15 * s, FontWeight::SemiBold, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+      );
+      const float stateWidth = std::ceil(stateMetrics.width / s) + 2;
+      auto* stateLabel =
+          label(state, w - 22 - stateWidth, 0, stateWidth, 15, stateColor, false, 1, FontWeight::SemiBold);
+      stateLabel->setPosition(stateLabel->x(), (h * s - stateLabel->height()) / 2);
+      const float titleX = badgeX + badgeSize + 12;
+      auto* title = label(
+          i18n::tr(charging ? "island.status.charging" : "island.status.dnd"), titleX, 0,
+          std::max(1.0F, w - 22 - stateWidth - 12 - titleX), 15, foreground, false, 1, FontWeight::SemiBold
+      );
+      title->setPosition(title->x(), (h * s - title->height()) / 2);
+    }
   } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::LockKeys || !m_osd->showProgress)) {
     // Status messages without a level centre their icon and text as one group.
     constexpr float iconSize = 26.0F;
@@ -2283,6 +2318,61 @@ void Island::prepare(Instance& inst) {
     glyph(m_osd->icon, x, (h - iconSize) / 2, iconSize);
     auto* value = label(m_osd->value, x + iconSize + gap, 0, textWidth, 15);
     value->setPosition(value->x(), (h * s - value->height()) / 2);
+  } else if (
+      view == island::View::Osd
+      && m_osd
+      && gCupertino
+      && (m_osd->kind == OsdKind::Volume || m_osd->kind == OsdKind::Microphone || m_osd->kind == OsdKind::Brightness)
+  ) {
+    // Big Sur's Sound and Display modules: the name (and level) over a white-filled groove with
+    // the symbol inside its leading end.
+    const bool volume = m_osd->kind == OsdKind::Volume;
+    const float trackHeight = std::clamp(volume ? cfg.volumeBarHeight : 18.0F, 5.0F, 24.0F);
+    const bool symbolInside = trackHeight >= 14.0F;
+    constexpr float margin = 20.0F;
+    const float trackX = symbolInside ? margin : margin + 32.0F;
+    const float trackWidth = std::max(trackHeight, w - margin - trackX);
+    const std::string title = i18n::tr(
+        volume                                   ? "island.osd.sound"
+            : m_osd->kind == OsdKind::Microphone ? "island.osd.microphone"
+                                                 : "island.osd.display"
+    );
+    auto* titleLabel = label(title, margin, 9, w - 2 * margin - 64, 13, foreground, false, 1, FontWeight::SemiBold);
+    if (!volume || cfg.volumeShowPercentage) {
+      const auto metrics = renderer.measureText(
+          m_osd->value, 13 * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+      );
+      const float valueWidth = std::ceil(metrics.width / s) + 2;
+      auto* valueLabel = label(m_osd->value, w - margin - valueWidth, 9, valueWidth, 13, muted);
+      valueLabel->setPosition(valueLabel->x(), titleLabel->y());
+    }
+    const float top = 9 + titleLabel->height() / s + 6;
+    const float trackY = top + std::max(0.0F, (h - top - 10 - trackHeight) / 2);
+    const auto groove = [&](float x, float width, ColorSpec fill) {
+      auto node = std::make_unique<Box>();
+      node->setFill(fill);
+      node->setRadius(trackHeight * s / 2);
+      node->setSize(width * s, trackHeight * s);
+      node->setPosition(x * s, trackY * s);
+      node->setHitTestVisible(false);
+      canvas->addChild(std::move(node));
+    };
+    groove(trackX, trackWidth, islandRole(ColorRole::OnSurface, 0.2F));
+    // The fill starts as a round end, so the symbol always sits on white; muted reads grey.
+    const float level = std::clamp(m_osd->progress, 0.0F, 1.0F);
+    groove(
+        trackX, trackHeight + level * (trackWidth - trackHeight),
+        m_osd->inactive ? islandRole(ColorRole::OnSurface, 0.55F) : islandFixed(rgba(1.0F, 1.0F, 1.0F), 1.0F)
+    );
+    if (symbolInside) {
+      const float symbolSize = std::round(trackHeight * 0.62F);
+      glyph(
+          m_osd->icon, trackX + (trackHeight - symbolSize) / 2, trackY + (trackHeight - symbolSize) / 2, symbolSize,
+          islandFixed(rgba(0.22F, 0.22F, 0.24F), 1.0F)
+      );
+    } else {
+      glyph(m_osd->icon, margin, trackY + trackHeight / 2 - 11, 22);
+    }
   } else if (view == island::View::Osd && m_osd) {
     // Icon and level span the Island with equal margins, so the group sits centred.
     glyph(m_osd->icon, 20, (h - 26) / 2, 26);
@@ -2317,8 +2407,7 @@ void Island::prepare(Instance& inst) {
     const float appLabelX = textX;
     // "now" / "5m ago" closes the header row, as on the notification banners.
     constexpr float timeWidth = 56.0F;
-    auto* appLabel =
-        label(n.appName, appLabelX, 14, w - 55 - timeWidth - appLabelX, Style::fontSizeCaption, muted);
+    auto* appLabel = label(n.appName, appLabelX, 14, w - 55 - timeWidth - appLabelX, Style::fontSizeCaption, muted);
     auto* timeLabel = label(
         formatNotificationTime(n.receivedWallClock.value_or(WallClock::now())), w - 51 - timeWidth, 14, timeWidth,
         Style::fontSizeCaption, muted
@@ -2629,10 +2718,10 @@ void Island::prepare(Instance& inst) {
         );
         toggle->inputArea()->setTabFocusKey(timer.plugin + "-toggle");
         roundButton(toggle, kAppleOrange);
-        auto* cancel = control(
-            x + 40, h + 8, 32, 32, "", "x", i18n::tr("island.timer.cancel"), 16, true,
-            [this, timer] { timerCommand(timer, timer.cancelCommand()); }
-        );
+        auto* cancel =
+            control(x + 40, h + 8, 32, 32, "", "x", i18n::tr("island.timer.cancel"), 16, true, [this, timer] {
+              timerCommand(timer, timer.cancelCommand());
+            });
         cancel->inputArea()->setTabFocusKey(timer.plugin + "-cancel");
         roundButton(cancel);
         auto* open = control(
@@ -2756,7 +2845,9 @@ void Island::prepare(Instance& inst) {
           ghost->setGlyphSize(16 * s);
           ghost->setColor(islandRole(ColorRole::Primary));
           ghost->measure(renderer);
-          ghost->setPosition(icon->x() + (icon->width() - ghost->width()) / 2, icon->y() + (icon->height() - ghost->height()) / 2);
+          ghost->setPosition(
+              icon->x() + (icon->width() - ghost->width()) / 2, icon->y() + (icon->height() - ghost->height()) / 2
+          );
           auto* outgoing = static_cast<Glyph*>(canvas->addChild(std::move(ghost)));
           const float iconY = icon->y(), outgoingY = outgoing->y(), travel = 8 * s;
           icon->setOpacity(0);
@@ -2874,8 +2965,9 @@ void Island::prepare(Instance& inst) {
       auto title = notification.appName + " · " + notification.summary;
       std::replace(title.begin(), title.end(), '\n', ' ');
       std::replace(title.begin(), title.end(), '\r', ' ');
-      auto* row =
-          control(rowX, h, w - rowX - 22, 30, title, "", notification.body, 0, true, [panel] { panel("notifications"); });
+      auto* row = control(rowX, h, w - rowX - 22, 30, title, "", notification.body, 0, true, [panel] {
+        panel("notifications");
+      });
       if (gCupertino)
         row->setContentAlign(ButtonContentAlign::Start);
       h += 34;
@@ -3107,9 +3199,7 @@ void Island::tickFlow() {
     if (!inst.flowShown || inst.panelHosted || inst.flowTexture.id == 0 || !m_renderContext)
       continue;
     if (!any)
-      m_flow.render(
-          std::chrono::duration<float>(std::chrono::steady_clock::now() - m_flowStart).count(), m_flowFrame
-      );
+      m_flow.render(std::chrono::duration<float>(std::chrono::steady_clock::now() - m_flowStart).count(), m_flowFrame);
     any = true;
     m_renderContext->makeCurrent(inst.surface->renderTarget());
     (void)inst.surface->renderTarget().renderer().textureManager().updateSubImage(
@@ -3403,6 +3493,8 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
       inst.surface.get(), inst.output, inst.width * inst.scale, inst.height * inst.scale, inst.scale
   };
 }
+
+Color Island::capsuleColor() const { return resolveColorSpec(islandRole(ColorRole::Surface)); }
 
 island::Size Island::panelReturnSize() const {
   const auto hosted = std::ranges::find_if(m_instances, [](const auto& inst) { return inst->panelHosted; });

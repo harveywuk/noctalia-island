@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -185,6 +186,7 @@ HomeTab::HomeTab(const ControlCenterServices& services)
       m_config(services.config), m_accounts(services.accounts), m_wallpaper(services.wallpaper),
       m_thumbnails(services.thumbnails), m_asyncTextures(services.asyncTextures),
       m_services(services.shortcutServices()) {
+  m_brightness = services.brightness;
   if (m_thumbnails != nullptr) {
     m_thumbnailPendingSub = m_thumbnails->subscribePendingUpload([this]() {
       if (m_wallpaperBg == nullptr) {
@@ -216,6 +218,11 @@ HomeTab::~HomeTab() {
 }
 
 std::unique_ptr<Flex> HomeTab::create() {
+  m_modules =
+      m_config == nullptr || m_config->config().controlCenter.homeTab.layout == ControlCenterHomeLayout::Modules;
+  if (m_modules) {
+    return createModules();
+  }
   const float scale = contentScale();
   const std::string displayName = sessionDisplayName();
 
@@ -666,11 +673,25 @@ std::unique_ptr<Flex> HomeTab::create() {
               applyShortcutButtonStyle(button, enabled, isActive, fillOpacity);
             },
     });
-    if (!showLabels) {
-      btn->setTooltip(label);
-    }
     Button* btnPtr = btn.get();
     if (auto* ia = btnPtr->inputArea(); ia != nullptr) {
+      // Contextual tooltip, like a macOS menu bar extra: the control and its current state
+      // ("Wi-Fi: Home-5G", "Audio: Muted"), re-read every second while shown so a click on the
+      // tile updates it in place. With captions on, a tile without a state has nothing to add.
+      ia->setTooltipProvider(
+          [this, padIdx, showLabels]() -> TooltipContent {
+            if (padIdx >= m_shortcutPads.size()) {
+              return std::monostate{};
+            }
+            const Shortcut& tile = *m_shortcutPads[padIdx].shortcut;
+            std::string text = tile.tooltipText();
+            if (showLabels && text == tile.displayLabel()) {
+              return std::monostate{};
+            }
+            return text;
+          },
+          std::chrono::seconds(1)
+      );
       ia->setOnAxisHandler([this, padIdx](const InputArea::PointerData& data) -> bool {
         if (data.axis != WL_POINTER_AXIS_VERTICAL_SCROLL || padIdx >= m_shortcutPads.size()) {
           return false;
@@ -818,6 +839,10 @@ std::unique_ptr<Flex> HomeTab::createHeaderActions() {
 }
 
 void HomeTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight) {
+  if (m_modules) {
+    layoutModules(renderer, contentWidth, bodyHeight);
+    return;
+  }
   if (m_rootLayout == nullptr) {
     return;
   }
@@ -1501,6 +1526,26 @@ void HomeTab::setActive(bool active) {
 void HomeTab::onClose() {
   m_progressTimer.stop();
   m_clockTimer.stop();
+  // A slider let go as the panel closes still lands its last value.
+  flushBrightness();
+  flushVolume();
+  m_brightnessTimer.stop();
+  m_volumeTimer.stop();
+  m_modulesScroll = nullptr;
+  m_modulesColumn = nullptr;
+  m_shortcutModule = nullptr;
+  m_displayModule = nullptr;
+  m_displaySlider = nullptr;
+  m_displayGlyph = nullptr;
+  m_displayOutline = nullptr;
+  m_soundModule = nullptr;
+  m_soundSlider = nullptr;
+  m_soundGlyph = nullptr;
+  m_soundOutline = nullptr;
+  m_mediaControls = nullptr;
+  m_mediaPlayButton = nullptr;
+  m_mediaNextButton = nullptr;
+  m_moduleOverlays.clear();
   m_rootLayout = nullptr;
   m_homeScroll = nullptr;
   m_stacked = false;
@@ -1566,6 +1611,7 @@ void HomeTab::onClose() {
     pad.button = nullptr;
     pad.glyph = nullptr;
     pad.label = nullptr;
+    pad.status = nullptr;
   }
 }
 
@@ -1593,6 +1639,9 @@ void HomeTab::syncScaledFonts() {
       label->setFontSize(Style::fontSizeCaption * s);
     }
   }
+  if (m_modules) {
+    return; // module text keeps the sizes it was built with
+  }
   if (m_mediaTrack != nullptr) {
     m_mediaTrack->setFontSize(Style::fontSizeBody * 0.95F * s);
   }
@@ -1616,6 +1665,7 @@ void HomeTab::syncScaledFonts() {
 void HomeTab::sync(Renderer& renderer) {
   syncScaledFonts();
   syncShortcuts();
+  syncModules();
 
   if (m_timeLabel != nullptr) {
     m_timeLabel->setText(formatShellTime(m_config));
@@ -1810,7 +1860,8 @@ void HomeTab::sync(Renderer& renderer) {
             } else {
               m_mediaArt->clear(renderer);
             }
-            if (!loaded || !m_mediaFlow.load(renderer, artPath)) {
+            // The Now Playing module shows the artwork itself, without the flow behind it.
+            if (m_modules || !loaded || !m_mediaFlow.load(renderer, artPath)) {
               m_mediaFlow.clear();
             }
             m_mediaArt->setVisible(loaded);
@@ -1842,7 +1893,7 @@ void HomeTab::sync(Renderer& renderer) {
     }
   }
   m_mediaFlow.setAnimating(m_active && m_mediaPlaying);
-  applyMediaOverlay(m_mediaFlow.hasArtwork());
+  applyMediaOverlay(!m_modules && m_mediaFlow.hasArtwork());
 }
 
 void HomeTab::applyMediaOverlay(bool overlay) {
@@ -1890,6 +1941,9 @@ void HomeTab::warnOnOversizedAvatarSource(const std::string& path) {
 
 void HomeTab::syncShortcuts() {
   for (auto& pad : m_shortcutPads) {
+    if (pad.kind != ShortcutPadKind::Grid) {
+      continue; // the Big Sur modules sync in syncModules()
+    }
     auto& sc = *pad.shortcut;
     const bool enabled = sc.enabled();
     const bool on = sc.isToggle() && sc.active();
@@ -1905,8 +1959,6 @@ void HomeTab::syncShortcuts() {
       if (pad.label->text() != label) {
         pad.label->setText(label);
       }
-    } else if (pad.button != nullptr) {
-      pad.button->setTooltip(sc.displayLabel());
     }
   }
 }

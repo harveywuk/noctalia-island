@@ -1011,6 +1011,19 @@ constexpr EnumOption<SessionActionButtonVariant> kSessionActionButtonVariants[] 
     {SessionActionButtonVariant::Ghost, "ghost", "settings.session-actions.variant.ghost"},
 };
 
+// The service behind the launcher's AI (shell.launcher.ai.provider).
+enum class AiProviderKind : std::uint8_t {
+  Ollama,    // a local Ollama server
+  OpenAi,    // OpenAI, or any OpenAI-compatible API (OpenRouter, Groq, Mistral, LM Studio, …)
+  Anthropic, // the Anthropic Messages API
+};
+
+constexpr EnumOption<AiProviderKind> kAiProviderKinds[] = {
+    {AiProviderKind::Ollama, "ollama", "settings.options.launcher.ai-provider.ollama"},
+    {AiProviderKind::OpenAi, "openai", "settings.options.launcher.ai-provider.openai"},
+    {AiProviderKind::Anthropic, "anthropic", "settings.options.launcher.ai-provider.anthropic"},
+};
+
 enum class ClipboardAutoPasteMode : std::uint8_t {
   Off = 0,
   Auto = 1,
@@ -1710,6 +1723,21 @@ struct ShellConfig {
       bool operator==(const DmenuConfig&) const = default;
     } dmenu;
 
+    // The launcher's AI (Raycast's AI): which service answers, where it is and with which model.
+    struct AiConfig {
+      AiProviderKind provider = AiProviderKind::Ollama;
+      // Empty: the service's usual address (Ollama on this machine, api.openai.com, api.anthropic.com).
+      std::string url;
+      // Empty: the model picked under /ai › Choose Model, else the first listed, else the service's default.
+      std::string model;
+      // Online services need a key: this, or the output of api_key_command (`pass show openai`),
+      // or the service's usual environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY).
+      std::string apiKey;
+      std::string apiKeyCommand;
+
+      bool operator==(const AiConfig&) const = default;
+    } ai;
+
     struct PanelsConfig {
       // Panel ids the panel provider never lists. Setting this in config.toml
       // replaces the default outright, same as every other list config here.
@@ -1725,6 +1753,12 @@ struct ShellConfig {
     // Raycast's fallback commands: provider names ("files", "emoji", …) and quicklink ids ("github")
     // offered under "Use “query” with…" after the results, beside the web search.
     std::vector<std::string> fallbacks{"files"};
+    // Markdown file quick notes are appended to; empty means ~/Documents/Notes.md (or ~/Notes.md).
+    std::string notesFile;
+    // Screen position of the Floating Notes window (one of kPanelPositions); empty means bottom_right.
+    std::string floatingNotesPosition;
+    // Expand snippet keywords typed in other apps (reads the keyboards under /dev/input; needs the `input` group).
+    bool snippetExpansion = false;
     // Quicklinks and snippets from config. With no quicklinks configured a small built-in set is used.
     std::vector<LauncherQuicklinkConfig> quicklinks;
     std::vector<LauncherSnippetConfig> snippets;
@@ -2321,11 +2355,26 @@ struct ThemeConfig {
   return theme.mode;
 }
 
+// The Home tab's arrangement: macOS Big Sur's Control Center modules (connectivity, tiles,
+// Display and Sound sliders, Now Playing), or the dashboard with the profile and clock cards.
+enum class ControlCenterHomeLayout : std::uint8_t {
+  Modules = 0,
+  Dashboard = 1,
+};
+
+constexpr EnumOption<ControlCenterHomeLayout> kControlCenterHomeLayouts[] = {
+    {ControlCenterHomeLayout::Modules, "modules", "settings.options.control-center.home-layout.modules"},
+    {ControlCenterHomeLayout::Dashboard, "dashboard", "settings.options.control-center.home-layout.dashboard"},
+};
+
 struct ControlCenterConfig {
   static constexpr std::int32_t kDefaultWidth = 700;
 
   struct HomeTabConfig {
-    std::vector<std::string> cards = {"profile", "media", "clock", "shortcuts"};
+    // Modules shows shortcuts, display, sound and media, always in that order; the dashboard
+    // shows profile, media, clock and shortcuts (in this order when stacked).
+    std::vector<std::string> cards = {"profile", "media", "clock", "shortcuts", "display", "sound"};
+    ControlCenterHomeLayout layout = ControlCenterHomeLayout::Modules;
     bool stacked = false;
     bool operator==(const HomeTabConfig&) const = default;
   };

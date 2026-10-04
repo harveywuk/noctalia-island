@@ -65,9 +65,16 @@ bubble back under the capsule. Set `split_activities = false` to hide the second
 activity instead, or to cycle activities with `cycle_activities = true`.
 
 Turning Do Not Disturb on or off from a keybind or `noctalia msg notification-dnd-set`
-shows a short pill: an indigo moon, "Do Not Disturb", and On or Off. Plugging in a
-laptop's charger shows a green "Charging" pill with the battery level. Turn the
-charging pill off with `[osd.kinds] charging = false`.
+shows a short pill drawn like the macOS Big Sur Control Center tile: a round toggle
+(solid indigo with a white moon when on, grey when off), "Do Not Disturb", and On or
+Off under it. Plugging in a laptop's charger shows a green "Charging" pill with the
+battery level. Turn the charging pill off with `[osd.kinds] charging = false`.
+
+In the Cupertino look, volume, microphone and brightness changes show as Big Sur's
+Sound and Display modules: the name (and the level for brightness, or for volume with
+`volume_show_percentage`) over a white-filled groove with the symbol inside its leading
+end. `volume_bar_height` sets the groove's thickness; below 14 px the symbol moves
+outside, to the groove's left. The theme look keeps its icon and accent bar.
 
 ## Download indicators
 

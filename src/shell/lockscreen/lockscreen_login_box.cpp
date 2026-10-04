@@ -149,7 +149,7 @@ namespace lockscreen_login_box {
     // avatar, name, field, status line, then optional session buttons with their labels.
     float height = kCupertinoAvatarSize
         + Style::spaceMd
-        + Style::fontSizeTitle
+        + Style::fontSizeHeader
         + Style::spaceMd
         + kCupertinoFieldHeight
         + Style::spaceSm
@@ -372,7 +372,7 @@ namespace lockscreen_login_box {
       settings.insert_or_assign(std::string(kShowUnlockHintKey), true);
       settings.insert_or_assign(std::string(kInputOpacityKey), 1.0);
       settings.insert_or_assign(std::string(kInputRadiusKey), 6.0);
-      settings.insert_or_assign(std::string(kCenterPasswordTextKey), false);
+      settings.insert_or_assign(std::string(kCenterPasswordTextKey), true);
     }
     if (scope == desktop_settings::DesktopWidgetSettingsScope::Background) {
       settings.insert_or_assign("background_color", std::string("surface_variant"));

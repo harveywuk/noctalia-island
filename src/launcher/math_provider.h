@@ -2,7 +2,12 @@
 
 #include "launcher/launcher_provider.h"
 
+#include <chrono>
+#include <ctime>
+#include <deque>
 #include <memory>
+#include <optional>
+#include <string>
 
 class ClipboardService;
 class ConfigService;
@@ -32,8 +37,19 @@ public:
   [[nodiscard]] std::vector<LauncherAction> actions(const LauncherResult& result) const override;
   LauncherActionOutcome runAction(const LauncherResult& result, std::string_view actionId) override;
 
+  struct HistoryEntry {
+    std::string expression;
+    std::string result;
+  };
+  // Raycast keeps the last answers under the calculator; exposed for tests through `path`.
+  [[nodiscard]] static std::deque<HistoryEntry> loadHistory(const std::string& path);
+  static void saveHistory(const std::string& path, const std::deque<HistoryEntry>& history);
+
 private:
-  [[nodiscard]] std::vector<LauncherResult> evaluate(std::string_view text) const;
+  [[nodiscard]] std::vector<LauncherResult> evaluate(std::string_view text, bool prefixed) const;
+  [[nodiscard]] std::vector<LauncherResult> historyResults() const;
+  void remember(std::string expression, std::string result);
+  [[nodiscard]] std::string historyPath() const;
 
   // Download fresh exchange rates over the async HTTP client, gated on
   // shell.launcher.fetch_exchange_rates and shell.offline_mode.
@@ -43,4 +59,5 @@ private:
   ConfigService* m_config = nullptr;
   HttpClient* m_httpClient = nullptr;
   std::unique_ptr<Calculator> m_calc;
+  mutable std::optional<std::deque<HistoryEntry>> m_history;
 };

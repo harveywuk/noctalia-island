@@ -11,6 +11,7 @@
 #include "render/render_target.h"
 #include "render/scene/node.h"
 #include "shell/dock/pinned_apps.h"
+#include "shell/tooltip/tooltip_manager.h"
 #include "system/desktop_entry.h"
 #include "ui/builders.h"
 #include "ui/controls/context_menu.h"
@@ -31,7 +32,7 @@ namespace shell::dock {
 
     constexpr Logger kLog("dock");
 
-    constexpr float kMenuWidth = 240.0F;
+    constexpr float kMenuWidth = 168.0F;
     constexpr std::int32_t kMenuCloseId = -1;
     constexpr std::int32_t kMenuCloseAllId = -2;
     constexpr std::int32_t kMenuSeparatorId = -3;
@@ -393,6 +394,8 @@ namespace shell::dock {
       }
       (void)popup_chrome::addCardBackground(*menuPtr->sceneRoot, menuPtr->chrome, 1.0F);
 
+      // The icon's tooltip would sit over the menu.
+      TooltipManager::instance().forceDestroy();
       auto ctrl = std::make_unique<ContextMenuControl>();
       ctrl->setMenuWidth(menuPtr->chrome.contentWidth);
       ctrl->setMaxVisible(entries.size());
