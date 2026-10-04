@@ -88,6 +88,8 @@ public:
   std::optional<IslandPanelSurface>
   acquirePanelSurface(wl_output* output, bool exactOutput = false, std::string_view barName = {});
   [[nodiscard]] island::Size panelReturnSize() const;
+  // The capsule's own fill (black in the Cupertino look), which a hosted panel blends from and back to.
+  [[nodiscard]] Color capsuleColor() const;
   void releasePanelSurface(wl_output* output, float width, float height);
 
 private:

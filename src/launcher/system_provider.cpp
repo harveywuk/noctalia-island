@@ -23,7 +23,7 @@ namespace {
   // Long enough for the launcher's close animation to finish.
   constexpr auto kAfterCloseDelay = std::chrono::milliseconds(260);
 
-  constexpr std::array<SystemProvider::Command, 22> kCommands = {{
+  constexpr std::array<SystemProvider::Command, 23> kCommands = {{
       {.id = "toggle-dark-mode", .glyph = "moon", .ipc = "theme-mode-toggle"},
       {.id = "toggle-dnd", .glyph = "bell-off", .ipc = "notification-dnd-toggle"},
       {.id = "toggle-wifi", .glyph = "wifi", .ipc = "wifi-toggle"},
@@ -39,6 +39,7 @@ namespace {
       {.id = "screenshot", .glyph = "screenshot", .ipc = "screenshot-region", .afterClose = true},
       {.id = "annotate", .glyph = "pencil", .ipc = "screenshot-annotate", .afterClose = true},
       {.id = "record", .glyph = "video", .ipc = "record-region", .afterClose = true},
+      {.id = "pick-color", .glyph = "color-picker", .ipc = {}, .afterClose = true},
       {.id = "stop-recording", .glyph = "player-stop", .ipc = "record-stop"},
       {.id = "displays-off", .glyph = "device-desktop-off", .ipc = "dpms-off", .afterClose = true},
       {.id = "clear-clipboard", .glyph = "clipboard-x", .ipc = "clipboard-clear"},
@@ -155,6 +156,13 @@ std::vector<LauncherResult> SystemProvider::query(std::string_view text) const {
 std::vector<LauncherResult> SystemProvider::queryPrefixed(std::string_view text) const { return search(text, true); }
 
 void SystemProvider::run(const Command& command) {
+  if (command.id == "pick-color") {
+    // hyprpicker -a copies the picked colour; the launcher has closed by now so it isn't sampled.
+    if (!process::commandExists("hyprpicker") || !process::runAsync({"hyprpicker", "-a"})) {
+      notify::info("Noctalia", titleFor(command), i18n::tr("launcher.system.pick-color-missing"));
+    }
+    return;
+  }
   if (command.id == "empty-trash") {
     std::thread(emptyTrash).detach();
     return;

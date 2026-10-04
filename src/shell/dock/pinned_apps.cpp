@@ -20,12 +20,27 @@ namespace shell::dock::pinned_apps {
 
   } // namespace
 
+  namespace {
+
+    // Desktop entry ids are file stems ("firefox"); a pin written as "firefox.desktop" means the same file.
+    [[nodiscard]] std::string_view stripDesktopSuffix(std::string_view id) {
+      constexpr std::string_view kSuffix = ".desktop";
+      if (id.size() > kSuffix.size() && id.ends_with(kSuffix)) {
+        id.remove_suffix(kSuffix.size());
+      }
+      return id;
+    }
+
+  } // namespace
+
   bool matchesEntry(const DesktopEntry& entry, std::string_view pinnedId) {
     if (pinnedId.empty()) {
       return false;
     }
-
-    return entry.id == pinnedId;
+    if (entry.id == pinnedId || (!entry.path.empty() && entry.path == pinnedId)) {
+      return true;
+    }
+    return stripDesktopSuffix(entry.id) == stripDesktopSuffix(pinnedId);
   }
 
   bool containsEntry(const std::vector<std::string>& pinned, const DesktopEntry& entry) {
@@ -43,7 +58,7 @@ namespace shell::dock::pinned_apps {
     const auto& entries = desktopEntries();
     for (const auto& pinnedId : pinned) {
       const auto match = std::ranges::find_if(entries, [&](const DesktopEntry& entry) {
-        return !entry.hidden && !entry.noDisplay && entry.id == pinnedId;
+        return !entry.hidden && !entry.noDisplay && matchesEntry(entry, pinnedId);
       });
 
       DesktopEntry entry = match != entries.end() ? *match : [&]() {

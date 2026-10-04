@@ -1,9 +1,9 @@
 #pragma once
 
-#include "shell/control_center/artwork_flow_layer.h"
 #include "config/config_types.h"
 #include "core/timer_manager.h"
 #include "render/core/thumbnail_service.h"
+#include "shell/control_center/artwork_flow_layer.h"
 #include "shell/control_center/control_center_services.h"
 #include "shell/control_center/shortcut_services.h"
 #include "shell/control_center/tab.h"
@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -18,6 +19,10 @@
 
 class AccountsService;
 class AsyncTextureCache;
+class Box;
+class BrightnessService;
+class PipeWireService;
+class Slider;
 class Button;
 class CompositorPlatform;
 class HttpClient;
@@ -29,6 +34,7 @@ class GridView;
 class Image;
 class InputArea;
 class Label;
+class Node;
 class Shortcut;
 class ScrollView;
 class Wallpaper;
@@ -37,12 +43,18 @@ namespace scripting {
   class ScriptApiContext;
 }
 
+// How a shortcut is drawn: a round toggle in the dashboard grid, or, in the Big Sur modules, a
+// row of the connectivity module (toggle, name, state), the wide tile or a small tile.
+enum class ShortcutPadKind : std::uint8_t { Grid, Row, Wide, Small };
+
 struct ShortcutPad {
   // Survives HomeTab::onClose(); button/glyph/label are nulled with the scene.
   std::unique_ptr<Shortcut> shortcut;
   Button* button = nullptr;
   Glyph* glyph = nullptr;
   Label* label = nullptr;
+  Label* status = nullptr;
+  ShortcutPadKind kind = ShortcutPadKind::Grid;
 };
 
 class HomeTab : public Tab {
@@ -87,6 +99,25 @@ private:
   bool resizeMediaArtToCard();
   void applyMediaOverlay(bool overlay);
   void onPanelCardOpacityChanged(float opacity) override;
+
+  // The Big Sur modules layout (home_tab_modules.cpp).
+  std::unique_ptr<Flex> createModules();
+  void layoutModules(Renderer& renderer, float contentWidth, float bodyHeight);
+  void syncModules();
+  std::unique_ptr<Flex> makeShortcutModule(float scale);
+  std::unique_ptr<Flex> makeSliderModule(
+      float scale, const std::string& title, const std::string& detailTab, const std::string& detailTooltip,
+      Slider** slider, Glyph** glyph, Box** outline, std::function<void(double)> onChange,
+      std::function<void()> onDragEnd, std::unique_ptr<Node> trailing
+  );
+  std::unique_ptr<Flex> makeNowPlayingModule(float scale);
+  void addPad(Flex& parent, std::unique_ptr<Shortcut> shortcut, ShortcutPadKind kind, float scale);
+  // A pointer target over `target` (laid out in layoutModules) that runs `onActivate`.
+  void addModuleOverlay(Flex& target, std::function<void()> onActivate);
+  void flushBrightness();
+  void flushVolume();
+  // The configured shortcuts, reusing the instances kept across open/close.
+  std::vector<std::unique_ptr<Shortcut>> takeShortcuts(std::size_t limit);
 
   MprisService* m_mpris = nullptr;
   HttpClient* m_httpClient = nullptr;
@@ -173,6 +204,31 @@ private:
   // Keeps the home tab clock ticking while the panel is open and idle; the clock
   // otherwise only refreshes when an unrelated service forces a redraw.
   Timer m_clockTimer;
+
+  // Big Sur modules.
+  bool m_modules = false;
+  BrightnessService* m_brightness = nullptr;
+  ScrollView* m_modulesScroll = nullptr;
+  Flex* m_modulesColumn = nullptr;
+  Flex* m_shortcutModule = nullptr;
+  Flex* m_displayModule = nullptr;
+  Slider* m_displaySlider = nullptr;
+  Glyph* m_displayGlyph = nullptr;
+  Box* m_displayOutline = nullptr;
+  Flex* m_soundModule = nullptr;
+  Slider* m_soundSlider = nullptr;
+  Glyph* m_soundGlyph = nullptr;
+  Box* m_soundOutline = nullptr;
+  Flex* m_mediaControls = nullptr;
+  Button* m_mediaPlayButton = nullptr;
+  Button* m_mediaNextButton = nullptr;
+  std::vector<std::pair<Flex*, InputArea*>> m_moduleOverlays;
+  float m_pendingBrightness = -1.0F;
+  float m_pendingVolume = -1.0F;
+  Timer m_brightnessTimer;
+  Timer m_volumeTimer;
+  // A slider moved by the user ignores service echoes until its writes have landed.
+  std::chrono::steady_clock::time_point m_sliderHoldoff{};
 
   GridView* m_shortcutsGrid = nullptr;
   std::vector<ShortcutPad> m_shortcutPads;

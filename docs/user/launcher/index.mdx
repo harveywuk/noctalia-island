@@ -28,9 +28,13 @@ The bar along the bottom names the selected result's kind and its keys: **Return
 - **Tab** autocompletes the selected result: a provider row from the `/` overview puts its prefix in the field, a search quicklink puts its keyword in (`gh `), and a fallback row carries your query into that provider.
 - **Esc** inside a provider view you reached from the root search (for example after typing `/clip`) goes back to the root search; **Esc** at the root, or in a view the launcher opened with (the clipboard shortcut), closes the launcher.
 
-### Actions menu
+### Arguments
 
-**Shift + Return** (or a right click) lists everything you can do with the selected result, Raycast-style: the primary action first, then the result's own actions (for example **Quit Application** and **Copy Name** for a running application, **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. **Ctrl + Return** runs the first of the result's own actions directly.
+Commands that take arguments (a script command with `@raycast.argument1`, a search quicklink picked without a query, **Translate** in AI) show them inline, like Raycast: **Tab** on the command, or **Return** while a required argument is still empty, opens an argument bar under the search field with the command on the left and a pill per argument. The search field edits the highlighted argument; **Tab** / **Shift + Tab** (or **Down** / **Up**) move between them, **Return** runs the command once every required argument has a value, and **Esc** puts your search back. Typing the arguments after the title (`deploy staging`, `gh noctalia`) still works.
+
+### Action panel
+
+**Shift + Return** (or a right click) opens the action panel over the bottom-right of the results, like Raycast's ⌘K panel: the primary action first with its **↵** hint, then the result's own actions (the first of which **Ctrl + Return** runs directly; for example **Quit Application** and **Copy Name** for a running application, **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. While the panel is open the search field filters the actions; **Up** / **Down** move, **Return** runs, **Esc** or **Shift + Return** closes it and brings the search back.
 
 ### Aliases and hotkeys
 
@@ -110,6 +114,7 @@ A built-in expression evaluator powered by [`libqalculate`](https://qalculate.gi
   unit conversion (`10 cm to in`, `5 ft in cm`, `100 km/h to mph`, `70F in C`), number bases (`0xff`), and currency conversion
   (`10 USD to EUR`, `20 GBP in JPY`). Both `to` and `in` work. Decimal and thousands separators follow the system numeric locale
   (for example `10000,50+2000,25` under `pt_BR`). Pressing **Enter** copies the result to your clipboard.
+- **History**: `/calc` with nothing typed lists the last answers you copied, newest first, each with **Copy Answer** and **Copy Expression**; **Clear History** is at the end. The list is kept in `~/.local/state/noctalia/calculator_history.json`.
 - **Currency rates**: Exchange rates are cached locally and refreshed in the background from libqalculate's
   ECB/global providers when `shell.launcher.fetch_exchange_rates` is enabled (the default). Refresh is also
   skipped when `[shell].offline_mode` is enabled; in either case the last cached rates are used.
@@ -186,7 +191,7 @@ Paste saved text by name or keyword.
 - **Source**: `[shell.launcher.snippets.<id>]` in your config, plus snippets made in the launcher (kept in `~/.local/state/noctalia/launcher_snippets.json`).
 - **Creating**: Run **Create Snippet** (first in `/snip`, or search "create snippet") to fill in a name, the text and an optional keyword. Type `\n` for a new line. **Save as Snippet** in clipboard history opens the same form with the copied text filled in, and **Edit Snippet…** changes one made here.
 - **Placeholders**: `{date}`, `{time}`, `{datetime}`, `{day}`, `{weekday}`, `{month}`, `{year}`, `{clipboard}` and `{uuid}` are filled in when the snippet is pasted, as in Raycast. `{cursor}` is accepted and removed; the launcher can't place the caret in another app.
-- **Limits**: Snippets are pasted from the launcher; they don't expand automatically as you type in other apps.
+- **Expansion while typing**: With `shell.launcher.snippet_expansion = true` (**Settings → Launcher → Expand Snippets While Typing**), typing a snippet's keyword in any app replaces it with the snippet's text, as in Raycast: the keyword is erased with Backspace through the virtual keyboard and the text pasted. Wayland has no way to watch the keyboard, so, like espanso, the shell reads the keyboards under `/dev/input`; your user must be in the `input` group (`sudo usermod -aG input $USER`, then log in again). Keys decode with the compositor's keymap, a word ends at Return, arrows or any Ctrl/Alt/Super chord, and nothing expands while a shell panel has the keyboard. Keywords should be at least two characters and are matched exactly, so a leading symbol (`;sig`, `:addr`) avoids accidents.
 
 ### Script commands
 
@@ -195,7 +200,7 @@ Run your own scripts from the launcher, using Raycast's script command format.
 - **Prefix**: `/script ` (also in global search)
 - **Source**: Executable files in `~/.config/noctalia/scripts` and any folders in `shell.launcher.script_directories`.
 - **Metadata**: Comment lines such as `# @raycast.title`, `@raycast.description`, `@raycast.packageName`, `@raycast.icon` and `@raycast.mode` (`silent`, `compact` or `fullOutput`) are read from the top of the file; `@noctalia.` works too. Raycast script commands work unchanged.
-- **Arguments**: Text typed after the title is passed to the script (`deploy staging`).
+- **Arguments**: `@raycast.argument1` … `argument3` become inline fields in the argument bar (Tab on the command); text typed after the title is passed too (`deploy staging`).
 - **Output**: `compact` shows the last line of output as a notification, `fullOutput` shows all of it, and a failing script reports its error. Actions: **Edit Script** and **Show in Folder**.
 
 ### Time zones
@@ -211,8 +216,62 @@ See the time anywhere, or convert a time between places.
 Toggle settings and run system actions.
 
 - **Prefix**: `/sys ` (also in global search)
-- **Commands**: Toggle Dark Mode, Do Not Disturb, Wi-Fi, Bluetooth, Keep Awake, Night Light, Mute and Microphone; Volume Up and Down, Brightness Up and Down; Take Screenshot, Screenshot and Annotate, Record Screen, Stop Recording, Turn Off Displays, Clear Clipboard History, Clear Notifications, Empty Trash, Eject All Disks and Reload Configuration.
+- **Commands**: Toggle Dark Mode, Do Not Disturb, Wi-Fi, Bluetooth, Keep Awake, Night Light, Mute and Microphone; Volume Up and Down, Brightness Up and Down; Take Screenshot, Screenshot and Annotate, Record Screen, Pick Color (with `hyprpicker`), Stop Recording, Turn Off Displays, Clear Clipboard History, Clear Notifications, Empty Trash, Eject All Disks and Reload Configuration.
 - **Matching**: In global search every word you type must start a word of the command's name or keywords, so short queries don't pull in unrelated commands.
+
+### Timers
+
+Start a countdown that lives in the Dynamic Island.
+
+- **Prefix**: `/timer ` (also in global search when the word "timer" is typed)
+- **Examples**: `timer 10m`, `set timer 1h30 tea`, `15 min stretch timer`; after the prefix just `25` or `2h focus`.
+- **Functionality**: The timer counts down as a live activity in the Island, a ring that empties, with its label and the time left. A notification says when it is done. `/timer` lists running timers; their actions are **Cancel Timer** and **Add 1 Minute**. Timers live in the shell process and don't survive a restart.
+
+### Kill Process
+
+- **Prefix**: `/kill ` (never in global search)
+- **Source**: Your own processes from `/proc`, busiest first, with their PID, average CPU share and resident memory.
+- **Functionality**: Search by name, command line or PID. **Return** sends SIGTERM; **Force Kill** in the action panel sends SIGKILL.
+
+### Dates
+
+Date arithmetic in the search field, like Raycast's calculator.
+
+- **Prefix**: `/date ` (also in global search)
+- **Examples**: `3 days from now`, `2 weeks ago`, `in 1 month`, `days until 25 dec`, `weeks since 2026-01-01`, `next friday`, `last monday`, `today + 10 days`, `25 dec - 2 weeks`, `1 month from 31 oct`.
+- **Functionality**: Shows the resulting date with how far away it is, or the number of days or weeks between two dates. Dates are read day first (`25/12`, `25 dec`, `december 25th 2027`, `2026-12-25`); a day without a year means the next one. Return copies the answer.
+
+### Dictionary
+
+- **Prefix**: `/define ` (also in global search as `define …`, `def …` or `meaning of …`)
+- **Source**: The free [dictionaryapi.dev](https://dictionaryapi.dev) service, asked once you pause typing. Nothing is fetched when `[shell].offline_mode` is on.
+- **Functionality**: Lists the word's meanings by part of speech, with its pronunciation on the first. Return copies the definition; the action panel offers **Copy Word** and **Copy Example**. While the lookup is in flight, or when the word isn't found or the service is unreachable, a status row takes its place and Return searches the web for the word instead.
+
+### Screenshots
+
+- **Prefix**: `/shot `
+- **Source**: Image files in the screenshot folder (`shell.screenshot.directory`, or your Pictures folder), newest first, with a preview pane.
+- **Functionality**: Return opens the screenshot. Actions: **Copy Image** (the PNG itself, other formats as a file reference), **Show in Folder**, **Copy Path** and **Move to Trash**.
+
+### Quick notes
+
+The capture half of Raycast's Floating Notes: jot something down without leaving the keyboard.
+
+- **Prefix**: `/note ` (also in global search as `note …`)
+- **File**: `shell.launcher.notes_file`, or `~/Documents/Notes.md` (falling back to `~/Notes.md`). Each note is a Markdown list item with a time stamp, so the file reads well anywhere.
+- **Functionality**: `note call the dentist` offers **Save note**; `/note` lists the latest notes newest first with a preview, **Copy Note**, **Delete Note** and **Open Notes File**.
+- **Floating Notes**: **Floating Notes** (first in `/note`, or search for it, or `noctalia msg panel-open floating-notes`) opens a small note window that stays over your apps while you open other panels or the launcher. It edits the notes file in place and saves as you type; **Esc** or the close button puts it away. `shell.launcher.floating_notes_position` moves it (default `bottom_right`).
+
+### AI
+
+Raycast's AI, answered by the service in `[shell.launcher.ai]`: a local model through [Ollama](https://ollama.com) by default, so nothing leaves your machine, or an online service when you set `provider = "openai"` (OpenAI, and anything speaking its API: OpenRouter, Groq, Mistral, LM Studio, …) or `provider = "anthropic"`.
+
+- **Prefix**: `/ai ` (also in global search: **Ask AI** sits with the fallbacks under "Use … with")
+- **Setup (local)**: Install Ollama, run `ollama serve` and pull a model (`ollama pull llama3.2`). `/ai › Choose Model` lists the installed models and remembers your pick; `shell.launcher.ai.model` pins one.
+- **Setup (online)**: Set `provider` and give it a key: `api_key` in the config, `api_key_command` (a command whose output is the key, such as `pass show openai`, so the key stays out of `config.toml`), or the service's usual environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). `url` defaults to the service's API; point it at `https://openrouter.ai/api/v1`, `https://api.groq.com/openai/v1`, a local LM Studio and so on for other OpenAI-compatible services. `Choose Model` lists the service's models and remembers the pick per service; without one, `gpt-4o-mini` or `claude-sonnet-5-5` answers. Online requests carry only the prompt (your question, or the clipboard text for a command), and `[shell].offline_mode` blocks them like every other request.
+- **Quick AI**: Type a question and **Return** on **Ask AI**. The answer streams into the launcher as Markdown; **Return** copies it (and pastes it, per `auto_paste`), the action panel offers **Stop Writing**, **Regenerate** and **Copy Question**. **Esc** goes back to the search; the same question shows its answer again.
+- **AI Commands**: **Improve Writing**, **Fix Spelling and Grammar**, **Make Shorter**, **Make Longer**, **Change Tone to Professional / Casual / Friendly / Confident**, **Summarize**, **Explain This in Simple Terms**, **Explain Code Step by Step** and **Translate** (asks for the language in the argument bar) run their prompt over the text on the clipboard, since Wayland doesn't expose the selection of another app: copy the text, run the command, then paste the result over it. The prompts follow the community Ollama extension for Raycast.
+- **States**: An unreachable server, a missing or rejected API key, no installed models and offline mode each show a status row saying what to do.
 
 ### Window management
 
@@ -345,7 +404,7 @@ So `provider_prefix = "/"` with a trigger word of `emo` gives `/emo`. Changing `
 
 Each provider type gets its trigger word from a different place:
 
-- **Built-in providers** (Calculator, Clipboard, Emoji, Files, Panels, Quicklinks, Scripts, Session, Snippets, System, Time, Wallpaper, Windows): `[shell.launcher.providers.<name>]`.
+- **Built-in providers** (Calculator, Clipboard, Date, Dictionary, Emoji, Files, Notes, Panels, Processes, Quicklinks, Screenshots, Scripts, Session, Snippets, System, Time, Timer, Wallpaper, WindowManagement, Windows): `[shell.launcher.providers.<name>]`.
 - **Dmenu providers**: the `prefix`/`global` keys on the entry's `[shell.launcher.dmenu.entry.<id>]` table.
 - **Plugin providers**: the `[[launcher_provider]]` manifest `prefix`, optionally overridden per-user via `[shell.launcher.providers."<pluginId>:<entry>"]`.
 

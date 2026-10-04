@@ -2,15 +2,24 @@
 // URL templates, snippet placeholders, script command metadata, time zone parsing, form validation,
 // and the alias, quicklink and snippet stores.
 
+#include "launcher/ai_provider.h"
 #include "launcher/alias_store.h"
 #include "launcher/clipboard_provider.h"
+#include "launcher/date_provider.h"
+#include "launcher/define_provider.h"
 #include "launcher/launcher_util.h"
+#include "launcher/math_provider.h"
+#include "launcher/notes_provider.h"
+#include "launcher/process_provider.h"
 #include "launcher/quicklink_provider.h"
 #include "launcher/quicklink_store.h"
+#include "launcher/screenshot_provider.h"
 #include "launcher/script_provider.h"
+#include "launcher/snippet_matcher.h"
 #include "launcher/snippet_provider.h"
 #include "launcher/snippet_store.h"
 #include "launcher/time_provider.h"
+#include "launcher/timer_provider.h"
 #include "launcher/usage_tracker.h"
 #include "launcher/window_management_provider.h"
 #include "tests/test_check.h"
@@ -18,7 +27,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <deque>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <unistd.h>
 
@@ -162,6 +173,143 @@ namespace {
     fs::remove(path);
   }
 
+  void testSnippetMatcher() {
+    SnippetMatcher matcher;
+    matcher.setKeywords(
+        {{";sig", "a"}, {"brb", "b"}, {"x", "too short"}, {"two words", "spaces"}, {"ab", "c"}, {"xab", "d"}}
+    );
+    for (const char* ch : {"h", "i", " ", ";", "s", "i"}) {
+      TEST_CHECK(!matcher.feed(ch).has_value());
+    }
+    const auto sig = matcher.feed("g");
+    TEST_CHECK(sig.has_value() && sig->snippetId == "a");
+    TEST_CHECK(matcher.buffer().empty()); // a match resets the word
+    // Backspace drops the last code point; a word break drops the word.
+    (void)matcher.feed("b");
+    (void)matcher.feed("r");
+    (void)matcher.feed("é");
+    matcher.backspace();
+    TEST_CHECK(matcher.buffer() == "br");
+    const auto brb = matcher.feed("b");
+    TEST_CHECK(brb.has_value() && brb->snippetId == "b");
+    (void)matcher.feed("b");
+    matcher.reset();
+    TEST_CHECK(!matcher.feed("r").has_value());
+    TEST_CHECK(!matcher.feed("b").has_value());
+    // The longest keyword wins when several end the buffer.
+    matcher.reset();
+    (void)matcher.feed("x");
+    (void)matcher.feed("a");
+    const auto longest = matcher.feed("b");
+    TEST_CHECK(longest.has_value() && longest->snippetId == "d");
+    TEST_CHECK(SnippetMatcher::codePoints("héllo") == 5);
+    TEST_CHECK(SnippetMatcher::codePoints(";sig") == 4);
+  }
+
+  void testArguments() {
+    // A search quicklink picked without a query takes one in the argument bar.
+    const auto links = QuicklinkProvider::builtinQuicklinks();
+    bool sawArgument = false;
+    for (const auto& result : QuicklinkProvider::match(links, "duck", false)) {
+      if (result.id == "link:duckduckgo") {
+        sawArgument =
+            result.arguments.size() == 1 && result.arguments[0].required && !result.arguments[0].placeholder.empty();
+      }
+    }
+    TEST_CHECK(sawArgument);
+    // With a query typed after the keyword there is nothing left to ask for.
+    for (const auto& result : QuicklinkProvider::match(links, "ddg noctalia", false)) {
+      if (result.id == "link:duckduckgo") {
+        TEST_CHECK(result.arguments.empty() && result.query.has_value());
+      }
+    }
+  }
+
+  void testAi() {
+    using Kind = AiProvider::Kind;
+    const auto models = AiProvider::parseModels(
+        Kind::Ollama, R"({"models":[{"name":"llama3.2:latest","size":1},{"name":"qwen2.5-coder:7b"}]})"
+    );
+    TEST_CHECK(models.size() == 2 && models[0] == "llama3.2:latest" && models[1] == "qwen2.5-coder:7b");
+    TEST_CHECK(AiProvider::parseModels(Kind::Ollama, "nope").empty());
+    const auto online =
+        AiProvider::parseModels(Kind::OpenAi, R"({"object":"list","data":[{"id":"gpt-4o-mini"},{"id":"gpt-4.1"}]})");
+    TEST_CHECK(online.size() == 2 && online[0] == "gpt-4.1" && online[1] == "gpt-4o-mini"); // sorted
+    const auto anthropic = AiProvider::parseModels(
+        Kind::Anthropic, R"({"data":[{"id":"claude-sonnet-5-5","display_name":"Claude Sonnet 5.5"}]})"
+    );
+    TEST_CHECK(anthropic.size() == 1 && anthropic[0] == "claude-sonnet-5-5");
+
+    const auto token = AiProvider::parseStreamLine(
+        Kind::Ollama, R"({"model":"llama3.2","message":{"role":"assistant","content":"Hel"},"done":false})"
+    );
+    TEST_CHECK(token.has_value() && token->content == "Hel" && !token->done && token->error.empty());
+    const auto last =
+        AiProvider::parseStreamLine(Kind::Ollama, R"({"message":{"content":""},"done":true,"total_duration":1})");
+    TEST_CHECK(last.has_value() && last->done);
+    const auto error = AiProvider::parseStreamLine(Kind::Ollama, R"({"error":"model 'x' not found"})");
+    TEST_CHECK(error.has_value() && error->error == "model 'x' not found" && error->done);
+    TEST_CHECK(!AiProvider::parseStreamLine(Kind::Ollama, "   ").has_value());
+
+    const auto openai = AiProvider::parseStreamLine(
+        Kind::OpenAi, R"(data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":null}]})"
+    );
+    TEST_CHECK(openai.has_value() && openai->content == "Hi" && !openai->done);
+    const auto openaiStop =
+        AiProvider::parseStreamLine(Kind::OpenAi, R"(data: {"choices":[{"delta":{},"finish_reason":"stop"}]})");
+    TEST_CHECK(openaiStop.has_value() && openaiStop->content.empty() && openaiStop->done);
+    const auto openaiDone = AiProvider::parseStreamLine(Kind::OpenAi, "data: [DONE]");
+    TEST_CHECK(openaiDone.has_value() && openaiDone->done);
+    TEST_CHECK(!AiProvider::parseStreamLine(Kind::OpenAi, ": keep-alive").has_value());
+    const auto openaiError = AiProvider::parseStreamLine(
+        Kind::OpenAi, R"({"error":{"message":"Incorrect API key","type":"invalid_request_error"}})"
+    );
+    TEST_CHECK(openaiError.has_value() && openaiError->error == "Incorrect API key");
+
+    TEST_CHECK(!AiProvider::parseStreamLine(Kind::Anthropic, "event: content_block_delta").has_value());
+    const auto claude = AiProvider::parseStreamLine(
+        Kind::Anthropic,
+        R"(data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}})"
+    );
+    TEST_CHECK(claude.has_value() && claude->content == "Hello" && !claude->done);
+    const auto claudeStop = AiProvider::parseStreamLine(Kind::Anthropic, R"(data: {"type":"message_stop"})");
+    TEST_CHECK(claudeStop.has_value() && claudeStop->done);
+    const auto claudeError = AiProvider::parseStreamLine(
+        Kind::Anthropic, R"(data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}})"
+    );
+    TEST_CHECK(claudeError.has_value() && claudeError->error == "Overloaded" && claudeError->done);
+
+    const HttpRequest chat =
+        AiProvider::chatRequest(Kind::OpenAi, "https://openrouter.ai/api/v1/", "sk-test", "gpt-4o-mini", "hi");
+    TEST_CHECK(chat.method == "POST" && chat.url == "https://openrouter.ai/api/v1/chat/completions");
+    TEST_CHECK(std::ranges::find(chat.headers, "Authorization: Bearer sk-test") != chat.headers.end());
+    TEST_CHECK(chat.body.contains("\"stream\":true") && chat.body.contains("\"model\":\"gpt-4o-mini\""));
+    const HttpRequest claudeChat = AiProvider::chatRequest(Kind::Anthropic, "", "sk-ant", "claude-sonnet-5-5", "hi");
+    TEST_CHECK(claudeChat.url == "/messages");
+    TEST_CHECK(std::ranges::find(claudeChat.headers, "x-api-key: sk-ant") != claudeChat.headers.end());
+    TEST_CHECK(std::ranges::find(claudeChat.headers, "anthropic-version: 2023-06-01") != claudeChat.headers.end());
+    TEST_CHECK(claudeChat.body.contains("\"max_tokens\""));
+    const HttpRequest tags = AiProvider::modelsRequest(Kind::Ollama, "http://127.0.0.1:11434", "");
+    TEST_CHECK(tags.url == "http://127.0.0.1:11434/api/tags" && tags.headers.empty());
+    TEST_CHECK(
+        AiProvider::modelsRequest(Kind::OpenAi, AiProvider::defaultUrl(Kind::OpenAi), "k").url
+        == "https://api.openai.com/v1/models"
+    );
+    TEST_CHECK(AiProvider::keyEnvironmentVariable(Kind::Anthropic) == "ANTHROPIC_API_KEY");
+
+    TEST_CHECK(
+        AiProvider::fillPrompt("Translate into {language}.\n{text}", "hi", "French") == "Translate into French.\nhi"
+    );
+    bool translateTakesLanguage = false;
+    for (const auto& command : AiProvider::commands()) {
+      TEST_CHECK(command.prompt.contains("{text}"));
+      if (command.id == "translate") {
+        translateTakesLanguage = command.takesLanguage && command.prompt.contains("{language}");
+      }
+    }
+    TEST_CHECK(translateTakesLanguage);
+  }
+
   void testScripts() {
     const std::string raycast = R"(#!/bin/bash
 # Required parameters:
@@ -269,6 +417,150 @@ echo "$1"
     }
   }
 
+  void testTimers() {
+    using namespace std::chrono;
+    auto request = TimerProvider::parse("timer 10m", false);
+    TEST_CHECK(request.has_value() && request->duration == minutes(10) && request->label.empty());
+    request = TimerProvider::parse("set timer 1h30 tea", false);
+    TEST_CHECK(request.has_value() && request->duration == minutes(90) && request->label == "Tea");
+    request = TimerProvider::parse("15 min stretch timer", false);
+    TEST_CHECK(request.has_value() && request->duration == minutes(15) && request->label == "Stretch");
+    request = TimerProvider::parse("25 minutes focus", true);
+    TEST_CHECK(request.has_value() && request->duration == minutes(25) && request->label == "Focus");
+    request = TimerProvider::parse("2h", true);
+    TEST_CHECK(request.has_value() && request->duration == hours(2));
+    request = TimerProvider::parse("90", true);
+    TEST_CHECK(request.has_value() && request->duration == minutes(90));
+    // Without its prefix the word "timer" is required, and plain searches are left alone.
+    TEST_CHECK(!TimerProvider::parse("10 min", false).has_value());
+    TEST_CHECK(!TimerProvider::parse("firefox", true).has_value());
+    TEST_CHECK(!TimerProvider::parse("timer 0m", false).has_value());
+    TEST_CHECK(!TimerProvider::parse("timer 48h", false).has_value());
+    TEST_CHECK(TimerProvider::formatRemaining(seconds(299)) == "4:59");
+    TEST_CHECK(TimerProvider::formatRemaining(seconds(3661)) == "1:01:01");
+    TEST_CHECK(TimerProvider::formatRemaining(seconds(7)) == "0:07");
+  }
+
+  void testProcesses() {
+    const auto stat = ProcessProvider::parseStat(
+        "1234 (my (odd) name) S 1 1234 1234 0 -1 4194560 100 0 0 0 250 50 0 0 20 0 1 0 98765 1000000 300 "
+        "18446744073709551615 1 1 0 0 0 0 0 0 0 0 0 0 17 0 0 0 0 0 0"
+    );
+    TEST_CHECK(stat.has_value());
+    TEST_CHECK(stat->comm == "my (odd) name" && stat->state == 'S');
+    TEST_CHECK(stat->utime == 250 && stat->stime == 50 && stat->starttime == 98765);
+    TEST_CHECK(!ProcessProvider::parseStat("garbage").has_value());
+    // The live scan lists this test's own parent shell, never the test itself.
+    const auto processes = ProcessProvider::scan();
+    TEST_CHECK(std::ranges::none_of(processes, [](const ProcessProvider::Process& p) { return p.pid == ::getpid(); }));
+    for (const auto& process : processes) {
+      TEST_CHECK(!process.name.empty() && process.pid > 0);
+    }
+  }
+
+  void testDates() {
+    using namespace std::chrono;
+    const year_month_day today = 2026y / October / 3; // a Saturday
+    const auto ymd = [](int y, unsigned m, unsigned d) { return year{y} / month{m} / day{d}; };
+
+    auto a = DateProvider::answer("3 days from now", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 10, 6));
+    a = DateProvider::answer("2 weeks ago", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 9, 19));
+    a = DateProvider::answer("in 1 month", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 11, 3));
+    a = DateProvider::answer("days until 25 dec", today, false);
+    TEST_CHECK(a.has_value() && a->count == 83 && a->unit == "days");
+    a = DateProvider::answer("weeks since 2026-01-03", today, false);
+    TEST_CHECK(a.has_value() && a->count == 39 && a->unit == "weeks");
+    a = DateProvider::answer("next friday", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 10, 9));
+    a = DateProvider::answer("last monday", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 9, 28));
+    a = DateProvider::answer("today + 10 days", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 10, 13));
+    a = DateProvider::answer("25 dec - 2 weeks", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 12, 11));
+    // Month ends clamp: 31 Oct + 1 month is 30 Nov.
+    a = DateProvider::answer("1 month from 31 oct", today, false);
+    TEST_CHECK(a.has_value() && a->date == ymd(2026, 11, 30));
+    // A past day without a year means next year's.
+    TEST_CHECK(DateProvider::parseDate("1 jan", today) == std::optional(ymd(2027, 1, 1)));
+    TEST_CHECK(DateProvider::parseDate("25/12", today) == std::optional(ymd(2026, 12, 25)));
+    TEST_CHECK(DateProvider::parseDate("december 25th 2027", today) == std::optional(ymd(2027, 12, 25)));
+    TEST_CHECK(DateProvider::parseDate("friday", today) == std::optional(ymd(2026, 10, 9)));
+    // Plain searches, maths and times are not dates.
+    TEST_CHECK(!DateProvider::answer("firefox", today, false).has_value());
+    TEST_CHECK(!DateProvider::answer("2+2", today, false).has_value());
+    TEST_CHECK(!DateProvider::answer("3pm in tokyo", today, false).has_value());
+    TEST_CHECK(!DateProvider::answer("today", today, false).has_value());
+    TEST_CHECK(DateProvider::answer("today", today, true).has_value());
+    TEST_CHECK(DateProvider::formatDate(ymd(2026, 12, 25)) == "Friday, 25 December 2026");
+  }
+
+  void testCalculatorHistory() {
+    const fs::path path = fs::temp_directory_path() / ("noctalia-calc-" + std::to_string(::getpid()) + ".json");
+    fs::remove(path);
+    TEST_CHECK(MathProvider::loadHistory(path.string()).empty());
+    std::deque<MathProvider::HistoryEntry> history;
+    history.push_front({.expression = "2+2", .result = "4"});
+    history.push_front({.expression = "10 cm to in", .result = "3.937 in"});
+    MathProvider::saveHistory(path.string(), history);
+    const auto loaded = MathProvider::loadHistory(path.string());
+    TEST_CHECK(loaded.size() == 2 && loaded.front().result == "3.937 in" && loaded.back().expression == "2+2");
+    fs::remove(path);
+  }
+
+  void testDictionary() {
+    TEST_CHECK(DefineProvider::wordFor("define serendipity", false) == "serendipity");
+    TEST_CHECK(DefineProvider::wordFor("Def Apple", false) == "apple");
+    TEST_CHECK(DefineProvider::wordFor("meaning of life", false) == "life");
+    TEST_CHECK(DefineProvider::wordFor("serendipity", false).empty());
+    TEST_CHECK(DefineProvider::wordFor("serendipity", true) == "serendipity");
+    TEST_CHECK(DefineProvider::wordFor("define 2 words", false).empty());
+    TEST_CHECK(DefineProvider::urlFor("ice cream") == "https://api.dictionaryapi.dev/api/v2/entries/en/ice%20cream");
+    const auto entry = DefineProvider::parse(R"([{"word":"serendipity","phonetic":"/ˌsɛɹənˈdɪpɪti/",
+      "meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A happy accident.","example":"Pure serendipity."},
+      {"definition":"Finding valuable things not sought for."}]}]}])");
+    TEST_CHECK(entry.has_value() && entry->word == "serendipity" && entry->phonetic == "/ˌsɛɹənˈdɪpɪti/");
+    TEST_CHECK(entry->meanings.size() == 2 && entry->meanings[0].partOfSpeech == "noun");
+    TEST_CHECK(entry->meanings[0].example == "Pure serendipity." && entry->meanings[1].example.empty());
+    TEST_CHECK(!DefineProvider::parse(R"({"title":"No Definitions Found"})").has_value());
+    TEST_CHECK(!DefineProvider::parse("not json").has_value());
+  }
+
+  void testScreenshotsAndNotes() {
+    const fs::path dir = fs::temp_directory_path() / ("noctalia-shots-" + std::to_string(::getpid()));
+    fs::create_directories(dir);
+    const auto write = [&](const char* name) { std::ofstream(dir / name) << "x"; };
+    write("screenshot_20261003_120000.png");
+    write("notes.txt");
+    write("later.jpg");
+    fs::last_write_time(dir / "later.jpg", fs::file_time_type::clock::now() + std::chrono::hours(1));
+    const auto shots = ScreenshotProvider::scan(dir);
+    TEST_CHECK(shots.size() == 2);
+    TEST_CHECK(shots[0].path.filename() == "later.jpg" && shots[1].path.filename() == "screenshot_20261003_120000.png");
+
+    const fs::path notes = dir / "Notes.md";
+    TEST_CHECK(NotesProvider::append(notes, "Call the dentist"));
+    TEST_CHECK(NotesProvider::append(notes, "  Buy milk  "));
+    TEST_CHECK(!NotesProvider::append(notes, "   "));
+    auto read = NotesProvider::read(notes);
+    TEST_CHECK(read.size() == 2 && read[0].text == "Buy milk" && read[1].text == "Call the dentist");
+    TEST_CHECK(read[0].stamp.size() == 16 && read[0].line == 1);
+    TEST_CHECK(NotesProvider::remove(notes, read[1].line));
+    read = NotesProvider::read(notes);
+    TEST_CHECK(read.size() == 1 && read[0].text == "Buy milk");
+    // A notes provider pointed at the file lists the note and offers to add a new one.
+    NotesProvider provider(nullptr, nullptr, notes);
+    const auto listed = provider.queryPrefixed("");
+    TEST_CHECK(listed.size() == 2 && listed[0].title == "Buy milk" && listed[1].id == "open");
+    const auto adding = provider.query("note water the plants");
+    TEST_CHECK(adding.size() == 1 && adding[0].query == std::optional<std::string>("water the plants"));
+    TEST_CHECK(provider.query("firefox").empty());
+    fs::remove_all(dir);
+  }
+
   void testRecent() {
     // The tracker keeps a short cross-provider history for Suggestions, newest first, de-duplicated.
     const fs::path dir = fs::temp_directory_path() / ("noctalia-usage-" + std::to_string(::getpid()));
@@ -328,10 +620,19 @@ int main() {
   testQuicklinks();
   testQuicklinkForms();
   testSnippets();
+  testSnippetMatcher();
+  testArguments();
+  testAi();
   testScripts();
   testTime();
   testWindowManagement();
   testRecent();
+  testTimers();
+  testProcesses();
+  testDates();
+  testCalculatorHistory();
+  testDictionary();
+  testScreenshotsAndNotes();
   testAliases();
   return 0;
 }

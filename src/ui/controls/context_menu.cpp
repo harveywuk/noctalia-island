@@ -70,7 +70,7 @@ ContextMenuControl::ContextMenuControl() : Node(NodeType::Base) {}
 
 void ContextMenuControl::setEntries(std::vector<ContextMenuControlEntry> entries) {
   m_entries = std::move(entries);
-  m_highlightedIndex = firstInteractiveIndex();
+  m_highlightedIndex = kNoHighlight;
   m_needsRebuild = true;
   markLayoutDirty();
 }
@@ -135,9 +135,12 @@ void ContextMenuControl::applyHighlightVisuals() {
 }
 
 void ContextMenuControl::setHighlightedIndex(std::size_t index) {
-  if (m_entries.empty()) {
-    m_highlightedIndex = 0;
+  if (m_entries.empty() || index == kNoHighlight) {
+    m_highlightedIndex = kNoHighlight;
     applyHighlightVisuals();
+    if (m_redrawCallback) {
+      m_redrawCallback();
+    }
     return;
   }
   m_highlightedIndex = std::min(index, m_entries.size() - 1);
@@ -158,7 +161,8 @@ bool ContextMenuControl::moveHighlight(int delta) {
     return false;
   }
   const std::size_t count = m_rows.size();
-  std::size_t idx = m_highlightedIndex < count ? m_highlightedIndex : 0;
+  // From no highlight, Down lands on the first row and Up on the last.
+  std::size_t idx = m_highlightedIndex < count ? m_highlightedIndex : (delta > 0 ? count - 1 : 0);
   for (std::size_t step = 0; step < count; ++step) {
     if (delta > 0) {
       idx = (idx + 1) % count;
@@ -478,7 +482,7 @@ void ContextMenuControl::rebuildRows(Renderer& renderer) {
     currentY += rowHeight + itemGap;
   }
 
-  if (m_highlightedIndex >= m_rows.size()) {
+  if (m_highlightedIndex != kNoHighlight && m_highlightedIndex >= m_rows.size()) {
     m_highlightedIndex = firstInteractiveIndex();
   }
   applyHighlightVisuals();

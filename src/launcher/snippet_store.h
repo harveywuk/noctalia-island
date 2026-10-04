@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,6 +25,8 @@ public:
   std::string add(std::string name, std::string text, std::string keyword = {});
   bool update(std::string_view id, std::string name, std::string text, std::string keyword);
   bool remove(std::string_view id);
+  // Called after every save (snippet expansion re-reads its keywords).
+  void setChangedCallback(std::function<void()> callback) { m_changed = std::move(callback); }
 
 private:
   void ensureLoaded();
@@ -32,4 +35,5 @@ private:
   std::string m_path;
   bool m_loaded = false;
   std::vector<Snippet> m_snippets;
+  std::function<void()> m_changed;
 };

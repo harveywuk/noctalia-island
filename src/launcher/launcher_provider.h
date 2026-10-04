@@ -11,17 +11,21 @@
 
 namespace launcher {
   inline constexpr std::array kBuiltinProviders = {
+      std::string_view("ai"),
       std::string_view("calculator"),
       std::string_view("clipboard"),
+      std::string_view("date"),
       std::string_view("emoji"),
       std::string_view("files"),
       std::string_view("panels"),
+      std::string_view("processes"),
       std::string_view("quicklinks"),
       std::string_view("scripts"),
       std::string_view("session"),
       std::string_view("snippets"),
       std::string_view("system"),
       std::string_view("time"),
+      std::string_view("timer"),
       std::string_view("wallpaper"),
       std::string_view("windowmanagement"),
       std::string_view("windows")
@@ -31,6 +35,15 @@ namespace launcher {
 struct LauncherCategory {
   std::string label;
   std::string glyphName;
+};
+
+// An inline argument a command takes (Raycast's command arguments): a field shown in the launcher's
+// argument bar once the command is picked. `value` is filled in by the launcher before activation.
+struct LauncherArgument {
+  std::string id;
+  std::string placeholder;
+  bool required = true;
+  std::string value;
 };
 
 struct LauncherResult {
@@ -68,6 +81,9 @@ struct LauncherResult {
   bool pinned = false;       // Set by LauncherPanel for launcher-owned pinned applications.
   // Set by LauncherPanel: a recently used result shown under Suggestions when nothing is typed.
   bool suggested = false;
+  // Arguments the command takes. Tab (or Return while a required one is empty) opens the argument
+  // bar; the provider reads the filled values from the result it is activated with.
+  std::vector<LauncherArgument> arguments;
 };
 
 // An extra action offered for a result in the actions menu (Shift+Return, or right click).

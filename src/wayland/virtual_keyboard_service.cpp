@@ -102,6 +102,21 @@ bool VirtualKeyboardService::sendPasteShortcut(VirtualPasteShortcut shortcut) {
   return true;
 }
 
+bool VirtualKeyboardService::typeBackspaces(std::size_t count) {
+  if (!ensureKeyboard() || !ensureKeymap()) {
+    return false;
+  }
+  updateModifiers(false, false);
+  for (std::size_t i = 0; i < count; ++i) {
+    sendKey(KEY_BACKSPACE, true);
+    sendKey(KEY_BACKSPACE, false);
+  }
+  if (m_display != nullptr) {
+    (void)wl_display_flush(m_display);
+  }
+  return true;
+}
+
 bool VirtualKeyboardService::ensureKeyboard() {
   if (m_keyboard != nullptr) {
     return true;

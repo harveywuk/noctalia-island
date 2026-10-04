@@ -217,11 +217,17 @@ std::vector<LauncherResult> ScriptProvider::search(std::string_view text, bool l
       result.subtitle = *arguments;
     } else if (!script.arguments.empty()) {
       std::string placeholders;
-      for (const auto& argument : script.arguments) {
+      for (std::size_t i = 0; i < script.arguments.size(); ++i) {
+        const auto& argument = script.arguments[i];
         if (!placeholders.empty()) {
           placeholders += ' ';
         }
         placeholders += "‹" + (argument.placeholder.empty() ? std::string("…") : argument.placeholder) + "›";
+        result.arguments.push_back({
+            .id = "argument" + std::to_string(i + 1),
+            .placeholder = argument.placeholder,
+            .required = !argument.optional,
+        });
       }
       result.subtitle = placeholders;
     } else {
@@ -303,7 +309,18 @@ bool ScriptProvider::activate(const LauncherResult& result) {
   const std::size_t required = static_cast<std::size_t>(
       std::ranges::count_if(script->arguments, [](const Argument& argument) { return !argument.optional; })
   );
-  std::vector<std::string> arguments = splitArguments(result.query.value_or(""), script->arguments.size());
+  std::vector<std::string> arguments;
+  if (!result.arguments.empty()) {
+    // Filled in the launcher's argument bar; trailing empty optional ones are dropped.
+    for (const auto& argument : result.arguments) {
+      arguments.push_back(argument.value);
+    }
+    while (!arguments.empty() && arguments.back().empty()) {
+      arguments.pop_back();
+    }
+  } else {
+    arguments = splitArguments(result.query.value_or(""), script->arguments.size());
+  }
   if (arguments.size() < required) {
     // Arguments still to type: put the title in the field so they can follow it.
     if (m_requestQuery) {

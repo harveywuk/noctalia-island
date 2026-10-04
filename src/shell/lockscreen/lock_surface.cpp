@@ -1742,8 +1742,8 @@ void LockSurface::layoutCupertino(
   syncCupertinoIdentity(renderer);
 
   // Clock: date above a large time, near the top like macOS.
-  const float timeSize = std::clamp(sh * 0.15F, 64.0F, 136.0F);
-  m_cupDate->setFontSize(std::max(Style::fontSizeHeader, timeSize * 0.2F));
+  const float timeSize = std::clamp(sh * 0.165F, 64.0F, 180.0F);
+  m_cupDate->setFontSize(std::max(Style::fontSizeHeader, timeSize * 0.18F));
   m_cupDate->setColor(onWallpaper(0.9F));
   m_cupTime->setFontSize(timeSize);
   m_cupTime->setColor(onWallpaper(0.88F));
@@ -1785,8 +1785,8 @@ void LockSurface::layoutCupertino(
   const float avatarSize = box::kCupertinoAvatarSize;
   m_cupAvatarHolder->setSize(avatarSize, avatarSize);
   m_cupAvatarHolder->setRadius(avatarSize * 0.5F);
-  m_cupAvatarHolder->setFill(onWallpaper(0.22F));
-  m_cupAvatarHolder->setBorder(onWallpaper(0.35F), Style::borderWidth);
+  m_cupAvatarHolder->setFill(onWallpaper(0.24F));
+  m_cupAvatarHolder->setBorder(onWallpaper(0.4F), Style::borderWidth);
   m_cupAvatar->setPosition(0.0F, 0.0F);
   m_cupAvatar->setSize(avatarSize, avatarSize);
   m_cupAvatar->setRadius(avatarSize * 0.5F);
@@ -1798,14 +1798,14 @@ void LockSurface::layoutCupertino(
       std::round((avatarSize - m_cupInitials->height()) * 0.5F)
   );
 
-  m_cupName->setFontSize(Style::fontSizeTitle);
-  m_cupName->setColor(onWallpaper(0.95F));
+  m_cupName->setFontSize(Style::fontSizeHeader);
+  m_cupName->setColor(onWallpaper(0.96F));
   m_cupName->setMaxWidth(panelWidth);
 
   // Glass pill around the password field and its keyboard chip / submit arrow.
   const float fieldHeight = box::kCupertinoFieldHeight;
-  m_loginContentRow->setFill(onWallpaper(0.2F));
-  m_loginContentRow->setBorder(onWallpaper(0.28F), Style::borderWidth);
+  m_loginContentRow->setFill(onWallpaper(0.26F));
+  m_loginContentRow->setBorder(onWallpaper(0.34F), Style::borderWidth);
   m_loginContentRow->setRadius(fieldHeight * 0.5F);
   m_loginContentRow->setPadding(0.0F, Style::spaceSm, 0.0F, Style::spaceMd);
   m_loginContentRow->setMinWidth(box::kCupertinoFieldWidth);
@@ -1852,7 +1852,7 @@ void LockSurface::layoutCupertino(
   if (m_sessionRow != nullptr) {
     m_sessionRow->setVisible(showSession);
     m_sessionRow->setJustify(FlexJustify::Center);
-    m_sessionRow->setGap(Style::spaceLg * 2.0F);
+    m_sessionRow->setGap(Style::spaceLg * 2.5F);
     m_sessionRow->setMinHeight(0.0F);
     m_sessionRow->setMaxHeight(0.0F);
     m_sessionRow->setMaxWidth(panelWidth);
@@ -1904,6 +1904,7 @@ void LockSurface::updateCopy() {
 }
 
 std::vector<SessionPanelActionConfig> LockSurface::resolveSessionActions() const {
+  const bool cupertino = resolveLoginStyle().layout == lockscreen_login_box::LayoutMode::Cupertino;
   std::vector<SessionPanelActionConfig> src =
       m_config != nullptr ? m_config->config().shell.session.actions : defaultSessionPanelActions();
 
@@ -1916,10 +1917,25 @@ std::vector<SessionPanelActionConfig> LockSurface::resolveSessionActions() const
     if (!session_action::isKnown(row.action)) {
       continue;
     }
-    if (row.action == "lock" || row.action == "lock_and_suspend") {
+    if (row.action == "lock") {
       continue;
     }
     if (row.action == "command" && (!row.command.has_value() || StringUtils::trim(*row.command).empty())) {
+      continue;
+    }
+    if (cupertino && row.action == "logout") {
+      continue; // the macOS login window offers Sleep, Restart and Shut Down
+    }
+    if (row.action == "lock_and_suspend") {
+      if (!cupertino) {
+        continue;
+      }
+      SessionPanelActionConfig sleep = row; // already locked: a plain suspend, labelled Sleep
+      sleep.action = "suspend";
+      if (!sleep.label.has_value() || sleep.label->empty()) {
+        sleep.label = i18n::tr(session_action::labelKey("lock_and_suspend"));
+      }
+      out.push_back(std::move(sleep));
       continue;
     }
     out.push_back(row);

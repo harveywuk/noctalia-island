@@ -8,6 +8,7 @@
 #include "pipewire/pipewire_poll_source.h"
 #include "pipewire/pipewire_spectrum_poll_source.h"
 #include "pipewire/wireplumber_mixer.h"
+#include "shell/launcher/snippet_expander.h"
 #include "system/brightness_poll_source.h"
 
 std::vector<PollSource*> Application::currentPollSources() {
@@ -59,6 +60,9 @@ std::vector<PollSource*> Application::currentPollSources() {
   sources.push_back(&m_ipcPollSource);
   sources.push_back(&m_dmenuIpc);
   sources.push_back(&m_httpClientPollSource);
+  if (m_snippetExpander != nullptr) {
+    sources.push_back(m_snippetExpander.get());
+  }
   sources.push_back(&m_locationPollSource);
   sources.push_back(&m_weatherPollSource);
   sources.push_back(&m_calendarPollSource);

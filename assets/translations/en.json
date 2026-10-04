@@ -59,6 +59,11 @@
       "close": "Close",
       "more": "{count} more",
       "more-plural": "{count} more"
+    },
+    "osd": {
+      "display": "Display",
+      "microphone": "Microphone",
+      "sound": "Sound"
     }
   },
   "auth": {
@@ -382,7 +387,14 @@
         "fetching": "Fetching forecast…"
       },
       "customise": "Customise Home",
-      "empty": "No Home cards. Add cards using the settings button above."
+      "empty": "No Home cards. Add cards using the settings button above.",
+      "modules": {
+        "display": "Display",
+        "display-settings": "Display Settings",
+        "sound": "Sound",
+        "sound-output": "Sound Output",
+        "sound-settings": "Sound Settings"
+      }
     },
     "media": {
       "active-player": "Active player",
@@ -503,6 +515,7 @@
       "view-day": "View Day Details"
     },
     "shortcuts": {
+      "appearance": "Appearance",
       "audio": "Audio",
       "bluetooth": "Bluetooth",
       "caffeine": "Caffeine",
@@ -522,11 +535,24 @@
         "scheduled-day": "Scheduled",
         "scheduled-night": "Running"
       },
-      "notification": "DND",
-      "power-profile": "Power",
+      "notification": "Do Not Disturb",
+      "power-profile": "Power Mode",
       "screen-time": "Screen Time",
       "session": "Session",
+      "status": {
+        "auto": "Auto",
+        "dark": "Dark",
+        "light": "Light",
+        "muted": "Muted",
+        "not-connected": "Not connected",
+        "nothing-playing": "Nothing playing",
+        "off": "Off",
+        "on": "On",
+        "paused": "Paused",
+        "playing": "Playing"
+      },
       "system": "System",
+      "tooltip": "{label}: {status}",
       "wallpaper": "Wallpaper",
       "weather": "Weather",
       "wifi": "Wi-Fi"
@@ -835,7 +861,26 @@
       "show-in-folder": "Show in Folder",
       "switch-to-window": "Switch to Window",
       "unpin": "Unpin",
-      "quit-application": "Quit Application"
+      "quit-application": "Quit Application",
+      "start-timer": "Start Timer",
+      "cancel-timer": "Cancel Timer",
+      "add-minute": "Add 1 Minute",
+      "kill-process": "Kill Process",
+      "force-kill": "Force Kill",
+      "copy-date": "Copy Date",
+      "run-action": "Run Action",
+      "copy-definition": "Copy Definition",
+      "copy-word": "Copy Word",
+      "copy-example": "Copy Example",
+      "copy-image": "Copy Image",
+      "save-note": "Save Note",
+      "copy-note": "Copy Note",
+      "delete-note": "Delete Note",
+      "ask-ai": "Ask AI",
+      "use-model": "Use Model",
+      "stop-writing": "Stop Writing",
+      "regenerate": "Regenerate",
+      "copy-question": "Copy Question"
     },
     "aliases": {
       "footer": "Return saves the alias, Esc cancels",
@@ -943,7 +988,16 @@
       "text": "Text",
       "time": "Time",
       "web-search": "Web Search",
-      "window": "Window"
+      "window": "Window",
+      "timer": "Timer",
+      "process": "Process",
+      "date": "Date",
+      "definition": "Definition",
+      "screenshot": "Screenshot",
+      "note": "Note",
+      "ai": "AI",
+      "ai-command": "AI Command",
+      "model": "Model"
     },
     "origins": {
       "appimage": "AppImage",
@@ -966,7 +1020,8 @@
       "size": "Size",
       "source": "Source",
       "type": "Type",
-      "where": "Where"
+      "where": "Where",
+      "written": "Written"
     },
     "providers": {
       "applications": {
@@ -994,7 +1049,8 @@
           "setup-wizard": "Setup Wizard",
           "test": "Test Panel",
           "tray-drawer": "Tray Drawer",
-          "wallpaper": "Wallpaper"
+          "wallpaper": "Wallpaper",
+          "floating-notes": "Floating Notes"
         },
         "title": "Panels"
       },
@@ -1026,11 +1082,33 @@
       },
       "window-management": {
         "title": "Window Management"
+      },
+      "timer": {
+        "title": "Timer"
+      },
+      "processes": {
+        "title": "Kill Process"
+      },
+      "date": {
+        "title": "Dates"
+      },
+      "dictionary": {
+        "title": "Dictionary"
+      },
+      "screenshots": {
+        "title": "Screenshots"
+      },
+      "notes": {
+        "title": "Quick Notes"
+      },
+      "ai": {
+        "title": "AI"
       }
     },
     "quicklinks": {
       "search-for": "Search {name} for “{query}”",
-      "search-web": "Search the Web"
+      "search-web": "Search the Web",
+      "query": "Query"
     },
     "scripts": {
       "exit-code": "Exited with code {code}",
@@ -1144,7 +1222,12 @@
       "reload-config": {
         "title": "Reload Configuration",
         "keywords": "config reload settings refresh noctalia"
-      }
+      },
+      "pick-color": {
+        "title": "Pick Color",
+        "keywords": "color colour picker eyedropper hex"
+      },
+      "pick-color-missing": "Install hyprpicker to pick colours from the screen"
     },
     "time": {
       "local": "Local",
@@ -1248,6 +1331,126 @@
         "keywords": "window move monitor display previous"
       },
       "no-window": "No focused window to arrange"
+    },
+    "timer": {
+      "start": "Start a timer for {duration}",
+      "running": "{time} left",
+      "running-subtitle": "{duration} timer running",
+      "hint": "Type a duration, like 10m or 1h30 tea",
+      "hint-subtitle": "The timer counts down in the Island",
+      "done": "Timer done",
+      "done-label": "{label} is done",
+      "done-body": "{duration} timer finished",
+      "units": {
+        "hour": "{count} hour",
+        "hour-plural": "{count} hours",
+        "minute": "{count} minute",
+        "minute-plural": "{count} minutes",
+        "second": "{count} second",
+        "second-plural": "{count} seconds"
+      }
+    },
+    "processes": {
+      "subtitle": "PID {pid} · {cpu}% CPU · {memory}"
+    },
+    "date": {
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "yesterday": "Yesterday",
+      "in": "in {amount}",
+      "ago": "{amount} ago",
+      "hint": "Try “3 days from now”, “days until 25 dec” or “next friday”",
+      "hint-subtitle": "The answer is copied on Return",
+      "units": {
+        "day": "{count} day",
+        "day-plural": "{count} days",
+        "week": "{count} week",
+        "week-plural": "{count} weeks"
+      }
+    },
+    "calculator": {
+      "history": "History",
+      "clear-history": "Clear History"
+    },
+    "actionpanel": {
+      "placeholder": "Search for actions…",
+      "empty": "No matching actions",
+      "return": "↵",
+      "ctrl-return": "Ctrl ↵"
+    },
+    "dictionary": {
+      "hint": "Type a word to define",
+      "hint-subtitle": "Definitions come from dictionaryapi.dev",
+      "offline": "Dictionary lookups are off in offline mode",
+      "failed": "The dictionary could not be reached",
+      "not-found": "No definition found for “{word}”",
+      "looking-up": "Looking up “{word}”…"
+    },
+    "screenshots": {
+      "just-now": "Just now",
+      "minutes-ago": "{count} minute ago",
+      "minutes-ago-plural": "{count} minutes ago",
+      "hours-ago": "{count} hour ago",
+      "hours-ago-plural": "{count} hours ago"
+    },
+    "notes": {
+      "add": "Save note: {text}",
+      "open": "Open Notes File",
+      "preview-title": "New note",
+      "floating": "Floating Notes",
+      "floating-subtitle": "A small note window that stays over your apps"
+    },
+    "arguments": {
+      "placeholder": "Argument",
+      "optional": "{name} (optional)",
+      "footer": "Tab for the next argument, Esc to cancel"
+    },
+    "floating-notes": {
+      "title": "Floating Notes",
+      "placeholder": "Jot something down…",
+      "open-file": "Open Notes File",
+      "close": "Close",
+      "editing": "Editing…",
+      "saved-to": "Saved to {file}",
+      "save-failed": "The notes file could not be written"
+    },
+    "ai": {
+      "ask": "Ask AI: {question}",
+      "no-model": "No model yet. Install one with “ollama pull llama3.2”",
+      "copy-text-first": "Copy some text first; the command runs on the clipboard",
+      "on-clipboard": "On the clipboard: {text}",
+      "language": "Language",
+      "offline": "AI is off in offline mode",
+      "unreachable": "{service} isn’t answering at {url}",
+      "unreachable-subtitle": "Start it with “ollama serve”, or set shell.launcher.ai.url",
+      "no-models": "Ollama has no models installed",
+      "no-models-subtitle": "Pull one with “ollama pull llama3.2”",
+      "thinking": "Thinking…",
+      "writing": "writing",
+      "failed": "The model couldn’t answer: {error}",
+      "no-client": "No network client",
+      "choose-model": "Choose Model",
+      "current-model": "Current model",
+      "use-model": "Use this model",
+      "commands": {
+        "improve": "Improve Writing",
+        "fix": "Fix Spelling and Grammar",
+        "shorter": "Make Shorter",
+        "longer": "Make Longer",
+        "professional": "Change Tone to Professional",
+        "casual": "Change Tone to Casual",
+        "friendly": "Change Tone to Friendly",
+        "confident": "Change Tone to Confident",
+        "summarize": "Summarize",
+        "explain": "Explain This in Simple Terms",
+        "code": "Explain Code Step by Step",
+        "translate": "Translate"
+      },
+      "no-key": "No API key for {service}",
+      "no-key-subtitle": "Set shell.launcher.ai.api_key or api_key_command, or export {variable}",
+      "key-rejected": "{service} rejected the API key",
+      "key-rejected-subtitle": "Check shell.launcher.ai.api_key, api_key_command or the environment variable",
+      "unreachable-online-subtitle": "Check the network, shell.launcher.ai.url and the service’s status page"
     }
   },
   "location": {
@@ -2017,6 +2220,10 @@
         }
       },
       "control-center": {
+        "home-layout": {
+          "dashboard": "Dashboard",
+          "modules": "Modules"
+        },
         "sidebar": {
           "compact": "Compact",
           "full": "Full",
@@ -2186,7 +2393,9 @@
         "profile": "Profile",
         "media": "Media",
         "clock": "Clock and weather",
-        "shortcuts": "Shortcuts"
+        "shortcuts": "Shortcuts",
+        "display": "Display",
+        "sound": "Sound"
       },
       "island": {
         "timers-downloads-media": "Timers → Downloads → Media",
@@ -2200,6 +2409,13 @@
         "calendar-initials": "Single letters",
         "calendar-today": "Abbreviate today only",
         "calendar-abbreviated": "Abbreviate every day"
+      },
+      "launcher": {
+        "ai-provider": {
+          "ollama": "Ollama",
+          "openai": "OpenAI-compatible",
+          "anthropic": "Anthropic"
+        }
       }
     },
     "plugins": {
@@ -3448,11 +3664,11 @@
         },
         "home-cards": {
           "label": "Home cards",
-          "description": "Add or remove cards. Use the arrows to arrange them in the stacked layout."
+          "description": "Add or remove cards. Modules shows shortcuts, display, sound and media in that order; the dashboard shows profile, media, clock and shortcuts, arranged with the arrows when stacked."
         },
         "home-stacked": {
           "label": "Stack Home cards",
-          "description": "Show cards at full width in the order above. Turn off for the dashboard layout."
+          "description": "Dashboard layout only: show cards at full width in the order above."
         },
         "launcher-prefix-windowmanagement": {
           "label": "Window Management Prefix",
@@ -3461,6 +3677,86 @@
         "launcher-global-windowmanagement": {
           "label": "Window Management in Global Search",
           "description": "Also show window management commands in unprefixed search"
+        },
+        "launcher-prefix-date": {
+          "label": "Dates Prefix",
+          "description": "Trigger prefix for date calculations"
+        },
+        "launcher-global-date": {
+          "label": "Dates in Global Search",
+          "description": "Also answer date questions in unprefixed search"
+        },
+        "launcher-prefix-timer": {
+          "label": "Timer Prefix",
+          "description": "Trigger prefix for timers"
+        },
+        "launcher-global-timer": {
+          "label": "Timer in Global Search",
+          "description": "Also start timers from unprefixed search (“timer 10m”)"
+        },
+        "launcher-prefix-processes": {
+          "label": "Kill Process Prefix",
+          "description": "Trigger prefix for the process list"
+        },
+        "launcher-global-processes": {
+          "label": "Kill Process in Global Search",
+          "description": "Also list processes in unprefixed search"
+        },
+        "launcher-prefix-dictionary": {
+          "label": "Dictionary Prefix",
+          "description": "Trigger prefix for word definitions"
+        },
+        "launcher-global-dictionary": {
+          "label": "Dictionary in Global Search",
+          "description": "Also define words typed as “define …” in unprefixed search"
+        },
+        "launcher-prefix-notes": {
+          "label": "Quick Notes Prefix",
+          "description": "Trigger prefix for quick notes"
+        },
+        "launcher-global-notes": {
+          "label": "Quick Notes in Global Search",
+          "description": "Also save notes typed as “note …” in unprefixed search"
+        },
+        "launcher-prefix-screenshots": {
+          "label": "Screenshots Prefix",
+          "description": "Trigger prefix for the screenshot list"
+        },
+        "launcher-global-screenshots": {
+          "label": "Screenshots in Global Search",
+          "description": "Also list screenshots in unprefixed search"
+        },
+        "launcher-snippet-expansion": {
+          "label": "Expand Snippets While Typing",
+          "description": "Replace a snippet’s keyword with its text as you type in any app. Reads the keyboards under /dev/input, so your user must be in the input group."
+        },
+        "launcher-prefix-ai": {
+          "label": "AI Prefix",
+          "description": "Trigger prefix for Quick AI and the AI commands"
+        },
+        "launcher-global-ai": {
+          "label": "AI in Global Search",
+          "description": "Offer “Ask AI” under the fallbacks of unprefixed search"
+        },
+        "launcher-ai-url": {
+          "label": "AI Server URL",
+          "description": "Where the service listens; leave blank for its usual address (Ollama on this machine, api.openai.com, api.anthropic.com)"
+        },
+        "launcher-ai-model": {
+          "label": "AI Model",
+          "description": "The model that answers; leave blank to pick one under /ai › Choose Model"
+        },
+        "launcher-ai-provider": {
+          "label": "AI Service",
+          "description": "Ollama on this machine, an OpenAI-compatible API (OpenAI, OpenRouter, Groq, Mistral, LM Studio) or Anthropic"
+        },
+        "launcher-ai-key-command": {
+          "label": "API Key Command",
+          "description": "A command that prints the API key for an online service (pass show openai), so the key stays out of config.toml; the service’s environment variable also works"
+        },
+        "home-layout": {
+          "label": "Home layout",
+          "description": "Modules arranges Home like the macOS Control Center: connectivity, toggles, Display and Sound sliders, and Now Playing. Dashboard shows the profile and clock cards beside the shortcuts."
         }
       },
       "power": {
@@ -5623,10 +5919,12 @@
       }
     },
     "window": {
+      "close": "Close",
       "export-config": "Export Config…",
       "export-config-saved": "Config export saved.",
       "filter-overridden": "Overridden",
       "legacy-config-warning": "Legacy setting: {issue}. Edit this source entry; Noctalia is applying the replacement only temporarily. Run noctalia config validate to list every required change.",
+      "more-actions": "More Actions",
       "native-title": "Noctalia Settings",
       "no-results": "No settings found",
       "no-results-hint": "Try a different setting name or config key.",

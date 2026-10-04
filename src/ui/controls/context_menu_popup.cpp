@@ -72,7 +72,8 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
   m_scrollState = {};
   m_scrollView = nullptr;
   m_menu = nullptr;
-  m_highlightedIndex = request.initialHighlight < request.entries.size() ? request.initialHighlight : 0;
+  m_highlightedIndex =
+      request.initialHighlight < request.entries.size() ? request.initialHighlight : ContextMenuControl::kNoHighlight;
 
   const ContextMenuPopupPlacement defaultPlacement{
       .anchor = XDG_POSITIONER_ANCHOR_BOTTOM,

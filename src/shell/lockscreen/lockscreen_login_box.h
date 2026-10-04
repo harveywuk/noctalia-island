@@ -88,10 +88,10 @@ namespace lockscreen_login_box {
   constexpr float kRegularMaxPanelHeight = 320.0F;
   // Cupertino has no visible panel; these bound the identity block for placement.
   constexpr float kCupertinoPanelWidth = 320.0F;
-  constexpr float kCupertinoAvatarSize = 72.0F;
-  constexpr float kCupertinoFieldWidth = 220.0F;
-  constexpr float kCupertinoFieldHeight = 32.0F;
-  constexpr float kCupertinoSessionButtonSize = 40.0F;
+  constexpr float kCupertinoAvatarSize = 84.0F;
+  constexpr float kCupertinoFieldWidth = 196.0F;
+  constexpr float kCupertinoFieldHeight = 30.0F;
+  constexpr float kCupertinoSessionButtonSize = 44.0F;
   [[nodiscard]] float cupertinoPanelHeight(bool showSessionButtons);
 
   // Matches lock-surface media art / forecast glyph sizes used in Regular layout.

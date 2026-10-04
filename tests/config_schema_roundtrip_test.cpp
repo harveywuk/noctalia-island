@@ -498,6 +498,7 @@ location = "https://example.invalid/bad"
     c.controlCenter.sidebarSectionMode = ControlCenterSidebarMode::None;
     c.controlCenter.homeTab.cards = {"clock", "media"};
     c.controlCenter.homeTab.stacked = true;
+    c.controlCenter.homeTab.layout = ControlCenterHomeLayout::Dashboard;
     c.controlCenter.calendarTab.showEventsCard = false;
     c.controlCenter.calendarTab.showWeekNumbers = true;
     c.controlCenter.shortcuts = {{"wifi"}, {"bluetooth"}};
