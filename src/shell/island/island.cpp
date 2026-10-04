@@ -116,6 +116,13 @@ struct Island::Instance {
   Timer peek;
   wl_output* output = nullptr;
   std::unique_ptr<LayerSurface> surface;
+  // The surface spans the output's width so it never recentres sideways (Hyprland animates that),
+  // but is only as tall as the capsule needs: compositor effects such as hyprglass's layer glass
+  // cost in proportion to the layer's area, not the capsule's. A hosted panel gets the full height.
+  std::uint32_t surfaceWidth = 0;
+  std::uint32_t surfaceHeight = 0;
+  // The output's logical height, which still bounds tall content (notifications, the hover view).
+  float outputHeight = 0;
   std::optional<std::array<int, 4>> inputRegion;
   // The blur region last sent for glass, so unchanged frames send nothing.
   std::vector<std::array<int, 4>> blurRegion;
@@ -257,6 +264,14 @@ namespace {
   constexpr float kViewFadeInMs = Motion::islandExpand.responseMs / 2;
   // Extra space below expanded content; see the layout tail in Island::prepare.
   constexpr float kExpandedBottomInset = 8.0F;
+
+  // The surface height a capsule this tall needs: its 8 px top margin, the capture glow around
+  // it, and headroom for the expand spring's overshoot, in 64 px steps so small changes in
+  // height don't each resize the surface.
+  std::uint32_t surfaceHeightFor(float capsuleHeight, float scale) {
+    const float logical = (8.0F + capsuleHeight * 1.1F + 2.0F * island::CaptureGlow::kOutset) * scale;
+    return static_cast<std::uint32_t>(std::ceil(logical / 64.0F)) * 64U;
+  }
   // The split bubble buds out with a slight overshoot and tucks back without one.
   constexpr float kSplitOutMs = 420.0F;
   constexpr float kSplitInMs = 220.0F;
@@ -743,6 +758,7 @@ void Island::onOutputChange() {
       // Hyprland. Only the capsule's scene geometry and input region should move.
       const auto sw = static_cast<std::uint32_t>(output.effectiveLogicalWidth());
       const auto sh = static_cast<std::uint32_t>(output.effectiveLogicalHeight());
+      const auto initialHeight = std::min(sh, surfaceHeightFor(cfg.height, scale));
       const auto existing = std::ranges::find_if(m_instances, [&](const auto& inst) {
         return inst->output == output.output && inst->barConfig.name == bar.name;
       });
@@ -752,7 +768,10 @@ void Island::onOutputChange() {
         current.config = cfg;
         current.scale = scale;
         current.signature.clear();
-        current.surface->requestSize(sw, sh);
+        current.surfaceWidth = sw;
+        current.outputHeight = static_cast<float>(sh);
+        current.surfaceHeight = current.panelHosted ? sh : std::min(sh, std::max(current.surfaceHeight, initialHeight));
+        current.surface->requestSize(sw, current.surfaceHeight);
         current.surface->setExclusiveZone(
             cfg.reserveSpace ? static_cast<int>(std::ceil((cfg.height + 12) * scale)) : -1
         );
@@ -764,16 +783,19 @@ void Island::onOutputChange() {
       inst->config = cfg;
       inst->output = output.output;
       inst->scale = scale;
+      inst->surfaceWidth = sw;
+      inst->surfaceHeight = initialHeight;
+      inst->outputHeight = static_cast<float>(sh);
       LayerSurfaceConfig surfaceConfig{
           .nameSpace = "noctalia-island",
           .layer = resolved.layer == "overlay" ? LayerShellLayer::Overlay : LayerShellLayer::Top,
           .anchor = LayerShellAnchor::Top,
           .width = sw,
-          .height = sh,
+          .height = initialHeight,
           .exclusiveZone = cfg.reserveSpace ? static_cast<int>(std::ceil((cfg.height + 12) * inst->scale)) : -1,
           .keyboard = LayerShellKeyboard::None,
           .defaultWidth = sw,
-          .defaultHeight = sh,
+          .defaultHeight = initialHeight,
       };
       inst->surface = std::make_unique<LayerSurface>(*m_wayland, surfaceConfig);
       inst->surface->setRenderContext(m_renderContext);
@@ -1198,6 +1220,7 @@ void Island::geometry(Instance& inst) {
     // A changed input region needs a commit even if no scene node changed.
     inst.surface->requestRedraw();
   }
+  fitSurface(inst);
   updateGlass(inst, x, y, radius);
   // Node setters invalidate actual geometry/content changes. Repeated clock or
   // window-title updates must not redraw an otherwise unchanged capsule.
@@ -2509,10 +2532,8 @@ void Island::prepare(Instance& inst) {
     // in place of the time stamp, and only an opened notification (or keyboard mode) lists them.
     const bool actionsOpen = expanded || inst.keyboardMode;
     const bool hasActions = actionsOpen && !visibleActions.empty();
-    const float maxHeight = std::min(
-        expanded ? 640.0F : 360.0F,
-        static_cast<float>(inst.surface->height()) / s - 16.0F - (privacyList.empty() ? 0.0F : 32.0F)
-    );
+    const float maxHeight =
+        std::min(expanded ? 640.0F : 360.0F, inst.outputHeight / s - 16.0F - (privacyList.empty() ? 0.0F : 32.0F));
     const float footerHeight = hasActions ? 46.0F : 16.0F;
     const float textBottom = maxHeight - footerHeight;
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
@@ -3198,8 +3219,7 @@ void Island::prepare(Instance& inst) {
     for (const auto& child : footer->children())
       child->setPosition(child->x(), child->y() - footerTop * s);
     footer->setSize(w * s, footerHeight * s);
-    const float available =
-        std::max(1.0F, static_cast<float>(inst.surface->height()) / s - footerTop - 24 - kExpandedBottomInset);
+    const float available = std::max(1.0F, inst.outputHeight / s - footerTop - 24 - kExpandedBottomInset);
     if (footerHeight > available) {
       auto scroll = std::make_unique<ScrollView>();
       scroll->setContentScale(s);
@@ -3260,6 +3280,20 @@ void Island::prepare(Instance& inst) {
     );
   }
   geometry(inst);
+}
+
+void Island::fitSurface(Instance& inst) {
+  if (inst.panelHosted || inst.outputHeight <= 0)
+    return;
+  // Grow as soon as the capsule heads somewhere taller; shrink only once it has settled, so a
+  // collapse never runs into the surface's edge.
+  const auto max = static_cast<std::uint32_t>(inst.outputHeight);
+  const auto want = std::min(max, surfaceHeightFor(std::max(inst.height, inst.targetHeight), inst.scale));
+  const bool settled = inst.width == inst.targetWidth && inst.height == inst.targetHeight;
+  if (want > inst.surfaceHeight || (settled && want < inst.surfaceHeight)) {
+    inst.surfaceHeight = want;
+    inst.surface->requestSize(inst.surfaceWidth, want);
+  }
 }
 
 void Island::crossfadeOut(Instance& inst, std::unique_ptr<Node> previous) {
@@ -3608,6 +3642,9 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   if (inst.keyboardMode)
     releaseKeyboard(inst);
   inst.panelHosted = true;
+  // Panels can be as tall as the output; the Island shrinks the surface again once it settles.
+  inst.surfaceHeight = static_cast<std::uint32_t>(inst.outputHeight);
+  inst.surface->requestSize(inst.surfaceWidth, inst.surfaceHeight);
   // The panel opens from the capsule alone; the split bubbles bud out again when it closes.
   for (auto& split : inst.splits) {
     split.activity = island::Activity::None;

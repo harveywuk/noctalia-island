@@ -40,6 +40,7 @@ bool PanelManager::openIslandPanel(wl_output* output, std::string_view sourceBar
   m_islandProgress = 0;
   m_islandResizing = false;
   m_islandMorph = 0;
+  m_islandSurfaceHeight = monitor ? static_cast<std::uint32_t>(monitor->effectiveLogicalHeight()) : 0;
   m_panelLayer = LayerShellLayer::Overlay;
   m_layerSurface->setLayer(m_panelLayer);
   const bool keyboard = m_activePanel->keyboardMode() != LayerShellKeyboard::None;
@@ -125,8 +126,14 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
   m_activePanel->update(renderer);
   m_activePanel->layout(renderer, m_contentWidth, m_contentHeight);
   if (!m_closing) {
-    const float maxHeight = std::max(1.0F, static_cast<float>(height) - 32 * m_islandSurface->scale);
-    const float maxWidth = std::max(1.0F, static_cast<float>(width) - 32 * m_islandSurface->scale);
+    // Bounded by the output, not the surface: the Island grows its surface to full height for a
+    // panel, but the first layouts can run before that configure arrives.
+    const auto* monitor = m_platform->findOutputByWl(m_output);
+    const float limitWidth = monitor ? static_cast<float>(monitor->effectiveLogicalWidth()) : static_cast<float>(width);
+    const float limitHeight =
+        monitor ? static_cast<float>(monitor->effectiveLogicalHeight()) : static_cast<float>(height);
+    const float maxHeight = std::max(1.0F, limitHeight - 32 * m_islandSurface->scale);
+    const float maxWidth = std::max(1.0F, limitWidth - 32 * m_islandSurface->scale);
     const float targetWidth = std::round(std::clamp(m_activePanel->islandWidth(maxWidth), 1.0F, maxWidth));
     const float targetHeight = std::round(std::clamp(m_activePanel->islandHeight(maxHeight), 1.0F, maxHeight));
     if (first
@@ -215,9 +222,30 @@ void PanelManager::applyIslandReveal(float progress) {
     };
     m_clickShield.setPanelInputRect(m_output, *m_panelOutputInputRect);
   }
+  fitIslandSurface();
   // Resizing can move navigation away from a stationary pointer. Clear stale
   // hover/tooltip state using the new scene coordinates on every morph frame.
   if (m_pointerInside && !m_closing)
     m_inputDispatcher.syncPointerHover();
   m_surface->requestRedraw();
+}
+
+void PanelManager::fitIslandSurface() {
+  // The Island lends its surface at the output's full height. Trim it to the panel (or the
+  // capsule, while that is still taller): compositor effects such as hyprglass's layer glass cost
+  // per pixel of the layer. Grow at once; shrink only once the panel has settled open.
+  if (!m_islandSurface || !m_layerSurface || m_closing)
+    return;
+  const auto* monitor = m_platform->findOutputByWl(m_output);
+  if (!monitor)
+    return;
+  const float scale = m_islandSurface->scale;
+  const float tall = std::max({static_cast<float>(m_panelVisualHeight), m_islandHeight, m_islandCollapsedHeight});
+  const auto max = static_cast<std::uint32_t>(monitor->effectiveLogicalHeight());
+  const auto want = std::min(max, static_cast<std::uint32_t>(std::ceil((32 * scale + tall) / 64.0F)) * 64U);
+  const bool settled = !m_islandResizing && m_islandProgress >= 0.999F;
+  if (want > m_islandSurfaceHeight || (settled && want < m_islandSurfaceHeight)) {
+    m_islandSurfaceHeight = want;
+    m_layerSurface->requestSize(static_cast<std::uint32_t>(m_surface->width()), want);
+  }
 }

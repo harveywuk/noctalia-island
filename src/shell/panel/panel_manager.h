@@ -194,6 +194,7 @@ private:
   bool openIslandPanel(wl_output* output, std::string_view sourceBarName);
   void buildIslandScene(std::uint32_t width, std::uint32_t height);
   void applyIslandReveal(float progress);
+  void fitIslandSurface();
   void resizeIslandPanel(float width, float height, bool first);
   void buildScene(std::uint32_t width, std::uint32_t height);
   void prepareFrame(bool needsUpdate, bool needsLayout);
@@ -255,6 +256,8 @@ private:
   float m_islandHeight = 0;
   float m_islandCollapsedWidth = 0;
   float m_islandCollapsedHeight = 0;
+  // Height last requested for the borrowed Island surface (it arrives at the output's height).
+  std::uint32_t m_islandSurfaceHeight = 0;
   LayerSurface* m_layerSurface = nullptr;
   LayerShellLayer m_panelLayer = LayerShellLayer::Top;
   // m_sceneRoot must be destroyed before m_animations — ~Node() calls cancelForOwner().
