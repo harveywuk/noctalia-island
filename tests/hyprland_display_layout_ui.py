@@ -42,40 +42,15 @@ def run_checks(base, out, env, run, ctl, dispatch, msg):
                          for group in data['levels'].values() for layer in group)
                 for name, data in json.loads(ctl('-j', 'layers')).items()}
     def find_text(text, exact=False, min_y=0, park=True, min_x=0):
-        """Centre of `text` on TEST-1: OCR on a 2x upscale, retried inverted for light labels on grey."""
-        import csv, io, os
-        from PIL import Image, ImageOps
+        """Centre of `text` on TEST-1 (see tests/ocr.py)."""
+        import ocr
         if park:
             move(1276, 716); time.sleep(.2)  # keep the pointer off the text
         path = out / 'ocr.png'; run(['grim', '-o', 'TEST-1', str(path)])
-        image = Image.open(path).convert('L'); image = image.resize((image.width*2, image.height*2), Image.LANCZOS)
-        target = text.lower().split()
-        inverted = ImageOps.autocontrast(ImageOps.invert(image))
-        # Wide grey buttons only read inverted, and some only in sparse-with-orientation mode (12).
-        for picture, psm in ((image, '11'), (inverted, '11'), (inverted, '12')):
-            picture.save(out / 'ocr-x2.png')
-            tsv = run(['tesseract', str(out / 'ocr-x2.png'), 'stdout', '--tessdata-dir',
-                       os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo / 'build-rishot/test-data/tessdata')),
-                       '--psm', psm, '-c', 'tessedit_create_tsv=1', '-c', 'user_defined_dpi=192'])
-            rows = [r for r in csv.DictReader(io.StringIO(tsv), delimiter='\t', quoting=csv.QUOTE_NONE)
-                    if (r.get('text') or '').strip()]
-            for i in range(len(rows) - len(target) + 1):
-                words = [r['text'].lower().strip('‘’“”"\'|.,:;') for r in rows[i:i+len(target)]]
-                # A one-word target may sit inside a token, such as a tile's "1-TEST-1"; otherwise each
-                # word must be close (OCR reads "displays" as "aisplays" on grey buttons).
-                from difflib import SequenceMatcher
-                close = all(SequenceMatcher(None, w, t).ratio() >= .75 for w, t in zip(words, target))
-                matched = close or (len(target) == 1 and not exact and target[0] in words[0])
-                if not matched or int(rows[i]['top'])//2 < min_y or int(rows[i]['left'])//2 < min_x:
-                    continue
-                if exact and ((i > 0 and rows[i-1]['line_num'] == rows[i]['line_num'] and rows[i-1]['block_num'] == rows[i]['block_num'])
-                              or (i+len(target) < len(rows) and rows[i+len(target)]['line_num'] == rows[i]['line_num']
-                                  and rows[i+len(target)]['block_num'] == rows[i]['block_num'])):
-                    continue  # part of a longer label, such as "Flipped + 180°"
-                first, last = rows[i], rows[i+len(target)-1]
-                x0 = int(first['left'])//2; x1 = (int(last['left'])+int(last['width']))//2
-                return (x0+x1)//2, (int(first['top'])+int(first['height'])//2)//2
-        raise AssertionError('Display control not found: ' + text)
+        point = ocr.find(path, text, exact=exact, min_y=min_y, min_x=min_x)
+        if point is None:
+            raise AssertionError('Display control not found: ' + text)
+        return point
     def choose(row, option, exact=True):
         """Open the dropdown on the settings row titled `row` and pick `option` from its list."""
         for _ in range(8):  # scroll up a notch at a time until the row is in view

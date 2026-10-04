@@ -427,24 +427,12 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             msg('settings-open',name);time.sleep(1)
             run(['grim','-o','TEST-1',str(out/(shot+'.png'))])
         def find_text(text,min_x=0):
-            from PIL import Image,ImageOps
-            import csv,io
+            import ocr
             dispatch('hl.dsp.cursor.move({x=1276,y=716})');time.sleep(.2)  # keep the pointer off the text
             path=out/'ocr.png';run(['grim','-o','TEST-1',str(path)])
-            image=Image.open(path).convert('L');image=image.resize((image.width*2,image.height*2),Image.LANCZOS)
-            target=text.lower().split()
-            # Light labels on grey buttons only read once inverted, so try the screen as is, then inverted.
-            for variant,picture in (('plain',image),('inverted',ImageOps.autocontrast(ImageOps.invert(image)))):
-                picture.save(out/f'ocr-{variant}.png')
-                tsv=run(['tesseract',str(out/f'ocr-{variant}.png'),'stdout','--tessdata-dir',os.environ.get('NOCTALIA_TEST_TESSDATA',str(REPO/'build-rishot/test-data/tessdata')),
-                         '--psm','11','-c','tessedit_create_tsv=1','-c','user_defined_dpi=192'])
-                rows=[r for r in csv.DictReader(io.StringIO(tsv),delimiter='\t',quoting=csv.QUOTE_NONE) if (r.get('text') or '').strip()]
-                for i in range(len(rows)-len(target)+1):
-                    if [r['text'].lower().strip('‘’“”"\'|.,:;') for r in rows[i:i+len(target)]]==target and int(rows[i]['left'])//2>=min_x:
-                        first=rows[i];last=rows[i+len(target)-1]
-                        x0=int(first['left'])//2;x1=(int(last['left'])+int(last['width']))//2
-                        return (x0+x1)//2,(int(first['top'])+int(first['height'])//2)//2
-            raise AssertionError('Settings control not found: '+text)
+            point=ocr.find(path,text,min_x=min_x)
+            if point is None:raise AssertionError('Settings control not found: '+text)
+            return point
         def click_text(text,min_x=0):click(*find_text(text,min_x))
         def type_text(codes):
             for key in codes:

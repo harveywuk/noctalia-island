@@ -1,6 +1,4 @@
 """Managed Island checks, run via hyprland_smoke.py --island-bars-only."""
-import csv
-import io
 import json
 import os
 import pathlib
@@ -123,15 +121,12 @@ hover_widgets=[]
     def overrides():
         return tomllib.loads((base/'state/noctalia/settings.toml').read_text()).get('bar',{})
     def find_text(word,name,min_x=300):
-        """Centre of the first OCR word containing `word` (right of the sidebar) on a fresh screenshot."""
+        """Centre of `word` (right of the sidebar) on a fresh screenshot; see tests/ocr.py."""
+        import ocr
         capture(name)
-        data=run(['tesseract',str(out/(name+'.png')),'stdout','--tessdata-dir',
-                  os.environ.get('NOCTALIA_TEST_TESSDATA',str(repo/'build-rishot/test-data/tessdata')),
-                  '--psm','11','-c','tessedit_create_tsv=1'])
-        for row in csv.DictReader(io.StringIO(data),delimiter='\t',quoting=csv.QUOTE_NONE):
-            if word in (row.get('text') or '') and int(row['left'])>=min_x:
-                return int(row['left'])+int(row['width'])//2,int(row['top'])+int(row['height'])//2
-        raise AssertionError(f'{word!r} not found in {name}')
+        point=ocr.find(out/(name+'.png'),word,min_x=min_x)
+        if point is None:raise AssertionError(f'{word!r} not found in {name}')
+        return point
     try:
         # The hover-widget editor is the bar page's Widgets group; its Media preset leaves only
         # Volume in the left lane, and Undo preset restores the inherited layout.

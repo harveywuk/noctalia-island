@@ -1,6 +1,4 @@
 """Focused native Settings pages, search and keyboard navigation."""
-import csv
-import io
 import os
 import pathlib
 import subprocess
@@ -25,43 +23,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         move(x,y); command('press'); time.sleep(.12); command('release'); time.sleep(.9)
     def screenshot(name='current'):
         path = out/(name+'.png'); run(['grim','-o','TEST-1',str(path)]); return path
-    def words(variant='plain'):
+    def locate(text, starts_line=False):
         # OCR locates actual labels; coordinates vary with translated text, fonts,
         # status banners and the length of the review, so fixed clicks are brittle.
-        # It reads a 2x upscale, and an inverted one for light labels on grey buttons.
-        from PIL import Image, ImageOps
-        tessdata = os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata'))
-        scale = 3 if variant == 'threshold' else 2
-        image = Image.open(screenshot()).convert('L')
-        image = image.resize((image.width*scale, image.height*scale), Image.LANCZOS)
-        if variant == 'inverted':
-            image = ImageOps.autocontrast(ImageOps.invert(image))
-        elif variant == 'threshold':
-            # Light text on the grey highlighted row only reads as black-on-white.
-            image = image.point(lambda value: 0 if value > 140 else 255)
-        image.save(out/'ocr.png')
-        result = run(['tesseract',str(out/'ocr.png'),'stdout','--tessdata-dir',tessdata,'--psm','11',
-                      '-c','tessedit_create_tsv=1','-c',f'user_defined_dpi={96*scale}'])
-        (out/'ocr-last.tsv').write_text(result)
-        rows = [r for r in csv.DictReader(io.StringIO(result), delimiter='\t', quoting=csv.QUOTE_NONE) if r.get('text','').strip()]
-        for r in rows:
-            for k in ('left', 'top', 'width', 'height'):
-                r[k] = str(int(r[k])//scale)
-        return rows
-    def locate(text, starts_line=False):
-        target = [w.strip('<>‹›‘’“”"\'|.,:;') for w in text.lower().split()]
-        for variant in ('plain', 'inverted', 'threshold'):
-            rows = words(variant)
-            for i in range(len(rows)-len(target)+1):
-                if starts_line and rows[i]['word_num'] != '1': continue
-                # OCR glues a link's arrow to its word ("<Back") and adds stray marks at edges.
-                if [r['text'].lower().strip('<>‹›‘’“”"\'|.,:;') for r in rows[i:i+len(target)]] == target:
-                    selected = rows[i:i+len(target)]
-                    left = min(int(r['left']) for r in selected); top = min(int(r['top']) for r in selected)
-                    right = max(int(r['left'])+int(r['width']) for r in selected)
-                    bottom = max(int(r['top'])+int(r['height']) for r in selected)
-                    return ((left+right)//2, (top+bottom)//2)
-        return None
+        import ocr
+        return ocr.find(screenshot(), text, starts_line=starts_line)
     def scroll(steps):
         move(1000,590); command(f'scroll {steps}'); time.sleep(.4)
     def click_text(text, direction=1, starts_line=False):

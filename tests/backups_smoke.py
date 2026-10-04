@@ -1,6 +1,4 @@
 """Backup restore, undo and display confirmation inside a private compositor."""
-import csv
-import io
 import json
 import os
 import pathlib
@@ -26,38 +24,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         move(x,y); command('press'); time.sleep(.12); command('release'); time.sleep(.5)
     def screenshot(name='current'):
         path = out/(name+'.png'); run(['grim','-o','TEST-1',str(path)]); return path
-    def words(variant='plain'):
+    def locate(text, starts_line=False):
         # OCR locates actual labels; coordinates vary with translated text, fonts,
         # status banners and the length of the review, so fixed clicks are brittle.
-        # It reads a 2x upscale, and an inverted one for light labels on grey buttons.
-        from PIL import Image, ImageOps
-        tessdata = os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata'))
-        image = Image.open(screenshot()).convert('L')
-        image = image.resize((image.width*2, image.height*2), Image.LANCZOS)
-        if variant == 'inverted':
-            image = ImageOps.autocontrast(ImageOps.invert(image))
-        image.save(out/'ocr.png')
-        result = run(['tesseract',str(out/'ocr.png'),'stdout','--tessdata-dir',tessdata,'--psm','11',
-                      '-c','tessedit_create_tsv=1','-c','user_defined_dpi=192'])
-        rows = [r for r in csv.DictReader(io.StringIO(result), delimiter='\t', quoting=csv.QUOTE_NONE) if r.get('text','').strip()]
-        for r in rows:
-            for key in ('left', 'top', 'width', 'height'):
-                r[key] = str(int(r[key])//2)
-        return rows
-    def locate(text, starts_line=False):
-        target = [w.strip('<>‹›‘’“”"\'|.,:;') for w in text.lower().split()]
-        for variant in ('plain', 'inverted'):
-            rows = words(variant)
-            for i in range(len(rows)-len(target)+1):
-                if starts_line and rows[i]['word_num'] != '1': continue
-                # OCR glues a link's arrow to its word ("<Back") and adds stray marks at edges.
-                if [r['text'].lower().strip('<>‹›‘’“”"\'|.,:;') for r in rows[i:i+len(target)]] == target:
-                    selected = rows[i:i+len(target)]
-                    left = min(int(r['left']) for r in selected); top = min(int(r['top']) for r in selected)
-                    right = max(int(r['left'])+int(r['width']) for r in selected)
-                    bottom = max(int(r['top'])+int(r['height']) for r in selected)
-                    return ((left+right)//2, (top+bottom)//2)
-        return None
+        import ocr
+        return ocr.find(screenshot(), text, starts_line=starts_line)
     def switch_at(row_y):
         # The switch at the right end of a settings row: the white knob's pixels beside the row.
         from PIL import Image
