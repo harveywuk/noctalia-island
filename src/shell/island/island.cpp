@@ -2468,7 +2468,8 @@ void Island::prepare(Instance& inst) {
     const bool expanded = inst.expandedNotification == n.id;
     // The sending app's icon leads the banner at full size, as on a macOS banner, with the app
     // name, title and body in a column beside it; the text starts at the edge when none resolves.
-    const float appIconSize = 36.0F;
+    // The same size as the unread card in the expanded view, so the icon doesn't jump between them.
+    const float appIconSize = 32.0F;
     // A screenshot's image is its thumbnail, not the sender's icon.
     const bool screenshot = n.category == kScreenshotNotificationCategory
         && n.imageData
