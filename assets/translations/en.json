@@ -1484,6 +1484,8 @@
     "unread-history": "Unread notifications — open history",
     "unread-count": "{count} unread notification",
     "unread-count-plural": "{count} unread notifications",
+    "stack-more": "{count} more",
+    "stack-more-plural": "{count} more",
     "dismiss": "Dismiss notification",
     "expand": "Read full notification",
     "collapse": "Collapse notification",

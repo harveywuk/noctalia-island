@@ -70,11 +70,16 @@ shows a short pill drawn like the macOS Big Sur Control Center tile: a round tog
 Off under it. Plugging in a laptop's charger shows a green "Charging" pill with the
 battery level. Turn the charging pill off with `[osd.kinds] charging = false`.
 
-In the Cupertino look, volume, microphone and brightness changes show as Big Sur's
-Sound and Display modules: the name (and the level for brightness, or for volume with
-`volume_show_percentage`) over a white-filled groove with the symbol inside its leading
-end. `volume_bar_height` sets the groove's thickness; below 14 px the symbol moves
-outside, to the groove's left. The theme look keeps its icon and accent bar.
+In the Cupertino look, microphone and brightness changes show as Big Sur's Display
+module: the name and level over a white-filled groove with the symbol inside its leading
+end. Volume is just a larger groove centred in the capsule, with no title, and the level
+at its right with `volume_show_percentage`. The volume groove is `volume_bar_height`
+plus 10 px thick (28 px by default). The theme look keeps its icon and accent bar.
+
+Unread notifications in the Cupertino hover view are a macOS Notification Centre stack:
+the newest as its own card (app icon, app name and time, title and two lines of body),
+with up to two older cards peeking out beneath and an "N more" count. Clicking the stack
+opens the notification history.
 
 ## Download indicators
 
@@ -204,9 +209,8 @@ OSDs are retained and no new polling process is added.
 
 The island integrates the existing [official Timer](https://github.com/noctalia-dev/official-plugins/tree/main/timer)
 (`noctalia/timer`, tested with 1.2.1) and [community Pomodoro Timer](https://github.com/noctalia-dev/community-plugins/tree/main/pomodoro)
-(`thepunkoff/pomodoro`, tested with 1.3.0). Enable them in Settings → Plugins. The
-expanded calendar gains Timer/Pomodoro buttons that open their existing panels
-inside the island; no bar or desktop widget is required.
+(`thepunkoff/pomodoro`, tested with 1.3.0). Enable them in Settings → Plugins and
+start a countdown from the plugin's own panel; no bar or desktop widget is required.
 
 An active countdown takes the compact activity slot, showing a circular remaining
 fraction and the time remaining in the centre. Hover restores the clock/calendar,

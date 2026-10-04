@@ -104,9 +104,14 @@ float ControlCenterPanel::fittedHeight() const {
       ? static_cast<const CalendarTab*>(m_tabs[tabIndex(TabId::Calendar)].get())->fittedHeight()
       : panel_content::height(m_tabContainers[tabIndex(m_activeTab)]);
   const float navigation = panel_content::height(m_sidebar);
+  // Round up: tabContentHeight() floors the body, and at fractional UI scales a body of, say,
+  // 200.7px would otherwise get a 200px viewport and show a scrollbar for under a pixel.
   return std::max(
       scaled(180),
-      body + kTabViewportClipInset + navigation + m_rootLayout->gap() + 2 * Style::panelPadding * contentScale()
+      std::ceil(
+          std::ceil(body) + kTabViewportClipInset + navigation + m_rootLayout->gap()
+          + 2 * Style::panelPadding * contentScale()
+      )
   );
 }
 

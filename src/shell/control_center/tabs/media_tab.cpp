@@ -288,10 +288,11 @@ std::unique_ptr<Flex> MediaTab::create() {
       }),
       ui::label({
           .out = &m_trackArtist,
-          .text = i18n::tr("control-center.media.start-playback"),
+          .text = "",
           .fontSize = Style::fontSizeBody * scale,
           .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
           .textAlign = TextAlign::Center,
+          .visible = false,
       }),
       ui::label({
           .out = &m_trackAlbum,
@@ -989,6 +990,7 @@ void MediaTab::refreshContent(Renderer& renderer) {
 
     m_trackTitle->setText(player.title.empty() ? player.identity : player.title);
     m_trackArtist->setText(joinArtists(player.artists).empty() ? player.identity : joinArtists(player.artists));
+    m_trackArtist->setVisible(true);
     if (m_trackAlbum != nullptr) {
       m_trackAlbum->setText(player.album);
       m_trackAlbum->setVisible(!player.album.empty());
@@ -1086,7 +1088,9 @@ void MediaTab::refreshContent(Renderer& renderer) {
   m_lastTrackLengthUs = 0;
   m_positionSampleAt = {};
   m_trackTitle->setText(i18n::tr("control-center.media.nothing-playing"));
-  m_trackArtist->setText(i18n::tr("control-center.media.start-playback"));
+  // "Nothing Playing" says enough on its own.
+  m_trackArtist->setText("");
+  m_trackArtist->setVisible(false);
   if (m_trackAlbum != nullptr) {
     m_trackAlbum->setText("");
     m_trackAlbum->setVisible(false);

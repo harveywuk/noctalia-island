@@ -2324,30 +2324,41 @@ void Island::prepare(Instance& inst) {
       && gCupertino
       && (m_osd->kind == OsdKind::Volume || m_osd->kind == OsdKind::Microphone || m_osd->kind == OsdKind::Brightness)
   ) {
-    // Big Sur's Sound and Display modules: the name (and level) over a white-filled groove with
-    // the symbol inside its leading end.
+    // Big Sur's Sound and Display modules: a white-filled groove with the symbol inside its leading
+    // end. Display and Microphone name themselves above it; Sound is just a larger bar, centred.
     const bool volume = m_osd->kind == OsdKind::Volume;
-    const float trackHeight = std::clamp(volume ? cfg.volumeBarHeight : 18.0F, 5.0F, 24.0F);
+    const float trackHeight =
+        volume ? std::clamp(cfg.volumeBarHeight + 10.0F, 14.0F, 34.0F) : 18.0F;
     const bool symbolInside = trackHeight >= 14.0F;
     constexpr float margin = 20.0F;
     const float trackX = symbolInside ? margin : margin + 32.0F;
-    const float trackWidth = std::max(trackHeight, w - margin - trackX);
-    const std::string title = i18n::tr(
-        volume                                   ? "island.osd.sound"
-            : m_osd->kind == OsdKind::Microphone ? "island.osd.microphone"
-                                                 : "island.osd.display"
-    );
-    auto* titleLabel = label(title, margin, 9, w - 2 * margin - 64, 13, foreground, false, 1, FontWeight::SemiBold);
-    if (!volume || cfg.volumeShowPercentage) {
+    float trackRight = w - margin;
+    float trackY = 0.0F;
+    if (volume) {
+      trackY = (h - trackHeight) / 2;
+      if (cfg.volumeShowPercentage) {
+        const auto metrics = renderer.measureText(
+            m_osd->value, 13 * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
+        );
+        const float valueWidth = std::ceil(metrics.width / s) + 2;
+        auto* valueLabel = label(m_osd->value, w - margin - valueWidth, 0, valueWidth, 13, muted);
+        valueLabel->setPosition(valueLabel->x(), (h * s - valueLabel->height()) / 2);
+        trackRight -= valueWidth + 10;
+      }
+    } else {
+      const std::string title =
+          i18n::tr(m_osd->kind == OsdKind::Microphone ? "island.osd.microphone" : "island.osd.display");
+      auto* titleLabel = label(title, margin, 9, w - 2 * margin - 64, 13, foreground, false, 1, FontWeight::SemiBold);
       const auto metrics = renderer.measureText(
           m_osd->value, 13 * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
       );
       const float valueWidth = std::ceil(metrics.width / s) + 2;
       auto* valueLabel = label(m_osd->value, w - margin - valueWidth, 9, valueWidth, 13, muted);
       valueLabel->setPosition(valueLabel->x(), titleLabel->y());
+      const float top = 9 + titleLabel->height() / s + 6;
+      trackY = top + std::max(0.0F, (h - top - 10 - trackHeight) / 2);
     }
-    const float top = 9 + titleLabel->height() / s + 6;
-    const float trackY = top + std::max(0.0F, (h - top - 10 - trackHeight) / 2);
+    const float trackWidth = std::max(trackHeight, trackRight - trackX);
     const auto groove = [&](float x, float width, ColorSpec fill) {
       auto node = std::make_unique<Box>();
       node->setFill(fill);
@@ -2754,25 +2765,6 @@ void Island::prepare(Instance& inst) {
       h += 38;
       sectionCard(sectionTop, h);
     }
-    // A discoverable entry point when idle, without adding a permanent compact badge.
-    if (view == island::View::Calendar) {
-      const auto idle = std::ranges::count_if(timers, [](const auto& timer) { return !timer.active; });
-      if (idle > 0) {
-        const float count = static_cast<float>(idle);
-        const float width = (w - 44 - (count - 1) * 8) / count;
-        float x = 22;
-        for (const auto& timer : timers) {
-          if (timer.active)
-            continue;
-          pill(control(
-              x, h, width, 32, i18n::tr(timer.pomodoro ? "island.timer.pomodoro" : "island.timer.title"), timer.icon,
-              "", 16, true, [panel, timer] { panel(timer.panel); }
-          ));
-          x += width + 8;
-        }
-        h += 40;
-      }
-    }
   }
   // The expanded Island's icon row ends with the unread-notifications bell where the unread
   // section itself is not shown (the Cupertino Island keeps it to the calendar view), unless
@@ -2942,7 +2934,82 @@ void Island::prepare(Instance& inst) {
     h += 6;
     sectionCard(sectionTop, h);
   }
-  if (showUnread && expandedView && showExtras && cfg.hoverShowUnread) {
+  if (showUnread && expandedView && showExtras && cfg.hoverShowUnread && gCupertino) {
+    // macOS Notification Centre: the newest unread notification as its own card (app icon, app
+    // name and time, title, two lines of body) with the older ones stacked behind its lower edge.
+    // Clicking the stack opens the history.
+    std::vector<const NotificationHistoryEntry*> unread;
+    for (const auto& entry : m_notifications->history() | std::views::reverse)
+      if (!entry.seen)
+        unread.push_back(&entry);
+    const auto& note = unread.front()->notification;
+    const auto flatten = [](std::string text) {
+      std::replace(text.begin(), text.end(), '\n', ' ');
+      std::replace(text.begin(), text.end(), '\r', ' ');
+      return text;
+    };
+    constexpr float cardX = 12.0F;
+    constexpr float iconSize = 32.0F;
+    constexpr float timeWidth = 56.0F;
+    const float cardTop = h + 2;
+    const float cardWidth = w - 2 * cardX;
+    const bool hasIcon = notificationIcon(note, cardX + 12, cardTop + 12, iconSize);
+    const float textX = hasIcon ? cardX + 12 + iconSize + 10 : cardX + 14;
+    const float textWidth = cardX + cardWidth - 14 - textX;
+    label(note.appName, textX, cardTop + 10, textWidth - timeWidth - 4, Style::fontSizeCaption, muted);
+    auto* time = label(
+        formatNotificationTime(note.receivedWallClock.value_or(WallClock::now())), textX + textWidth - timeWidth,
+        cardTop + 10, timeWidth, Style::fontSizeCaption, muted
+    );
+    time->setTextAlign(TextAlign::End);
+    time->measure(renderer);
+    auto* title = label(
+        flatten(note.summary), textX, cardTop + 27, textWidth, Style::fontSizeBody, foreground, false, 1,
+        FontWeight::SemiBold
+    );
+    float textBottom = cardTop + 27 + title->height() / s;
+    if (note.body.find_first_not_of(" \t\r\n") != std::string::npos) {
+      auto* body = label(flatten(note.body), textX, textBottom + 1, textWidth, Style::fontSizeBody, muted, false, 2);
+      textBottom += 1 + body->height() / s;
+    }
+    const float cardBottom = std::max(cardTop + 12 + iconSize, textBottom) + 12;
+    const float cardHeight = cardBottom - cardTop;
+    // Up to two cards peek out beneath, each a little narrower and fainter, as a collapsed stack.
+    const std::size_t behind = std::min<std::size_t>(unread.size() - 1, 2);
+    constexpr float peek = 7.0F;
+    const auto card = [&](float x, float y, float width, ColorSpec fill, float alpha, int z) {
+      auto box = std::make_unique<Box>();
+      box->setFill(fill);
+      box->setBorder(islandRole(ColorRole::Outline, 0.5F * alpha), Style::borderWidth);
+      box->setRadius(Style::scaledRadiusLg(s) * 1.25F);
+      box->setPosition(x * s, y * s);
+      box->setSize(width * s, cardHeight * s);
+      box->setHitTestVisible(false);
+      box->setZIndex(z);
+      canvas->addChild(std::move(box));
+    };
+    for (std::size_t i = behind; i > 0; --i) {
+      const float inset = 10.0F * static_cast<float>(i);
+      const float alpha = i == 1 ? 0.7F : 0.45F;
+      card(
+          cardX + inset, cardTop + peek * static_cast<float>(i), cardWidth - 2 * inset,
+          islandRole(ColorRole::SurfaceVariant, alpha), alpha, -2 - static_cast<int>(i)
+      );
+    }
+    // The card fill is translucent; an opaque backing in the Island's own colour keeps the cards
+    // behind from showing through the front one.
+    card(cardX, cardTop, cardWidth, islandRole(ColorRole::Surface), 0.0F, -2);
+    card(cardX, cardTop, cardWidth, islandRole(ColorRole::SurfaceVariant), 1.0F, -1);
+    h = cardBottom + peek * static_cast<float>(behind) + 4;
+    if (unread.size() > 1) {
+      label(
+          i18n::trp("notifications.stack-more", unread.size() - 1), cardX, h, cardWidth, Style::fontSizeCaption, muted,
+          true
+      );
+      h += 20;
+    }
+    action(cardX, cardTop, cardWidth, h - cardTop, "unread-stack", [panel] { panel("notifications"); });
+  } else if (showUnread && expandedView && showExtras && cfg.hoverShowUnread) {
     const float sectionTop = h;
     // Cupertino: a leading bell badge and left-aligned rows, matching the battery and timer rows.
     const float rowX = gCupertino ? 58 : 22;
