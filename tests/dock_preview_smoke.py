@@ -40,13 +40,15 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         return dest
     def words(name='current', output='TEST-1', threshold=False):
         dest = shot(name, output)
+        # Card titles are small; OCR reads a 3x upscale and positions are mapped back.
+        image = Image.open(dest).convert('L')
+        image = image.resize((image.width*3, image.height*3), Image.LANCZOS)
         if threshold:
             # Large dark cards can confuse Tesseract's automatic background detection.
-            processed = out/'ocr-threshold.png'
-            Image.open(dest).convert('L').point(lambda value: 0 if value > 170 else 255).save(processed)
-            dest = processed
-        tsv = run(['tesseract', str(dest), 'stdout', '--tessdata-dir', str(repo/'build-rishot/test-data/tessdata'), '--psm', '11', '-c', 'tessedit_create_tsv=1', '-c', 'user_defined_dpi=96'])
-        return [dict(row, x=int(row['left']), y=int(row['top']), w=int(row['width']), h=int(row['height'])) for row in csv.DictReader(io.StringIO(tsv), delimiter='\t') if (row.get('text') or '').strip() and row.get('left', '').isdigit()]
+            image = image.point(lambda value: 0 if value > 150 else 255)
+        processed = out/'ocr-x2.png'; image.save(processed)
+        tsv = run(['tesseract', str(processed), 'stdout', '--tessdata-dir', str(repo/'build-rishot/test-data/tessdata'), '--psm', '11', '-c', 'tessedit_create_tsv=1', '-c', 'user_defined_dpi=288'])
+        return [dict(row, x=int(row['left'])//3, y=int(row['top'])//3, w=int(row['width'])//3, h=int(row['height'])//3) for row in csv.DictReader(io.StringIO(tsv), delimiter='\t') if (row.get('text') or '').strip() and row.get('left', '').isdigit()]
     def matches(text, name='current', output='TEST-1', count=1):
         found = [w for w in words(name, output) if text.lower() in w['text'].lower()]
         if len(found) < count:
