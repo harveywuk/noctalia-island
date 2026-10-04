@@ -138,6 +138,10 @@ struct Island::Instance {
   float outgoingFade = 0.0F;
   // The capsule width the outgoing content was laid out for, to keep it centred as it fades.
   float outgoingWidth = 0.0F;
+  // Set when a hosted panel hands the surface back: the panel has already faded out and shrunk
+  // to the capsule, so the view from before it opened (often the wide hover view) is dropped
+  // rather than crossfaded out over the compact one.
+  bool skipCrossfade = false;
   ScrollView* activityScroll = nullptr;
   island::View previousView = island::View::Rest;
   float scale = 1;
@@ -1805,9 +1809,10 @@ void Island::prepare(Instance& inst) {
   if (inst.content) {
     auto previous = inst.background->removeChild(inst.content);
     // Switching views crossfades: the old content fades out over the new one fading in.
-    if (viewChanged && previous && MotionService::instance().enabled())
+    if (viewChanged && previous && MotionService::instance().enabled() && !inst.skipCrossfade)
       crossfadeOut(inst, std::move(previous));
   }
+  inst.skipCrossfade = false;
   auto content = std::make_unique<Node>();
   content->setSize(w * s, h * s);
   inst.content = content.get();
@@ -3750,6 +3755,7 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     if (inst.output != output || !inst.panelHosted)
       continue;
     inst.panelHosted = false;
+    inst.skipCrossfade = true;
     // Drop an OSD queued while the panel was open, and the panel's own last changes (a
     // debounced slider commit can land just after it closes).
     m_osd.reset();
