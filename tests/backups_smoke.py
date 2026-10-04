@@ -26,25 +26,44 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         move(x,y); command('press'); time.sleep(.12); command('release'); time.sleep(.5)
     def screenshot(name='current'):
         path = out/(name+'.png'); run(['grim','-o','TEST-1',str(path)]); return path
-    def words():
+    def words(variant='plain'):
         # OCR locates actual labels; coordinates vary with translated text, fonts,
         # status banners and the length of the review, so fixed clicks are brittle.
+        # It reads a 2x upscale, and an inverted one for light labels on grey buttons.
+        from PIL import Image, ImageOps
         tessdata = os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata'))
-        result = run(['tesseract',str(screenshot()),'stdout','--tessdata-dir',tessdata,'--psm','11',
-                      '-c','tessedit_create_tsv=1','-c','user_defined_dpi=96'])
-        return [r for r in csv.DictReader(io.StringIO(result), delimiter='\t', quoting=csv.QUOTE_NONE) if r.get('text','').strip()]
+        image = Image.open(screenshot()).convert('L')
+        image = image.resize((image.width*2, image.height*2), Image.LANCZOS)
+        if variant == 'inverted':
+            image = ImageOps.autocontrast(ImageOps.invert(image))
+        image.save(out/'ocr.png')
+        result = run(['tesseract',str(out/'ocr.png'),'stdout','--tessdata-dir',tessdata,'--psm','11',
+                      '-c','tessedit_create_tsv=1','-c','user_defined_dpi=192'])
+        rows = [r for r in csv.DictReader(io.StringIO(result), delimiter='\t', quoting=csv.QUOTE_NONE) if r.get('text','').strip()]
+        for r in rows:
+            for key in ('left', 'top', 'width', 'height'):
+                r[key] = str(int(r[key])//2)
+        return rows
     def locate(text, starts_line=False):
         target = text.lower().split()
-        rows = words()
-        for i in range(len(rows)-len(target)+1):
-            if starts_line and rows[i]['word_num'] != '1': continue
-            if [r['text'].lower() for r in rows[i:i+len(target)]] == target:
-                selected = rows[i:i+len(target)]
-                left = min(int(r['left']) for r in selected); top = min(int(r['top']) for r in selected)
-                right = max(int(r['left'])+int(r['width']) for r in selected)
-                bottom = max(int(r['top'])+int(r['height']) for r in selected)
-                return ((left+right)//2, (top+bottom)//2)
+        for variant in ('plain', 'inverted'):
+            rows = words(variant)
+            for i in range(len(rows)-len(target)+1):
+                if starts_line and rows[i]['word_num'] != '1': continue
+                if [r['text'].lower() for r in rows[i:i+len(target)]] == target:
+                    selected = rows[i:i+len(target)]
+                    left = min(int(r['left']) for r in selected); top = min(int(r['top']) for r in selected)
+                    right = max(int(r['left'])+int(r['width']) for r in selected)
+                    bottom = max(int(r['top'])+int(r['height']) for r in selected)
+                    return ((left+right)//2, (top+bottom)//2)
         return None
+    def switch_at(row_y):
+        # The switch at the right end of a settings row: the white knob's pixels beside the row.
+        from PIL import Image
+        image = Image.open(screenshot('switch')).convert('L')
+        knob = [(x, y) for y in range(row_y-8, row_y+14) for x in range(1000, 1200) if image.getpixel((x, y)) > 225]
+        assert knob, 'No switch on the row at y=%d' % row_y
+        return sum(p[0] for p in knob)//len(knob), sum(p[1] for p in knob)//len(knob)
     def scroll(steps):
         move(1000,590); command(f'scroll {steps}'); time.sleep(.4)
     def click_text(text, direction=1, starts_line=False):
@@ -78,7 +97,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         msg('config-reload'); time.sleep(.6)
         bottom()
         point = locate('Input & motion'); assert point
-        click(1180,point[1])
+        click(*switch_at(point[1]))
         click_text('Preview restore')
         screenshot('backup-review')
         click_text('Restore selected sections', direction=-1)

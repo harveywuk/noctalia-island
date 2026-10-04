@@ -405,40 +405,58 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         (cfg/'config.toml').write_text(original_config+'\n'+appearance);msg('config-reload')
         msg('settings-open','appearance');time.sleep(1)
         run(['grim','-o','TEST-1',str(out/'appearance-settings.png')])
-        # Use a private virtual pointer to open the animations group.
+        # Settings pages open by name and controls are found by their text (OCR on a 2x upscale), so
+        # the checks survive layout changes. Use private virtual pointer and keyboard devices.
         proto=REPO/'tests/fixtures/wlr-virtual-pointer-unstable-v1.xml'
         run(['wayland-scanner','client-header',str(proto),str(base/'pointer-client.h')])
         run(['wayland-scanner','private-code',str(proto),str(base/'pointer-code.c')])
         run(['cc','-I'+str(base),str(REPO/'tests/fixtures/island_pointer.c'),str(base/'pointer-code.c'),'-lwayland-client','-o',str(base/'pointer')])
         pointer=subprocess.Popen([str(base/'pointer')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True);processes.append(pointer)
-        dispatch('hl.dsp.cursor.move({x=510,y=283})')
-        for action in ('press','release'):
-            pointer.stdin.write(action+'\n');pointer.stdin.flush();assert pointer.stdout.readline().strip()=='ok';time.sleep(.1)
-        time.sleep(.5)
-        run(['grim','-o','TEST-1',str(out/'animation-settings.png')])
-        content_offset=42  # Three rows of group pills at the integration baseline gaps.
-        def point(x,y):
-            if y>=360:y+=content_offset
-            dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})')
-            time.sleep(.1)  # Let the shell receive pointer motion before button input.
-        def mouse(action):
-            pointer.stdin.write(action+'\n');pointer.stdin.flush();assert pointer.stdout.readline().strip()=='ok';time.sleep(.1)
-        point(766,283);mouse('press');mouse('release');time.sleep(.3)
-        point(1000,590);mouse('scroll 5');time.sleep(.5)
-        run(['grim','-o','TEST-1',str(out/'curve-editor.png')])
-        # Save and reload a named appearance preset through the real controls.
         keyboard_proto=REPO/'protocols/virtual-keyboard-unstable-v1.xml'
         run(['wayland-scanner','client-header',str(keyboard_proto),str(base/'keyboard-client.h')])
         run(['wayland-scanner','private-code',str(keyboard_proto),str(base/'keyboard-code.c')])
         run(['cc','-I'+str(base),str(REPO/'tests/fixtures/island_keyboard.c'),str(base/'keyboard-code.c'),'-lwayland-client','-lxkbcommon','-o',str(base/'keyboard')])
         keyboard=subprocess.Popen([str(base/'keyboard')],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True);processes.append(keyboard)
         time.sleep(.3)
-        point(627,283);mouse('press');mouse('release');time.sleep(.5)
-        run(['grim','-o','TEST-1',str(out/'presets-before-save.png')])
-        point(740,527);mouse('press');mouse('release')
-        for key in (20,18,31,20):
-            keyboard.stdin.write(str(key)+'\n');keyboard.stdin.flush();assert keyboard.stdout.readline().strip()=='ok'
-        point(740,575);mouse('press');mouse('release');time.sleep(.5)
+        def mouse(action):
+            pointer.stdin.write(action+'\n');pointer.stdin.flush();assert pointer.stdout.readline().strip()=='ok';time.sleep(.1)
+        def click(x,y):
+            dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})');time.sleep(.1)  # let motion land before buttons
+            mouse('press');mouse('release');time.sleep(.3)
+        def page(name,shot):
+            msg('settings-open',name);time.sleep(1)
+            run(['grim','-o','TEST-1',str(out/(shot+'.png'))])
+        def find_text(text,min_x=0):
+            from PIL import Image,ImageOps
+            import csv,io
+            dispatch('hl.dsp.cursor.move({x=1276,y=716})');time.sleep(.2)  # keep the pointer off the text
+            path=out/'ocr.png';run(['grim','-o','TEST-1',str(path)])
+            image=Image.open(path).convert('L');image=image.resize((image.width*2,image.height*2),Image.LANCZOS)
+            target=text.lower().split()
+            # Light labels on grey buttons only read once inverted, so try the screen as is, then inverted.
+            for variant,picture in (('plain',image),('inverted',ImageOps.autocontrast(ImageOps.invert(image)))):
+                picture.save(out/f'ocr-{variant}.png')
+                tsv=run(['tesseract',str(out/f'ocr-{variant}.png'),'stdout','--tessdata-dir',os.environ.get('NOCTALIA_TEST_TESSDATA',str(REPO/'build-rishot/test-data/tessdata')),
+                         '--psm','11','-c','tessedit_create_tsv=1','-c','user_defined_dpi=192'])
+                rows=[r for r in csv.DictReader(io.StringIO(tsv),delimiter='\t',quoting=csv.QUOTE_NONE) if (r.get('text') or '').strip()]
+                for i in range(len(rows)-len(target)+1):
+                    if [r['text'].lower().strip('‘’“”"\'|.,:;') for r in rows[i:i+len(target)]]==target and int(rows[i]['left'])//2>=min_x:
+                        first=rows[i];last=rows[i+len(target)-1]
+                        x0=int(first['left'])//2;x1=(int(last['left'])+int(last['width']))//2
+                        return (x0+x1)//2,(int(first['top'])+int(first['height'])//2)//2
+            raise AssertionError('Settings control not found: '+text)
+        def click_text(text,min_x=0):click(*find_text(text,min_x))
+        def type_text(codes):
+            for key in codes:
+                keyboard.stdin.write(str(key)+'\n');keyboard.stdin.flush();assert keyboard.stdout.readline().strip()=='ok'
+        page('appearance/hyprland-animations','animation-settings')
+        page('appearance/hyprland-opening_curve','curve-editor')
+        # Save and reload a named appearance preset through the real controls.
+        page('appearance/hyprland-presets','presets-before-save')
+        # The name field's placeholder is too faint to OCR; it sits right above its Save button.
+        save_x,save_y=find_text('Save current look')
+        click(save_x,save_y-44);type_text((20,18,31,20))  # "test"
+        click(save_x,save_y);time.sleep(.5)
         run(['grim','-o','TEST-1',str(out/'presets-after-save.png')])
         settings_state=base/'state/noctalia/settings.toml'
         saved=tomllib.loads(settings_state.read_text()).get('shell',{}).get('hyprland_appearance_profiles',{})
@@ -450,28 +468,29 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         (cfg/'config.toml').write_text(original_config+'\n'+appearance.replace('rounding=23','rounding=31'));msg('config-reload')
         wait(lambda:option('decoration:rounding')['int']==31,'new appearance before preset restore')
         time.sleep(.5)
-        run(['grim','-o','TEST-1',str(out/'presets-before-restore.png')])
-        point(707,610);mouse('press');mouse('release')
+        page('appearance/hyprland-presets','presets-before-restore')
+        click_text('test')
         run(['grim','-o','TEST-1',str(out/'presets-after-restore.png')])
         wait(lambda:option('decoration:rounding')['int']==23,'restore named preset')
         # Reset the resulting override so subsequent checks can change the base config.
-        point(820,416);mouse('press');mouse('release')
+        click_text('Reset all appearance overrides')
         wait(lambda:option('decoration:rounding')['int']==31,'reset preset overrides')
         (cfg/'config.toml').write_text(original_config+'\n'+appearance);msg('config-reload')
         wait(lambda:option('decoration:rounding')['int']==23,'restore integration baseline')
         effects_preview=appearance+'glow_enabled=true\nglow_color="primary"\nshadow_opacity=0.55\nglow_opacity=0.16\n'
         (cfg/'config.toml').write_text(original_config+'\n'+effects_preview);msg('config-reload')
-        point(705,325);mouse('press');mouse('release');time.sleep(.5)
-        point(1180,436);mouse('press');mouse('release')
+        # The switch sits at the right end of the "Customise shadows and glow" row.
+        page('appearance/hyprland-shadow-glow','shadow-glow-page')
+        _,row_y=find_text('Customise shadows and glow')
+        click(1125,row_y+8)
         wait(lambda:option('decoration:glow:enabled')['bool'],'enable shadow and glow controls in UI')
         time.sleep(.5)
         run(['grim','-o','TEST-1',str(out/'shadow-glow-settings.png')])
-        point(1180,436);mouse('press');mouse('release')
+        _,row_y=find_text('Customise shadows and glow')  # the page grows once the controls appear
+        click(1125,row_y+8)
         wait(lambda:not option('decoration:glow:enabled')['bool'],'disable shadow and glow controls in UI')
-        point(627,283);mouse('press');mouse('release');time.sleep(.5)
-        point(627,283);mouse('press');mouse('release');time.sleep(.5)
-        run(['grim','-o','TEST-1',str(out/'soft-glass-before.png')])
-        point(875,469);mouse('press');mouse('release')
+        page('appearance/hyprland-presets','soft-glass-before')
+        click_text('Soft Glass')
         wait(lambda:option('decoration:rounding')['int']==16,'Soft Glass preset')
         assert abs(option('decoration:dim_strength')['float']-.08)<.001
         assert option('decoration:rounding_power')['float']==3
@@ -480,18 +499,12 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         assert option('decoration:blur:special')['bool'] is False
         assert option('decoration:shadow:range')['int']==18
         assert option('decoration:glow:enabled')['bool'] is True
-        # App rules keeps the group pills on three rows even with Soft Glass gaps.
-        content_offset=42
-        point(675,319);mouse('press');mouse('release');time.sleep(.5)
-        run(['grim','-o','TEST-1',str(out/'blur-focus-settings.png')])
-        point(627,283);mouse('press');mouse('release');time.sleep(.3)
-        point(627,283);mouse('press');mouse('release');time.sleep(.3)
-        run(['grim','-o','TEST-1',str(out/'soft-glass-before-undo.png')])
-        point(625,416);mouse('press');mouse('release')
+        page('appearance/hyprland-blur-focus','blur-focus-settings')
+        page('appearance/hyprland-presets','soft-glass-before-undo')
+        click_text('Undo last change')
         wait(lambda:option('decoration:rounding')['int']==23,'undo Soft Glass')
         wait(focus_matches,'undo blur and focus preset values')
-        content_offset=42
-        point(820,416);mouse('press');mouse('release')
+        click_text('Reset all appearance overrides')
         wait(focus_matches,'reset appearance overrides after Soft Glass')
         if os.environ.get('NOCTALIA_TEST_EDITOR_INSPECT'):
             (out/'inspect.json').write_text(json.dumps({k:env[k] for k in ('HOME','XDG_RUNTIME_DIR','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','DBUS_SESSION_BUS_ADDRESS','XDG_STATE_HOME')}))
@@ -576,27 +589,14 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         wait(lambda:all(prop(k)==v for k,v in baseline.items()),'remove app rule')
         wait(lambda:not has_glass_tag(),'remove Hyprglass app tag')
         dispatch('hl.dsp.focus({workspace="3"})')
-        msg('settings-open','appearance');time.sleep(1)
-        # The first click after this shell restart can be consumed while the
-        # settings surface gains focus. Confirm navigation actually moved the body.
-        from PIL import Image
-        app_editor_frame=out/'app-rule-editor.png'
-        run(['grim','-o','TEST-1',str(app_editor_frame)])
-        before_navigation=Image.open(app_editor_frame).crop((280,425,1210,650)).tobytes()
-        for _ in range(3):
-            point(918,325);mouse('press');mouse('release');time.sleep(.5)
-            run(['grim','-o','TEST-1',str(app_editor_frame)])
-            if Image.open(app_editor_frame).crop((280,425,1210,650)).tobytes()!=before_navigation:break
-        else:raise AssertionError('App rules tab did not open')
-        point(745,501);mouse('press');mouse('release');time.sleep(.3)
+        page('appearance/hyprland-app-rules','app-rule-editor')
+        click_text('Choose an app');time.sleep(.3)
         run(['grim','-o','TEST-1',str(out/'app-picker.png')])
-        for key in (52,30,25,25):  # '.app' uniquely identifies the literal-match fixture.
-            keyboard.stdin.write(str(key)+'\n');keyboard.stdin.flush();assert keyboard.stdout.readline().strip()=='ok'
-        time.sleep(.3)
-        point(633,334);mouse('press');mouse('release');time.sleep(.5)
+        type_text((52,30,25,25))  # '.app' uniquely identifies the literal-match fixture.
+        time.sleep(.3);type_text((28,));time.sleep(.5)  # Enter: choose the highlighted first match
         ui_rules=tomllib.loads(settings_state.read_text())['shell']['hyprland_app_rules']
         assert ui_rules['app-0001']['app_class']==app_class,'Running-app picker used the wrong class'
-        point(1000,568)
+        dispatch('hl.dsp.cursor.move({x=1000,y=568})');time.sleep(.1)
         for _ in range(6):mouse('scroll 1')
         time.sleep(.5)
         run(['grim','-o','TEST-1',str(out/'app-rule-controls.png')])
@@ -646,10 +646,8 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         wait(lambda:abs(profile_brightness()-.92)<.001,'invalid profile fallback')
         apply_profile_mode('light')
         wait(lambda:abs(profile_brightness()-1.04)<.001,'restore built-in light profile')
-        msg('settings-open','appearance');time.sleep(.6)
-        dispatch('hl.dsp.cursor.move({x=688,y=283})');mouse('press');mouse('release');time.sleep(.5)
-        run(['grim','-o','TEST-1',str(out/'theme-profiles.png')])
-        dispatch('hl.dsp.cursor.move({x=745,y=501})');mouse('press');mouse('release')
+        page('appearance/hyprland-theme-profiles','theme-profiles')
+        click_text('Keep current look & edit')
         wait(lambda:tomllib.loads(settings_state.read_text())['shell']['hyprland_profile_switching']['enabled'] is False,'Keep current look pauses automatic switching')
         apply_profile_mode('dark');time.sleep(1)
         assert abs(profile_brightness()-1.04)<.001,'Manual look changed with theme'
@@ -660,10 +658,8 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         shell=start([binary],'noctalia-manual-profile-restart.log')
         wait(lambda:(runtime/f"noctalia-{env['WAYLAND_DISPLAY']}.sock").exists(),'manual profile shell restart')
         wait(lambda:abs(profile_brightness()-1.04)<.001,'manual look after shell restart')
-        msg('settings-open','appearance');time.sleep(.5)
-        dispatch('hl.dsp.cursor.move({x=1014,y=325})');mouse('press');mouse('release');time.sleep(.4)
-        run(['grim','-o','TEST-1',str(out/'theme-manual-profile.png')])
-        dispatch('hl.dsp.cursor.move({x=745,y=554})');mouse('press');mouse('release')
+        page('appearance/hyprland-theme-profiles','theme-manual-profile')
+        click_text('Follow light/dark mode')
         wait(lambda:abs(profile_brightness()-.95)<.001,'resume automatic appearance switching')
         apply_profile_mode('light')
         wait(lambda:abs(profile_brightness()-1.04)<.001,'light switch after resume')
@@ -677,14 +673,13 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         (cfg/'config.toml').write_text(original_config);msg('config-reload')
         wait(lambda:option('decoration:rounding')['int']==initial_rounding,'restore after theme profile tests')
         (cfg/'config.toml').write_text(original_config+'\n'+appearance);msg('config-reload')
-        msg('settings-open','appearance');time.sleep(1)
-        dispatch('hl.dsp.cursor.move({x=150,y=175})');time.sleep(.1);mouse('press');mouse('release')
-        for key in (31,24,33,20,57,34,38,30,31,31,57,24,47,18,19,47,23,18,17):  # soft glass overview
-            keyboard.stdin.write(str(key)+'\n');keyboard.stdin.flush();assert keyboard.stdout.readline().strip()=='ok'
+        page('appearance','appearance-before-search')
+        _,title_y=find_text('Settings');click(150,title_y+50)  # the faint search field sits under the title
+        type_text((31,24,33,20,57,34,38,30,31,31,57,24,47,18,19,47,23,18,17))  # soft glass overview
         time.sleep(.5)
         run(['grim','-o','TEST-1',str(out/'overview-preset-search.png')])
         before_preset=tomllib.loads(settings_state.read_text())
-        dispatch('hl.dsp.cursor.move({x=750,y=333})');time.sleep(.1);mouse('press');mouse('release')
+        click_text('Soft Glass overview',min_x=300)  # not the query in the sidebar's search field
         wait(lambda:tomllib.loads(settings_state.read_text())['shell']['hyprland_appearance'].get('overview_style_managed',False),'Soft Glass overview preset button')
         after_preset=tomllib.loads(settings_state.read_text())
         for values in (before_preset,after_preset):
@@ -693,10 +688,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if plugin_dir:
             assert option('plugin:overview:overrideAnimSpeed')['float']==3.5
             assert option('plugin:overview:workspaceMargin')['int']==12
-        dispatch('hl.dsp.cursor.move({x=336,y=175})');time.sleep(.1);mouse('press');mouse('release')
-        dispatch('hl.dsp.cursor.move({x=150,y=175})');time.sleep(.1);mouse('press');mouse('release')
-        for key in (24,47,18,19,47,23,18,17):  # overview
-            keyboard.stdin.write(str(key)+'\n');keyboard.stdin.flush();assert keyboard.stdout.readline().strip()=='ok'
+        # Replace the query: select it all (Ctrl+A isn't available here), so clear by reopening.
+        msg('settings-close');time.sleep(.3);page('appearance','appearance-before-overview')
+        _,title_y=find_text('Settings');click(150,title_y+50)  # the faint search field sits under the title
+        type_text((24,47,18,19,47,23,18,17))  # overview
         time.sleep(.4)
         dispatch('hl.dsp.cursor.move({x=1000,y=590})');time.sleep(.1)
         for _ in range(5):mouse('scroll 1')
@@ -753,8 +748,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             apply_input()
             msg('settings-open','input-motion');time.sleep(1)
             run(['grim','-o','TEST-1',str(out/'input-motion-settings.png')])
-            for x,mode,enabled in ((820,'none',0),(710,'stretch',1),(635,'tilt',1)):
-                dispatch(f'hl.dsp.cursor.move({{x={x},y=458}})');time.sleep(.1);mouse('press');mouse('release')
+            page('input-motion/hyprland-input-presets','input-presets')
+            for label,mode,enabled in (('Reduced motion','none',0),('Playful','stretch',1),('Subtle','tilt',1)):
+                click_text(label)
                 wait(lambda:option('plugin:dynamic_cursors:mode')['str']==mode,'input preset '+mode)
                 assert option('plugin:kinetic-scroll:enabled')['int']==enabled
                 assert option('plugin:dynamic_cursors:shake:enabled')['bool']==bool(enabled)
@@ -763,9 +759,8 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
                 assert option('plugin:kinetic-scroll:stop_on_focus')['int']==1
                 assert option('plugin:kinetic-scroll:disabled_classes')['str']==excluded
                 assert option('decoration:rounding')['int']==initial_rounding
-            for x,group in ((405,'cursor'),(530,'scroll'),(635,'edge')):
-                dispatch(f'hl.dsp.cursor.move({{x={x},y=284}})');time.sleep(.1);mouse('press');mouse('release');time.sleep(.3)
-                run(['grim','-o','TEST-1',str(out/f'input-{group}-settings.png')])
+            for group in ('cursor','scroll','edge'):
+                page(f'input-motion/hyprland-input-{group}',f'input-{group}-settings')
             if os.environ.get('NOCTALIA_TEST_INPUT_INSPECT'):
                 (out/'input-inspect.json').write_text(json.dumps({k:env[k] for k in ('HOME','XDG_RUNTIME_DIR','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','DBUS_SESSION_BUS_ADDRESS','XDG_STATE_HOME')}))
                 print('Input inspection ready',flush=True)
