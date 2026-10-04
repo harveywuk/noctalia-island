@@ -969,6 +969,12 @@ bool Island::showOsd(const OsdContent& content) {
     refresh();
     return true;
   }
+  // A panel open in the Island already shows what changed (its sliders and toggles caused it),
+  // and the OSD cannot show until the panel closes; queuing it would replay a stale volume or
+  // toggle OSD the moment it does. Report it handled so no standalone OSD appears either.
+  if (std::ranges::any_of(m_instances, [](const auto& inst) { return inst->panelHosted; })
+      || std::chrono::steady_clock::now() < m_osdQuietUntil)
+    return true;
   m_osd = content;
   m_osdTimeout.start(1800ms, [this] {
     m_osd.reset();
@@ -3719,6 +3725,11 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     if (inst.output != output || !inst.panelHosted)
       continue;
     inst.panelHosted = false;
+    // Drop an OSD queued while the panel was open, and the panel's own last changes (a
+    // debounced slider commit can land just after it closes).
+    m_osd.reset();
+    m_osdTimeout.stop();
+    m_osdQuietUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
     inst.inputRegion.reset(); // The hosted panel installed its own input region.
     inst.suppressHover = false;
     inst.width = inst.targetWidth = width / inst.scale;

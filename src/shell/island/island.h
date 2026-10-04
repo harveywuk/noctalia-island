@@ -163,6 +163,9 @@ private:
   std::unique_ptr<island::BatteryConnections> m_batteryConnections;
   Timer m_batteryTimeout;
   Timer m_osdTimeout;
+  // OSDs are dropped until then: a panel just closed, and its last slider or toggle changes
+  // must not replay as an OSD once the Island is back.
+  std::chrono::steady_clock::time_point m_osdQuietUntil{};
   island::MediaActivity m_mediaActivity;
   Timer m_mediaTimeout;
   std::string m_trackSignature;
