@@ -218,10 +218,9 @@ by clicking the expanded Island, not with `panel-toggle`.
 
 ## Proposed next priorities
 
-1. **Greeter rollout:** the installed greeter package is an older build (`r1`). The current
-   build (`1.5.0.r3.g5a82d5c`, branch `feature/cupertino` of `~/Projects/noctalia-greeter`) is
-   built but not installed, and its commit is local only (its remote is upstream). Install it
-   and verify with the real synced wallpaper, which the test harness cannot read.
+1. **Greeter check:** build `1.5.0.r3.g5a82d5c` (branch `feature/cupertino`, pushed to the
+   fork `harveywuk/noctalia-greeter`) is installed as of 4 October. Verify it at the next login
+   with the real synced wallpaper, which the test harness cannot read.
 2. **Glass performance:** measure Hyprland frame times with the glass Island expanding over
    playing video, now that the shader takes up to 64 region rectangles per surface.
 3. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
