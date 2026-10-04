@@ -8,7 +8,6 @@
 #include "render/scene/rect_node.h"
 #include "ui/palette.h"
 #include "ui/style.h"
-#include "util/clamp.h"
 
 #include <algorithm>
 #include <cmath>
@@ -32,23 +31,6 @@ namespace {
 
   Color resolved(ColorRole role, float alpha = 1.0F) { return colorForRole(role, alpha); }
 
-  // macOS knobs are plain white, lifted off the track by a soft shadow rather than an outline.
-  constexpr Color kKnobColor = rgba(1.0F, 1.0F, 1.0F);
-  constexpr Color kKnobPressedColor = rgba(0.94F, 0.94F, 0.95F);
-
-  RoundedRectStyle knobStyle(const Color& fill, float radius) {
-    auto style = solidStyle(fill, radius);
-    style.border = rgba(0.0F, 0.0F, 0.0F, Style::knobEdgeAlpha);
-    style.borderWidth = Style::knobEdgeWidth;
-    return style;
-  }
-
-  RoundedRectStyle knobShadowStyle(float radius) {
-    auto style = solidStyle(rgba(0.0F, 0.0F, 0.0F, Style::knobShadowAlpha), radius);
-    style.softness = Style::knobShadowSoftness;
-    return style;
-  }
-
 } // namespace
 
 Slider::Slider() {
@@ -58,16 +40,11 @@ Slider::Slider() {
   auto fill = std::make_unique<RectNode>();
   m_fill = static_cast<RectNode*>(addChild(std::move(fill)));
 
-  // Level style only: a hairline over the groove and fill keeps a white fill's edge visible.
+  // Over the groove and fill: the level style's hairline (which keeps a white fill's edge
+  // visible) and the keyboard focus ring.
   auto outline = std::make_unique<RectNode>();
   outline->setVisible(false);
   m_outline = static_cast<RectNode*>(addChild(std::move(outline)));
-
-  auto thumbShadow = std::make_unique<RectNode>();
-  m_thumbShadow = static_cast<RectNode*>(addChild(std::move(thumbShadow)));
-
-  auto thumb = std::make_unique<RectNode>();
-  m_thumb = static_cast<RectNode*>(addChild(std::move(thumb)));
 
   auto area = std::make_unique<InputArea>();
   area->setOnEnter([this](const InputArea::PointerData& /*data*/) {
@@ -276,7 +253,6 @@ void Slider::updateGeometry() {
   const float t = normalizedValue();
   const float tVis = Style::rtl() ? 1.0F - t : t;
   const float thumbX = trackX + tVis * trackW;
-  const float thumbY = (heightPx - m_thumbSizePx) * 0.5F;
 
   m_track->setPosition(trackX, trackY);
   m_track->setFrameSize(trackW, m_trackHeight);
@@ -287,12 +263,6 @@ void Slider::updateGeometry() {
   m_fill->setFrameSize(std::max(0.0F, fillWidth), m_trackHeight);
   m_outline->setPosition(trackX, trackY);
   m_outline->setFrameSize(trackW, m_trackHeight);
-
-  const float thumbLeft = util::clampOrdered(thumbX - m_thumbSizePx * 0.5F, trackX, trackX + trackW - m_thumbSizePx);
-  m_thumb->setPosition(thumbLeft, thumbY);
-  m_thumb->setFrameSize(m_thumbSizePx, m_thumbSizePx);
-  m_thumbShadow->setPosition(thumbLeft, thumbY + Style::knobShadowOffsetY);
-  m_thumbShadow->setFrameSize(m_thumbSizePx, m_thumbSizePx);
 
   m_inputArea->setPosition(0.0F, 0.0F);
   m_inputArea->setFrameSize(widthPx, heightPx);
@@ -315,7 +285,6 @@ void Slider::setLevelStyle(bool level) {
     return;
   }
   m_level = level;
-  m_outline->setVisible(level);
   applyVisualState();
   markPaintDirty();
 }
@@ -330,14 +299,10 @@ void Slider::setColorOverride(std::optional<Color> track, std::optional<Color> f
 }
 
 void Slider::applyVisualState() {
-  const bool pressing = m_inputArea != nullptr && m_inputArea->pressed();
   const bool focused = m_inputArea != nullptr && m_inputArea->focused();
 
   Color trackColor = resolved(ColorRole::OnSurface, 0.16F);
   Color fillColor = resolved(ColorRole::Primary);
-
-  m_thumb->setVisible(m_enabled);
-  m_thumbShadow->setVisible(m_enabled);
 
   if (!m_enabled) {
     trackColor = resolved(ColorRole::Outline, Style::disabledOutlineAlpha);
@@ -347,11 +312,18 @@ void Slider::applyVisualState() {
   if (m_level) {
     trackColor = resolved(ColorRole::OnSurface, isResolvedLightTheme() ? 0.12F : 0.18F);
     fillColor = rgba(1.0F, 1.0F, 1.0F, m_enabled ? 1.0F : 0.5F);
-    RoundedRectStyle outline = solidStyle(rgba(0.0F, 0.0F, 0.0F, 0.0F), m_trackHeight * 0.5F);
+  }
+  // With no knob, keyboard focus rings the whole track.
+  m_outline->setVisible(m_level || focused);
+  RoundedRectStyle outline = solidStyle(rgba(0.0F, 0.0F, 0.0F, 0.0F), m_trackHeight * 0.5F);
+  if (focused) {
+    outline.border = resolveColorSpec(focusRingColorSpec());
+    outline.borderWidth = Style::focusRingWidth;
+  } else {
     outline.border = resolved(ColorRole::OnSurface, 0.14F);
     outline.borderWidth = Style::borderWidth;
-    m_outline->setStyle(outline);
   }
+  m_outline->setStyle(outline);
   if (m_trackOverride) {
     trackColor = *m_trackOverride;
   }
@@ -364,14 +336,6 @@ void Slider::applyVisualState() {
 
   auto fillStyle = solidStyle(fillColor, m_trackHeight * 0.5F);
   m_fill->setStyle(fillStyle);
-
-  auto thumbStyle = knobStyle(pressing ? kKnobPressedColor : kKnobColor, m_thumbSizePx * 0.5F);
-  if (focused) {
-    thumbStyle.border = resolveColorSpec(focusRingColorSpec());
-    thumbStyle.borderWidth = Style::focusRingWidth;
-  }
-  m_thumb->setStyle(thumbStyle);
-  m_thumbShadow->setStyle(knobShadowStyle(m_thumbSizePx * 0.5F));
 }
 
 float Slider::normalizedValue() const noexcept {

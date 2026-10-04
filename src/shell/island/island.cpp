@@ -2298,7 +2298,8 @@ void Island::prepare(Instance& inst) {
     }
     const float fraction =
         player->lengthUs > 0 ? static_cast<float>(player->positionUs) / static_cast<float>(player->lengthUs) : 0;
-    inst.seekProgress = progress(inst.seeking ? inst.seekFraction : fraction, 27, 106 + mediaOffset, w - 54);
+    // Twice the usual track height, centred where the thinner bar sat, inside the seek target.
+    inst.seekProgress = progress(inst.seeking ? inst.seekFraction : fraction, 27, 104 + mediaOffset, w - 54, 8.0F);
     // Cupertino tints the track's progress with its artwork's most vivid colour.
     if (gCupertino && cfg.mediaGradient && m_flowArt == artPath && m_flow.hasArtwork()) {
       const auto accent = m_flow.accent();
