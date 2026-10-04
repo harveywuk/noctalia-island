@@ -1191,7 +1191,8 @@ play_sound=false
             run(['notify-send','-a','Island test','-t','0','Long notification',long_body])
             time.sleep(1)
             run(['grim',str(out/'notification-collapsed.png')])
-            move(600,120);click();time.sleep(1)
+            # Let the pointer's arrival settle (hover enter) before clicking, as a person would.
+            move(600,120);time.sleep(.6);click();time.sleep(1)
             run(['grim',str(out/'notification-expanded.png')])
             collapsed=Image.open(out/'notification-collapsed.png').convert('RGB')
             expanded=Image.open(out/'notification-expanded.png').convert('RGB')
@@ -1214,9 +1215,11 @@ play_sound=false
             notification=start(['notify-send','-a','Island test','-t','0','--wait','--action=confirm=Mark as read','Short notification','Everything fits.'],'notification-action.log')
             time.sleep(1)
             run(['grim',str(out/'notification-short.png')])
-            move(640,125);time.sleep(1)
+            # As on macOS, hovering the banner shows its single action as a pill in place of the
+            # time stamp, at the top right.
+            move(640,70);time.sleep(1)
             run(['grim',str(out/'notification-action-hover.png')])
-            click()
+            move(770,31);time.sleep(.3);click()
             wait(lambda: 'confirm' in (out/'notification-action.log').read_text(),'Notification action invocation')
             move(1100,600)
             msg('notification-clear-active');msg('notification-clear-history')
@@ -1299,8 +1302,9 @@ play_sound=false
         assert msg('island-focus').strip()=='ok';time.sleep(.7)
         run(['grim',str(out/'keyboard-timed-before.png')]);time.sleep(1.5)
         run(['grim',str(out/'keyboard-timed-after.png')])
-        before_image=Image.open(out/'keyboard-timed-before.png').convert('RGB').crop((460,10,820,100))
-        after_image=Image.open(out/'keyboard-timed-after.png').convert('RGB').crop((460,10,820,100))
+        # The text area only: the close button's focus highlight can land between the two shots.
+        before_image=Image.open(out/'keyboard-timed-before.png').convert('RGB').crop((460,10,790,100))
+        after_image=Image.open(out/'keyboard-timed-after.png').convert('RGB').crop((460,10,790,100))
         assert ImageChops.difference(before_image,after_image).getbbox() is None, 'Focused notification must not expire'
         key(1);time.sleep(.5)
         keyboard_notification=start(['notify-send','-a','Keyboard test','-t','0','--wait','--action=confirm=Confirm','Keyboard notification','Tab to Confirm, then Enter.'],'keyboard-notification.log')
