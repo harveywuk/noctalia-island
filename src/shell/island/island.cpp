@@ -1439,12 +1439,13 @@ void Island::prepare(Instance& inst) {
       fill = islandTint(countdownTint(timers.front()), ColorRole::Primary);
     } else if (outlineDownload) {
       fill = islandTint(kAppleBlue, ColorRole::Primary);
-      // Each download gets equal weight; one unknown total makes the group indeterminate.
-      if (std::ranges::all_of(downloads, [](const auto& d) { return d.determinate; })) {
+      // Each download gets equal weight; one unknown total makes the group indeterminate. When
+      // the jobs split between capsule and bubble, the capsule's edge shows only its own.
+      if (std::ranges::all_of(capsuleDownloads, [](const auto& d) { return d.determinate; })) {
         float total = 0;
-        for (const auto& d : downloads)
+        for (const auto& d : capsuleDownloads)
           total += static_cast<float>(d.progress);
-        fraction = total / static_cast<float>(downloads.size());
+        fraction = total / static_cast<float>(capsuleDownloads.size());
       }
     } else if (outlineBattery) {
       fraction = static_cast<float>(batteryList.front().percentage / 100.0);
@@ -1507,10 +1508,10 @@ void Island::prepare(Instance& inst) {
           node->setPosition((d * s - node->width()) / 2, (d * s - node->height()) / 2);
           return content->addChild(std::move(node));
         };
-        const auto symbol = [&](const std::string& name, ColorSpec color) {
+        const auto symbol = [&](const std::string& name, ColorSpec color, float size = 0.28F) {
           auto node = std::make_unique<Glyph>();
           node->setGlyph(name);
-          node->setGlyphSize(std::round(d * 0.28F) * s);
+          node->setGlyphSize(std::round(d * size) * s);
           node->setColor(color);
           node->measure(renderer);
           centred(std::move(node));
@@ -1531,16 +1532,17 @@ void Island::prepare(Instance& inst) {
         if (splitActivity == island::Activity::Media && !artShown)
           symbol("music", islandRole(ColorRole::OnSurface));
         if (splitActivity == island::Activity::Timers || splitActivity == island::Activity::Downloads) {
-          // A progress ring around the activity's symbol, in its activity colour.
+          // A progress ring in the activity's colour round the bubble's own rim, the way the
+          // capsule's progress traces its edge, with the activity's symbol in the middle.
           const bool timer = splitActivity == island::Activity::Timers;
           const auto tint =
               timer ? islandTint(kAppleOrange, ColorRole::Primary) : islandTint(kAppleBlue, ColorRole::Primary);
-          auto ring = std::make_unique<DownloadRing>(std::round(d * 0.62F) * s, 2.5F * s, fraction, tint);
+          auto ring = std::make_unique<DownloadRing>(d * s, 3.0F * s, fraction, tint);
           auto* ringPtr = ring.get();
           centred(std::move(ring));
           if (fraction)
             inst.splitProgress = [ringPtr](float value) { ringPtr->setProgress(value); };
-          symbol(timer ? timers.front().icon : bubbleIcon, tint);
+          symbol(timer ? timers.front().icon : bubbleIcon, tint, 0.34F);
         }
         inst.splitContent = inst.splitArea->addChild(std::move(content));
         inst.splitArea->setTooltip(
@@ -2127,11 +2129,13 @@ void Island::prepare(Instance& inst) {
     if (view == island::View::Activity) {
       artwork(12, (cfg.height - 38) / 2, 38);
       if (showMediaStatus && !playing)
-        glyph("player-pause", w - 44, (cfg.height - 24) / 2, 24, muted);
+        glyph("media-pause", w - 44, (cfg.height - 24) / 2, 24, muted);
       if (showVisualizer) {
         if (!retainedVisualizer)
           retainedVisualizer = std::make_unique<IslandAudioVisualizer>(m_spectrum, *inst.surface);
         inst.visualizer = static_cast<IslandAudioVisualizer*>(retainedVisualizer.get());
+        // Foreground, not the accent: white on the black capsule, like Apple's Now Playing waveform.
+        inst.visualizer->setGradient(foreground, foreground);
         inst.visualizer->setPosition((w - 44) * s, (cfg.height - 24) * s / 2);
         inst.visualizer->setSize(24 * s, 24 * s);
         canvas->addChild(std::move(retainedVisualizer));
@@ -2229,7 +2233,7 @@ void Island::prepare(Instance& inst) {
     const auto button = [&](float x, const std::string& icon, const std::string& tooltip, bool available,
                             std::function<void()> cb) {
       auto* mediaControl = control(x, 137 + mediaOffset, 44, 48, "", icon, tooltip, 23, available, std::move(cb));
-      if (icon == "player-play" || icon == "player-pause") {
+      if (icon == "media-play" || icon == "media-pause") {
         mediaControl->inputArea()->setTabFocusKey("playback");
         // Apple's transport controls are bare symbols; the theme look keeps a filled play button.
         setIslandVariant(mediaControl, gCupertino ? ButtonVariant::Ghost : ButtonVariant::Default);
@@ -2237,15 +2241,16 @@ void Island::prepare(Instance& inst) {
       }
     };
     button(
-        w / 2 - 89, "player-skip-back", i18n::tr("control-center.media.previous"), player->canGoPrevious,
+        w / 2 - 89, "media-prev", i18n::tr("control-center.media.previous"), player->canGoPrevious,
         [this, bus] { m_mpris->previous(bus); }
     );
     button(
-        w / 2 - 22, playing ? "player-pause" : "player-play",
+        w / 2 - 22, playing ? "media-pause" : "media-play",
         i18n::tr(playing ? "control-center.media.pause" : "control-center.media.play"),
         playing ? player->canPause : player->canPlay, [this, bus] { m_mpris->playPause(bus); }
     );
-    button(w / 2 + 45, "player-skip-forward", i18n::tr("control-center.media.next"), player->canGoNext, [this, bus] {
+    // Solid transport symbols, the same as the Control Center's media card.
+    button(w / 2 + 45, "media-next", i18n::tr("control-center.media.next"), player->canGoNext, [this, bus] {
       m_mpris->next(bus);
     });
     action(20, 15, w - 40, 81 + mediaOffset, "media-panel", [panel] { panel("media"); });

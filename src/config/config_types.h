@@ -97,7 +97,8 @@ struct IslandConfig {
   IslandAppearance appearance = IslandAppearance::Cupertino;
   // Translucent capsule and hosted panels over the compositor's blur (hyprglass on Hyprland).
   bool glass = false;
-  bool outerProgressRing = false;
+  // Progress (timers, downloads, battery) traces the capsule's edge rather than ringing its icon.
+  bool outerProgressRing = true;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
   // A second running activity detaches into a round bubble beside the capsule, as on iPhone.

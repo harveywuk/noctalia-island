@@ -558,9 +558,11 @@ The greeter output layout also mirrors the desktop: DP-1 at (0,0), DP-2 at
 
 ## Outer progress ring
 
-Enable **Settings → Dynamic Island → Layout → Outer progress ring** to trace
-progress around the Island’s edge instead of the compact activity icon. It follows
-the capsule as it expands and scales. The default remains the small icon ring.
+Progress traces the Island’s edge rather than a small ring round the compact activity
+icon (**Settings → Dynamic Island → Layout → Outer progress ring**, on by default). It
+follows the capsule as it expands and scales. The split bubble does the same: a timer or
+download beside the capsule rings the bubble’s own rim, with its symbol in the middle.
+Turn the setting off for the small icon ring in the capsule.
 
 Active timers take priority over downloads, followed by the battery indicator.
 For multiple downloads, the outline shows their average progress; if any total is
@@ -570,5 +572,5 @@ outline. Expanded rows retain their individual progress indicators.
 
 ```toml
 [island]
-outer_progress_ring = true
+outer_progress_ring = false   # the small icon ring instead
 ```
