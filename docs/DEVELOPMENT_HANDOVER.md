@@ -228,19 +228,24 @@ costs much less (about 8% of the integrated GPU for a full-screen window). The n
 cannot render on the NVIDIA GPU (GBM allocation fails for headless outputs), so the numbers are
 from the integrated GPU, a worst case.
 
-### Failing smoke suites (not from this work)
+Because the surface now resizes, the shell always sends Hyprland a `no_anim` layer rule for the
+`noctalia-island` namespace (`e2e2d88a4`); without it Hyprland stretches the Island over each
+resize. On compositors that animate layer resizes some other way, expect the same stretch.
 
-`--island-routing-only` (no capsule found on TEST-1 at `focused-first`), `--island-bars-only`
-(`KeyError: 'capsule'` reading overrides) and `--island-activity-cycle-only` (`cycle-third`
-shows media) fail identically on the build from before 4 October's Island changes. Every other
-`--island-*-only` suite passes.
+### Smoke suites
+
+All nine `--island-*-only` suites pass. Routing, bars and activity-cycle had drifted from the
+features (`c72a96231`): the first two measured the capsule from pixels that the artwork gradient
+now lights, and bars clicked Settings coordinates from before the restyle; it now navigates with
+`settings-open bar/widgets` and finds buttons by their text.
 
 ## Proposed next priorities
 
 1. **Greeter check:** build `1.5.0.r3.g5a82d5c` (branch `feature/cupertino`, pushed to the
    fork `harveywuk/noctalia-greeter`) is installed as of 4 October. Verify it at the next login
    with the real synced wallpaper, which the test harness cannot read.
-2. **The three failing smoke suites** above: find out whether the tests or the features drifted.
+2. **3090 measurement:** read the desktop Hyprland's GPU use with the Island and Control Center open,
+   to confirm the surface change on the real GPU.
 3. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
 4. **Remaining text fit and reduced-motion marquees:** carried over from 1 October
    (`--text-fit-only`).
