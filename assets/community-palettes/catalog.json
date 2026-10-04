@@ -15,5 +15,73 @@
       "tertiary": "#8540B8",
       "error": "#C9342B"
     }
+  },
+  {
+    "name": "Catppuccin",
+    "dark": {
+      "surface": "#1E1E2E",
+      "primary": "#89B4FA",
+      "secondary": "#A6E3A1",
+      "tertiary": "#CBA6F7",
+      "error": "#F38BA8"
+    },
+    "light": {
+      "surface": "#EFF1F5",
+      "primary": "#1E66F5",
+      "secondary": "#40A02B",
+      "tertiary": "#8839EF",
+      "error": "#D20F39"
+    }
+  },
+  {
+    "name": "Gruvbox",
+    "dark": {
+      "surface": "#282828",
+      "primary": "#83A598",
+      "secondary": "#B8BB26",
+      "tertiary": "#D3869B",
+      "error": "#FB5946"
+    },
+    "light": {
+      "surface": "#F2E5BC",
+      "primary": "#076678",
+      "secondary": "#79740E",
+      "tertiary": "#8F3F71",
+      "error": "#9D0006"
+    }
+  },
+  {
+    "name": "Rose Pine",
+    "dark": {
+      "surface": "#191724",
+      "primary": "#C4A7E7",
+      "secondary": "#9CCFD8",
+      "tertiary": "#EBBCBA",
+      "error": "#EB6F92"
+    },
+    "light": {
+      "surface": "#FAF4ED",
+      "primary": "#286983",
+      "secondary": "#56949F",
+      "tertiary": "#907AA9",
+      "error": "#AD556E"
+    }
+  },
+  {
+    "name": "Tokyo Night",
+    "dark": {
+      "surface": "#1A1B26",
+      "primary": "#7AA2F7",
+      "secondary": "#9ECE6A",
+      "tertiary": "#BB9AF7",
+      "error": "#F7768E"
+    },
+    "light": {
+      "surface": "#E1E2E7",
+      "primary": "#1970E7",
+      "secondary": "#587539",
+      "tertiary": "#9854F1",
+      "error": "#E60B4B"
+    }
   }
 ]
