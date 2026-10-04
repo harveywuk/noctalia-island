@@ -239,6 +239,22 @@ features (`c72a96231`): the first two measured the capsule from pixels that the 
 now lights, and bars clicked Settings coordinates from before the restyle; it now navigates with
 `settings-open bar/widgets` and finds buttons by their text.
 
+### Readability and curated palettes
+
+A contrast audit (every OCR'd word on Settings, the Control Center, the Island, notifications and
+the launcher, both modes, glass on) drove these changes:
+
+- Light glass is much more opaque than dark (`src/ui/material.cpp`), and Settings' grouped cards
+  are nearly opaque white in light mode (`settingsGroupedCardFill`). Light Settings went from
+  52-59 words under 4.5:1 per page to 0-2. Settings rebuilds its content on a light/dark switch.
+- Badges and notices keep their tint but set text in the body colour; launcher secondary text is
+  the body colour at reduced opacity.
+- Catppuccin, Gruvbox, Rose Pine and Tokyo Night are bundled next to macOS, mapped from their
+  official colours with small lightness nudges where a pair fell short. `community_palettes_test`
+  checks every bundled palette; `theme.curated_palettes` (default on) hides the online catalogue.
+- The dark accent stays `#0072E3`: the palette test requires 4.5:1 for white text on the accent,
+  which Apple's brighter `#0A84FF` doesn't meet.
+
 ## Proposed next priorities
 
 1. **Greeter check:** build `1.5.0.r3.g5a82d5c` (branch `feature/cupertino`, pushed to the
