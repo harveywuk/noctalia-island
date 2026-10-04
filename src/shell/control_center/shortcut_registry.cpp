@@ -89,6 +89,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("network"); }
+    bool opensDetail() const override { return true; }
 
   private:
     INetworkService* m_svc;
@@ -135,6 +136,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("bluetooth"); }
+    bool opensDetail() const override { return true; }
 
   private:
     BluetoothService* m_svc;
@@ -201,8 +203,9 @@ namespace {
     explicit NotificationShortcut(NotificationManager* svc) : m_svc(svc) {}
     std::string_view id() const override { return "notification"; }
     std::string defaultLabel() const override { return i18n::tr("control-center.shortcuts.notification"); }
-    std::string_view iconOn() const override { return "bell-off"; }
-    std::string_view iconOff() const override { return "bell"; }
+    // Focus's crescent, as macOS draws Do Not Disturb.
+    std::string_view iconOn() const override { return "moon"; }
+    std::string_view iconOff() const override { return "moon"; }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && m_svc->doNotDisturb(); }
     std::string statusText() const override {
@@ -219,6 +222,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("notifications"); }
+    bool opensDetail() const override { return true; }
 
   private:
     NotificationManager* m_svc;
@@ -340,6 +344,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("audio"); }
+    bool opensDetail() const override { return true; }
 
   private:
     PipeWireService* m_svc;
@@ -375,6 +380,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("audio"); }
+    bool opensDetail() const override { return true; }
 
   private:
     PipeWireService* m_svc;
@@ -461,6 +467,7 @@ namespace {
     std::string_view iconOff() const override { return "weather-cloud-sun"; }
     void onClick() override { openTab("weather"); }
     void onRightClick() override { openTab("weather"); }
+    bool opensDetail() const override { return true; }
 
   private:
     WeatherService* m_svc;
@@ -565,6 +572,7 @@ namespace {
       }
     }
     void onRightClick() override { openTab("media"); }
+    bool opensDetail() const override { return true; }
 
   private:
     MprisService* m_svc;
@@ -578,6 +586,7 @@ namespace {
     std::string_view iconOff() const override { return "activity"; }
     void onClick() override { openTab("system"); }
     void onRightClick() override { openTab("system"); }
+    bool opensDetail() const override { return true; }
   };
 
   class ScreenTimeShortcut final : public Shortcut {
@@ -588,6 +597,7 @@ namespace {
     std::string_view iconOff() const override { return "hourglass"; }
     void onClick() override { openTab("screen-time"); }
     void onRightClick() override { openTab("screen-time"); }
+    bool opensDetail() const override { return true; }
   };
 
   class WallpaperShortcut final : public Shortcut {

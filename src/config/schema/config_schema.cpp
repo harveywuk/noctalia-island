@@ -548,6 +548,7 @@ namespace noctalia::config::schema {
       static const Schema<ControlCenterConfig::HomeTabConfig> s = {
           field(&ControlCenterConfig::HomeTabConfig::cards, "cards"),
           field(&ControlCenterConfig::HomeTabConfig::stacked, "stacked"),
+          enumField(&ControlCenterConfig::HomeTabConfig::layout, "layout", kControlCenterHomeLayouts),
       };
       return s;
     }

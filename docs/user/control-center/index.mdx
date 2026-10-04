@@ -53,7 +53,7 @@ Use these context IDs with `noctalia msg panel-toggle control-center <context>` 
 
 | Context | Tab | What it shows |
 |---------|-----|---------------|
-| `home` | Home | User card, media summary, date/time, weather summary, and shortcut buttons |
+| `home` | Home | macOS-style modules (shortcuts, Display and Sound sliders, Now Playing), or the dashboard with the user card, media, clock and weather |
 | `media` | Media | MPRIS players, playback controls, queue-style player switching, and artwork |
 | `audio` | Audio | Output/input volume, mute controls, devices, streams, and media-related audio controls |
 | `monitor` | Monitor | Brightness controls for displays that expose writable backlight devices |
@@ -74,9 +74,33 @@ Every available tab except Home that isn't hidden also gets its own row in the l
 
 ## Home
 
-The Home tab is the default Control Center landing view. It combines frequently checked status with a compact shortcut grid.
+The Home tab is the default Control Center landing view. It has two layouts, set with `layout` under `[control_center.home]` or in **Settings → Control Center**.
 
-Click the avatar in the user card to pick a custom image. Noctalia saves the selected path as `[shell].avatar_path`.
+**Modules** (the default) follows the macOS Big Sur Control Center:
+
+- The first three [shortcuts](/noctalia/control-center/shortcuts/) are rows of one module: a round toggle, the name, and its state under it (the network, the connected devices, the power mode). The fourth is the wide tile beside it, and the fifth and sixth are small tiles under that.
+- **Display** is a brightness slider for every controllable display. It shows only when a backlight or DDC display can be written.
+- **Sound** is the output volume slider. Moving it unmutes, and the round button beside it opens the Audio tab to pick an output.
+- **Now Playing** shows the active player's artwork and track with play/pause and next.
+
+Toggles turn the accent colour when on. A click on a shortcut's name, or on a module's title, opens its tab (Wi-Fi opens Network, Display opens Monitor, Sound opens Audio). A shortcut without a tab toggles instead.
+
+**Dashboard** is the earlier layout: the user card over the media and clock cards, with the shortcuts as a grid of round toggles. `stacked = true` stacks its cards at full width.
+
+```toml
+[control_center.home]
+layout = "modules"   # or "dashboard"
+# cards = ["profile", "media", "clock", "shortcuts", "display", "sound"]
+# stacked = false    # dashboard only
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `layout` | string | `"modules"` | `"modules"` for the macOS-style modules, `"dashboard"` for the user card and clock layout |
+| `cards` | array | all six | Which cards show. Modules uses `shortcuts`, `display`, `sound` and `media`, always in that order. The dashboard uses `profile`, `media`, `clock` and `shortcuts`, in this order when stacked. |
+| `stacked` | bool | `false` | Dashboard only: show the cards at full width in the order of `cards` |
+
+In the dashboard, click the avatar in the user card to pick a custom image. Noctalia saves the selected path as `[shell].avatar_path`.
 
 When AccountsService is available, Noctalia also writes the selected avatar to `org.freedesktop.Accounts` as your user's `IconFile`. That is what Noctalia Greeter reads for the login user list. On distros where this is not enabled by default, install and enable **accountsservice** (usually the `accounts-daemon` service) if you want the same avatar in both the shell and the greeter.
 

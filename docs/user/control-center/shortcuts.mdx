@@ -27,10 +27,12 @@ type = "wallpaper"
 type = "session"
 ```
 
-When no `[[control_center.shortcuts]]` entries are defined, the default set is: `wifi`, `bluetooth`, `caffeine`, `nightlight`, `notification`, `power_profile`.
+When no `[[control_center.shortcuts]]` entries are defined, the default set is: `wifi`, `bluetooth`, `power_profile`, `notification`, `nightlight`, `caffeine`.
+
+In the Home tab's modules layout the order places them: the first three are rows of the connectivity module, the fourth is the wide tile beside it, and the fifth and sixth are small tiles. The default puts Do Not Disturb in the wide tile, as macOS does.
 Set `shortcuts = []` under `[control_center]` to hide all Home shortcut buttons.
 
-Use `show_shortcut_labels` under `[control_center]` to show or hide the text under each shortcut icon (default `true`). When labels are off, the icons scale with the shortcut cell size, which is useful at narrower Control Center widths.
+Use `show_shortcut_labels` under `[control_center]` to show or hide the text under each shortcut icon in the dashboard layout (default `true`). When labels are off, the icons scale with the shortcut cell size, which is useful at narrower Control Center widths.
 
 ```toml
 [control_center]
@@ -50,7 +52,7 @@ show_shortcut_labels = false
 | `wifi` | Wi-Fi | Toggle wireless on/off | Open network tab |
 | `bluetooth` | Bluetooth | Toggle adapter on/off | Open bluetooth tab |
 | `nightlight` | Night Light | Toggle blue-light filter (forced -> scheduled-on) | Toggle always-on (force) |
-| `notification` | DND | Toggle Do Not Disturb | Open notifications tab |
+| `notification` | Do Not Disturb | Toggle Do Not Disturb | Open notifications tab |
 | `dark_mode` | Dark Mode | Toggle light/dark theme | - |
 | `caffeine` | Caffeine | Toggle idle/sleep prevention | - |
 | `audio` | Audio | Toggle output mute | Open audio tab |

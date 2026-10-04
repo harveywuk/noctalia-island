@@ -682,6 +682,7 @@ _noctalia_sources = files(
   'src/shell/control_center/tabs/power_tab.cpp',
   'src/shell/control_center/tabs/screen_time_tab.cpp',
   'src/shell/control_center/tabs/home_tab.cpp',
+  'src/shell/control_center/tabs/home_tab_modules.cpp',
   'src/shell/control_center/plugin_shortcut.cpp',
   'src/shell/control_center/shortcut_registry.cpp',
   'src/shell/control_center/tabs/system_tab.cpp',

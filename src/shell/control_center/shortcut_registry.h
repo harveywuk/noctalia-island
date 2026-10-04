@@ -26,6 +26,9 @@ public:
   // The tooltip for the shortcut's tile: "Wi-Fi: Home-5G" style when there is a status, else the
   // label. Like macOS' menu bar extras, it says what the control is and its current state.
   [[nodiscard]] virtual std::string tooltipText() const;
+  // True when right click opens a detail view (a Control Center tab); in the Home modules a
+  // click on the shortcut's name then opens it, as a click on "Wi-Fi" does on macOS.
+  [[nodiscard]] virtual bool opensDetail() const { return false; }
 
   virtual void onClick() {}
   virtual void onRightClick() {}

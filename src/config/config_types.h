@@ -2355,11 +2355,26 @@ struct ThemeConfig {
   return theme.mode;
 }
 
+// The Home tab's arrangement: macOS Big Sur's Control Center modules (connectivity, tiles,
+// Display and Sound sliders, Now Playing), or the dashboard with the profile and clock cards.
+enum class ControlCenterHomeLayout : std::uint8_t {
+  Modules = 0,
+  Dashboard = 1,
+};
+
+constexpr EnumOption<ControlCenterHomeLayout> kControlCenterHomeLayouts[] = {
+    {ControlCenterHomeLayout::Modules, "modules", "settings.options.control-center.home-layout.modules"},
+    {ControlCenterHomeLayout::Dashboard, "dashboard", "settings.options.control-center.home-layout.dashboard"},
+};
+
 struct ControlCenterConfig {
   static constexpr std::int32_t kDefaultWidth = 700;
 
   struct HomeTabConfig {
-    std::vector<std::string> cards = {"profile", "media", "clock", "shortcuts"};
+    // Modules shows shortcuts, display, sound and media, always in that order; the dashboard
+    // shows profile, media, clock and shortcuts (in this order when stacked).
+    std::vector<std::string> cards = {"profile", "media", "clock", "shortcuts", "display", "sound"};
+    ControlCenterHomeLayout layout = ControlCenterHomeLayout::Modules;
     bool stacked = false;
     bool operator==(const HomeTabConfig&) const = default;
   };

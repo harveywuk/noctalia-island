@@ -84,3 +84,21 @@ Fixed on this branch:
 - **The Settings window's header buttons have tooltips**: "More Actions" on the ellipsis and "Close" on the close button.
 
 Looked at and left: the bar widgets (network, volume, battery, Bluetooth, weather, system monitor, clock) already show key/value tables that resize to their rows, and the dock and taskbar show the window's own title.
+
+## Sixth pass (4 October 2026): the Big Sur Control Center as the reference
+
+Harvey supplied a screenshot of the macOS Big Sur Control Center (the main panel and its Display, Sound, Do Not Disturb, AirDrop and Screen Mirroring menus) as the reference for the Control Center and the Island.
+
+Changed on this branch:
+
+- **Home is laid out as Big Sur's modules** (`[control_center.home] layout = "modules"`, the new default). The first three shortcuts are rows of one module, each a round toggle with the name and its state under it ("Wi-Fi / Home-5G", "Power Mode / Balanced"); the fourth is the wide tile beside it (Do Not Disturb by default, as on macOS); the fifth and sixth are small tiles under that. Below them are the Display and Sound modules, each a title over a thick white-filled slider with its symbol inside the groove (Sound has the round output button that opens the Audio tab), and Now Playing with the artwork, track, play/pause and next. Toggles fill with the accent when on and are grey discs when off. A click on a name or a module title opens its tab, as a click on "Wi-Fi" or "Sound" does on macOS. Display shows only with a writable backlight or DDC display; Sound only with PipeWire.
+- **The default shortcut order** became Wi-Fi, Bluetooth, Power Mode, Do Not Disturb, Night Light, Caffeine, so the modules match the reference. DND's caption reads "Do Not Disturb" and its symbol is the moon.
+- **The dashboard stays** as `layout = "dashboard"`, unchanged apart from the new caption; `cards` gains `display` and `sound`.
+- **The Island's volume, microphone and brightness OSDs** (Cupertino look) are Big Sur's Sound and Display modules on the black capsule: the name, the level at the right where shown, and the white-filled groove with the symbol inside.
+- **The Do Not Disturb and Charging pills** draw the Big Sur tile: a solid indigo (or green) round toggle with a white symbol, grey when off, and the name with its state under it.
+
+![Big Sur modules, light and dark](assets/control-center/big-sur-modules.png)
+![Toggles on](assets/control-center/big-sur-toggled.png)
+![Island OSDs](assets/island/big-sur-osd.png)
+
+The container has no backlight or PipeWire, so the Display and Sound modules in the first screenshot came from a probe build that forced them on with fixed levels; the shipped code shows them only when the services exist. The OSD screenshots came from a probe build that let `osd-show` send level and DND events. Neither hook is in the branch.

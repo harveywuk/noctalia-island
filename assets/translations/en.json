@@ -59,6 +59,11 @@
       "close": "Close",
       "more": "{count} more",
       "more-plural": "{count} more"
+    },
+    "osd": {
+      "display": "Display",
+      "microphone": "Microphone",
+      "sound": "Sound"
     }
   },
   "auth": {
@@ -382,7 +387,14 @@
         "fetching": "Fetching forecast…"
       },
       "customise": "Customise Home",
-      "empty": "No Home cards. Add cards using the settings button above."
+      "empty": "No Home cards. Add cards using the settings button above.",
+      "modules": {
+        "display": "Display",
+        "display-settings": "Display Settings",
+        "sound": "Sound",
+        "sound-output": "Sound Output",
+        "sound-settings": "Sound Settings"
+      }
     },
     "media": {
       "active-player": "Active player",
@@ -523,7 +535,7 @@
         "scheduled-day": "Scheduled",
         "scheduled-night": "Running"
       },
-      "notification": "DND",
+      "notification": "Do Not Disturb",
       "power-profile": "Power Mode",
       "screen-time": "Screen Time",
       "session": "Session",
@@ -2208,6 +2220,10 @@
         }
       },
       "control-center": {
+        "home-layout": {
+          "dashboard": "Dashboard",
+          "modules": "Modules"
+        },
         "sidebar": {
           "compact": "Compact",
           "full": "Full",
@@ -2377,7 +2393,9 @@
         "profile": "Profile",
         "media": "Media",
         "clock": "Clock and weather",
-        "shortcuts": "Shortcuts"
+        "shortcuts": "Shortcuts",
+        "display": "Display",
+        "sound": "Sound"
       },
       "island": {
         "timers-downloads-media": "Timers → Downloads → Media",
@@ -3646,11 +3664,11 @@
         },
         "home-cards": {
           "label": "Home cards",
-          "description": "Add or remove cards. Use the arrows to arrange them in the stacked layout."
+          "description": "Add or remove cards. Modules shows shortcuts, display, sound and media in that order; the dashboard shows profile, media, clock and shortcuts, arranged with the arrows when stacked."
         },
         "home-stacked": {
           "label": "Stack Home cards",
-          "description": "Show cards at full width in the order above. Turn off for the dashboard layout."
+          "description": "Dashboard layout only: show cards at full width in the order above."
         },
         "launcher-prefix-windowmanagement": {
           "label": "Window Management Prefix",
@@ -3735,6 +3753,10 @@
         "launcher-ai-key-command": {
           "label": "API Key Command",
           "description": "A command that prints the API key for an online service (pass show openai), so the key stays out of config.toml; the service’s environment variable also works"
+        },
+        "home-layout": {
+          "label": "Home layout",
+          "description": "Modules arranges Home like the macOS Control Center: connectivity, toggles, Display and Sound sliders, and Now Playing. Dashboard shows the profile and clock cards beside the shortcuts."
         }
       },
       "power": {

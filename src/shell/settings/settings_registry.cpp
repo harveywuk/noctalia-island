@@ -1814,9 +1814,17 @@ namespace settings {
                 {{"profile", tr("settings.options.home-cards.profile")},
                  {"media", tr("settings.options.home-cards.media")},
                  {"clock", tr("settings.options.home-cards.clock")},
-                 {"shortcuts", tr("settings.options.home-cards.shortcuts")}}
+                 {"shortcuts", tr("settings.options.home-cards.shortcuts")},
+                 {"display", tr("settings.options.home-cards.display")},
+                 {"sound", tr("settings.options.home-cards.sound")}}
         },
-        "home cards visible hide show reorder profile music clock weather shortcuts"
+        "home cards visible hide show reorder profile music clock weather shortcuts display brightness sound volume"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-layout.label"),
+        tr("settings.schema.panels.home-layout.description"), {"control_center", "home", "layout"},
+        asSegmented(enumSelect(kControlCenterHomeLayouts, cfg.controlCenter.homeTab.layout)),
+        "home layout modules dashboard big sur macos control centre"
     ));
     entries.push_back(makeEntry(
         SettingsSection::ControlCenter, "home", tr("settings.schema.panels.home-stacked.label"),
