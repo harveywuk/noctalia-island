@@ -234,26 +234,23 @@ resize. On compositors that animate layer resizes some other way, expect the sam
 
 ### Smoke suites
 
-All nine `--island-*-only` suites pass. Routing, bars and activity-cycle had drifted from the
-features (`c72a96231`): the first two measured the capsule from pixels that the artwork gradient
-now lights, and bars clicked Settings coordinates from before the restyle; it now navigates with
-`settings-open bar/widgets` and finds buttons by their text.
+All 31 suites pass (`hyprland_smoke.py` with no flag and every `--*-only` flag, plus
+`capture_smoke.py` and `island_settings_smoke.py`). Several had drifted from the restyled
+Settings and now open pages with `settings-open <section>/<group>` and find controls by text
+through `tests/ocr.py`, which tries a 2x upscale, an inverted one, a 3x thresholded one and
+sparse mode, ignores punctuation at word edges and tolerates one-letter slips. Use it for new
+checks instead of fixed coordinates.
 
-### Readability and curated palettes
+The sweep found real regressions, fixed on 4 October: the screenshot toolbar lost its record
+buttons after the Island surface change (`158afc38c`), the Notification Centre stopped marking
+notifications seen (`01cee3d8e`), and finished sounds kept a PipeWire connection
+open (`217bb0114`).
 
-A contrast audit (every OCR'd word on Settings, the Control Center, the Island, notifications and
-the launcher, both modes, glass on) drove these changes:
+### Contrast audit, second pass
 
-- Light glass is much more opaque than dark (`src/ui/material.cpp`), and Settings' grouped cards
-  are nearly opaque white in light mode (`settingsGroupedCardFill`). Light Settings went from
-  52-59 words under 4.5:1 per page to 0-2. Settings rebuilds its content on a light/dark switch.
-- Badges and notices keep their tint but set text in the body colour; launcher secondary text is
-  the body colour at reduced opacity.
-- Catppuccin, Gruvbox, Rose Pine and Tokyo Night are bundled next to macOS, mapped from their
-  official colours with small lightness nudges where a pair fell short. `community_palettes_test`
-  checks every bundled palette; `theme.curated_palettes` (default on) hides the online catalogue.
-- The dark accent stays `#0072E3`: the palette test requires 4.5:1 for white text on the accent,
-  which Apple's brighter `#0A84FF` doesn't meet.
+Notification Centre, session menu, polkit prompt, wallpaper panel, OSD, dock tooltip and lock
+screen all clear 4.5:1 in both modes; the only exception is the polkit password placeholder
+(4.2:1 in dark mode), left fainter on purpose like other placeholders.
 
 ## Proposed next priorities
 
@@ -263,8 +260,8 @@ the launcher, both modes, glass on) drove these changes:
 2. **3090 measurement:** read the desktop Hyprland's GPU use with the Island and Control Center open,
    to confirm the surface change on the real GPU.
 3. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
-4. **Remaining text fit and reduced-motion marquees:** carried over from 1 October
-   (`--text-fit-only`).
+4. **Text fit:** `--text-fit-only` reports no newly cut-off labels (German and English at 1.5x).
+   Scrolling labels already stop when animations are off (`--marquee-motion-only`).
 5. **Release preparation:** group remaining issues, run the full integration matrix, prepare
    release notes and decide which fixes to offer upstream (high contrast, logind fallback,
    greeter frame loop are generic).
