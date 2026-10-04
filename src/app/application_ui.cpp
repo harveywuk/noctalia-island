@@ -640,7 +640,12 @@ void Application::initPanelManagerAndPanels() {
   m_panelManager.registerPanel("control-center", std::move(controlCenterPanel));
   {
     auto notificationCenter = std::make_unique<NotificationCenterPanel>(&m_notificationManager, &m_compositorPlatform);
-    notificationCenter->onOpened = [this]() { m_notificationToast.hideAllBanners(); };
+    notificationCenter->onOpened = [this]() {
+      m_notificationToast.hideAllBanners();
+      // Opening the history is reading it, as the Control Center tab it replaced did; this clears
+      // the Island's unread bell.
+      m_notificationManager.markNotificationHistorySeen();
+    };
     m_panelManager.registerPanel("notification-center", std::move(notificationCenter));
   }
   {
