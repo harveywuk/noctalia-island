@@ -254,6 +254,10 @@ private:
   Image* m_mediaFlowImage = nullptr;
   control_center::ArtworkFlowLayer m_mediaFlow;
   std::string m_mediaFlowUrl;
+  // Set when the current artwork should be (re)tried: a new track, or its download landing.
+  bool m_mediaFlowPending = false;
+  // The artwork file last tried, so a cached file that will not decode is tried only once.
+  std::string m_mediaFlowTried;
   std::string m_lastMediaTitle;
   std::string m_lastMediaArtist;
   std::string m_lastWeatherFingerprint;

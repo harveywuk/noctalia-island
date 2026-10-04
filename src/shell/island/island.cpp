@@ -136,6 +136,8 @@ struct Island::Instance {
   // How much of the outgoing content still shows (1 → 0); the incoming content waits on it so
   // two views (two clocks, say) never show at once.
   float outgoingFade = 0.0F;
+  // The capsule width the outgoing content was laid out for, to keep it centred as it fades.
+  float outgoingWidth = 0.0F;
   ScrollView* activityScroll = nullptr;
   island::View previousView = island::View::Rest;
   float scale = 1;
@@ -1173,6 +1175,8 @@ void Island::geometry(Instance& inst) {
     inst.flowImage->setSize(inst.width * s, inst.height * s);
     inst.flowImage->setRadius(radius);
   }
+  if (inst.outgoing)
+    inst.outgoing->setPosition((inst.width - inst.outgoingWidth) * s / 2, 0);
   if (inst.content) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
     // Conceal content until the expanding capsule has room to contain it.
@@ -3259,6 +3263,7 @@ void Island::crossfadeOut(Instance& inst, std::unique_ptr<Node> previous) {
   // Behind the incoming content, which is added after it.
   inst.outgoing = inst.background->addChild(std::move(previous));
   Node* outgoing = inst.outgoing;
+  inst.outgoingWidth = inst.targetWidth; // not yet the new view's
   const float startOpacity = outgoing->opacity();
   inst.outgoingFade = startOpacity > 0.01F ? 1.0F : 0.0F;
   inst.animations.animate(

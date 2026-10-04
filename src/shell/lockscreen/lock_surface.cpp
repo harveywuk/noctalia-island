@@ -2146,15 +2146,32 @@ void LockSurface::syncMediaBackdrop(Renderer& renderer) {
   const std::string artUrl = playing ? mpris::effectiveArtUrl(*active) : std::string{};
   if (artUrl != m_mediaFlowUrl) {
     m_mediaFlowUrl = artUrl;
-    if (artUrl.empty()) {
-      m_mediaFlow.clear();
-    } else {
-      const std::string artPath = mpris::resolveArtworkSource(
-          m_httpClient, m_pendingArtDownloads, artUrl, [this] { requestUpdate(); }, m_aliveGuard
-      );
-      // Remote artwork may still be downloading; its completion asks for another update.
-      if (artPath.empty() || !m_mediaFlow.load(renderer, artPath))
-        m_mediaFlowUrl.clear();
+    m_mediaFlow.clear();
+    m_mediaFlowPending = !artUrl.empty();
+    m_mediaFlowTried.clear();
+  }
+  // The media widget may have started the download (the queue is shared and deduplicated, so our
+  // callback was never registered): pick the file up once it is cached.
+  if (!m_mediaFlowPending && !artUrl.empty() && !m_mediaFlow.hasArtwork()) {
+    const std::string cached = mpris::cachedArtworkPath(artUrl);
+    m_mediaFlowPending = !cached.empty() && cached != m_mediaFlowTried;
+  }
+  // One try per track: remote artwork that is still downloading re-arms this when it lands, and
+  // one that fails to download (or decode) is not fetched again on every update.
+  if (m_mediaFlowPending) {
+    m_mediaFlowPending = false;
+    const std::string artPath = mpris::resolveArtworkSource(
+        m_httpClient, m_pendingArtDownloads, artUrl,
+        [this] {
+          m_mediaFlowPending = true;
+          requestUpdate();
+        },
+        m_aliveGuard
+    );
+    if (!artPath.empty()) {
+      m_mediaFlowTried = artPath;
+      if (!m_mediaFlow.load(renderer, artPath))
+        m_mediaFlow.clear();
     }
   }
   m_mediaFlow.setAnimating(playing && m_mediaFlow.hasArtwork());
