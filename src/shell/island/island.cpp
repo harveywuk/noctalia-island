@@ -133,6 +133,9 @@ struct Island::Instance {
   // View crossfades: the outgoing content fading out, and the incoming content's fade-in factor.
   Node* outgoing = nullptr;
   float contentFade = 1.0F;
+  // How much of the outgoing content still shows (1 → 0); the incoming content waits on it so
+  // two views (two clocks, say) never show at once.
+  float outgoingFade = 0.0F;
   ScrollView* activityScroll = nullptr;
   island::View previousView = island::View::Rest;
   float scale = 1;
@@ -1174,7 +1177,7 @@ void Island::geometry(Instance& inst) {
     inst.content->setPosition((inst.width - inst.targetWidth) * s / 2, 0);
     // Conceal content until the expanding capsule has room to contain it.
     const float gap = std::max(std::abs(inst.width - inst.targetWidth), std::abs(inst.height - inst.targetHeight));
-    inst.content->setOpacity(std::clamp(1 - gap / 55, 0.0F, 1.0F) * inst.contentFade);
+    inst.content->setOpacity(std::clamp(1 - gap / 55, 0.0F, 1.0F) * inst.contentFade * (1 - inst.outgoingFade));
     inst.content->setHitTestVisible(inst.content->opacity() > 0.1F);
   }
   const std::array<int, 4> inputRegion{
@@ -3257,13 +3260,22 @@ void Island::crossfadeOut(Instance& inst, std::unique_ptr<Node> previous) {
   inst.outgoing = inst.background->addChild(std::move(previous));
   Node* outgoing = inst.outgoing;
   const float startOpacity = outgoing->opacity();
+  inst.outgoingFade = startOpacity > 0.01F ? 1.0F : 0.0F;
   inst.animations.animate(
       0, 1, kViewFadeOutMs, Easing::EaseOutCubic,
-      [outgoing, startOpacity](float t) { outgoing->setOpacity(startOpacity * (1 - t)); },
+      [this, &inst, outgoing, startOpacity](float t) {
+        outgoing->setOpacity(startOpacity * (1 - t));
+        if (inst.outgoing == outgoing) {
+          inst.outgoingFade = startOpacity > 0.01F ? 1 - t : 0.0F;
+          geometry(inst);
+        }
+      },
       [this, &inst, outgoing] {
         if (inst.outgoing != outgoing)
           return;
         inst.outgoing = nullptr;
+        inst.outgoingFade = 0.0F;
+        geometry(inst);
         // Detach outside the animation tick; the instance or ghost may be gone by then.
         DeferredCall::callLater([this, instance = &inst, outgoing] {
           for (auto& ptr : m_instances) {
@@ -3608,6 +3620,13 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   inst.enter.stop();
   inst.leave.stop();
   inst.animations.cancelAll();
+  // Finish any view crossfade the cancel cut short, so the Island comes back fully drawn.
+  if (inst.outgoing != nullptr) {
+    (void)inst.background->removeChild(inst.outgoing);
+    inst.outgoing = nullptr;
+  }
+  inst.outgoingFade = 0.0F;
+  inst.contentFade = 1.0F;
   inst.seeking = false;
   inst.activeSeek = {};
   inst.pressedAction.clear();
