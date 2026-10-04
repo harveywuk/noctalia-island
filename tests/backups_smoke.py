@@ -45,12 +45,13 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
                 r[key] = str(int(r[key])//2)
         return rows
     def locate(text, starts_line=False):
-        target = text.lower().split()
+        target = [w.strip('<>‹›‘’“”"\'|.,:;') for w in text.lower().split()]
         for variant in ('plain', 'inverted'):
             rows = words(variant)
             for i in range(len(rows)-len(target)+1):
                 if starts_line and rows[i]['word_num'] != '1': continue
-                if [r['text'].lower() for r in rows[i:i+len(target)]] == target:
+                # OCR glues a link's arrow to its word ("<Back") and adds stray marks at edges.
+                if [r['text'].lower().strip('<>‹›‘’“”"\'|.,:;') for r in rows[i:i+len(target)]] == target:
                     selected = rows[i:i+len(target)]
                     left = min(int(r['left']) for r in selected); top = min(int(r['top']) for r in selected)
                     right = max(int(r['left'])+int(r['width']) for r in selected)

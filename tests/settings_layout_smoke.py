@@ -25,25 +25,42 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         move(x,y); command('press'); time.sleep(.12); command('release'); time.sleep(.9)
     def screenshot(name='current'):
         path = out/(name+'.png'); run(['grim','-o','TEST-1',str(path)]); return path
-    def words():
+    def words(variant='plain'):
         # OCR locates actual labels; coordinates vary with translated text, fonts,
         # status banners and the length of the review, so fixed clicks are brittle.
+        # It reads a 2x upscale, and an inverted one for light labels on grey buttons.
+        from PIL import Image, ImageOps
         tessdata = os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata'))
-        result = run(['tesseract',str(screenshot()),'stdout','--tessdata-dir',tessdata,'--psm','11',
-                      '-c','tessedit_create_tsv=1','-c','user_defined_dpi=96'])
+        scale = 3 if variant == 'threshold' else 2
+        image = Image.open(screenshot()).convert('L')
+        image = image.resize((image.width*scale, image.height*scale), Image.LANCZOS)
+        if variant == 'inverted':
+            image = ImageOps.autocontrast(ImageOps.invert(image))
+        elif variant == 'threshold':
+            # Light text on the grey highlighted row only reads as black-on-white.
+            image = image.point(lambda value: 0 if value > 140 else 255)
+        image.save(out/'ocr.png')
+        result = run(['tesseract',str(out/'ocr.png'),'stdout','--tessdata-dir',tessdata,'--psm','11',
+                      '-c','tessedit_create_tsv=1','-c',f'user_defined_dpi={96*scale}'])
         (out/'ocr-last.tsv').write_text(result)
-        return [r for r in csv.DictReader(io.StringIO(result), delimiter='\t', quoting=csv.QUOTE_NONE) if r.get('text','').strip()]
+        rows = [r for r in csv.DictReader(io.StringIO(result), delimiter='\t', quoting=csv.QUOTE_NONE) if r.get('text','').strip()]
+        for r in rows:
+            for k in ('left', 'top', 'width', 'height'):
+                r[k] = str(int(r[k])//scale)
+        return rows
     def locate(text, starts_line=False):
-        target = text.lower().split()
-        rows = words()
-        for i in range(len(rows)-len(target)+1):
-            if starts_line and rows[i]['word_num'] != '1': continue
-            if [r['text'].lower() for r in rows[i:i+len(target)]] == target:
-                selected = rows[i:i+len(target)]
-                left = min(int(r['left']) for r in selected); top = min(int(r['top']) for r in selected)
-                right = max(int(r['left'])+int(r['width']) for r in selected)
-                bottom = max(int(r['top'])+int(r['height']) for r in selected)
-                return ((left+right)//2, (top+bottom)//2)
+        target = [w.strip('<>‹›‘’“”"\'|.,:;') for w in text.lower().split()]
+        for variant in ('plain', 'inverted', 'threshold'):
+            rows = words(variant)
+            for i in range(len(rows)-len(target)+1):
+                if starts_line and rows[i]['word_num'] != '1': continue
+                # OCR glues a link's arrow to its word ("<Back") and adds stray marks at edges.
+                if [r['text'].lower().strip('<>‹›‘’“”"\'|.,:;') for r in rows[i:i+len(target)]] == target:
+                    selected = rows[i:i+len(target)]
+                    left = min(int(r['left']) for r in selected); top = min(int(r['top']) for r in selected)
+                    right = max(int(r['left'])+int(r['width']) for r in selected)
+                    bottom = max(int(r['top'])+int(r['height']) for r in selected)
+                    return ((left+right)//2, (top+bottom)//2)
         return None
     def scroll(steps):
         move(1000,590); command(f'scroll {steps}'); time.sleep(.4)
@@ -96,10 +113,14 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         click_text('Back');wait(lambda:locate('General'), 'Island overview after Back')
         open_page('input-motion','Touchpad')
         screenshot('settings-touchpad')
-        point=locate('Overridden');assert point
-        click(1224,point[1])
+        # "Show Only Changed Settings" lives in the window's actions (⋯) menu, top right.
+        def toggle_changed_only():
+            # The menu drops below the button; its second item is the filter. (Searching by text
+            # would scroll the page, which closes the menu.)
+            click(1193,127); click(1140,186)
+        toggle_changed_only()
         assert locate('No settings found') and locate('Back')
-        click(1224,point[1])
+        toggle_changed_only()
         # Ctrl+F finds controls across pages, and clearing search restores the page.
         key('chord 2 33')
         for k in [48,30,46,37,22,25,31]: key(k) # backups
@@ -136,9 +157,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert locate('Inherited')
         screenshot('settings-monitor-override')
         click_text('Monitor Override');key(1)
-        point=locate('Overridden');assert point
-        click(1224,point[1]);assert locate('Back')
-        click(1224,point[1])
+        toggle_changed_only();assert locate('Back')
+        toggle_changed_only()
         (cfg/'config.toml').write_bytes(original);msg('config-reload')
         msg('settings-close');msg('settings-open','displays');time.sleep(.8)
         assert locate('Identify displays')
