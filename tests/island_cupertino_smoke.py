@@ -6,7 +6,10 @@ import os
 import pathlib
 import subprocess
 import sys
+import threading
 import time
+
+from PIL import Image, ImageChops, ImageFilter
 
 
 def prepare(base, cfg, env):
@@ -142,8 +145,37 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             msg('panel-open', 'control-center', 'home'); time.sleep(.5); shot(mode+'-hosted-panel')
             msg('panel-close'); time.sleep(.5); shot(mode+'-panel-return')
 
-        # The shared corner preference applies to both the ring and borrowed panel surface.
+        # A panel opened from the hover view hands back a compact capsule; only the compact view
+        # may appear in it, not the wide hover view crossfading out (a second, clipped clock).
         config = cfg/'config.toml'
+        config.write_text(config.read_text().replace('[shell.animation]\nenabled=false',
+                                                     '[shell.animation]\nenabled=true\nspeed=0.5'))
+        msg('config-reload'); time.sleep(.6); leave(); time.sleep(1); hover(); time.sleep(1)
+        click(640, 30); time.sleep(1)
+        frames = []
+        def record():
+            for i in range(150):
+                frames.append(out/f'panel-return-{i:02d}.png')
+                run(['grim', '-g', '440,0 400x90', str(frames[-1])])
+        move(1100, 600); recorder = threading.Thread(target=record); recorder.start()
+        command(pointer, 'press'); time.sleep(.08); command(pointer, 'release'); recorder.join(); time.sleep(.5)
+        def bright(path):
+            return Image.open(path).convert('L').point(lambda v: 255 if v > 170 else 0)
+        settled = bright(frames[-1]).filter(ImageFilter.MaxFilter(7))
+        emptied = False
+        for path in frames:
+            mask = bright(path)
+            if not emptied:
+                emptied = mask.getbbox() is None
+                continue
+            stray = ImageChops.subtract(mask, settled).histogram()[255]
+            assert stray < 20, f'Content other than the compact view after the panel returned: {path}'
+        assert emptied, 'The returning panel never showed an empty capsule'
+        config.write_text(config.read_text().replace('[shell.animation]\nenabled=true\nspeed=0.5',
+                                                     '[shell.animation]\nenabled=false'))
+        msg('config-reload'); time.sleep(.6)
+
+        # The shared corner preference applies to both the ring and borrowed panel surface.
         config.write_text(config.read_text().replace('corner_radius_scale=1', 'corner_radius_scale=0.5')
                           .replace('track_preview_seconds=0', 'outer_progress_ring=true\ntrack_preview_seconds=0'))
         msg('config-reload'); time.sleep(.6); timer('PAUSED'); leave(); shot('scaled-corners-ring')
@@ -151,7 +183,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
         dispatch('hl.dsp.focus({monitor="TEST-2"})'); move(640, 760); shot('fractional-monitor-hover', 'TEST-2')
         assert shell.poll() is None and not ctl('configerrors').strip()
         print('PASS: light/dark Island cards, calendar, widgets, batteries, privacy, media controls and seeking, '
-              'activity tabs, notifications, OSD, keyboard, panel return, corner scale and fractional monitor', flush=True)
+              'activity tabs, notifications, OSD, keyboard, panel return (also from the hover view), corner scale '
+              'and fractional monitor', flush=True)
     finally:
         for proc in helpers:
             if proc.poll() is None:
