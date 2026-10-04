@@ -1,6 +1,8 @@
 # Dynamic Noctalia development handover
 
-Updated: 1 October 2026. Working branch: `feature/orbit-island`.
+Updated: 4 October 2026. Working branch: `feature/orbit-island`. The newest state is in
+[Checkpoint: 4 October 2026](#checkpoint-4-october-2026); the sections before it describe the
+1 October checkpoint and still apply.
 
 This checkpoint brings together the recent Hyprland settings work, Dynamic Island
 integration, Cupertino-inspired shell styling, and dock improvements. The latest
@@ -115,13 +117,15 @@ separate runs from the final live-preview check, not a claim that every integrat
 scenario was rerun after every edit. Physical HDR/VRR hardware and other compositor
 versions need their own validation.
 
-Follow [BUILDING.md](../BUILDING.md) for dependencies and a fresh checkout. The local
-development build directory is `build-rishot`; it is not committed. After configuring
-a build with tests enabled, useful commands are:
+Follow [BUILDING.md](../BUILDING.md) for dependencies and a fresh checkout. Build
+directories are not committed. `build-release` is the release build that gets installed;
+it does not compile the unit tests. `build-test` is a debug build with tests enabled.
+The Hyprland harness runs `build-rishot/noctalia`, so point that at the binary under test
+(for example `ln -sf ../build-release/noctalia build-rishot/noctalia`). Useful commands:
 
 ```sh
-meson compile -C build-rishot -j 6
-meson test -C build-rishot --no-rebuild --print-errorlogs
+meson compile -C build-test -j 6
+meson test -C build-test --no-rebuild --print-errorlogs
 python3 tools/i18n-check.py
 python3 tests/hyprland_smoke.py --dock-preview-only
 python3 tests/hyprland_smoke.py --dock-motion-only
@@ -160,17 +164,69 @@ in the isolated Hyprland harness and is installed on the development desktop.
 | Setup | [SETUP.md](SETUP.md), `scripts/install-local.sh`, `examples/starter.toml`, systemd unit and Hyprland start hook; `--starter-only` boots the starter config. |
 | Greeter | Separate fork `~/Projects/noctalia-greeter`, branch `feature/cupertino` (from v1.5.0): Cupertino layout, frame-loop fix for animations, `tests/visual_smoke.py`, Arch PKGBUILD. Built but not installed. |
 
+## Checkpoint: 4 October 2026
+
+### 2–3 October: the Ventura pass
+
+PRs #1 to #24 brought the shell closer to macOS Ventura: controls at macOS proportions (with
+matching GTK and Kvantum themes), notification banners and Notification Centre, the session
+menu, polkit prompt, dock badges, the Raycast-style launcher, Island script activities, quick
+pills, up-next events and the screenshot thumbnail. The fork's strings were translated into
+all 26 languages (`1a2b4ba2c`). [VENTURA_PROJECT.md](VENTURA_PROJECT.md) summarises that work
+and its guiding decisions; [ORBIT_ISLAND.md](ORBIT_ISLAND.md) documents the Island features.
+
+### 4 October: glass Island and Island polish
+
+All commits are on `feature/orbit-island` and pushed, except where noted. Everything below is
+installed on the development desktop.
+
+| Area | Change |
+|------|--------|
+| Glass Island | `glass` on an Island bar (**Settings → Dynamic Island → Glass**) makes the capsule and the panels it hosts translucent over the compositor's blur. The blur region traces the capsule and split bubbles in up to 64 rectangles instead of bounding boxes (`Surface::tessellateRoundedRect`, `setBlurRegionRectLimit`), so corners stay round. |
+| Activities | Edge progress rings around the capsule; a second split bubble for a third concurrent activity, ordered by `activity_priority`; a white visualiser and solid transport controls. |
+| Notifications | Critical notifications pulse with the capture glow instead of taking an outline. The banner's app icon is 32 px, the same as the unread card in the expanded view (`adc7f120f`, local only). |
+| Crossfades | The incoming view waits for the outgoing one to fade, and the outgoing view stays centred as the capsule morphs (`9fb647369`, `6f7b15112`). |
+| Control Center | Big Sur level sliders for volume and brightness, distinct tile icons, no percentages, Wired title. |
+| Lock screen | Artwork gradient background while media plays; each track's artwork is fetched once. |
+| Tests | Glass-region coarsening test; island and config round-trip tests updated for the glass key and edge-ring default. 152 of 152 unit tests pass in `build-test`. |
+
+### Hyprglass patch
+
+Smooth glass edges need two hyprglass changes that are not upstream yet:
+`layers:alpha_coverage` (layer glass follows surface alpha at the edges) and accepting up to
+64 protocol region rectangles (was 16). They are on branch `noctalia/alpha-coverage` of the
+fork `harveywuk/hyprglass`, offered upstream as
+[hyprnux/hyprglass#89](https://github.com/hyprnux/hyprglass/pull/89), which is still open.
+
+- Without the patch, glass edges look stepped and glow shows in the capsule's corners.
+- Nothing updates plugins automatically on the development desktop (no hyprpm). The local
+  hyprglass source checkout is on the patched branch, so a rebuild keeps the fix. Rebase it
+  onto new upstream releases until #89 is merged.
+- Restart Hyprland after replacing `hyprglass.so`. Reloading it in place left a window
+  decoration pointing at unloaded code and crashed Hyprland on 4 October.
+- To test glass in the harness, load the plugin in the private Hyprland
+  (`hyprctl plugin load <path>/hyprglass.so`), then `config-reload` the shell.
+
+### Known issue: two clocks while the Island shrinks
+
+Reported again after the crossfade fixes. It has not been reproduced in the harness with the
+desktop's config and settings: hover collapse with and without an unread bell, with media
+playing, at 0.2× and 1× animation speed, and the Control Center closing back into the Island
+all show one clock at a time. A screen recording from the desktop is the next step.
+
 ## Proposed next priorities
 
-1. **Translations:** the 1,024 strings added by the fork exist only in English in all 26
-   catalogs. Decide between machine translation with review or English fallback.
-2. **Remaining text fit:** two long descriptions exceed five lines at 1.5x; the palette-source
-   row and a few German controls still truncate (run `--text-fit-only`).
-3. **Marquee labels under reduced motion:** they keep scrolling by design; decide whether to
-   stop them when animations are off.
-4. **Greeter rollout:** install the package (see SETUP.md) and verify with the real synced
-   wallpaper, which the test harness cannot read.
-5. **Release preparation:** group remaining issues, run the full integration matrix, prepare
+1. **Two clocks while shrinking:** capture it on the desktop, then fix.
+2. **Greeter rollout:** the installed greeter package is an older build (`r1`). The current
+   build (`1.5.0.r3.g5a82d5c`, branch `feature/cupertino` of `~/Projects/noctalia-greeter`) is
+   built but not installed, and its commit is local only (its remote is upstream). Install it
+   and verify with the real synced wallpaper, which the test harness cannot read.
+3. **Glass performance:** measure Hyprland frame times with the glass Island expanding over
+   playing video, now that the shader takes up to 64 region rectangles per surface.
+4. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
+5. **Remaining text fit and reduced-motion marquees:** carried over from 1 October
+   (`--text-fit-only`).
+6. **Release preparation:** group remaining issues, run the full integration matrix, prepare
    release notes and decide which fixes to offer upstream (high contrast, logind fallback,
    greeter frame loop are generic).
 
