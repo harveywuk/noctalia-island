@@ -66,4 +66,7 @@ private:
   std::unordered_map<std::uint64_t, std::unordered_map<std::string, std::shared_ptr<const SoundBuffer>>>
       m_pluginBuffers;
   std::vector<std::unique_ptr<ActiveStream>> m_active;
+  // Lets a cleanup deferred from a stream callback tell whether this player still exists.
+  std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
+  bool m_cleanupQueued = false;
 };

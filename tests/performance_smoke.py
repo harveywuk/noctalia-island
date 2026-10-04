@@ -41,7 +41,13 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         deadline=time.monotonic()+int(os.environ['NOCTALIA_TEST_PERFORMANCE_INSPECT'])
         while time.monotonic()<deadline and not (out/'inspect-done').exists():time.sleep(.25)
     assert shell.poll() is None
-    assert all(s['fds'] == results[0]['fds'] for s in results), 'UI cycles leaked file descriptors'
+    # Like memory, allow the first batch to warm up caches that live for the session (one texture
+    # cache's eventfd); after that, repeated UI cycles must not open more descriptors. Finished
+    # sound streams used to keep a PipeWire connection each until the next sound.
+    assert results[1]['fds'] == results[0]['fds'], 'Idle shell opened file descriptors'
+    warm = next(i for i, s in enumerate(results) if s['label'] == 'closed-after-batch-1')
+    assert all(s['fds'] == results[warm]['fds'] for s in results[warm:]), 'UI cycles leaked file descriptors'
+    assert results[warm]['fds'] <= results[0]['fds'] + 2, 'First UI use kept more than a couple of descriptors open'
     # Allow cache warmup on the first batch; compare subsequent identical work.
     first = next(s for s in results if s['label']=='closed-after-batch-1')
     last = next(s for s in results if s['label']=='closed-after-batch-3')

@@ -1,5 +1,6 @@
 #include "pipewire/sound_player.h"
 
+#include "core/deferred_call.h"
 #include "core/log.h"
 #include "system/freedesktop_key_file.h"
 
@@ -222,6 +223,7 @@ void SoundPlayer::setTheme(std::string theme) {
 }
 
 SoundPlayer::~SoundPlayer() {
+  *m_alive = false;
   for (auto& active : m_active) {
     if (active->listener != nullptr) {
       spa_hook_remove(active->listener);
@@ -440,7 +442,20 @@ void SoundPlayer::processStream(ActiveStream& streamState) {
   }
 }
 
-void SoundPlayer::markFinished(ActiveStream& streamState) { streamState.finished = true; }
+void SoundPlayer::markFinished(ActiveStream& streamState) {
+  streamState.finished = true;
+  // Release the finished stream (and its PipeWire connection) soon, not at the next sound: a stream
+  // can't be destroyed from inside its own callback, so defer to the main loop.
+  if (m_cleanupQueued)
+    return;
+  m_cleanupQueued = true;
+  DeferredCall::callLater([this, alive = std::weak_ptr<bool>(m_alive)] {
+    if (alive.expired())
+      return;
+    m_cleanupQueued = false;
+    removeFinished();
+  });
+}
 
 void SoundPlayer::removeFinished() {
   std::erase_if(m_active, [](const std::unique_ptr<ActiveStream>& active) {
