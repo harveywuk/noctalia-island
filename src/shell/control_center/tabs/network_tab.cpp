@@ -108,7 +108,7 @@ namespace {
       return s.ssid;
     }
     if (s.kind == NetworkConnectivity::Wired && s.connected) {
-      return s.interfaceName.empty() ? i18n::tr("control-center.network.wired-connection") : s.interfaceName;
+      return i18n::tr("control-center.network.wired"); // not the adapter name (enp7s0)
     }
     if (s.kind == NetworkConnectivity::Cellular && s.connected) {
       if (modem != nullptr && !modem->operatorName.empty()) {
@@ -138,9 +138,7 @@ namespace {
       append(s.ipv4);
     }
     if (s.kind == NetworkConnectivity::Wireless) {
-      if (s.signalStrength > 0) {
-        append(std::to_string(static_cast<int>(s.signalStrength)) + "%");
-      }
+      // Signal strength shows in the Wi-Fi glyph; no percentage, as on macOS.
       if (const char* band = network_display::wifiFrequencyBandLabel(s.frequencyMhz); band != nullptr) {
         append(band);
       }
@@ -286,6 +284,7 @@ public:
             .text = percentText(m_ap.strength),
             .fontSize = Style::fontSizeCaption * scale,
             .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+            .visible = false, // the signal glyph shows strength
         })
     );
 

@@ -570,7 +570,7 @@ std::unique_ptr<Flex> HomeTab::createModules() {
   if (shown("sound") && m_services.audio != nullptr) {
     const float buttonSize = kToggleDiameter * scale;
     auto output = ui::button({
-        .glyph = "cast",
+        .glyph = "device-speaker", // the output picker; "cast" reads as screen sharing
         .glyphSize = kToggleGlyph * scale,
         .variant = ButtonVariant::Secondary,
         .tooltip = i18n::tr("control-center.home.modules.sound-output"),

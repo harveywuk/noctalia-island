@@ -448,6 +448,7 @@
       "wifi": "Wi-Fi",
       "wifi-off": "Wi-Fi is off",
       "wifi-on": "Wi-Fi is on",
+      "wired": "Wired",
       "wired-connection": "Wired connection"
     },
     "notifications": {

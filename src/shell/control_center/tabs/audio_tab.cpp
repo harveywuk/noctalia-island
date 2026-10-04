@@ -1058,6 +1058,7 @@ namespace {
                           .fontWeight = FontWeight::Bold,
                           .minWidth = m_valueLabelMinWidth,
                           .textAlign = TextAlign::End,
+                          .visible = false, // the slider shows the level, as on macOS
                       })
                   ),
                   ui::slider({
@@ -1784,6 +1785,7 @@ std::unique_ptr<Flex> AudioTab::createDeviceVolumeCard(DeviceVolumeCardSpec card
                   .fontWeight = FontWeight::Bold,
                   .minWidth = kValueLabelWidth * scale,
                   .textAlign = TextAlign::End,
+                  .visible = false, // the slider shows the level, as on macOS
               }),
               ui::button({
                   .out = &card.state.muteButton,

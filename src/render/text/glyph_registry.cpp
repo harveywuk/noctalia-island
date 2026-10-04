@@ -83,9 +83,10 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     {"hibernate", "zzz"},
 
     // Night light / dark mode
-    {"nightlight-on", "moon"},
-    {"nightlight-off", "moon-off"},
-    {"nightlight-forced", "moon-stars"},
+    // A setting sun (evening warmth), so Night Light never shares Do Not Disturb's moon.
+    {"nightlight-on", "sunset"},
+    {"nightlight-off", "sunset"},
+    {"nightlight-forced", "sunset-filled"},
     {"theme-mode", "contrast-filled"},
 
     // Caffeine (idle inhibitor)
