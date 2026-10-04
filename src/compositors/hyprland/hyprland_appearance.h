@@ -49,6 +49,7 @@ namespace compositors::hyprland {
 
   private:
     void apply();
+    void syncGlassMasking();
     HyprlandAppearanceConfig m_config;
     HyprlandInputConfig m_input;
     HyprlandWindowBehaviourConfig m_behaviour;

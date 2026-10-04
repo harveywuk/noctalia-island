@@ -1188,6 +1188,7 @@ namespace settings {
       if (legacy)
         islandSetting("general", "reserve_space", ToggleSetting{island.reserveSpace});
       islandSetting("layout", "appearance", enumSelect(kIslandAppearances, island.appearance));
+      islandSetting("layout", "glass", ToggleSetting{island.glass});
       islandSetting("layout", "outer_progress_ring", ToggleSetting{island.outerProgressRing});
       islandSetting("layout", "height", SliderSetting{island.height, 44, 72, 1, true});
       if (legacy)

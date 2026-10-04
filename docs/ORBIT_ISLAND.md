@@ -472,6 +472,28 @@ volume_show_percentage = false
 Larger artwork increases the media card height and moves its seek/transport
 controls with it. Single-letter calendar mode uses a narrower card.
 
+### Glass
+
+**Settings → Dynamic Island → Glass** (`[island] glass = true`) makes the Island,
+and every panel it opens (Control Center, launcher, notifications), translucent over
+the compositor's blur, with the same tint as the shell's glass panels. It needs a
+compositor that blurs behind shell surfaces (`ext-background-effect-v1`); without one
+the Island stays solid.
+
+On Hyprland with the hyprglass plugin and **Glass** managed in the Hyprland settings,
+the switch also turns on hyprglass's layer glass, so the Island gets Liquid Glass
+(refraction, rim light) along with the dock and OSDs. The setting lives on the Island
+bar (`[bar.<name>.island] glass`); the top-level `[island]` table only counts for the
+legacy single Island.
+
+hyprglass draws layer glass inside each surface's blur region, and up to v0.9.1 it does
+so all-or-nothing per pixel, with at most 16 region rectangles. Rounded shapes therefore
+end on a jagged edge. The local `noctalia/alpha-coverage` branch of hyprglass adds
+`layers:alpha_coverage` (default 0.45), which fades the glass with the surface's own
+alpha. When the shell finds that option it sends one box per glass shape and lets
+the drawn, antialiased outline shape the glass. Without it, the shell keeps exact
+strip regions. The wallpaper opts out with an empty region.
+
 ## Home layout
 
 The same preferences can be set in the profile:

@@ -95,6 +95,8 @@ struct IslandConfig {
   float expandedClockOffset = 0.0F;
   IslandCalendarLabels calendarLabels = IslandCalendarLabels::Abbreviated;
   IslandAppearance appearance = IslandAppearance::Cupertino;
+  // Translucent capsule and hosted panels over the compositor's blur (hyprglass on Hyprland).
+  bool glass = false;
   bool outerProgressRing = false;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
@@ -136,6 +138,7 @@ struct IslandMonitorOverride {
   std::optional<float> clockOffset;
   std::optional<float> expandedClockOffset;
   std::optional<IslandCalendarLabels> calendarLabels;
+  std::optional<bool> glass;
   std::optional<bool> outerProgressRing;
   std::optional<float> mediaArtworkSize;
   std::optional<IslandActivityPriority> activityPriority;
@@ -223,6 +226,8 @@ inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOv
     base.volumeBarHeight = *override.volumeBarHeight;
   if (override.volumeShowPercentage)
     base.volumeShowPercentage = *override.volumeShowPercentage;
+  if (override.glass)
+    base.glass = *override.glass;
   return base;
 }
 

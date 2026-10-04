@@ -307,9 +307,79 @@ namespace {
 
 } // namespace
 
-Surface::Surface(WaylandConnection& connection) : m_connection(connection) {}
+namespace {
+
+  bool g_blurRegionsAsBoxes = false;
+
+  // Live surfaces, so a change in how blur regions are sent can resend them all.
+  std::vector<Surface*>& liveSurfaces() {
+    static std::vector<Surface*> surfaces;
+    return surfaces;
+  }
+
+  // One bounding box per connected group of rects (strips that touch or overlap form one
+  // shape). The 16-rect limit of compositor glass is kept by merging everything past it.
+  std::vector<InputRect> boundingBoxesOf(const std::vector<InputRect>& rects) {
+    std::vector<InputRect> boxes;
+    for (const auto& r : rects) {
+      if (r.width <= 0 || r.height <= 0)
+        continue;
+      InputRect box = r;
+      bool merged = true;
+      while (merged) {
+        merged = false;
+        for (auto it = boxes.begin(); it != boxes.end(); ++it) {
+          const bool touches = box.x <= it->x + it->width && it->x <= box.x + box.width
+              && box.y <= it->y + it->height && it->y <= box.y + box.height;
+          if (!touches)
+            continue;
+          const int x0 = std::min(box.x, it->x);
+          const int y0 = std::min(box.y, it->y);
+          const int x1 = std::max(box.x + box.width, it->x + it->width);
+          const int y1 = std::max(box.y + box.height, it->y + it->height);
+          box = InputRect{x0, y0, x1 - x0, y1 - y0};
+          boxes.erase(it);
+          merged = true;
+          break;
+        }
+      }
+      boxes.push_back(box);
+    }
+    constexpr std::size_t kMaxBoxes = 16;
+    while (boxes.size() > kMaxBoxes) {
+      auto& a = boxes[boxes.size() - 2];
+      const auto& b = boxes.back();
+      const int x0 = std::min(a.x, b.x);
+      const int y0 = std::min(a.y, b.y);
+      const int x1 = std::max(a.x + a.width, b.x + b.width);
+      const int y1 = std::max(a.y + a.height, b.y + b.height);
+      a = InputRect{x0, y0, x1 - x0, y1 - y0};
+      boxes.pop_back();
+    }
+    return boxes;
+  }
+
+} // namespace
+
+Surface::Surface(WaylandConnection& connection) : m_connection(connection) { liveSurfaces().push_back(this); }
+
+void Surface::setBlurRegionsAsBoxes(bool boxes) {
+  if (g_blurRegionsAsBoxes == boxes)
+    return;
+  g_blurRegionsAsBoxes = boxes;
+  for (Surface* surface : liveSurfaces()) {
+    if (surface->m_requestedBlurRegion && surface->m_backgroundEffect != nullptr) {
+      const auto rects = *surface->m_requestedBlurRegion;
+      surface->setBlurRegion(rects);
+      surface->requestRedraw();
+    }
+  }
+}
+
+bool Surface::blurRegionsAsBoxes() noexcept { return g_blurRegionsAsBoxes; }
 
 Surface::~Surface() {
+  std::erase(liveSurfaces(), this);
   cancelQueuedFrameWork();
   cancelQueuedRender();
   m_invalidationToken.reset();
@@ -700,10 +770,12 @@ bool Surface::regionIntersectsBounds(const std::vector<InputRect>& rects, std::u
   return false;
 }
 
-void Surface::setBlurRegion(const std::vector<InputRect>& rects) {
+void Surface::setBlurRegion(const std::vector<InputRect>& requested) {
   if (!prepareBlurEffect()) {
     return;
   }
+  m_requestedBlurRegion = requested;
+  const std::vector<InputRect> rects = g_blurRegionsAsBoxes ? boundingBoxesOf(requested) : requested;
 
   // Hyprland renders a fully off-surface non-empty blur region as full-surface blur, so send null instead.
   const bool hasVisibleRegion = regionIntersectsBounds(rects, m_width, m_height);
@@ -1154,6 +1226,7 @@ void Surface::clearBlurRegion() {
     return;
   }
   traceSurfaceEvent(*this, "blur-clear-destroy");
+  m_requestedBlurRegion.reset();
   ext_background_effect_surface_v1_destroy(m_backgroundEffect);
   m_backgroundEffect = nullptr;
 }

@@ -113,6 +113,26 @@
 #include <utility>
 
 namespace {
+
+  // The resolved Hyprland appearance, with hyprglass's layer glass turned on whenever a glass
+  // Island needs it: the Island setting is the one switch for glass shell surfaces.
+  HyprlandAppearanceConfig hyprlandAppearanceFor(const Config& config, bool light) {
+    auto appearance = compositors::hyprland::resolveAppearanceProfile(config.shell, light).appearance;
+    // Island bars carry their own settings; the top-level [island] table only applies when no
+    // bar is presented as the Island (the legacy single Island).
+    const bool islandBars = std::ranges::any_of(config.bars, [](const BarConfig& bar) {
+      return bar.presentation == BarPresentation::Island;
+    });
+    const bool islandGlass = islandBars
+        ? std::ranges::any_of(config.bars, [](const BarConfig& bar) {
+            return bar.presentation == BarPresentation::Island && bar.island.glass;
+          })
+        : config.island.enabled && config.island.glass;
+    if (islandGlass)
+      appearance.glassLayers = true;
+    return appearance;
+  }
+
   constexpr Logger kLog("app");
   constexpr std::string_view kPolkitAuthorityBusName = "org.freedesktop.PolicyKit1";
   constexpr std::string_view kSecretServiceBusName = "org.freedesktop.secrets";
@@ -752,8 +772,7 @@ void Application::initStyleThemeAndWayland() {
     m_templateApplyService.apply(generated, mode, /*force=*/false, /*paletteChanged=*/colorsChanged);
     if (m_hyprlandAppearance) {
       m_hyprlandAppearance->sync(
-          compositors::hyprland::resolveAppearanceProfile(m_configService.config().shell, m_themeService.isLightMode())
-              .appearance,
+          hyprlandAppearanceFor(m_configService.config(), m_themeService.isLightMode()),
           palette.primary, palette.surface, m_configService.config().shell.hyprlandAppRules,
           m_configService.config().shell.hyprlandInput, m_configService.config().shell.hyprlandWindowBehaviour,
           m_configService.config().shell.hyprlandTiling, m_configService.config().shell.hyprlandPlacementRules,
@@ -802,8 +821,7 @@ void Application::initStyleThemeAndWayland() {
         std::make_unique<compositors::hyprland::HyprlandAppearance>(m_compositorPlatform.hyprlandRuntime());
     auto syncAppearance = [this]() {
       m_hyprlandAppearance->sync(
-          compositors::hyprland::resolveAppearanceProfile(m_configService.config().shell, m_themeService.isLightMode())
-              .appearance,
+          hyprlandAppearanceFor(m_configService.config(), m_themeService.isLightMode()),
           palette.primary, palette.surface, m_configService.config().shell.hyprlandAppRules,
           m_configService.config().shell.hyprlandInput, m_configService.config().shell.hyprlandWindowBehaviour,
           m_configService.config().shell.hyprlandTiling, m_configService.config().shell.hyprlandPlacementRules,

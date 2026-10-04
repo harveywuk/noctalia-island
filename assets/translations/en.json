@@ -4510,6 +4510,10 @@
           "label": "Appearance",
           "description": "macOS keeps the Island black with white content and colours each activity, like Apple’s Dynamic Island. Theme follows the shell palette."
         },
+        "glass": {
+          "label": "Glass",
+          "description": "Make the Island and the panels it opens translucent over the compositor’s blur. On Hyprland with hyprglass (and Glass managed in Hyprland settings) the shell turns on hyprglass for its own surfaces, so they get Liquid Glass."
+        },
         "outer_progress_ring": {
           "label": "Outer progress ring",
           "description": "Show timer, download or battery progress around the Island’s edge. Timers take priority, followed by downloads, then battery status."

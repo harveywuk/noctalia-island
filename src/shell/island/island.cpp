@@ -46,6 +46,7 @@
 #include "ui/controls/progress_bar.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/controls/spinner.h"
+#include "ui/material.h"
 #include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/visuals/audio_visualizer.h"
@@ -116,6 +117,8 @@ struct Island::Instance {
   wl_output* output = nullptr;
   std::unique_ptr<LayerSurface> surface;
   std::optional<std::array<int, 4>> inputRegion;
+  // The blur region last sent for glass, so unchanged frames send nothing.
+  std::vector<std::array<int, 4>> blurRegion;
   AnimationManager animations;
   InputDispatcher input;
   std::unique_ptr<Node> root;
@@ -263,6 +266,14 @@ namespace {
     ColorSpec spec = fixedColorSpec(color);
     spec.alpha = alpha;
     return spec;
+  }
+
+  // The glass capsule's tint over the compositor's blur, as the shell's glass panels use; opaque
+  // when glass is off or the compositor cannot blur behind shell surfaces.
+  [[nodiscard]] float glassOpacity(const IslandConfig& cfg) {
+    return cfg.glass && ui::material::backgroundBlurAvailable()
+        ? ui::material::tintOpacity(ui::material::Kind::Panel, PanelTransparencyMode::Glass)
+        : 1.0F;
   }
 
   [[nodiscard]] ColorSpec islandRole(ColorRole role, float alpha = 1.0F) {
@@ -1157,6 +1168,7 @@ void Island::geometry(Instance& inst) {
     // A changed input region needs a commit even if no scene node changed.
     inst.surface->requestRedraw();
   }
+  updateGlass(inst, x, y, radius);
   // Node setters invalidate actual geometry/content changes. Repeated clock or
   // window-title updates must not redraw an otherwise unchanged capsule.
   inst.input.syncPointerHover();
@@ -2998,7 +3010,7 @@ void Island::prepare(Instance& inst) {
     }
     // The card fill is translucent; an opaque backing in the Island's own colour keeps the cards
     // behind from showing through the front one.
-    card(cardX, cardTop, cardWidth, islandRole(ColorRole::Surface), 0.0F, -2);
+    card(cardX, cardTop, cardWidth, islandRole(ColorRole::Surface, glassOpacity(cfg)), 0.0F, -2);
     card(cardX, cardTop, cardWidth, islandRole(ColorRole::SurfaceVariant), 1.0F, -1);
     h = cardBottom + peek * static_cast<float>(behind) + 4;
     if (unread.size() > 1) {
@@ -3563,6 +3575,47 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
 
 Color Island::capsuleColor() const { return resolveColorSpec(islandRole(ColorRole::Surface)); }
 
+float Island::capsuleOpacity() const {
+  const auto hosted = std::ranges::find_if(m_instances, [](const auto& inst) { return inst->panelHosted; });
+  if (hosted != m_instances.end())
+    return glassOpacity((*hosted)->config);
+  return glassOpacity(m_instances.empty() ? m_config->config().island : m_instances.front()->config);
+}
+
+void Island::updateGlass(Instance& inst, float x, float y, float radius) {
+  const float glass = glassOpacity(inst.config);
+  inst.background->setFill(islandRole(ColorRole::Surface, glass));
+  if (inst.splitBubble)
+    inst.splitBubble->setFill(islandRole(ColorRole::Surface, glass));
+  // The compositor blurs (and hyprglass glasses) this shape behind the capsule and the split
+  // bubble; see Surface::setBlurRegionsAsBoxes for how hyprglass gets smooth edges from it.
+  std::vector<InputRect> rects;
+  if (glass < 1.0F && inst.visibility > 0.01F) {
+    rects = Surface::tessellateRoundedRect(
+        static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)),
+        static_cast<int>(std::lround(inst.width * inst.scale)), static_cast<int>(std::lround(inst.height * inst.scale)),
+        radius
+    );
+    if (inst.splitBubble && inst.splitBubble->visible()) {
+      const float d = inst.splitBubble->width();
+      auto more = Surface::tessellateRoundedRect(
+          static_cast<int>(std::lround(inst.splitBubble->x())), static_cast<int>(std::lround(inst.splitBubble->y())),
+          static_cast<int>(std::lround(d)), static_cast<int>(std::lround(d)), d / 2
+      );
+      rects.insert(rects.end(), more.begin(), more.end());
+    }
+  }
+  std::vector<std::array<int, 4>> key;
+  key.reserve(rects.size());
+  for (const auto& r : rects)
+    key.push_back({r.x, r.y, r.width, r.height});
+  if (key == inst.blurRegion)
+    return;
+  inst.blurRegion = std::move(key);
+  inst.surface->setBlurRegion(rects);
+  inst.surface->requestRedraw();
+}
+
 island::Size Island::panelReturnSize() const {
   const auto hosted = std::ranges::find_if(m_instances, [](const auto& inst) { return inst->panelHosted; });
   const auto& cfg = hosted != m_instances.end() ? (*hosted)->config
@@ -3642,6 +3695,7 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     inst.surface->setKeyboardInteractivity(LayerShellKeyboard::None);
     inst.surface->setLayer(inst.barConfig.layer == "overlay" ? LayerShellLayer::Overlay : LayerShellLayer::Top);
     inst.surface->setBlurRegion({});
+    inst.blurRegion.clear(); // the hosted panel sent its own; geometry() resends the capsule's
     updateVisibility(inst);
     inst.surface->requestUpdate();
   }

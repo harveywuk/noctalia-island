@@ -1275,6 +1275,9 @@ void Wallpaper::createInstance(const WaylandOutput& output) {
     kLog.warn("failed to initialize surface for output {}", output.name);
     return;
   }
+  // An explicit empty blur region: nothing to blur behind the wallpaper, and compositor glass
+  // (hyprglass layer glass) otherwise treats an opaque full-screen layer as glass everywhere.
+  instance->surface->setBlurRegion({});
 
   m_instances.push_back(std::move(instance));
 }

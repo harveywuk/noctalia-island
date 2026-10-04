@@ -90,12 +90,15 @@ public:
   [[nodiscard]] island::Size panelReturnSize() const;
   // The capsule's own fill (black in the Cupertino look), which a hosted panel blends from and back to.
   [[nodiscard]] Color capsuleColor() const;
+  // The capsule's alpha: below 1 when the Island is glass over the compositor's blur.
+  [[nodiscard]] float capsuleOpacity() const;
   void releasePanelSurface(wl_output* output, float width, float height);
 
 private:
   struct Instance;
   void prepare(Instance&);
   void geometry(Instance&);
+  void updateGlass(Instance&, float x, float y, float radius);
   void updateVisibility(Instance&);
   bool trackPreview(const IslandConfig&, wl_output*) const;
   void releaseKeyboard(Instance&);

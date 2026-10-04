@@ -91,7 +91,10 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
     auto content = std::make_unique<Node>();
     m_contentNode = m_bgNode->addChild(std::move(content));
     m_activePanel->setAnimationManager(&m_animations);
-    m_activePanel->setPanelCardOpacity(1.0F);
+    const float glass = m_islandHost->capsuleOpacity();
+    m_activePanel->setPanelCardOpacity(
+        glass < 1.0F ? panelCardOpacityForTransparencyMode(PanelTransparencyMode::Glass, glass) : 1.0F
+    );
     m_activePanel->create();
     m_activePanel->onOpen(m_pendingOpenContext);
     m_pendingOpenContext.clear();
@@ -170,20 +173,33 @@ void PanelManager::applyIslandReveal(float progress) {
   m_bgNode->setPosition(x, y);
   m_bgNode->setSize(m_islandWidth, m_islandHeight);
   auto* capsule = static_cast<Box*>(m_bgNode);
-  capsule->setRadius(island::surfaceRadius(m_islandHeight, scale));
+  const float radius = island::surfaceRadius(m_islandHeight, scale);
+  capsule->setRadius(radius);
+  // A glass Island stays glass while it hosts a panel: the same tint, and the morphing card's
+  // shape as the blur region (hyprglass glasses exactly this).
+  const float glass = m_islandHost->capsuleOpacity();
+  const auto glassFill = [glass](Color color) {
+    color.a *= glass;
+    return color;
+  };
   // The card keeps the Island's own colour while it is still pill-sized and takes the panel
   // surface as it grows, so opening and closing read as one capsule changing shape rather than
   // a light card snapping onto a black pill. A resize between two panel sizes stays on the surface.
   if (m_islandResizing) {
-    capsule->setFill(colorSpecFromRole(ColorRole::Surface));
+    capsule->setFill(colorSpecFromRole(ColorRole::Surface, glass));
   } else {
     // Closing returns to the capsule colour by mid-travel, so the pill never lands light.
     const float blend = m_closing ? std::clamp((progress - 0.45F) / 0.4F, 0.0F, 1.0F)
                                   : std::clamp((progress - 0.2F) / 0.55F, 0.0F, 1.0F);
-    capsule->setFill(
+    capsule->setFill(glassFill(
         lerpColor(m_islandHost->capsuleColor(), colorForRole(ColorRole::Surface), blend * blend * (3.0F - 2.0F * blend))
-    );
+    ));
   }
+  if (glass < 1.0F)
+    m_surface->setBlurRegion(Surface::tessellateRoundedRect(
+        static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)), static_cast<int>(std::lround(m_islandWidth)),
+        static_cast<int>(std::lround(m_islandHeight)), radius
+    ));
   const float padding = Style::panelPadding * m_activePanel->contentScale();
   m_contentNode->setPosition((m_islandWidth - static_cast<float>(m_panelVisualWidth)) / 2 + padding, padding);
   if (!m_closing)

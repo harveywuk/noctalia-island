@@ -112,6 +112,7 @@ namespace noctalia::config::schema {
         field(&IslandConfig::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
         field(&IslandConfig::volumeBarHeight, "volume_bar_height", Range<float>{5.0F, 24.0F}),
         field(&IslandConfig::volumeShowPercentage, "volume_show_percentage"),
+        field(&IslandConfig::glass, "glass"),
     };
     return s;
   }
@@ -2903,6 +2904,7 @@ namespace noctalia::config::schema {
         field(&IslandMonitorOverride::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
         optionalFloatField(&IslandMonitorOverride::volumeBarHeight, "volume_bar_height", Range<float>{5, 24}),
         optionalBoolField(&IslandMonitorOverride::volumeShowPercentage, "volume_show_percentage"),
+        optionalBoolField(&IslandMonitorOverride::glass, "glass"),
     };
     return s;
   }

@@ -6,6 +6,7 @@
 #include "config/schema/engine.h"
 #include "core/log.h"
 #include "system/keyboard_layout_catalog.h"
+#include "wayland/surface.h"
 
 #include <algorithm>
 #include <cmath>
@@ -313,11 +314,14 @@ namespace compositors::hyprland {
 
   std::string pluginAppearanceCommands(const HyprlandAppearanceConfig& c, Color primary, Color surface) {
     std::string out;
+    // Layer glass in "auto": a surface with a blur region (the dock, OSDs) is glassed there, one
+    // that opts out with an empty region (the wallpaper, a solid Island) is not, and a glass
+    // Island, which sends no region, is glassed by its own alpha so curves stay smooth.
     if (c.glassManaged)
       out += std::format(
           "; if hl.plugin.hyprglass then hl.plugin.hyprglass.config({{enabled={},default_theme=\"{}\","
           "blur_strength={},refraction_strength={},chromatic_aberration={},lens_distortion={},"
-          "glass_opacity={},fresnel_strength={},specular_strength={},layers={{enabled={}}}}}) end",
+          "glass_opacity={},fresnel_strength={},specular_strength={},layers={{enabled={},mask_mode=\"auto\"}}}}) end",
           c.glassEnabled, c.glassLight ? "light" : "dark", c.glassBlur, c.glassRefraction, c.glassChromatic,
           c.glassLens, c.glassOpacity, c.glassFresnel, c.glassSpecular, c.glassLayers
       );
@@ -782,7 +786,20 @@ namespace compositors::hyprland {
     apply();
   }
 
+  void HyprlandAppearance::syncGlassMasking() {
+    // hyprglass with layers:alpha_coverage (> 0) trims layer glass to the surface's alpha, so
+    // shell surfaces can send a box per shape and get edges that follow their antialiased curve.
+    // Without it, keep the exact strip regions (Hyprland's own blur, or an unpatched hyprglass).
+    bool boxes = false;
+    if (m_runtime.available() && m_config.glassManaged && m_config.glassEnabled && m_config.glassLayers) {
+      const auto reply = m_runtime.requestJson("j/getoption plugin:hyprglass:layers:alpha_coverage");
+      boxes = reply && reply->is_object() && reply->value("float", 0.0) > 0.0;
+    }
+    Surface::setBlurRegionsAsBoxes(boxes);
+  }
+
   void HyprlandAppearance::apply() {
+    syncGlassMasking();
     if (!m_runtime.available() || !m_runtime.configIsLua())
       return;
     auto appearance = m_config;

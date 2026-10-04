@@ -86,6 +86,11 @@ public:
   void setInputRegion(const std::vector<InputRect>& rects);
   void setBlurRegion(const std::vector<InputRect>& rects);
   void clearBlurRegion();
+  // Compositor glass that trims a coarse blur region to the surface's own alpha (hyprglass with
+  // layers:alpha_coverage) gets one bounding box per shape instead of a stack of strips: its
+  // edges then follow the drawn, antialiased curve. Changing it resends every surface's region.
+  static void setBlurRegionsAsBoxes(bool boxes);
+  [[nodiscard]] static bool blurRegionsAsBoxes() noexcept;
   void setDebugName(std::string name);
 
   // Approximates a rounded rectangle as a stack of horizontal axis-aligned strips
@@ -203,6 +208,9 @@ private:
   OutputChangedCallback m_outputChangedCallback;
   wl_callback* m_frameCallback = nullptr;
   ext_background_effect_surface_v1* m_backgroundEffect = nullptr;
+  // The region last requested through setBlurRegion, before any box conversion; empty
+  // optional after clearBlurRegion.
+  std::optional<std::vector<InputRect>> m_requestedBlurRegion;
   wp_viewport* m_viewport = nullptr;
   wp_fractional_scale_v1* m_fractionalScale = nullptr;
   std::optional<std::chrono::steady_clock::time_point> m_lastFrameAt;
