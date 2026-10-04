@@ -815,9 +815,11 @@ namespace compositors::hyprland {
         + workspaceRuleCommands(m_workspaces)
         + (m_keybinds.empty()
                ? std::string{}
-               : keybindCommands(m_keybinds, m_runtime.requestJson("j/binds").value_or(nlohmann::json{})));
-    if (!input.empty())
-      command = (command.empty() ? "repl do end" : command) + input;
+               : keybindCommands(m_keybinds, m_runtime.requestJson("j/binds").value_or(nlohmann::json{})))
+        // The Island resizes its surface in place and morphs the capsule itself; Hyprland's layer
+        // animation would stretch the surface over each resize. Set whatever else is managed.
+        + "; hl.layer_rule({name=\"noctalia-island-static\",match={namespace=\"^(noctalia-island)$\"},no_anim=true})";
+    command = (command.empty() ? "repl do end" : command) + input;
     if (command.empty() || command == m_lastCommand)
       return;
     const auto reply = m_runtime.request(command);
