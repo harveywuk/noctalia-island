@@ -101,13 +101,14 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         click(*switch_at(point[1]))
         click_text('Preview restore')
         screenshot('backup-review')
-        click_text('Restore selected sections', direction=-1)
-        assert 'popup_shadows' not in saved().get('shell',{})
+        click_text('Restore selected sections', direction=-1, starts_line=True)
+        # The restore writes settings asynchronously; wait for it rather than reading at once.
+        wait(lambda: 'popup_shadows' not in saved().get('shell',{}), 'scoped restore written')
         assert abs(saved()['shell']['hyprland_input']['pointer_sensitivity']-.4)<.001
         assert len(backups()) == 2 and tomllib.loads(backups()[-1].read_text())['automatic']
         click_text('Preview undo',direction=-1)
-        click_text('Restore selected sections',direction=-1)
-        assert saved()['shell']['popup_shadows'] is False
+        click_text('Restore selected sections', direction=-1, starts_line=True)
+        wait(lambda: saved().get('shell',{}).get('popup_shadows') is False, 'undo restore written')
         assert abs(saved()['shell']['hyprland_input']['pointer_sensitivity']-.4)<.001
         # Start a fresh editor and select the original named backup. Automatic
         # backups remain available across Settings closes.

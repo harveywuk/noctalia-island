@@ -63,17 +63,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         return rows
     def find_text(text):
         """Centre of the first visible run of words matching `text`, scrolling down to find it."""
-        target = text.lower().split()
+        import ocr
         for _ in range(12):
-            rows = words()
-            for i in range(len(rows)-len(target)+1):
-                selected = rows[i:i+len(target)]
-                # OCR sometimes reads a stray quote or bar at a word's edge.
-                if [r['text'].lower().strip('‘’“”"\'|.,:;') for r in selected] == target:
-                    x = int(selected[0]['left'])+int(selected[0]['width'])//2
-                    y = int(selected[0]['top'])+int(selected[0]['height'])//2
-                    if y < 640:
-                        return x, y
+            point = ocr.find(shot('current'), text, max_y=640)
+            if point:
+                return point
             move(1000, 575); command(pointer, 'scroll 3'); time.sleep(.3)
         raise AssertionError('Missing control: '+text)
     def click_text(text):

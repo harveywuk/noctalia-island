@@ -1030,7 +1030,7 @@
     },
     "controls": {
       "keybind": {
-        "add": "Klicken, um Tastenkombination hinzuzufügen",
+        "add": "Tastenkürzel hinzufügen",
         "recording-placeholder": "Drücke eine Tastenkombination…",
         "unset-placeholder": "Klicken zum Zuweisen…"
       },
