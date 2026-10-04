@@ -1,4 +1,6 @@
 """Managed Island checks, run via hyprland_smoke.py --island-bars-only."""
+import csv
+import io
 import json
 import os
 import pathlib
@@ -120,23 +122,40 @@ hover_widgets=[]
         point(x,y);mouse('press');mouse('release');time.sleep(.3)
     def overrides():
         return tomllib.loads((base/'state/noctalia/settings.toml').read_text()).get('bar',{})
+    def find_text(word,name,min_x=300):
+        """Centre of the first OCR word containing `word` (right of the sidebar) on a fresh screenshot."""
+        capture(name)
+        data=run(['tesseract',str(out/(name+'.png')),'stdout','--tessdata-dir',
+                  os.environ.get('NOCTALIA_TEST_TESSDATA',str(repo/'build-rishot/test-data/tessdata')),
+                  '--psm','11','-c','tessedit_create_tsv=1'])
+        for row in csv.DictReader(io.StringIO(data),delimiter='\t',quoting=csv.QUOTE_NONE):
+            if word in (row.get('text') or '') and int(row['left'])>=min_x:
+                return int(row['left'])+int(row['width'])//2,int(row['top'])+int(row['height'])//2
+        raise AssertionError(f'{word!r} not found in {name}')
     try:
-        click(990,210);capture('island-widgets-editor')
-        click(400,409)
-        assert overrides()['capsule']['island']['hover_widgets']==['volume']
-        capture('island-widget-preset')
-        click(622,409)
+        # The hover-widget editor is the bar page's Widgets group; its Media preset leaves only
+        # Volume in the left lane, and Undo preset restores the inherited layout.
+        msg('settings-open','bar/widgets');time.sleep(.8)
+        click(*find_text('Media','island-widgets-editor'))
+        assert overrides()['capsule']['island']['hover_widgets']==['volume'],overrides()
+        click(*find_text('Undo','island-widget-preset'))
         assert not overrides(),'Undo did not restore the inherited bar layout'
-        point(175,580)
+        # The monitor override is an indented sidebar row under its bar, below the fold.
+        msg('settings-open','bar');time.sleep(.8)
+        point(150,500)
         for _ in range(20):mouse('scroll 1')
-        click(130,558);click(990,210)
-        capture('island-monitor-editor')
-        click(400,409)
+        click(*find_text('TEST-2','island-monitor-sidebar',min_x=0));time.sleep(.5)
+        try: widgets=find_text('Widgets','island-monitor-groups')
+        except AssertionError:
+            point(760,500)
+            for _ in range(10):mouse('scroll 1')
+            widgets=find_text('Widgets','island-monitor-groups')
+        click(*widgets);time.sleep(.5)
+        click(*find_text('Media','island-monitor-editor'))
         saved=overrides()['capsule']
-        assert saved['monitor']['TEST-2']['island']['hover_widgets']==['volume']
+        assert saved['monitor']['TEST-2']['island']['hover_widgets']==['volume'],saved
         assert not saved.get('island'),'Monitor preset changed the parent bar'
-        capture('island-monitor-preset')
-        click(622,409)
+        click(*find_text('Undo','island-monitor-preset'))
         assert not overrides(),'Monitor Undo did not restore inheritance'
     finally:
         pointer.terminate();pointer.wait(timeout=5)

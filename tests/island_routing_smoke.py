@@ -15,8 +15,9 @@ def run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,bluetooth)
                                            'mode="1280x720@60",position="0x720",scale=1,transform=0'))
     ctl('reload');time.sleep(1)
     baseline=(cfg/'config.toml').read_text().replace('[island]\nenabled=true','[island]\nenabled=false')
+    # Widths are measured from the dark capsule, so keep the artwork gradient from lighting it.
     def configure(target='focused',seconds=5):
-        (cfg/'config.toml').write_text(baseline+'\n[bar]\norder=["capsule","default"]\n[bar.capsule]\npresentation="island"\nreserve_space=false\n[bar.capsule.island]\ntrack_preview_monitor='+json.dumps(target)+'\nbluetooth_preview_monitor='+json.dumps(target)+'\ntrack_preview_seconds='+str(seconds)+'\nbluetooth_preview_seconds='+str(seconds)+'\n')
+        (cfg/'config.toml').write_text(baseline+'\n[bar]\norder=["capsule","default"]\n[bar.capsule]\npresentation="island"\nreserve_space=false\n[bar.capsule.island]\nmedia_gradient=false\ntrack_preview_monitor='+json.dumps(target)+'\nbluetooth_preview_monitor='+json.dumps(target)+'\ntrack_preview_seconds='+str(seconds)+'\nbluetooth_preview_seconds='+str(seconds)+'\n')
         msg('config-reload');time.sleep(.6)
     def focus(output):
         y=600 if output=='TEST-1' else 1320

@@ -43,9 +43,11 @@ def _checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell, re
 
     def move(x, y): dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})')
     def timer(state='PAUSED'): msg('plugin', 'noctalia/timer:timer', 'all', state, '75')
+    # Activities are told apart by comparing the capsule against snapshots, so keep the flowing
+    # artwork gradient (never the same twice) out of it.
     def configure(order, cycle=False, seconds=3):
         move(1100, 600)
-        (cfg / 'config.toml').write_text(baseline + '\n[bar.capsule.island]\ntrack_preview_seconds=0\nactivity_priority=' + json.dumps(order) + '\nsplit_activities=false\ncycle_activities=' + str(cycle).lower() + '\nactivity_cycle_seconds=' + str(seconds) + '\n[bar.capsule.monitor.TEST-2.island]\nactivity_priority="media-downloads-timers"\ncycle_activities=false\n')
+        (cfg / 'config.toml').write_text(baseline + '\n[bar.capsule.island]\nmedia_gradient=false\ntrack_preview_seconds=0\nactivity_priority=' + json.dumps(order) + '\nsplit_activities=false\ncycle_activities=' + str(cycle).lower() + '\nactivity_cycle_seconds=' + str(seconds) + '\n[bar.capsule.monitor.TEST-2.island]\nactivity_priority="media-downloads-timers"\ncycle_activities=false\n')
         msg('config-reload'); time.sleep(.6); timer(); time.sleep(.3)
     def download(visible=True, progress=.25):
         publisher.stdin.write(json.dumps({'uri': 'application://cycle-test.desktop',
