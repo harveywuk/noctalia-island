@@ -207,26 +207,27 @@ fork `harveywuk/hyprglass`, offered upstream as
 - To test glass in the harness, load the plugin in the private Hyprland
   (`hyprctl plugin load <path>/hyprglass.so`), then `config-reload` the shell.
 
-### Known issue: two clocks while the Island shrinks
+### Fixed: two clocks while the Island shrinks
 
-Reported again after the crossfade fixes. It has not been reproduced in the harness with the
-desktop's config and settings: hover collapse with and without an unread bell, with media
-playing, at 0.2× and 1× animation speed, and the Control Center closing back into the Island
-all show one clock at a time. A screen recording from the desktop is the next step.
+Opening the Control Center from the hover view and closing it showed a second, larger clock
+clipped at the capsule's right edge (`381fdb89a`). The first rebuild after a hosted panel
+returns the surface crossfaded out the wide hover view from before the panel opened. The
+panel has already faded and shrunk by then, so that rebuild now drops the old view. A
+desktop screen recording found it; the harness only catches it when the panel is opened
+by clicking the expanded Island, not with `panel-toggle`.
 
 ## Proposed next priorities
 
-1. **Two clocks while shrinking:** capture it on the desktop, then fix.
-2. **Greeter rollout:** the installed greeter package is an older build (`r1`). The current
+1. **Greeter rollout:** the installed greeter package is an older build (`r1`). The current
    build (`1.5.0.r3.g5a82d5c`, branch `feature/cupertino` of `~/Projects/noctalia-greeter`) is
    built but not installed, and its commit is local only (its remote is upstream). Install it
    and verify with the real synced wallpaper, which the test harness cannot read.
-3. **Glass performance:** measure Hyprland frame times with the glass Island expanding over
+2. **Glass performance:** measure Hyprland frame times with the glass Island expanding over
    playing video, now that the shader takes up to 64 region rectangles per surface.
-4. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
-5. **Remaining text fit and reduced-motion marquees:** carried over from 1 October
+3. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
+4. **Remaining text fit and reduced-motion marquees:** carried over from 1 October
    (`--text-fit-only`).
-6. **Release preparation:** group remaining issues, run the full integration matrix, prepare
+5. **Release preparation:** group remaining issues, run the full integration matrix, prepare
    release notes and decide which fixes to offer upstream (high contrast, logind fallback,
    greeter frame loop are generic).
 
