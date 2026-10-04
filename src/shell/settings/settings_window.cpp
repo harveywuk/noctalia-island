@@ -1260,8 +1260,18 @@ void SettingsWindow::onKeyboardEvent(const KeyboardEvent& event) {
 void SettingsWindow::onThemeChanged() {
   const bool modeChanged = m_hyprlandProfileLightMode != isResolvedLightTheme();
   m_hyprlandProfileLightMode = isResolvedLightTheme();
-  if (modeChanged && m_config && m_config->config().shell.hyprlandProfileSwitching.enabled)
-    requestContentRebuild(/*refreshRegistry=*/true, /*refreshFilterRow=*/true);
+  if (modeChanged) {
+    // Card fills and the window's glass tint differ between light and dark, and are chosen when
+    // the content is built, so a mode change rebuilds it.
+    const bool profiles = m_config && m_config->config().shell.hyprlandProfileSwitching.enabled;
+    // Only while open: closing frees the scene without clearing m_panelBackground, and the next
+    // open builds the background with the current mode's tint anyway.
+    if (isOpen() && m_panelBackground != nullptr && m_config != nullptr)
+      m_panelBackground->setFill(
+          colorSpecFromRole(ColorRole::Surface, ui::material::settingsWindowOpacity(m_config->config().shell))
+      );
+    requestContentRebuild(/*refreshRegistry=*/profiles, /*refreshFilterRow=*/profiles);
+  }
   requestRedraw();
 }
 

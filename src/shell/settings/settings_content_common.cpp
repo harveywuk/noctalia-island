@@ -21,9 +21,12 @@ namespace settings {
 
   namespace {
     // Cards sit on the Surface window background and hold controls that fill SurfaceVariant at full
-    // opacity, so a full-strength card fill would match them. Mixing the theme's own elevated tone
-    // partway toward Surface keeps the palette hue and still reads distinct from those controls.
-    constexpr float kCardFillOpacity = 0.4F;
+    // opacity, so a full-strength card fill would match them. In dark mode, mixing the theme's own
+    // elevated tone partway toward Surface keeps the palette hue and still reads distinct from those
+    // controls. In light mode a translucent card over a translucent window lets a dark wallpaper
+    // grey it, and captions on it fell to 3.5-4:1, so it is nearly opaque, as macOS's grouped cards
+    // are; light controls keep their outline and stay distinct.
+    float cardFillOpacity() { return isResolvedLightTheme() ? 0.85F : 0.4F; }
   } // namespace
 
   void addTrailingDisclosureChevron(Button& button, float scale) {
@@ -206,7 +209,7 @@ namespace settings {
             .configure =
                 [scale](Flex& container) {
                   container.setPadding(Style::spaceSm * scale, Style::spaceMd * scale);
-                  container.setCardStyle(scale, kCardFillOpacity);
+                  container.setCardStyle(scale, cardFillOpacity());
                 },
         },
         makeLabel(title, Style::fontSizeTitle * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Bold),
@@ -220,10 +223,15 @@ namespace settings {
     return bodyRaw;
   }
 
+  ColorSpec settingsGroupedCardFill() {
+    return isResolvedLightTheme() ? colorSpecFromRole(ColorRole::SurfaceVariant, 0.85F)
+                                  : colorSpecFromRole(ColorRole::OnSurface, 0.045F);
+  }
+
   Flex* addSettingsGroupCard(SettingsGroupCardProps props) {
     auto card = ui::column({.align = FlexAlign::Stretch, .configure = [scale = props.scale](Flex& container) {
                               container.setPadding(Style::spaceSm * scale, Style::spaceMd * scale);
-                              container.setCardStyle(scale, kCardFillOpacity);
+                              container.setCardStyle(scale, cardFillOpacity());
                             }});
     auto body = ui::column({
         .align = FlexAlign::Stretch,
@@ -424,7 +432,9 @@ namespace settings {
         .padding = Style::spaceSm * scale,
         .configure = [scale](Flex& column) {
           column.setRadius(Style::scaledRadiusMd(scale));
-          column.setFill(colorSpecFromRole(ColorRole::Error, 0.10F));
+          // A light tint and body-coloured message: grey or red text on a stronger red tint
+          // measured 3.6-4.2:1.
+          column.setFill(colorSpecFromRole(ColorRole::Error, 0.06F));
           column.setBorder(colorSpecFromRole(ColorRole::Error, 0.5F), Style::borderWidth);
         },
     });
@@ -440,7 +450,7 @@ namespace settings {
         ui::label({
             .text = std::move(message),
             .fontSize = Style::fontSizeCaption * scale,
-            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+            .color = colorSpecFromRole(ColorRole::OnSurface),
             .maxLines = 4,
         })
     );

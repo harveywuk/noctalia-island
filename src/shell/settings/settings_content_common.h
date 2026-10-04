@@ -2,6 +2,7 @@
 
 #include "shell/settings/settings_registry.h"
 #include "ui/controls/label.h"
+#include "ui/palette.h"
 
 #include <cstddef>
 #include <functional>
@@ -54,6 +55,10 @@ namespace settings {
   };
 
   [[nodiscard]] Flex* addSettingsGroupCard(SettingsGroupCardProps props);
+  // Fill for a page's grouped card: a faint lift of the text colour in dark mode, and a nearly
+  // opaque elevated (white) surface in light mode, as macOS groups rows. A light-mode lift of the
+  // dark text colour sinks the card below the window and greys the captions on it.
+  [[nodiscard]] ColorSpec settingsGroupedCardFill();
   // Same card as addSettingsGroupCard without the collapsible header, for transient groupings
   // (search results) that must never start hidden and hold no expanded state.
   [[nodiscard]] Flex* addSettingsCard(Flex& parent, std::string_view title, float scale);

@@ -576,7 +576,9 @@ namespace {
       }
 
       const ColorSpec foreground = colorSpecFromRole(ColorRole::OnSurface);
-      const ColorSpec mutedForeground = colorSpecFromRole(ColorRole::OnSurfaceVariant);
+      // Secondary text is the body colour at reduced opacity, as on macOS, so it darkens with
+      // the selection's grey fill instead of sinking into it (a fixed grey measured 3.4:1 there).
+      const ColorSpec mutedForeground = colorSpecFromRole(ColorRole::OnSurface, 0.68F);
       m_badgeLabel->setColor(foreground);
       m_glyph->setColor(foreground);
       m_title->setColor(foreground);

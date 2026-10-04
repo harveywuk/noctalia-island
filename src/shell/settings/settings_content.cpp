@@ -1310,7 +1310,7 @@ namespace settings {
             {.align = FlexAlign::Stretch,
              .gap = 0.0F,
              .padding = Style::spaceSm * scale,
-             .fill = colorSpecFromRole(ColorRole::OnSurface, 0.045F),
+             .fill = settingsGroupedCardFill(),
              .radius = Style::scaledRadiusMd(scale)}
         );
         for (const auto& group : pageGroupKeys) {
@@ -1398,7 +1398,7 @@ namespace settings {
                  .gap = Style::spaceSm * scale,
                  .paddingV = Style::spaceSm * scale,
                  .paddingH = Style::spaceMd * scale,
-                 .fill = colorSpecFromRole(ColorRole::OnSurface, 0.045F),
+                 .fill = settingsGroupedCardFill(),
                  .radius = Style::scaledRadiusMd(scale)}
             );
             activeGroupBody = static_cast<Flex*>(activeSection->addChild(std::move(card)));
@@ -1497,7 +1497,7 @@ namespace settings {
            .justify = FlexJustify::Center,
            .gap = Style::spaceSm * scale,
            .padding = (Style::spaceLg * 2.0F) * scale,
-           .fill = colorSpecFromRole(ColorRole::OnSurface, 0.045F),
+           .fill = settingsGroupedCardFill(),
            .radius = Style::scaledRadiusMd(scale),
            .border = colorSpecFromRole(ColorRole::Outline),
            .minWidth = 360.0F * scale,

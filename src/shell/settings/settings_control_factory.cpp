@@ -225,9 +225,11 @@ namespace settings {
   }
 
   std::unique_ptr<Flex> SettingsControlFactory::makeOverrideBadge() {
+    // The tint says "accent"; the label is body text, since small accent text on its own tint
+    // measured 2.5-2.9:1 in both modes.
     return makeStatusBadge(
-        i18n::tr("settings.badges.override"), colorSpecFromRole(ColorRole::Primary, 0.15F),
-        colorSpecFromRole(ColorRole::Primary), false
+        i18n::tr("settings.badges.override"), colorSpecFromRole(ColorRole::Primary, 0.22F),
+        colorSpecFromRole(ColorRole::OnSurface), false
     );
   }
 
