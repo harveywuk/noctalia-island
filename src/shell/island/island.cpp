@@ -3076,7 +3076,7 @@ void Island::prepare(Instance& inst) {
     // Up to two cards peek out beneath, each a little narrower and fainter, as a collapsed stack.
     const std::size_t behind = std::min<std::size_t>(unread.size() - 1, 2);
     constexpr float peek = 7.0F;
-    const auto card = [&](float x, float y, float width, ColorSpec fill, float alpha, int z) {
+    const auto card = [&](Node& parent, float x, float y, float width, ColorSpec fill, float alpha, int z) {
       auto box = std::make_unique<Box>();
       box->setFill(fill);
       box->setBorder(islandRole(ColorRole::Outline, 0.5F * alpha), Style::borderWidth);
@@ -3085,20 +3085,30 @@ void Island::prepare(Instance& inst) {
       box->setSize(width * s, cardHeight * s);
       box->setHitTestVisible(false);
       box->setZIndex(z);
-      canvas->addChild(std::move(box));
+      parent.addChild(std::move(box));
     };
-    for (std::size_t i = behind; i > 0; --i) {
-      const float inset = 10.0F * static_cast<float>(i);
-      const float alpha = i == 1 ? 0.7F : 0.45F;
-      card(
-          cardX + inset, cardTop + peek * static_cast<float>(i), cardWidth - 2 * inset,
-          islandRole(ColorRole::SurfaceVariant, alpha), alpha, -2 - static_cast<int>(i)
-      );
+    // The front card is translucent (glass), so the cards behind are clipped to the strip below
+    // its bottom edge: only the part that peeks out is drawn, never anything under the front card.
+    if (behind > 0) {
+      auto strip = std::make_unique<Box>();
+      strip->setFill(clearColorSpec());
+      strip->clearBorder();
+      strip->setClipChildren(true);
+      strip->setHitTestVisible(false);
+      strip->setPosition(0, cardBottom * s);
+      strip->setSize(w * s, (peek * static_cast<float>(behind) + 2) * s);
+      strip->setZIndex(-2);
+      auto* stripNode = canvas->addChild(std::move(strip));
+      for (std::size_t i = behind; i > 0; --i) {
+        const float inset = 10.0F * static_cast<float>(i);
+        const float alpha = i == 1 ? 0.7F : 0.45F;
+        card(
+            *stripNode, cardX + inset, cardTop + peek * static_cast<float>(i) - cardBottom, cardWidth - 2 * inset,
+            islandRole(ColorRole::SurfaceVariant, alpha), alpha, -static_cast<int>(i)
+        );
+      }
     }
-    // The card fill is translucent; an opaque backing in the Island's own colour keeps the cards
-    // behind from showing through the front one.
-    card(cardX, cardTop, cardWidth, islandRole(ColorRole::Surface, glassOpacity(cfg)), 0.0F, -2);
-    card(cardX, cardTop, cardWidth, islandRole(ColorRole::SurfaceVariant), 1.0F, -1);
+    card(*canvas, cardX, cardTop, cardWidth, islandRole(ColorRole::SurfaceVariant), 1.0F, -1);
     h = cardBottom + peek * static_cast<float>(behind) + 4;
     if (unread.size() > 1) {
       label(
