@@ -1066,9 +1066,10 @@ namespace {
                       .minValue = 0.0F,
                       .maxValue = sliderMax,
                       .step = 0.01F,
-                      .trackHeight = Style::sliderTrackHeight * scale,
-                      .thumbSize = Style::sliderThumbSize * scale,
-                      .controlHeight = kCompactSliderControlHeight * scale,
+                      .trackHeight = Slider::kLevelHeight * scale,
+                      .thumbSize = Slider::kLevelHeight * scale,
+                      .controlHeight = std::max(kCompactSliderControlHeight, Slider::kLevelHeight) * scale,
+                      .levelStyle = true, // the Control Center's volume slider
                       .wheelAdjustEnabled = true,
                       .flexGrow = 1.0F,
                       .onValueChanged =
@@ -1750,9 +1751,10 @@ std::unique_ptr<Flex> AudioTab::createDeviceVolumeCard(DeviceVolumeCardSpec card
               .minValue = 0.0F,
               .maxValue = sliderMax,
               .step = 0.01F,
-              .trackHeight = Style::sliderTrackHeight * scale,
-              .thumbSize = Style::sliderThumbSize * scale,
+              .trackHeight = Slider::kLevelHeight * scale,
+              .thumbSize = Slider::kLevelHeight * scale,
               .controlHeight = Style::controlHeight * scale,
+              .levelStyle = true, // the Control Center's volume slider
               .wheelAdjustEnabled = true,
               .flexGrow = 1.0F,
               .onValueChanged =

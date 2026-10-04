@@ -337,6 +337,8 @@ namespace ui {
     std::optional<float> trackHeight = std::nullopt;
     std::optional<float> thumbSize = std::nullopt;
     std::optional<float> controlHeight = std::nullopt;
+    // Big Sur's level slider (see Slider::setLevelStyle); pair with Slider::kLevelHeight sizes.
+    std::optional<bool> levelStyle = std::nullopt;
     std::optional<bool> wheelAdjustEnabled = std::nullopt;
     std::optional<float> width = std::nullopt;
     std::optional<float> height = std::nullopt;

@@ -38,7 +38,7 @@ namespace {
 
   constexpr float kToggleDiameter = 28.0F;
   constexpr float kToggleGlyph = 15.0F;
-  constexpr float kSliderHeight = 22.0F;
+  constexpr float kSliderHeight = Slider::kLevelHeight;
   constexpr auto kSliderCommitInterval = std::chrono::milliseconds(60);
   constexpr auto kSliderHoldoff = std::chrono::milliseconds(600);
 
@@ -62,14 +62,6 @@ namespace {
   void styleModuleToggle(Button& button, bool enabled, bool on) {
     button.setVariant(enabled && on ? ButtonVariant::Primary : ButtonVariant::Secondary);
     button.setEnabled(enabled);
-  }
-
-  // The Display and Sound tracks: white fill over a grey groove, as Big Sur draws them.
-  void styleModuleSlider(Slider& slider) {
-    const float grooveAlpha = isResolvedLightTheme() ? 0.12F : 0.18F;
-    slider.setColorOverride(
-        resolveColorSpec(colorSpecFromRole(ColorRole::OnSurface, grooveAlpha)), rgba(1.0F, 1.0F, 1.0F, 1.0F)
-    );
   }
 
   std::string volumeGlyph(const AudioNode* sink) {
@@ -336,7 +328,7 @@ std::unique_ptr<Flex> HomeTab::makeShortcutModule(float scale) {
 
 std::unique_ptr<Flex> HomeTab::makeSliderModule(
     float scale, const std::string& title, const std::string& detailTab, const std::string& detailTooltip,
-    Slider** slider, Glyph** glyph, Box** outline, std::function<void(double)> onChange,
+    Slider** slider, Glyph** glyph, std::function<void(double)> onChange,
     std::function<void()> onDragEnd, std::unique_ptr<Node> trailing
 ) {
   auto module = ui::column({
@@ -382,7 +374,7 @@ std::unique_ptr<Flex> HomeTab::makeSliderModule(
           .flexGrow = 1.0F,
           .onValueChanged = std::move(onChange),
           .onDragEnd = std::move(onDragEnd),
-          .configure = [](Slider& s) { styleModuleSlider(s); },
+          .configure = [](Slider& s) { s.setLevelStyle(true); },
       })
   );
   // The symbol sits inside the track's leading end, over the white fill or the knob.
@@ -398,14 +390,6 @@ std::unique_ptr<Flex> HomeTab::makeSliderModule(
           },
       })
   );
-  // A hairline around the groove keeps the white fill's edge visible on a light module.
-  auto edge = std::make_unique<Box>();
-  edge->setFill(clearColorSpec());
-  edge->setBorder(colorSpecFromRole(ColorRole::OnSurface, 0.14F), Style::borderWidth);
-  edge->setParticipatesInLayout(false);
-  edge->setHitTestVisible(false);
-  edge->setZIndex(4);
-  *outline = static_cast<Box*>(track->addChild(std::move(edge)));
   if (trailing != nullptr) {
     track->addChild(std::move(trailing));
   }
@@ -549,7 +533,7 @@ std::unique_ptr<Flex> HomeTab::createModules() {
   if (shown("display") && brightnessAvailable) {
     auto module = makeSliderModule(
         scale, i18n::tr("control-center.home.modules.display"), "monitor",
-        i18n::tr("control-center.home.modules.display-settings"), &m_displaySlider, &m_displayGlyph, &m_displayOutline,
+        i18n::tr("control-center.home.modules.display-settings"), &m_displaySlider, &m_displayGlyph,
         [this](double value) {
           m_pendingBrightness = static_cast<float>(value);
           m_sliderHoldoff = std::chrono::steady_clock::now() + kSliderHoldoff;
@@ -584,7 +568,7 @@ std::unique_ptr<Flex> HomeTab::createModules() {
     });
     auto module = makeSliderModule(
         scale, i18n::tr("control-center.home.modules.sound"), "audio",
-        i18n::tr("control-center.home.modules.sound-settings"), &m_soundSlider, &m_soundGlyph, &m_soundOutline,
+        i18n::tr("control-center.home.modules.sound-settings"), &m_soundSlider, &m_soundGlyph,
         [this](double value) {
           m_pendingVolume = static_cast<float>(value);
           m_sliderHoldoff = std::chrono::steady_clock::now() + kSliderHoldoff;
@@ -702,26 +686,19 @@ void HomeTab::layoutModules(Renderer& renderer, float contentWidth, float bodyHe
   struct SliderParts {
     Slider* slider;
     Glyph* glyph;
-    Box* outline;
   };
-  for (const auto& [slider, glyph, outline] :
-       {SliderParts{m_displaySlider, m_displayGlyph, m_displayOutline},
-        SliderParts{m_soundSlider, m_soundGlyph, m_soundOutline}}) {
+  for (const auto& [slider, glyph] :
+       {SliderParts{m_displaySlider, m_displayGlyph}, SliderParts{m_soundSlider, m_soundGlyph}}) {
     if (slider == nullptr) {
       continue;
     }
-    // The slider insets its groove; the symbol and hairline follow the groove, not the node.
+    // The slider insets its groove; the symbol follows the groove, not the node.
     const float grooveX = slider->x() + Style::sliderHorizontalPadding;
     const float grooveH = kSliderHeight * scale;
     const float grooveY = slider->y() + (slider->height() - grooveH) / 2.0F;
     if (glyph != nullptr) {
       glyph->measure(renderer);
       glyph->setPosition(grooveX + (grooveH - glyph->width()) / 2.0F, grooveY + (grooveH - glyph->height()) / 2.0F);
-    }
-    if (outline != nullptr) {
-      outline->setPosition(grooveX, grooveY);
-      outline->setSize(std::max(0.0F, slider->width() - 2.0F * Style::sliderHorizontalPadding), grooveH);
-      outline->setRadius(grooveH / 2.0F);
     }
   }
   if (m_mediaArt != nullptr && m_mediaArtSlot != nullptr) {
@@ -764,7 +741,6 @@ void HomeTab::syncModules() {
   }
 
   if (m_displaySlider != nullptr && m_brightness != nullptr) {
-    styleModuleSlider(*m_displaySlider);
     if (!m_displaySlider->dragging() && !holding && m_pendingBrightness < 0.0F) {
       for (const auto& display : m_brightness->displays()) {
         if (display.controllable) {
@@ -776,7 +752,6 @@ void HomeTab::syncModules() {
   }
 
   if (m_soundSlider != nullptr && m_services.audio != nullptr) {
-    styleModuleSlider(*m_soundSlider);
     const AudioNode* sink = m_services.audio->defaultSink();
     m_soundSlider->setEnabled(sink != nullptr);
     if (sink != nullptr && !m_soundSlider->dragging() && !holding && m_pendingVolume < 0.0F) {

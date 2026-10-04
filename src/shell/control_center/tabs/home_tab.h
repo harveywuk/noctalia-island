@@ -107,7 +107,7 @@ private:
   std::unique_ptr<Flex> makeShortcutModule(float scale);
   std::unique_ptr<Flex> makeSliderModule(
       float scale, const std::string& title, const std::string& detailTab, const std::string& detailTooltip,
-      Slider** slider, Glyph** glyph, Box** outline, std::function<void(double)> onChange,
+      Slider** slider, Glyph** glyph, std::function<void(double)> onChange,
       std::function<void()> onDragEnd, std::unique_ptr<Node> trailing
   );
   std::unique_ptr<Flex> makeNowPlayingModule(float scale);
@@ -214,11 +214,9 @@ private:
   Flex* m_displayModule = nullptr;
   Slider* m_displaySlider = nullptr;
   Glyph* m_displayGlyph = nullptr;
-  Box* m_displayOutline = nullptr;
   Flex* m_soundModule = nullptr;
   Slider* m_soundSlider = nullptr;
   Glyph* m_soundGlyph = nullptr;
-  Box* m_soundOutline = nullptr;
   Flex* m_mediaControls = nullptr;
   Button* m_mediaPlayButton = nullptr;
   Button* m_mediaNextButton = nullptr;

@@ -365,9 +365,10 @@ void MonitorTab::rebuildCards(Renderer& /*renderer*/) {
         .step = 0.01F,
         .value = std::max(display.brightness, minBrightness),
         .enabled = display.controllable,
-        .trackHeight = Style::sliderTrackHeight * scale,
-        .thumbSize = Style::sliderThumbSize * scale,
+        .trackHeight = Slider::kLevelHeight * scale,
+        .thumbSize = Slider::kLevelHeight * scale,
         .controlHeight = Style::controlHeight * scale,
+        .levelStyle = true, // the Control Center's brightness slider
         .flexGrow = 1.0F,
         .onValueChanged =
             [this, displayId](double value) {

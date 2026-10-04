@@ -58,6 +58,11 @@ Slider::Slider() {
   auto fill = std::make_unique<RectNode>();
   m_fill = static_cast<RectNode*>(addChild(std::move(fill)));
 
+  // Level style only: a hairline over the groove and fill keeps a white fill's edge visible.
+  auto outline = std::make_unique<RectNode>();
+  outline->setVisible(false);
+  m_outline = static_cast<RectNode*>(addChild(std::move(outline)));
+
   auto thumbShadow = std::make_unique<RectNode>();
   m_thumbShadow = static_cast<RectNode*>(addChild(std::move(thumbShadow)));
 
@@ -280,6 +285,8 @@ void Slider::updateGeometry() {
   const float fillWidth = Style::rtl() ? trackX + trackW - thumbX : thumbX - trackX;
   m_fill->setPosition(fillX, trackY);
   m_fill->setFrameSize(std::max(0.0F, fillWidth), m_trackHeight);
+  m_outline->setPosition(trackX, trackY);
+  m_outline->setFrameSize(trackW, m_trackHeight);
 
   const float thumbLeft = util::clampOrdered(thumbX - m_thumbSizePx * 0.5F, trackX, trackX + trackW - m_thumbSizePx);
   m_thumb->setPosition(thumbLeft, thumbY);
@@ -301,6 +308,16 @@ void Slider::updateFromLocalX(float x) {
   const double raw = static_cast<double>(std::clamp((x - trackX) / trackW, 0.0F, 1.0F));
   const double t = Style::rtl() ? 1.0 - raw : raw;
   setValue(m_min + t * (m_max - m_min));
+}
+
+void Slider::setLevelStyle(bool level) {
+  if (m_level == level) {
+    return;
+  }
+  m_level = level;
+  m_outline->setVisible(level);
+  applyVisualState();
+  markPaintDirty();
 }
 
 void Slider::setColorOverride(std::optional<Color> track, std::optional<Color> fill) {
@@ -327,6 +344,14 @@ void Slider::applyVisualState() {
     fillColor = resolved(ColorRole::Primary, 0.5F);
   }
 
+  if (m_level) {
+    trackColor = resolved(ColorRole::OnSurface, isResolvedLightTheme() ? 0.12F : 0.18F);
+    fillColor = rgba(1.0F, 1.0F, 1.0F, m_enabled ? 1.0F : 0.5F);
+    RoundedRectStyle outline = solidStyle(rgba(0.0F, 0.0F, 0.0F, 0.0F), m_trackHeight * 0.5F);
+    outline.border = resolved(ColorRole::OnSurface, 0.14F);
+    outline.borderWidth = Style::borderWidth;
+    m_outline->setStyle(outline);
+  }
   if (m_trackOverride) {
     trackColor = *m_trackOverride;
   }

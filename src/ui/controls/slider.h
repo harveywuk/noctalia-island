@@ -25,6 +25,11 @@ public:
   void setOnDragEnd(std::function<void()> callback);
   // Track and fill colours in place of the palette's, e.g. white over artwork; nullopt restores.
   void setColorOverride(std::optional<Color> track, std::optional<Color> fill);
+  // Big Sur's level slider (the Control Center's volume and brightness): a thick grey groove
+  // with a white fill and a knob as tall as the groove, edged by a hairline. Callers size it
+  // with kLevelHeight (times their content scale) for the track, thumb and control height.
+  void setLevelStyle(bool level);
+  static constexpr float kLevelHeight = 22.0F;
 
   [[nodiscard]] double value() const noexcept { return m_value; }
   [[nodiscard]] double minValue() const noexcept { return m_min; }
@@ -45,6 +50,7 @@ private:
 
   RectNode* m_track = nullptr;
   RectNode* m_fill = nullptr;
+  RectNode* m_outline = nullptr;
   RectNode* m_thumbShadow = nullptr;
   RectNode* m_thumb = nullptr;
   InputArea* m_inputArea = nullptr;
@@ -63,4 +69,5 @@ private:
   float m_controlHeightPx = Style::controlHeight;
   std::optional<Color> m_trackOverride;
   std::optional<Color> m_fillOverride;
+  bool m_level = false;
 };

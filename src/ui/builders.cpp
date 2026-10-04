@@ -633,6 +633,9 @@ namespace ui {
     if (props.controlHeight.has_value()) {
       control->setControlHeight(*props.controlHeight);
     }
+    if (props.levelStyle.has_value()) {
+      control->setLevelStyle(*props.levelStyle);
+    }
     if (props.wheelAdjustEnabled.has_value()) {
       control->setWheelAdjustEnabled(*props.wheelAdjustEnabled);
     }

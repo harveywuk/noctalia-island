@@ -1537,11 +1537,9 @@ void HomeTab::onClose() {
   m_displayModule = nullptr;
   m_displaySlider = nullptr;
   m_displayGlyph = nullptr;
-  m_displayOutline = nullptr;
   m_soundModule = nullptr;
   m_soundSlider = nullptr;
   m_soundGlyph = nullptr;
-  m_soundOutline = nullptr;
   m_mediaControls = nullptr;
   m_mediaPlayButton = nullptr;
   m_mediaNextButton = nullptr;
