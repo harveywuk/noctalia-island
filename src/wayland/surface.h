@@ -91,6 +91,11 @@ public:
   // antialiased curve then shapes the glass edge. 0 sends regions exactly. Changing it resends
   // every surface's region.
   static void setBlurRegionRectLimit(std::size_t limit);
+  // Coarsens a region to at most maxRects rectangles that still cover it, keeping close to its
+  // shapes: strips of one shape merge with their neighbours cheapest first (the merge that adds
+  // the least area), so curves stay traced instead of becoming bounding boxes, and separate shapes
+  // stay apart until there are more shapes than maxRects.
+  [[nodiscard]] static std::vector<InputRect> coarsenRegion(const std::vector<InputRect>& rects, std::size_t maxRects);
   [[nodiscard]] static std::size_t blurRegionRectLimit() noexcept;
   void setDebugName(std::string name);
 

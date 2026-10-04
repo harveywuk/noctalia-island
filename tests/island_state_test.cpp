@@ -205,7 +205,8 @@ int main() {
   assert(isKnownConfigPath({"island", "enabled"}));
   assert(isKnownConfigPath({"island", "clock_size"}));
   IslandConfig cfg;
-  assert(!cfg.outerProgressRing);
+  assert(cfg.outerProgressRing); // progress traces the edge by default
+  assert(!cfg.glass);
   assert(cfg.hoverOpenDelayMs == 110 && cfg.hoverCloseDelayMs == 180);
   Diagnostics diagnostics;
   auto table = toml::parse("height = 900\nclock_size = -1\nscale = 1.1\nenabled = true\nouter_progress_ring = true\n");
