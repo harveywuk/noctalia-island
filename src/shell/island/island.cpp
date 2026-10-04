@@ -149,18 +149,25 @@ struct Island::Instance {
   bool inside = false;
   bool hovered = false;
   bool badgeHovered = false;
-  // Split Island: a second running activity in a round bubble beside the capsule, as on iPhone.
-  // The bubble sits behind the capsule and slides out from under its right end.
-  Box* splitBubble = nullptr;
-  InputArea* splitArea = nullptr;
-  Node* splitContent = nullptr;
-  island::Activity splitActivity = island::Activity::None;
-  std::string splitSignature;
-  std::function<void(float)> splitProgress;
-  // 0 tucked under the capsule, 1 fully apart.
-  float splitReveal = 0;
-  AnimationManager::Id splitMorph = 0;
-  bool splitHovered = false;
+  // Split Island: other running activities in round bubbles beside the capsule, as on iPhone.
+  // The first sits behind the capsule and slides out from under its right end; the second sits
+  // behind the first and slides out from under that, for a third concurrent activity.
+  struct SplitBubble {
+    Box* bubble = nullptr;
+    InputArea* area = nullptr;
+    Node* content = nullptr;
+    island::Activity activity = island::Activity::None;
+    std::string signature;
+    std::function<void(float)> progress;
+    // 0 tucked under its neighbour, 1 fully apart.
+    float reveal = 0;
+    AnimationManager::Id morph = 0;
+    bool hovered = false;
+  };
+  std::array<SplitBubble, 2> splits;
+  [[nodiscard]] bool splitHovered() const {
+    return std::ranges::any_of(splits, [](const SplitBubble& split) { return split.hovered; });
+  }
   // Several jobs in the downloads lane split among themselves: the bubble holds the next job,
   // and clicking it makes that job the capsule's lead.
   bool splitLane = false;
@@ -1114,26 +1121,32 @@ void Island::geometry(Instance& inst) {
   // hangs off its right end.
   const float bubble = inst.config.height;
   const float spacing = splitGap(bubble);
-  const float splitWidth = std::max(0.0F, inst.splitReveal) * (spacing + bubble);
+  const float splitWidth =
+      (std::max(0.0F, inst.splits[0].reveal) + std::max(0.0F, inst.splits[1].reveal)) * (spacing + bubble);
   const float x = (static_cast<float>(inst.surface->width()) - inst.width * s) / 2;
   const float y = (8 - (inst.height + 12) * (1 - inst.visibility)) * s;
-  if (inst.splitBubble) {
-    // Out from under the capsule's right end, with a little growth as it separates.
-    const float reveal = inst.splitReveal;
+  // Each bubble comes out from under its left neighbour (the capsule, then the first bubble),
+  // with a little growth as it separates.
+  float offset = 0;
+  for (auto& split : inst.splits) {
+    if (!split.bubble)
+      continue;
+    const float reveal = split.reveal;
+    offset += (spacing + bubble) * reveal;
     const float diameter = bubble * (0.72F + 0.28F * std::min(1.0F, std::max(0.0F, reveal)));
-    const float centre = inst.width - bubble / 2 + (spacing + bubble) * reveal;
-    inst.splitBubble->setVisible(reveal > 0.001F);
-    inst.splitBubble->setPosition(x + (centre - diameter / 2) * s, y + (bubble - diameter) * s / 2);
-    inst.splitBubble->setSize(diameter * s, diameter * s);
-    inst.splitBubble->setRadius(diameter * s / 2);
-    if (inst.splitArea) {
-      inst.splitArea->setSize(diameter * s, diameter * s);
-      inst.splitArea->setHitTestVisible(reveal > 0.5F);
+    const float centre = inst.width - bubble / 2 + offset;
+    split.bubble->setVisible(reveal > 0.001F);
+    split.bubble->setPosition(x + (centre - diameter / 2) * s, y + (bubble - diameter) * s / 2);
+    split.bubble->setSize(diameter * s, diameter * s);
+    split.bubble->setRadius(diameter * s / 2);
+    if (split.area) {
+      split.area->setSize(diameter * s, diameter * s);
+      split.area->setHitTestVisible(reveal > 0.5F);
     }
-    if (inst.splitContent) {
+    if (split.content) {
       // The content is laid out for the full bubble; keep it centred while the bubble grows.
-      inst.splitContent->setPosition((diameter - bubble) * s / 2, (diameter - bubble) * s / 2);
-      inst.splitContent->setOpacity(std::clamp((reveal - 0.4F) / 0.6F, 0.0F, 1.0F));
+      split.content->setPosition((diameter - bubble) * s / 2, (diameter - bubble) * s / 2);
+      split.content->setOpacity(std::clamp((reveal - 0.4F) / 0.6F, 0.0F, 1.0F));
     }
   }
   inst.background->setPosition(x, y);
@@ -1253,6 +1266,18 @@ void Island::prepare(Instance& inst) {
       && otherActivity == island::Activity::None
       && downloads.size() > 1;
   const auto splitActivity = laneSplit ? island::Activity::Downloads : otherActivity;
+  // A third running activity takes a second bubble beside the first.
+  const island::Activities runningActivities{
+      player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
+      !downloads.empty(), timerActive
+  };
+  island::Activity thirdActivity = island::Activity::None;
+  if (!laneSplit && otherActivity != island::Activity::None)
+    for (const auto activity : island::activityOrder(cfg.activityPriority))
+      if (activity != primaryActivity && activity != otherActivity && runningActivities.contains(activity)) {
+        thirdActivity = activity;
+        break;
+      }
   const std::span<const DownloadProgress> capsuleDownloads =
       laneSplit ? std::span<const DownloadProgress>(downloads).first(1) : std::span<const DownloadProgress>(downloads);
   const std::span<const DownloadProgress> bubbleDownloads = laneSplit
@@ -1464,8 +1489,11 @@ void Island::prepare(Instance& inst) {
       inst.captureGlow->update(!privacyList.empty() || recording, islandRole(ColorRole::Error));
   };
   updateCaptureGlow();
-  const auto updateSplit = [&] {
-    if (!inst.splitBubble)
+  // One bubble: its activity, the download jobs it stands for, and whether it is the lane split.
+  const auto updateBubble = [&](std::size_t index, island::Activity splitActivity,
+                                std::span<const DownloadProgress> bubbleDownloads, bool laneSplit) {
+    auto& split = inst.splits[index];
+    if (!split.bubble)
       return;
     const float s = inst.scale;
     const float d = cfg.height;
@@ -1484,8 +1512,10 @@ void Island::prepare(Instance& inst) {
     const std::string bubbleIcon = bubbleDownloads.size() == 1 && !bubbleDownloads.front().icon.empty()
         ? bubbleDownloads.front().icon
         : "download";
-    inst.splitLane = laneSplit;
-    inst.splitNext = laneSplit ? bubbleDownloads.front().desktopId : "";
+    if (index == 0) {
+      inst.splitLane = laneSplit;
+      inst.splitNext = laneSplit ? bubbleDownloads.front().desktopId : "";
+    }
     // A retracting bubble keeps its last content until it is tucked away.
     if (splitActivity != island::Activity::None) {
       std::string bubbleSignature = std::format("{}|{}|{}|{}", static_cast<int>(splitActivity), d, s, gCupertino);
@@ -1494,13 +1524,13 @@ void Island::prepare(Instance& inst) {
       else if (splitActivity == island::Activity::Timers)
         bubbleSignature += "|" + timers.front().plugin + "|" + timers.front().icon;
       else
-        bubbleSignature += std::format("|{}|{}|{}", fraction.has_value(), bubbleIcon, inst.splitNext);
-      if (bubbleSignature != inst.splitSignature) {
+        bubbleSignature += std::format("|{}|{}|{}", fraction.has_value(), bubbleIcon, laneSplit ? inst.splitNext : "");
+      if (bubbleSignature != split.signature) {
         m_renderContext->makeCurrent(inst.surface->renderTarget());
-        inst.splitSignature = bubbleSignature;
-        inst.splitProgress = {};
-        if (inst.splitContent)
-          (void)inst.splitArea->removeChild(inst.splitContent);
+        split.signature = bubbleSignature;
+        split.progress = {};
+        if (split.content)
+          (void)split.area->removeChild(split.content);
         auto content = std::make_unique<Node>();
         content->setSize(d * s, d * s);
         content->setHitTestVisible(false);
@@ -1541,11 +1571,11 @@ void Island::prepare(Instance& inst) {
           auto* ringPtr = ring.get();
           centred(std::move(ring));
           if (fraction)
-            inst.splitProgress = [ringPtr](float value) { ringPtr->setProgress(value); };
+            split.progress = [ringPtr](float value) { ringPtr->setProgress(value); };
           symbol(timer ? timers.front().icon : bubbleIcon, tint, 0.34F);
         }
-        inst.splitContent = inst.splitArea->addChild(std::move(content));
-        inst.splitArea->setTooltip(
+        split.content = split.area->addChild(std::move(content));
+        split.area->setTooltip(
             laneSplit && bubbleDownloads.size() == 1
                 ? bubbleDownloads.front().name
                 : i18n::tr(
@@ -1555,30 +1585,34 @@ void Island::prepare(Instance& inst) {
                   )
         );
       }
-      if (inst.splitProgress && fraction)
-        inst.splitProgress(*fraction);
+      if (split.progress && fraction)
+        split.progress(*fraction);
     }
     const bool shown = splitActivity != island::Activity::None;
-    const bool wasShown = inst.splitActivity != island::Activity::None;
-    inst.splitActivity = splitActivity;
+    const bool wasShown = split.activity != island::Activity::None;
+    split.activity = splitActivity;
     if (shown == wasShown)
       return;
-    inst.animations.cancel(inst.splitMorph);
-    inst.splitMorph = 0;
+    inst.animations.cancel(split.morph);
+    split.morph = 0;
     if (!MotionService::instance().enabled()) {
-      inst.splitReveal = shown ? 1.0F : 0.0F;
+      split.reveal = shown ? 1.0F : 0.0F;
       geometry(inst);
       return;
     }
-    const float from = inst.splitReveal;
-    inst.splitMorph = inst.animations.animate(
+    const float from = split.reveal;
+    split.morph = inst.animations.animate(
         from, shown ? 1.0F : 0.0F, shown ? kSplitOutMs : kSplitInMs, shown ? Easing::EaseOutBack : Motion::dismiss,
-        [this, &inst](float value) {
-          inst.splitReveal = value;
+        [this, &inst, &split](float value) {
+          split.reveal = value;
           geometry(inst);
         },
-        [&inst] { inst.splitMorph = 0; }
+        [&split] { split.morph = 0; }
     );
+  };
+  const auto updateSplit = [&] {
+    updateBubble(0, splitActivity, bubbleDownloads, laneSplit);
+    updateBubble(1, thirdActivity, std::span<const DownloadProgress>(downloads), false);
   };
   updateSplit();
   if (signature == inst.signature && inst.root) {
@@ -1673,39 +1707,43 @@ void Island::prepare(Instance& inst) {
     // Behind the capsule, so only the part of its halo outside the edge shows.
     auto glow = std::make_unique<island::CaptureGlow>();
     inst.captureGlow = static_cast<island::CaptureGlow*>(inst.root->addChild(std::move(glow)));
-    // Behind the capsule too, so the split bubble slides out from under it.
-    auto bubble = std::make_unique<Box>();
-    bubble->setFill(islandRole(ColorRole::Surface));
-    bubble->setClipChildren(true);
-    bubble->setVisible(false);
-    auto area = std::make_unique<InputArea>();
-    area->setHitShape(InputArea::HitShape::Circle);
-    area->setOnEnter([&inst](const InputArea::PointerData&) {
-      // Reaching for the bubble must not expand the capsule beside it.
-      inst.splitHovered = true;
-      inst.enter.stop();
-    });
-    area->setOnLeave([this, &inst] {
-      inst.splitHovered = false;
-      if (inst.inside && !inst.hovered && !inst.suppressHover)
-        inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
-            inst.hovered = true;
-            refresh();
-          }
-        });
-    });
-    area->setOnClick([this, &inst](const InputArea::PointerData&) {
-      if (inst.splitActivity == island::Activity::None)
-        return;
-      if (inst.splitLane)
-        inst.splitLead = inst.splitNext;
-      else
-        inst.compactActivity.promote(inst.splitActivity);
-      refresh();
-    });
-    inst.splitArea = static_cast<InputArea*>(bubble->addChild(std::move(area)));
-    inst.splitBubble = static_cast<Box*>(inst.root->addChild(std::move(bubble)));
+    // Behind the capsule too, so the split bubbles slide out from under it; the second is added
+    // first, so it sits behind the first and slides out from under that.
+    for (std::size_t index = inst.splits.size(); index-- > 0;) {
+      auto& split = inst.splits[index];
+      auto bubble = std::make_unique<Box>();
+      bubble->setFill(islandRole(ColorRole::Surface));
+      bubble->setClipChildren(true);
+      bubble->setVisible(false);
+      auto area = std::make_unique<InputArea>();
+      area->setHitShape(InputArea::HitShape::Circle);
+      area->setOnEnter([&inst, &split](const InputArea::PointerData&) {
+        // Reaching for a bubble must not expand the capsule beside it.
+        split.hovered = true;
+        inst.enter.stop();
+      });
+      area->setOnLeave([this, &inst, &split] {
+        split.hovered = false;
+        if (inst.inside && !inst.hovered && !inst.suppressHover)
+          inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
+            if (inst.inside && !inst.badgeHovered && !inst.splitHovered()) {
+              inst.hovered = true;
+              refresh();
+            }
+          });
+      });
+      area->setOnClick([this, &inst, &split, index](const InputArea::PointerData&) {
+        if (split.activity == island::Activity::None)
+          return;
+        if (index == 0 && inst.splitLane)
+          inst.splitLead = inst.splitNext;
+        else
+          inst.compactActivity.promote(split.activity);
+        refresh();
+      });
+      split.area = static_cast<InputArea*>(bubble->addChild(std::move(area)));
+      split.bubble = static_cast<Box*>(inst.root->addChild(std::move(bubble)));
+    }
     auto box = std::make_unique<Box>();
     box->setFill(islandRole(ColorRole::Surface));
     box->setClipChildren(true);
@@ -2240,10 +2278,9 @@ void Island::prepare(Instance& inst) {
         mediaControl->setRadius(Style::scaledRadius(22, s));
       }
     };
-    button(
-        w / 2 - 89, "media-prev", i18n::tr("control-center.media.previous"), player->canGoPrevious,
-        [this, bus] { m_mpris->previous(bus); }
-    );
+    button(w / 2 - 89, "media-prev", i18n::tr("control-center.media.previous"), player->canGoPrevious, [this, bus] {
+      m_mpris->previous(bus);
+    });
     button(
         w / 2 - 22, playing ? "media-pause" : "media-play",
         i18n::tr(playing ? "control-center.media.pause" : "control-center.media.play"),
@@ -2344,8 +2381,7 @@ void Island::prepare(Instance& inst) {
     // Big Sur's Sound and Display modules: a white-filled groove with the symbol inside its leading
     // end. Display and Microphone name themselves above it; Sound is just a larger bar, centred.
     const bool volume = m_osd->kind == OsdKind::Volume;
-    const float trackHeight =
-        volume ? std::clamp(cfg.volumeBarHeight + 10.0F, 14.0F, 34.0F) : 18.0F;
+    const float trackHeight = volume ? std::clamp(cfg.volumeBarHeight + 10.0F, 14.0F, 34.0F) : 18.0F;
     const bool symbolInside = trackHeight >= 14.0F;
     constexpr float margin = 20.0F;
     const float trackX = symbolInside ? margin : margin + 32.0F;
@@ -2882,7 +2918,7 @@ void Island::prepare(Instance& inst) {
           inst.badgeHovered = false;
           if (inst.inside && !inst.hovered && !inst.suppressHover)
             inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-              if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
+              if (inst.inside && !inst.badgeHovered && !inst.splitHovered()) {
                 inst.hovered = true;
                 refresh();
               }
@@ -3082,7 +3118,7 @@ void Island::prepare(Instance& inst) {
       inst.badgeHovered = false;
       if (inst.inside && !inst.hovered && !inst.suppressHover)
         inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered()) {
             inst.hovered = true;
             refresh();
           }
@@ -3417,7 +3453,7 @@ bool Island::onPointerEvent(const PointerEvent& event) {
         m_notifications->pauseExpiry(m_notification->id);
       if (!inst.suppressHover)
         inst.enter.start(std::chrono::milliseconds(inst.config.hoverOpenDelayMs), [this, &inst] {
-          if (inst.inside && !inst.badgeHovered && !inst.splitHovered) {
+          if (inst.inside && !inst.badgeHovered && !inst.splitHovered()) {
             inst.hovered = true;
             refresh();
           }
@@ -3543,13 +3579,15 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   if (inst.keyboardMode)
     releaseKeyboard(inst);
   inst.panelHosted = true;
-  // The panel opens from the capsule alone; the split bubble buds out again when it closes.
-  inst.splitActivity = island::Activity::None;
-  inst.splitReveal = 0;
-  inst.splitMorph = 0;
-  inst.splitHovered = false;
-  if (inst.splitBubble)
-    inst.splitBubble->setVisible(false);
+  // The panel opens from the capsule alone; the split bubbles bud out again when it closes.
+  for (auto& split : inst.splits) {
+    split.activity = island::Activity::None;
+    split.reveal = 0;
+    split.morph = 0;
+    split.hovered = false;
+    if (split.bubble)
+      split.bubble->setVisible(false);
+  }
   inst.compactActivity.pause(island::CompactActivity::Clock::now());
   inst.activityTimeout.stop();
   inst.animations.cancel(inst.hideAnimation);
@@ -3590,8 +3628,9 @@ float Island::capsuleOpacity() const {
 void Island::updateGlass(Instance& inst, float x, float y, float radius) {
   const float glass = glassOpacity(inst.config);
   inst.background->setFill(islandRole(ColorRole::Surface, glass));
-  if (inst.splitBubble)
-    inst.splitBubble->setFill(islandRole(ColorRole::Surface, glass));
+  for (const auto& split : inst.splits)
+    if (split.bubble)
+      split.bubble->setFill(islandRole(ColorRole::Surface, glass));
   // The compositor blurs (and hyprglass glasses) this shape behind the capsule and the split
   // bubble; see Surface::setBlurRegionsAsBoxes for how hyprglass gets smooth edges from it.
   std::vector<InputRect> rects;
@@ -3601,10 +3640,12 @@ void Island::updateGlass(Instance& inst, float x, float y, float radius) {
         static_cast<int>(std::lround(inst.width * inst.scale)), static_cast<int>(std::lround(inst.height * inst.scale)),
         radius
     );
-    if (inst.splitBubble && inst.splitBubble->visible()) {
-      const float d = inst.splitBubble->width();
+    for (const auto& split : inst.splits) {
+      if (!split.bubble || !split.bubble->visible())
+        continue;
+      const float d = split.bubble->width();
       auto more = Surface::tessellateRoundedRect(
-          static_cast<int>(std::lround(inst.splitBubble->x())), static_cast<int>(std::lround(inst.splitBubble->y())),
+          static_cast<int>(std::lround(split.bubble->x())), static_cast<int>(std::lround(split.bubble->y())),
           static_cast<int>(std::lround(d)), static_cast<int>(std::lround(d)), d / 2
       );
       rects.insert(rects.end(), more.begin(), more.end());
