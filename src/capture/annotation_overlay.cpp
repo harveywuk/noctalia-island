@@ -276,6 +276,9 @@ namespace capture {
     std::unique_ptr<LayerSurface> ownedSurface;
     LayerSurface* surface = nullptr;
     std::optional<IslandPanelSurface> islandHost;
+    // The output's logical height. The Island lends its surface short (it is only as tall as the
+    // capsule) and grows it to this; the overlay waits for that before building its scene.
+    std::uint32_t fullHeight = 0;
     Box* capsule = nullptr;
     float capsuleWidth = 0, capsuleHeight = 0, targetWidth = 0, targetHeight = 0;
     AnimationManager::Id capsuleAnimation = 0;
@@ -576,6 +579,7 @@ namespace capture {
         inst->surface->setLayer(LayerShellLayer::Overlay);
         inst->surface->setKeyboardInteractivity(LayerShellKeyboard::Exclusive);
         inst->surface->setInputRegion({InputRect{0, 0, output.logicalWidth, output.logicalHeight}});
+        inst->fullHeight = static_cast<std::uint32_t>(output.effectiveLogicalHeight());
         inst->capsuleWidth = inst->islandHost->width;
         inst->capsuleHeight = inst->islandHost->height;
       } else {
@@ -1046,6 +1050,10 @@ namespace capture {
     const auto width = inst.surface->width();
     const auto height = inst.surface->height();
     if (width == 0 || height == 0) {
+      return;
+    }
+    // A borrowed Island surface arrives short; its configure to full height requests a new frame.
+    if (inst.islandHost && inst.fullHeight != 0 && height < inst.fullHeight) {
       return;
     }
 
