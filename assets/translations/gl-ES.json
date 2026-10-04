@@ -1719,6 +1719,10 @@
           "description": "Escala o radio dos cantos nos contedores e controis da interface da shell",
           "label": "Redondez dos cantos"
         },
+        "curated-palettes": {
+          "description": "Mostra só as paletas incluídas, co contraste comprobado para que se lean ben en modo claro e escuro. Desactívao para explorar todo o catálogo en liña.",
+          "label": "Só paletas seleccionadas"
+        },
         "custom-palette": {
           "description": "Escolle unha paleta de ~/.config/noctalia/palettes/",
           "label": "Paleta personalizada",

@@ -2013,6 +2013,10 @@
           "description": "Scala il raggio degli angoli nei contenitori e della shell UI",
           "label": "Arrotondamento angoli"
         },
+        "curated-palettes": {
+          "description": "Mostra solo le palette incluse, con il contrasto verificato per una buona leggibilità in modalità chiara e scura. Disattiva per sfogliare l’intero catalogo online.",
+          "label": "Solo palette selezionate"
+        },
         "custom-palette": {
           "description": "Scegli una palette da ~/.config/noctalia/palettes/",
           "label": "Palette personalizzata",

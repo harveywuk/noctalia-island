@@ -13,7 +13,8 @@ mode              = "dark"        # dark | light | auto
 shell_mode        = "follow"      # follow | dark | light | auto
 source            = "builtin"     # builtin | wallpaper | community | custom
 builtin           = "Noctalia"    # bundled palette name
-community_palette = "Oxocarbon"   # community palette name when source = "community"
+community_palette = "macOS"       # community palette name when source = "community"
+curated_palettes  = true          # list only the bundled, contrast-checked community palettes
 custom_palette    = "MyPalette"   # file name (without .json) when source = "custom"
 wallpaper_scheme  = "m3-content"  # generator used when source = "wallpaper"
 pure_black_dark   = false         # replace dark-mode backgrounds with pure black
@@ -86,10 +87,13 @@ Available palettes: `Ayu`, `Catppuccin`, `Dracula`, `Eldritch`, `Gruvbox`, `Kana
 
 Names a palette served by `https://api.noctalia.dev/palette/<name>`. The shell downloads the palette on first use and stores it in `~/.local/state/noctalia/community-palettes/` (honoring `NOCTALIA_STATE_HOME`, then `XDG_STATE_HOME`).
 
-**macOS** is bundled with this shell and appears in the same community palette picker, even offline. Choose **Settings → Appearance → Theme → Palette Source → Community**, then select **macOS** in **Community Palette**. It includes neutral light and dark surfaces, a blue accent, and matching terminal colours. The shared Cupertino control styling also works with every other palette; selecting this preset changes colours only.
+Five palettes are bundled with this shell and work offline: **macOS** (the default), **Catppuccin** (Latte / Mocha), **Gruvbox**, **Rose Pine** (Dawn / main) and **Tokyo Night** (Day / Night). Each has a light and a dark variant and is checked for readable contrast in both. Choose **Settings → Appearance → Theme → Palette Source → Community**, then pick one in **Community Palette**. The shared Cupertino control styling works with every palette; choosing one changes colours only.
 
+## `curated_palettes`
 
-The Settings GUI lists palette names from the cached `https://api.noctalia.dev/palettes` catalog when that catalog is available.
+When `true` (the default), the community palette pickers list only the bundled palettes. A palette already chosen from the online catalog keeps working and stays listed. Set it to `false` (**Curated Palettes Only** in Settings) to browse the whole catalog.
+
+The full list comes from the cached `https://api.noctalia.dev/palettes` catalog when that catalog is available.
 
 The catalog is refreshed on every launch and config reload. Each catalog entry carries an `md5` of its palette JSON; when the cached palette's checksum no longer matches the catalog, the shell re-downloads it and cross-fades to the updated colors. This means edits you publish to the online catalog reach clients automatically - no manual cache clearing. A cached palette whose catalog entry omits an `md5` is treated as up to date and kept. If the catalog cannot be fetched, the cached palette is used as-is, so community palettes still work offline.
 

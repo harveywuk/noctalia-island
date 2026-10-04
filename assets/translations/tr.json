@@ -1881,6 +1881,10 @@
           "description": "Kullanıcı arayüzündeki kutuların ve kontrollerin köşe kavislerini ayarla",
           "label": "Köşe Yuvarlaklığı"
         },
+        "curated-palettes": {
+          "description": "Yalnızca açık ve koyu modda okunabilir kontrast için denetlenmiş yerleşik paletleri listeler. Tüm çevrim içi kataloğa göz atmak için kapatın.",
+          "label": "Yalnızca seçilmiş paletler"
+        },
         "custom-palette": {
           "description": "~/.config/noctalia/palettes/ klasöründen özel bir palet seç",
           "label": "Özel Palet",

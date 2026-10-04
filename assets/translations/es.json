@@ -1996,6 +1996,10 @@
           "description": "Escalar el radio de esquina en los contenedores y controles de la interfaz del shell",
           "label": "Radio de las esquinas"
         },
+        "curated-palettes": {
+          "description": "Muestra solo las paletas incluidas, con el contraste comprobado para que se lean bien en modo claro y oscuro. Desactívalo para explorar todo el catálogo en línea.",
+          "label": "Solo paletas seleccionadas"
+        },
         "custom-palette": {
           "description": "Elige una paleta de ~/.config/noctalia/palettes/",
           "label": "Paleta personalizada",

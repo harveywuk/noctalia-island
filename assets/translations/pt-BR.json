@@ -2013,6 +2013,10 @@
           "description": "Dimensionar o raio dos cantos em contêineres e controles da interface do usuário do shell",
           "label": "Arredondamento dos Cantos"
         },
+        "curated-palettes": {
+          "description": "Mostra apenas as paletas incluídas, com o contraste verificado para leitura nos modos claro e escuro. Desative para navegar pelo catálogo on-line completo.",
+          "label": "Somente paletas selecionadas"
+        },
         "custom-palette": {
           "description": "Escolha uma paleta em ~/.config/noctalia/palettes/",
           "label": "Paleta Personalizada",

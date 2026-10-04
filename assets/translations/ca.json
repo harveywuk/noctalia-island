@@ -1850,6 +1850,10 @@
           "description": "Escala el radi de les cantonades en els contenidors i controls de la interfície del shell",
           "label": "Arrodoniment de cantonades"
         },
+        "curated-palettes": {
+          "description": "Mostra només les paletes incloses, amb el contrast comprovat perquè es llegeixin bé en mode clar i fosc. Desactiva-ho per explorar tot el catàleg en línia.",
+          "label": "Només paletes seleccionades"
+        },
         "custom-palette": {
           "description": "Tria una paleta de ~/.config/noctalia/palettes/",
           "label": "Paleta personalitzada",

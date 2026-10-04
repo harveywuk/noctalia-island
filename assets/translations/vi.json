@@ -1854,6 +1854,10 @@
           "description": "Điều chỉnh bán kính bo góc trên toàn bộ các vùng chứa và điều khiển giao diện người dùng của shell",
           "label": "Độ bo góc"
         },
+        "curated-palettes": {
+          "description": "Chỉ liệt kê các bảng màu tích hợp, đã được kiểm tra độ tương phản để dễ đọc ở cả chế độ sáng và tối. Tắt để duyệt toàn bộ danh mục trực tuyến.",
+          "label": "Chỉ bảng màu chọn lọc"
+        },
         "custom-palette": {
           "description": "Chọn bảng màu từ ~/.config/noctalia/palettes/",
           "label": "Bảng màu tùy chỉnh",

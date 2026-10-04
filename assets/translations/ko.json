@@ -1909,6 +1909,10 @@
           "description": "쉘 UI 컨테이너 및 컨트롤 전반에 걸쳐 모서리 반지름 조절",
           "label": "모서리 둥글기"
         },
+        "curated-palettes": {
+          "description": "라이트 모드와 다크 모드 모두에서 읽기 쉬운 대비가 확인된 내장 팔레트만 표시합니다. 끄면 전체 온라인 카탈로그를 볼 수 있습니다.",
+          "label": "엄선된 팔레트만"
+        },
         "custom-palette": {
           "description": "~/.config/noctalia/palettes/에서 팔레트 선택",
           "label": "사용자 팔레트",

@@ -1849,6 +1849,10 @@
           "description": "Ajuste le rayon des coins de tous les conteneurs et contrôles de l'interface",
           "label": "Arrondi des coins"
         },
+        "curated-palettes": {
+          "description": "Affiche uniquement les palettes incluses, dont le contraste est vérifié pour rester lisible en mode clair et sombre. Désactivez pour parcourir tout le catalogue en ligne.",
+          "label": "Palettes sélectionnées uniquement"
+        },
         "custom-palette": {
           "description": "Choisir une palette depuis ~/.config/noctalia/palettes/",
           "label": "Palette personnalisée",

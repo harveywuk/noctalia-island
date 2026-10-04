@@ -2013,6 +2013,10 @@
           "description": "缩放 Shell UI 容器和控件的圆角半径",
           "label": "圆角缩放"
         },
+        "curated-palettes": {
+          "description": "仅列出内置调色板，这些调色板已在浅色和深色模式下检查过可读的对比度。关闭后可浏览完整的在线目录。",
+          "label": "仅精选调色板"
+        },
         "custom-palette": {
           "description": "从 ~/.config/noctalia/palettes/ 中选择配色方案",
           "label": "自定义配色方案",

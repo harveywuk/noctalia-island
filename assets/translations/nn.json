@@ -1869,6 +1869,10 @@
           "description": "Høva inn hyrneradius gjennom alle ilåta og styringar i skalgrensesnittet",
           "label": "Rundingsgrad på hyrno"
         },
+        "curated-palettes": {
+          "description": "Vis berre dei innebygde palettane, der kontrasten er sjekka for lesbarheit i lys og mørk modus. Slå av for å bla gjennom heile nettkatalogen.",
+          "label": "Berre utvalde palettar"
+        },
         "custom-palette": {
           "description": "Vel ein palett frå ~/.config/noctalia/palettes/",
           "label": "Sjølvvald palett",

@@ -778,7 +778,7 @@ namespace settings {
       ));
     } else if (cfg.theme.source == PaletteSource::Community) {
       SettingControl communityPaletteControl =
-          TextSetting{.value = cfg.theme.communityPalette, .placeholder = "Oxocarbon", .browseFileExtensions = {}};
+          TextSetting{.value = cfg.theme.communityPalette, .placeholder = "macOS", .browseFileExtensions = {}};
       if (!env.communityPalettes.empty()) {
         communityPaletteControl = SearchPickerSetting{
             .options = env.communityPalettes,

@@ -1874,6 +1874,10 @@
           "description": "Skaliere den Eckenradius in Shell-UI-Containern und Steuerelementen",
           "label": "Eckenrundung"
         },
+        "curated-palettes": {
+          "description": "Nur die mitgelieferten Paletten anzeigen, deren Kontrast im hellen und dunklen Modus auf Lesbarkeit geprüft ist. Ausschalten, um den gesamten Online-Katalog zu durchsuchen.",
+          "label": "Nur kuratierte Paletten"
+        },
         "custom-palette": {
           "description": "Wähle eine Palette aus ~/.config/noctalia/palettes/",
           "label": "Benutzerdefinierte Palette",

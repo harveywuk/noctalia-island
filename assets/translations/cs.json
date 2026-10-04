@@ -1648,6 +1648,10 @@
           "description": "Škálovat poloměr rohů napříč kontejnery a ovládacími prvky rozhraní shellu",
           "label": "Zaoblení rohů"
         },
+        "curated-palettes": {
+          "description": "Zobrazovat jen vestavěné palety, u kterých je ověřen čitelný kontrast ve světlém i tmavém režimu. Vypněte pro procházení celého online katalogu.",
+          "label": "Pouze vybrané palety"
+        },
         "custom-palette": {
           "description": "Vybrat paletu z ~/.config/noctalia/palettes/",
           "label": "Vlastní paleta",

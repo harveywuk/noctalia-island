@@ -1808,6 +1808,10 @@
           "description": "Sarokkerekítés méretezése a felület összes konténerén és vezérlőelemén",
           "label": "Sarokkerekítés"
         },
+        "curated-palettes": {
+          "description": "Csak a beépített paletták megjelenítése, amelyek kontrasztja világos és sötét módban is ellenőrzötten olvasható. Kapcsold ki a teljes online katalógus böngészéséhez.",
+          "label": "Csak válogatott paletták"
+        },
         "custom-palette": {
           "description": "Válassz egy palettát a ~/.config/noctalia/palettes/ mappából",
           "label": "Egyéni paletta",

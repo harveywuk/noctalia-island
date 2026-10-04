@@ -1565,6 +1565,10 @@
           "description": "Schaal de hoekradius over shell-UI-containers en -knoppen",
           "label": "Hoekronding"
         },
+        "curated-palettes": {
+          "description": "Toon alleen de meegeleverde paletten, waarvan het contrast in lichte en donkere modus op leesbaarheid is gecontroleerd. Zet uit om de volledige online catalogus te bekijken.",
+          "label": "Alleen geselecteerde paletten"
+        },
         "custom-palette": {
           "description": "Kies een palet uit ~/.config/noctalia/palettes/",
           "label": "Aangepast palet",

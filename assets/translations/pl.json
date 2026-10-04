@@ -1533,6 +1533,10 @@
           "description": "Skaluj promień narożników w całym interfejsie shela",
           "label": "Zaokrąglenie narożników"
         },
+        "curated-palettes": {
+          "description": "Pokazuj tylko wbudowane palety, których kontrast sprawdzono pod kątem czytelności w trybie jasnym i ciemnym. Wyłącz, aby przeglądać cały katalog online.",
+          "label": "Tylko wybrane palety"
+        },
         "custom-palette": {
           "description": "Wybierz paletę z ~/.config/noctalia/palettes/",
           "label": "Niestandardowa paleta",
