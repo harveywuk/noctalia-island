@@ -3087,26 +3087,26 @@ void Island::prepare(Instance& inst) {
       box->setZIndex(z);
       parent.addChild(std::move(box));
     };
-    // The front card is translucent (glass), so the cards behind are clipped to the strip below
-    // its bottom edge: only the part that peeks out is drawn, never anything under the front card.
-    if (behind > 0) {
-      auto strip = std::make_unique<Box>();
-      strip->setFill(clearColorSpec());
-      strip->clearBorder();
-      strip->setClipChildren(true);
-      strip->setHitTestVisible(false);
-      strip->setPosition(0, cardBottom * s);
-      strip->setSize(w * s, (peek * static_cast<float>(behind) + 2) * s);
-      strip->setZIndex(-2);
-      auto* stripNode = canvas->addChild(std::move(strip));
-      for (std::size_t i = behind; i > 0; --i) {
-        const float inset = 10.0F * static_cast<float>(i);
-        const float alpha = i == 1 ? 0.7F : 0.45F;
-        card(
-            *stripNode, cardX + inset, cardTop + peek * static_cast<float>(i) - cardBottom, cardWidth - 2 * inset,
-            islandRole(ColorRole::SurfaceVariant, alpha), alpha, -static_cast<int>(i)
-        );
-      }
+    // Every card is translucent (glass), so each back card is clipped to its own band: the strip
+    // between the bottom edge of the card in front of it and its own bottom edge. Only the part
+    // that peeks out is drawn, never anything under another card.
+    for (std::size_t i = 1; i <= behind; ++i) {
+      const float bandTop = cardBottom + peek * static_cast<float>(i - 1);
+      auto band = std::make_unique<Box>();
+      band->setFill(clearColorSpec());
+      band->clearBorder();
+      band->setClipChildren(true);
+      band->setHitTestVisible(false);
+      band->setPosition(0, bandTop * s);
+      band->setSize(w * s, (peek + 1) * s);
+      band->setZIndex(-2);
+      auto* bandNode = canvas->addChild(std::move(band));
+      const float inset = 10.0F * static_cast<float>(i);
+      const float alpha = i == 1 ? 0.7F : 0.45F;
+      card(
+          *bandNode, cardX + inset, cardTop + peek * static_cast<float>(i) - bandTop, cardWidth - 2 * inset,
+          islandRole(ColorRole::SurfaceVariant, alpha), alpha, 0
+      );
     }
     card(*canvas, cardX, cardTop, cardWidth, islandRole(ColorRole::SurfaceVariant), 1.0F, -1);
     h = cardBottom + peek * static_cast<float>(behind) + 4;
