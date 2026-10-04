@@ -1484,9 +1484,12 @@ void Island::prepare(Instance& inst) {
   };
   updateOutline();
   // Capture (microphone, camera, screen) and screen recording pulse red around the Island.
+  // A critical notification pulses around the Island like capture does, so it reads as urgent.
+  const bool criticalShown =
+      view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical;
   const auto updateCaptureGlow = [&] {
     if (inst.captureGlow)
-      inst.captureGlow->update(!privacyList.empty() || recording, islandRole(ColorRole::Error));
+      inst.captureGlow->update(!privacyList.empty() || recording || criticalShown, islandRole(ColorRole::Error));
   };
   updateCaptureGlow();
   // One bubble: its activity, the download jobs it stands for, and whether it is the lane split.
@@ -1765,11 +1768,8 @@ void Island::prepare(Instance& inst) {
     inst.height = h;
     updateSplit();
   }
-  // Critical notifications: a full red outline in the theme look; a quieter one on black.
-  if (view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical)
-    inst.background->setBorder(islandRole(ColorRole::Error, gCupertino ? 0.55F : 1.0F), Style::borderWidth);
-  else
-    inst.background->clearBorder();
+  // Critical notifications pulse with the capture glow (above) rather than taking an outline.
+  inst.background->clearBorder();
   inst.root->setSize(static_cast<float>(inst.surface->width()), static_cast<float>(inst.surface->height()));
   const auto keyboardFocus = inst.input.captureTabFocus();
   const float activityOffset =
