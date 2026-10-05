@@ -1392,7 +1392,6 @@
         "keybinds": "Raccourcis",
         "launcher": "Lanceur",
         "location": "Localisation",
-        "niri": "Niri",
         "notifications": "Notifications",
         "osd": "OSD",
         "panels": "Panneaux",
@@ -2956,10 +2955,6 @@
           "description": "Commande personnalisée utilisée par le lanceur d'applications. Elle remplace $CMD par la commande d'origine.",
           "label": "Commande personnalisée du lanceur d'applications ",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Ouvre le lanceur lors de la saisie dans la vue d’ensemble de niri; utilise une petite surface de focus clavier tant que la vue d’ensemble est ouverte",
-          "label": "Saisir pour lancer"
         },
         "offline-mode": {
           "description": "Bloque toutes les connexions réseau sortantes",

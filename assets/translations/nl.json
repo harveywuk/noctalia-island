@@ -1198,7 +1198,6 @@
         "dock": "Dock",
         "hooks": "Hooks",
         "location": "Locatie",
-        "niri": "Niri",
         "notifications": "Meldingen",
         "osd": "OSD",
         "panels": "Panelen",
@@ -2449,10 +2448,6 @@
         "launch-apps-as-systemd-services": {
           "description": "Start applicaties in aparte systemd-diensten zodat ze Noctalia's cgroup niet delen",
           "label": "Apps starten als systemd-diensten"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Open Start wanneer je typt in het Niri-overzicht; gebruikt een klein toetsenbordfocusgebied terwijl het overzicht open is",
-          "label": "Typen om te starten"
         },
         "offline-mode": {
           "description": "Blokkeer alle uitgaande netwerkverzoeken",

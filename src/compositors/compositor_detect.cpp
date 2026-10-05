@@ -27,9 +27,6 @@ namespace compositors {
 
     [[nodiscard]] CompositorKind detectImpl() {
       // Compositor-set env vars are the most reliable signal.
-      if (const char* v = std::getenv("UMBRIEL_SOCKET"); v != nullptr && v[0] != '\0') {
-        return CompositorKind::Umbriel;
-      }
       if (const char* v = std::getenv("LABWC_PID"); v != nullptr && v[0] != '\0') {
         return CompositorKind::Labwc;
       }
@@ -38,9 +35,6 @@ namespace compositors {
       }
       if (const char* v = std::getenv("RIVER_WM"); v != nullptr && StringUtils::containsInsensitive(v, "triad")) {
         return CompositorKind::Triad;
-      }
-      if (const char* v = std::getenv("NIRI_SOCKET"); v != nullptr && v[0] != '\0') {
-        return CompositorKind::Niri;
       }
       if (const char* v = std::getenv("HYPRLAND_INSTANCE_SIGNATURE"); v != nullptr && v[0] != '\0') {
         return CompositorKind::Hyprland;
@@ -54,14 +48,8 @@ namespace compositors {
 
       // Fall back to the desktop env hint (covers dwl-style compositors that don't expose a socket var).
       const std::string hint = buildEnvHint();
-      if (StringUtils::containsInsensitive(hint, "umbriel")) {
-        return CompositorKind::Umbriel;
-      }
       if (StringUtils::containsInsensitive(hint, "triad")) {
         return CompositorKind::Triad;
-      }
-      if (StringUtils::containsInsensitive(hint, "niri")) {
-        return CompositorKind::Niri;
       }
       if (StringUtils::containsInsensitive(hint, "hypr")) {
         return CompositorKind::Hyprland;
@@ -95,8 +83,6 @@ namespace compositors {
     switch (kind) {
     case CompositorKind::Triad:
       return "Triad";
-    case CompositorKind::Niri:
-      return "Niri";
     case CompositorKind::Hyprland:
       return "Hyprland";
     case CompositorKind::Sway:
@@ -109,8 +95,6 @@ namespace compositors {
       return "Labwc";
     case CompositorKind::Kde:
       return "KDE";
-    case CompositorKind::Umbriel:
-      return "Umbriel";
     case CompositorKind::Unknown:
       return "Unknown";
     }

@@ -736,11 +736,9 @@ void SettingsWindow::prepareFrame(bool needsUpdate, bool needsLayout) {
   }
 
   // Rebuild the entire scene only on first build or when something explicitly
-  // requested it (config change, nav click, etc.). Pure size changes — which
-  // niri delivers at refresh rate during window animations (slide-in on focus
-  // return, workspace transitions) — should just re-layout the existing tree.
-  // Rebuilding on every configure causes a 25+ rebuild storm during niri
-  // animations, freezing input response for ~150 ms.
+  // requested it (config change, nav click, etc.). Pure size changes during
+  // window animations should only re-layout the existing tree. Rebuilding on
+  // every configure can stall input while the compositor animates a window.
   const bool firstBuild = m_sceneRoot == nullptr;
   const bool sizeChanged = !firstBuild && (m_lastSceneWidth != width || m_lastSceneHeight != height);
   const bool needRebuild = firstBuild || m_rebuildRequested;

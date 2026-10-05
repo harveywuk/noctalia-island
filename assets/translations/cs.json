@@ -1233,7 +1233,6 @@
         "hooks": "Háčky",
         "keybinds": "Klávesové zkratky",
         "location": "Poloha",
-        "niri": "Niri",
         "notifications": "Oznámení",
         "osd": "OSD",
         "panels": "Panely",
@@ -2671,10 +2670,6 @@
           "description": "Vlastní příkaz použitý spouštěčem aplikací, nahrazuje $CMD původním příkazem.",
           "label": "Vlastní příkaz spouštěče",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Otevřít spouštěč při psaní v přehledu niri; používá malý povrch pro klávesové zaměření, dokud je přehled otevřený",
-          "label": "Psaním spustit"
         },
         "offline-mode": {
           "description": "Blokovat všechny odchozí síťové požadavky",

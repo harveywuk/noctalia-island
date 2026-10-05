@@ -29,7 +29,6 @@ int main() {
   using compositors::CompositorKind;
   using wayland_protocol_policy::shouldBindExtForeignToplevelList;
 
-  TEST_CHECK(shouldBindExtForeignToplevelList(CompositorKind::Niri));
   TEST_CHECK(shouldBindExtForeignToplevelList(CompositorKind::Hyprland));
   TEST_CHECK(shouldBindExtForeignToplevelList(CompositorKind::Kde));
   TEST_CHECK(!shouldBindExtForeignToplevelList(CompositorKind::Unknown));

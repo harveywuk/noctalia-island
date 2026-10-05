@@ -1278,7 +1278,6 @@
         "keybinds": "Atallos",
         "launcher": "Launcher",
         "location": "Localización",
-        "niri": "Niri",
         "notifications": "Notificacións",
         "osd": "OSD",
         "panels": "Paneis",
@@ -2783,10 +2782,6 @@
           "description": "Comando personalizado usado polo Launcher de aplicacións; substitúe $CMD polo comando orixinal.",
           "label": "Comando personalizado do Launcher",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Abre o Launcher ao escribir na vista xeral de Niri; usa unha pequena superficie con foco de teclado mentres a vista xeral está aberta",
-          "label": "Escribir para lanzar"
         },
         "offline-mode": {
           "description": "Bloquea todas as solicitudes de rede saíntes",

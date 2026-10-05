@@ -1424,7 +1424,6 @@
         "keybinds": "단축키",
         "launcher": "런처",
         "location": "위치",
-        "niri": "Niri",
         "notifications": "알림",
         "osd": "OSD",
         "panels": "패널",
@@ -3176,10 +3175,6 @@
           "description": "런처, 독 및 태스크바에서 실행되는 앱을 감쌉니다. $CMD를 원래 명령어로 대체합니다",
           "label": "사용자 정의 앱 실행 명령어",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "niri 개요에서 입력 시 런처 열기. 개요가 열려 있는 동안 작은 키보드 포커스 표면을 사용합니다",
-          "label": "입력하여 실행"
         },
         "offline-mode": {
           "description": "모든 발신 네트워크 요청 차단",

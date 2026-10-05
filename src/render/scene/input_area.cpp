@@ -296,7 +296,7 @@ bool InputArea::dispatchAxis(
 
   // Quantize scroll into whole detent steps, at most one per frame. A wheel
   // notch is a hardware detent: the user feels one click, so it is one step
-  // even when the compositor scales the delta (niri's scroll-factor), and a
+  // even when the compositor scales the delta (its scroll factor), and a
   // free-spinning hi-res wheel accrues sub-detent frames until a full detent
   // has turned. Continuous sources (touchpads) accrue axisValue the same way.
   // Scrolling content stays on scrollDelta() and keeps the scaling.

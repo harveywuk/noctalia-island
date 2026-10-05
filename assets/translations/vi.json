@@ -1390,7 +1390,6 @@
         "keybinds": "Phím tắt",
         "launcher": "Trình khởi chạy",
         "location": "Vị trí",
-        "niri": "Niri",
         "notifications": "Thông báo",
         "osd": "OSD",
         "panels": "Các bảng",
@@ -2957,10 +2956,6 @@
         "launch-apps-custom-command": {
           "description": "Lệnh tùy chỉnh được dùng bởi trình khởi chạy ứng dụng, biến $CMD sẽ được thay thế bằng lệnh gốc.",
           "label": "Lệnh trình khởi chạy tùy chỉnh"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Mở trình khởi chạy khi gõ phím trong chế độ tổng quan của Niri; sử dụng một bề mặt lấy nét bàn phím nhỏ trong khi chế độ tổng quan đang mở",
-          "label": "Gõ để khởi chạy"
         },
         "offline-mode": {
           "description": "Chặn tất cả yêu cầu mạng đi",

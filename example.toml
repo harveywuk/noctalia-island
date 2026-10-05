@@ -16,7 +16,6 @@ date_format           = "%A %-d %B" # default shell UI date format
 offline_mode          = false        # block all outgoing HTTP when true
 # panel_anchor_bar   = "main"        # bar panels attach to without a source bar; omit = first enabled bar
 telemetry_enabled     = false        # send an anonymous startup ping
-niri_overview_type_to_launch_enabled = false # opt in to type-to-launch from niri overview
 polkit_agent          = false
 password_style        = "default"    # default | random
 settings_show_advanced = true        # show advanced settings by default in Settings
@@ -165,13 +164,6 @@ community_ids              = []     # fetched from api.noctalia.dev/templates, c
 # input_path  = "templates/my-app.css"
 # output_path = "~/.config/my-app/theme.css"
 # post_hook   = "my-app --reload-theme"
-
-# ── Backdrop ──────────────────────────────────────────────────────────────────
-
-[backdrop]
-enabled                = false
-blur_intensity         = 0.5        # 0.0 = no blur, 1.0 = maximum
-tint_intensity         = 0.3        # 0.0 = no tint, 1.0 = opaque
 
 # ── Notifications ─────────────────────────────────────────────────────────────
 

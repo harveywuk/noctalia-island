@@ -1395,7 +1395,6 @@
         "keybinds": "Tuş Atamaları",
         "launcher": "Başlat",
         "location": "Konum",
-        "niri": "Niri",
         "notifications": "Bildirimler",
         "osd": "Ekranda Gösterim",
         "panels": "Paneller",
@@ -1407,7 +1406,6 @@
         "shell": "Kabuk",
         "system": "Sistem",
         "templates": "Şablonlar",
-        "umbriel": "Umbriel",
         "wallpaper": "Duvar Kağıdı",
         "island": "Dynamic Island",
         "workspaces": "Çalışma alanları",
@@ -3152,10 +3150,6 @@
           "description": "Başlatıcıdan, rıhtımdan ve görev çubuğundan başlatılan uygulamaları sarar; $CMD'yi orijinal komutla değiştirir.",
           "label": "Özel Uygulama Çalıştırma Komutu",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Niri genel bakışında yazarken başlat menüsünü aç; genel bakış açıkken küçük bir klavye odak yüzeyi kullanır",
-          "label": "Başlatmak İçin Yaz"
         },
         "offline-mode": {
           "description": "Tüm dışa giden ağ isteklerini engelle",

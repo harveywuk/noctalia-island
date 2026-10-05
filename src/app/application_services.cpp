@@ -889,7 +889,6 @@ void Application::reconcileOutputSurfaces() {
   // stacking (e.g. screen corners above the dock) is identical in both cases.
   // Each owner's onOutputChange() reconciles idempotently against the current
   // output set, so re-running it is safe. initialize() only wires dependencies.
-  m_backdrop.onOutputChange();
   m_wallpaper.onOutputChange();
   m_bar.onOutputChange();
   m_dock.onOutputChange();
@@ -900,7 +899,6 @@ void Application::reconcileOutputSurfaces() {
   m_lockScreen.onOutputChange();
   m_idleGraceOverlay.onOutputChange();
   m_idleInhibitor.onOutputChange();
-  m_overviewLauncherCapture.onOutputChange();
   m_screenshotService.onOutputChange();
   m_notificationToast.onOutputChange();
   m_osdOverlay.onOutputChange();
@@ -1025,7 +1023,6 @@ void Application::initAuxServicesAndHooks() {
     if (m_syncScriptApiOutputs) {
       m_syncScriptApiOutputs();
     }
-    m_backdrop.onStateChange();
     m_lockScreen.onWallpaperChanged();
     m_themeService.onWallpaperChange();
     if (m_panelManager.isOpenPanel("control-center")) {
@@ -1070,7 +1067,6 @@ void Application::initAuxServicesAndHooks() {
     requestAllSurfacesRedraw();
     m_lockScreen.onThemeChanged();
     m_trayMenu.onThemeChanged();
-    m_backdrop.onThemeChanged();
     m_settingsWindow.onThemeChanged();
     scheduleGreeterAutoSync();
   });
@@ -1767,10 +1763,6 @@ void Application::triggerShellAction(const std::string& action, wl_output* outpu
     m_panelManager.togglePanel("launcher", PanelOpenRequest{.output = output});
   } else if (action == "control_center") {
     m_panelManager.togglePanel("control-center", PanelOpenRequest{.output = output});
-  } else if (action == "overview") {
-    // There is no public toggle for overview in OverviewLauncherCapture.
-    // Try to execute a generic compositor action, or use niri directly if using niri.
-    runShellCommand("niri msg action toggle-overview");
   } else if (action == "window_switcher") {
     m_windowSwitcher.show(output);
   }

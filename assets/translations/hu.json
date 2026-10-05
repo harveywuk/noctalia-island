@@ -1351,7 +1351,6 @@
         "keybinds": "Billentyűkiosztás",
         "launcher": "Indító",
         "location": "Hely",
-        "niri": "Niri",
         "notifications": "Értesítések",
         "osd": "Képernyőkijelzés",
         "panels": "Panelek",
@@ -3024,10 +3023,6 @@
           "description": "A programindítóból, a dokkból és a tálcáról elindított alkalmazásokat fogja közre; a $CMD-t az eredeti parancsra cseréli",
           "label": "Egyéni alkalmazásindító parancs",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Nyisd meg az Indítót, amikor gépelsz a niri áttekintésben; egy apró billentyűzet-fókusz felületet használ, amíg az áttekintés nyitva van",
-          "label": "Gépelj az indításhoz"
         },
         "offline-mode": {
           "description": "Összes kimenő hálózati kérés blokkolása",

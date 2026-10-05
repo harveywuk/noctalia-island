@@ -26,7 +26,7 @@ namespace {
   constexpr float kRampDurationMs = std::chrono::duration<float, std::milli>(kRampDuration).count();
   constexpr auto kScheduleRecheckInterval = std::chrono::minutes(1);
 
-  // Each LUT upload costs the compositor a stall (~26 ms per output on niri/smithay+AMD, measured),
+  // Each LUT upload costs the compositor a stall (measured at ~26 ms per output on a Smithay compositor with AMD),
   // so the upload count is the budget. Steps of this size are not visible, so spend exactly enough
   // uploads to keep every step at or under it and no more.
   constexpr int kTargetStepKelvin = 50;

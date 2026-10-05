@@ -37,7 +37,6 @@
 #include "scripting/script_api_context.h"
 #include "security/secret_store.h"
 #include "security/storage_key_provider.h"
-#include "shell/backdrop/backdrop.h"
 #include "shell/bar/bar.h"
 #include "shell/desktop/desktop_widgets_controller.h"
 #include "shell/dock/dock.h"
@@ -54,7 +53,6 @@
 #include "shell/osd/media_osd.h"
 #include "shell/osd/osd_overlay.h"
 #include "shell/osd/privacy_osd.h"
-#include "shell/overview/overview_launcher_capture.h"
 #include "shell/panel/panel_manager.h"
 #include "shell/screen_corners/screen_corners.h"
 #include "shell/session/session_action_runner.h"
@@ -364,7 +362,6 @@ private:
   // reload can retire the previous set before registering the new one.
   std::vector<std::string> m_pluginPanelIds;
   WindowSwitcher m_windowSwitcher;
-  OverviewLauncherCapture m_overviewLauncherCapture;
   NotificationToast m_notificationToast;
   AudioOsd m_audioOsd;
   BrightnessOsd m_brightnessOsd;
@@ -379,7 +376,6 @@ private:
   ScreenCorners m_screenCorners;
   TrayMenu m_trayMenu;
   Wallpaper m_wallpaper;
-  Backdrop m_backdrop;
   SettingsWindow m_settingsWindow;
   LayerPopupHostRegistry m_layerPopupHosts;
   ColorPickerDialogPopup m_colorPickerDialogPopup;

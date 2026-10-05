@@ -1495,7 +1495,6 @@
         "keybinds": "Atajos de teclado",
         "launcher": "Lanzador",
         "location": "Localización",
-        "niri": "Niri",
         "notifications": "Notificaciones",
         "osd": "OSD",
         "panels": "Paneles",
@@ -1508,7 +1507,6 @@
         "shell": "Shell",
         "system": "Sistema",
         "templates": "Plantillas",
-        "umbriel": "Umbriel",
         "wallpaper": "Fondo de Pantalla",
         "island": "Dynamic Island",
         "workspaces": "Espacios de trabajo",
@@ -3313,10 +3311,6 @@
           "label": "Comando de inicio de aplicación personalizado",
           "placeholder": "$CMD"
         },
-        "niri-overview-type-to-launch": {
-          "description": "Abrir el lanzador al escribir en la vista general de niri; usa una pequeña superficie de foco de teclado mientras la vista general está abierta",
-          "label": "Escribe para lanzar"
-        },
         "offline-mode": {
           "description": "Bloquear todas las solicitudes de red salientes",
           "label": "Modo sin conexión"
@@ -3531,10 +3525,6 @@
         "time-format": {
           "description": "Formato de hora predeterminado para la interfaz del shell sin configuración propia",
           "label": "Formato de hora"
-        },
-        "umbriel-overview-type-to-launch": {
-          "description": "Abre el lanzador al escribir en la vista general de Umbriel; utiliza una superficie diminuta para el foco del teclado mientras la vista general está abierta",
-          "label": "Escribe para lanzar"
         },
         "window-switcher-current-workspace-only": {
           "description": "Mostrar solo las ventanas del espacio de trabajo activo; desactívalo para incluir las de todos los espacios",

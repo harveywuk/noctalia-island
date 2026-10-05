@@ -207,7 +207,6 @@ Override bases with `NOCTALIA_CONFIG_HOME`, `NOCTALIA_STATE_HOME`,
   [noctalia-greeter](https://github.com/noctalia-dev/noctalia-greeter).
 - Not a replacement for file managers, screen casting, or drive mounting.
 - Compositor support varies (protocols / IPC). See the compositor docs for
-  [Niri](https://docs.noctalia.dev/noctalia/compositor-settings/niri/),
   [Hyprland](https://docs.noctalia.dev/noctalia/compositor-settings/hyprland/),
   [Sway / Scroll](https://docs.noctalia.dev/noctalia/compositor-settings/sway-scroll/),
   [Mango](https://docs.noctalia.dev/noctalia/compositor-settings/mango/),

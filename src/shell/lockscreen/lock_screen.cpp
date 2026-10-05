@@ -32,7 +32,7 @@ namespace {
 
   Color resolveWallpaperFillColor(const WallpaperConfig& config) {
     // The lockscreen is an ext-session-lock surface: any transparency lets the
-    // compositor's "client hasn't painted" fallback (e.g. niri's red) bleed
+    // compositor's "client hasn't painted" fallback bleed
     // through. With no wallpaper image and no configured fill color, paint an
     // opaque black background so the lock surface is always fully opaque.
     if (!config.fillColor) {

@@ -930,7 +930,7 @@ namespace process {
     }
     return cachedProcessMatchesAny(
         {"xdg-desktop-portal-wlr ", "xdg-desktop-portal-hyprland ", "xdg-desktop-portal-gnome ",
-         "xdg-desktop-portal-kde ", "niri-screenshare "}
+         "xdg-desktop-portal-kde "}
     );
   }
 

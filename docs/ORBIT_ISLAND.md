@@ -258,12 +258,7 @@ focus so it cannot inherit a key press intended for the previous content.
 Hovering alone leaves keyboard focus with the current app. With no media player
 or notification, active download, or countdown, the command opens the existing calendar panel.
 
-The local Umbriel shortcut is Super+Alt+I:
-
-```toml
-[keybinds]
-"Mod+Alt+I" = { action = "spawn:/home/mrpickles/.local/bin/noctalia msg island-focus", repeat = false }
-```
+Bind `noctalia msg island-focus` to a shortcut in your compositor.
 
 ## Scope
 
@@ -531,30 +526,7 @@ panel yet. Other capture shortcuts remain in their existing configuration.
 Backups of the old startup, shortcut and idle files are in
 `~/.local/state/noctalia-island/migration-backup/20260926-203655`.
 
-Umbriel is built separately in `~/src/umbriel`, with its portal in
-`~/src/xdg-desktop-portal-umbriel`. Its configuration is
-`~/.config/umbriel/config.toml`. It keeps Hyprland available as a separate session.
-The user service launches the same Noctalia installation in either compositor.
-
-Umbriel and its portal are installed under `/usr/local`; Noctalia Greeter 1.5.0
-and Xwayland Satellite are installed through pacman. `/etc/greetd/config.toml`
-now launches `/usr/bin/noctalia-greeter-session`. The initial greeter selection is
-Hyprland; select Umbriel to try the new compositor. greetd was not restarted during
-installation, so the old login greeter remains until greetd restarts; reboot when ready for the new login screen.
-The original greetd/PAM files and installed-file manifest are backed up in
-`/var/backups/noctalia-migration-20260926-204306`.
-
-The install staging and system installer are under `~/.local/state/noctalia-install`.
-`check-umbriel.py` and `check-greeter.py` there run isolated headless checks. These
-passed with two outputs, including island panel rendering and the greeter's first
-presented frames. A real hardware login/authentication was not attempted.
-
-To restore the old user shell, restore the backed-up Hyprland files, run
-`systemctl --user disable --now noctalia-island.service`, then
-`systemctl --user enable --now orbit.service orbit-display.service` and reload
-Hyprland. To restore the old login greeter, copy the backed-up greetd config back
-as root before restarting greetd or rebooting; do not restart greetd inside a session you need to
-keep. Umbriel does not replace or uninstall Hyprland.
+For the current installation and session instructions, see [SETUP.md](SETUP.md).
 
 The greeter output layout also mirrors the desktop: DP-1 at (0,0), DP-2 at
 (350,1440) with a 180-degree transform and scale 1 on both outputs.

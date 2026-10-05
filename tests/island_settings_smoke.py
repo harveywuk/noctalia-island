@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check island settings and resized media controls on a private Umbriel display."""
+"""Check island settings and resized media controls on a private labwc display."""
 import os, subprocess, sys, tempfile, time, pathlib, json, tomllib, ast
 from PIL import Image, ImageChops
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -62,7 +62,9 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
         with (cfg/'config.toml').open('a') as f:
             f.write('\n[osd.kinds]\nlock_keys=false\n')
     (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
-    config = base/'umbriel.toml'; config.write_text('[output."HEADLESS-1"]\nmode="1280x720"\n')
+    config = base/'labwc'; config.mkdir()
+    (config/'rc.xml').write_text('<labwc_config/>')
+    (config/'autostart').write_text('')
     env=dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(base/'config'), XDG_STATE_HOME=str(base/'state'), XDG_DATA_HOME=str(base/'data'), XDG_CACHE_HOME=str(base/'cache'), NOCTALIA_CONFIG_HOME=str(base/'config'), NOCTALIA_STATE_HOME=str(base/'state'), NOCTALIA_DATA_HOME=str(base/'data'), WLR_BACKENDS='headless', WLR_HEADLESS_OUTPUTS='1', WLR_LIBINPUT_NO_DEVICES='1', LIBGL_ALWAYS_SOFTWARE='1', XDG_VIDEOS_DIR=str(out))
     env['NOCTALIA_ASSETS_DIR']=str(REPO/'assets')
     # Keep the host's webcam users (the /proc scan) out of the private session.
@@ -73,7 +75,9 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
     env['HOME']=str(base)
     env['DBUS_SYSTEM_BUS_ADDRESS']=env['DBUS_SESSION_BUS_ADDRESS']
     env.pop('WAYLAND_DISPLAY',None); env.pop('DISPLAY',None)
-    env.pop('UMBRIEL_SOCKET',None)
+    for key in ('HYPRLAND_INSTANCE_SIGNATURE','SWAYSOCK','TRIAD_SOCKET','MANGO_INSTANCE_SIGNATURE'):
+        env.pop(key,None)
+    env.update(XDG_CURRENT_DESKTOP='labwc',XDG_SESSION_TYPE='wayland',HOME=str(base),GSETTINGS_BACKEND='keyfile')
     processes=[]
     def run(args): return subprocess.check_output(args,env=env,text=True,stderr=subprocess.STDOUT,timeout=15)
     def start(args,name):
@@ -98,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             wait(lambda:(runtime/'pulse/native').exists(),'private PulseAudio startup')
             run(['pactl','load-module','module-null-sink','sink_name=island-test'])
             run(['pactl','set-default-sink','island-test'])
-        compositor=start(['/usr/local/bin/umbriel','-c',str(config)],'umbriel.log')
+        compositor=start(['labwc','-C',str(config)],'labwc.log')
         wait(lambda:list(runtime.glob('wayland-*.lock')),'headless compositor start')
         env['WAYLAND_DISPLAY']=next(runtime.glob('wayland-*.lock')).name.removesuffix('.lock')
         for kind,proto,libs in [('pointer',REPO/'tests/fixtures/wlr-virtual-pointer-unstable-v1.xml',[]),('keyboard',REPO/'protocols/virtual-keyboard-unstable-v1.xml',['-lxkbcommon'])]:
@@ -123,7 +127,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
                                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
             processes.append(bluetooth)
             assert bluetooth.stdout.readline().strip() == 'ok'
-        binary=str(REPO/'build-rishot/noctalia'); shell=start([binary],'noctalia.log')
+        binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia')); shell=start([binary],'noctalia.log')
         wait(lambda:(runtime/f"noctalia-{env['WAYLAND_DISPLAY']}.sock").exists(),'shell start')
         def msg(*words): return run([binary,'msg',*words])
         def find_box(word,name,min_x=0,min_y=0):
@@ -146,7 +150,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
                 if word in (row.get('text') or '') and int(row['left'])>=min_x:
                     return int(row['left'])+int(row['width'])//2,int(row['top'])+int(row['height'])//2
             raise AssertionError(f'{word!r} not found in {name}')
-        def click_switch(label,name,min_x=420,xs=(1060,1110),below=50):
+        def click_switch(label,name,min_x=420,xs=(1020,1110),below=50):
             """Click the switch in the settings row titled `label`: the round knob right of the row."""
             _,label_y=find_text(label,name,min_x=min_x)
             image=Image.open(out/name).convert('RGB')
@@ -159,7 +163,6 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             try: return msg('theme-mode-get').strip() in ('dark', 'light')
             except subprocess.CalledProcessError: return False
         wait(ready, 'shell IPC startup')
-        key(1)  # Dismiss Umbriel's first-run keybinding hint.
         time.sleep(3)
         if '--activity-switcher-only' in sys.argv:
             def state(name):
@@ -727,7 +730,7 @@ play_sound=false
             assert plugin_state().get('clicks') == 1, 'Clock refreshes must retain the plugin runtime'
             move(615,165);click();wait(lambda:(base/'widget-clicked').exists(),'custom command widget click')
             move(660,165);click();time.sleep(1);shot('audio-panel')
-            msg('panel-close');move(1100,600);time.sleep(1)  # Island-hosted; Umbriel gives it no keyboard focus.
+            msg('panel-close');move(1100,600);time.sleep(1)  # Close the Island-hosted panel explicitly.
             before=plugin_state().get('ticks',0);time.sleep(.7)
             assert plugin_state().get('ticks',0)==before, 'Hidden widgets must stop their runtime'
             move(640,40);time.sleep(1);shot('reopened')
@@ -790,7 +793,7 @@ play_sound=false
             assert spectrum_count()==1
             msg('panel-open','control-center');time.sleep(1)
             assert spectrum_count()==0, 'A hosted panel must release the visualizer'
-            msg('panel-close');time.sleep(1)  # Island-hosted; Umbriel gives it no keyboard focus.
+            msg('panel-close');time.sleep(1)  # Close the Island-hosted panel explicitly.
             assert spectrum_count()==1, 'Returning from a panel must restore the visualizer'
             sound.terminate();sound.wait(timeout=5);time.sleep(3)
             quiet=shot('quiet')
@@ -958,7 +961,7 @@ play_sound=false
             # Compact mic icon opens Noctalia's existing audio tab.
             move(724,40);click();time.sleep(.8);shot('audio-controls')
             assert differs('mic-hover','audio-controls',(400,90,880,330)), 'Microphone click must open the audio panel'
-            msg('panel-close');move(1100,600)  # Island-hosted; Umbriel gives it no keyboard focus.
+            msg('panel-close');move(1100,600)  # Close the Island-hosted panel explicitly.
             mic.terminate();mic.wait(timeout=6);time.sleep(2.5);shot('stopped')
             assert not differs('idle','stopped'), 'Stopping captures must remove all indicators'
             assert shell.poll() is None
@@ -1184,7 +1187,7 @@ play_sound=false
             # Source name shares the existing media-panel action.
             move(650,99);click();time.sleep(1)
             run(['grim',str(out/'media-panel.png')])
-            # Umbriel gives the Island-hosted panel no keyboard focus, so close it over IPC; Escape on
+            # The Island-hosted panel may not have keyboard focus, so close it over IPC; Escape on
             # Hyprland is covered by the island privacy check.
             msg('panel-close');move(1100,600);time.sleep(.5)
             long_body='\n'.join(f'Line {i:02}: A complete notification stays readable when expanded.' for i in range(1,61))+'\nEND OF FULL MESSAGE'

@@ -1443,7 +1443,6 @@
         "keybinds": "Гарячі клавіші",
         "launcher": "Запускач",
         "location": "Місцеперебування",
-        "niri": "Niri",
         "notifications": "Сповіщення",
         "osd": "OSD",
         "panels": "Панелі",
@@ -2900,10 +2899,6 @@
         "launch-apps-as-systemd-services": {
           "description": "Запускає програми в окремих службах systemd, щоб вони не ділили cgroup Noctalia",
           "label": "Запускати програми як служби systemd"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Відкриває Launcher під час введення тексту в Niri Overview; використовує невелику поверхню для фокусування клавіатури, поки Overview відкрито",
-          "label": "Набери, щоб запустити"
         },
         "offline-mode": {
           "description": "Блокувати всі вихідні мережеві запити",

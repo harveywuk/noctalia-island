@@ -33,7 +33,7 @@ struct zwlr_layer_surface_v1;
 //     uses Exclusive there. The panel is also Exclusive and is mapped after
 //     the shield, so per the layer-shell spec the panel still wins keyboard
 //     focus.
-//   - On every other compositor we tested (niri, wlroots vanilla, sway), None
+//   - On every other compositor we tested (wlroots vanilla, sway), None
 //     works fine and avoids touching keyboard focus at all, so we keep that
 //     as the default.
 //

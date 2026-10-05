@@ -53,12 +53,6 @@ Noctalia does not manage session autostart from its Settings app. Use your compo
 
 Examples for each supported compositor:
 
-:::note[Niri]
-Add to `~/.config/niri/config.kdl`:
-```ini
-spawn-at-startup "noctalia"
-```
-:::
 
 :::note[Hyprland]
 Add to your `hyprland.start` event hook in `~/.config/hypr/hyprland.lua`:
@@ -179,14 +173,6 @@ See [Shell settings](/noctalia/configuration/shell/#shell-settings) and [Bars](/
 
 </FaqItem>
 
-<FaqItem question="How do I turn off blur behind a transparent bar?">
-
-On Niri, making a bar transparent only changes Noctalia surface opacity. When Niri `ext-background-effects` support is active, Noctalia still publishes blur regions for its layer surfaces, so the compositor can keep blurring behind the bar.
-
-The default xray blur samples the wallpaper, which can also appear as faint wallpaper-colored pixels around rounded corners. Use `xray false` to blur the actual content behind Noctalia, or `blur false` to disable the effect. See [Niri compositor settings: Blur](/noctalia/compositor-settings/niri/?section=blur) for the full rules and explanation.
-
-</FaqItem>
-
 <FaqItem question="How do I tweak the seam between the bar and attached panels?">
 
 Attached panels (like the control center) sit flush against the bar, so the line where they meet, the seam, can show a faint cut, a hairline gap, or a doubled edge depending on your compositor and display scaling. These artifacts mostly show up with a highly transparent bar, where the seam between the two surfaces has nothing opaque to hide behind. If the seam bothers you, the simplest fix is to raise `background_opacity` toward `1.0`; the settings below help when you want to keep the transparency. Three settings control how that seam looks.
@@ -195,7 +181,7 @@ Attached panels (like the control center) sit flush against the bar, so the line
 
 **Embrace the cut with `contact_shadow`.** Instead of hiding the seam, this draws a dark gradient where the panel meets the bar, giving the panel a lifted-off-the-bar feel. It is independent of the bar's `shadow` and only affects attached panels; the change applies the next time a panel opens. In Settings it lives under **Bar → Effects**.
 
-**Mind the compositor blur.** The bar and an attached panel are separate Wayland surfaces, so the compositor blurs each one on its own. With a large blur sampling offset the two blur passes don't line up at the seam, and the gap between them becomes visible. How much shows up depends on the compositor: Hyprland handles it well, while Niri tends to reveal the split more. If the seam looks off with blur, lower your compositor's blur size/passes (or its sampling offset) rather than chasing it with `panel_overlap`.
+**Mind the compositor blur.** The bar and an attached panel are separate Wayland surfaces, so the compositor blurs each one on its own. With a large blur sampling offset the two blur passes don't line up at the seam, and the gap between them becomes visible. How much shows up depends on the compositor. If the seam looks off with blur, lower your compositor's blur size/passes (or its sampling offset) rather than chasing it with `panel_overlap`.
 
 ```toml
 [bar.default]

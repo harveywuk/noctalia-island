@@ -1508,7 +1508,6 @@
         "keybinds": "快捷键",
         "launcher": "启动器",
         "location": "位置",
-        "niri": "Niri",
         "notifications": "通知",
         "osd": "OSD",
         "panels": "面板",
@@ -1521,7 +1520,6 @@
         "shell": "Shell",
         "system": "系统",
         "templates": "模板",
-        "umbriel": "Umbriel",
         "wallpaper": "壁纸",
         "island": "灵动岛",
         "workspaces": "工作区",
@@ -3346,10 +3344,6 @@
           "label": "自定义应用启动命令",
           "placeholder": "$CMD"
         },
-        "niri-overview-type-to-launch": {
-          "description": "在 niri 概览中键入时打开启动器；进入概览后，将通过一个极小的输入界面接收键盘输入",
-          "label": "键入启动"
-        },
         "offline-mode": {
           "description": "阻止所有出站网络请求",
           "label": "离线模式"
@@ -3568,10 +3562,6 @@
         "time-format": {
           "description": "Shell UI 的默认时间格式",
           "label": "时间格式"
-        },
-        "umbriel-overview-type-to-launch": {
-          "description": "在 umbriel 概览中键入时打开启动器；进入概览后，将通过一个极小的输入界面接收键盘输入",
-          "label": "键入启动"
         },
         "window-switcher-current-workspace-only": {
           "description": "仅列出活动工作区中的窗口；关闭后包含所有工作区的窗口",

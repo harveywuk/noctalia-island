@@ -1,6 +1,6 @@
 ---
 title: Wallpaper & Backdrop
-description: Wallpaper fill modes, automation, per-monitor directories, and niri's backdrop.
+description: Wallpaper fill modes, automation, per-monitor directories.
 sidebar:
   order: 9
 ---
@@ -106,29 +106,3 @@ builtin_palette = "Noctalia"
 The **Theme** and **Colors** row is always available under the toolbar. When no favorited image is selected, those controls persist a live global theme override, the same as changing theme mode or palette source in Settings. When the selected image is already a favorite, adjusting the controls also saves the favorite preset and re-applies that wallpaper with the updated settings.
 
 Starring an image wallpaper bookmarks the path only, except when that image is the wallpaper currently applied to the selected monitor: the favorite is saved with the active `theme_mode`, `palette_source`, and palette selection so re-applying it restores the look you already have. Declarative `color:#RRGGBB` favorites use the same stored theme fields when present. Clicking a favorite applies the wallpaper together with its stored theme settings; a favorite without `theme_mode` or `palette_source` leaves the current theme mode or palette unchanged.
-
----
-
-# Backdrop
-
-Renders a blurred and tinted copy of the current wallpaper as a layer-shell backdrop for compositor overview/backdrop modes (e.g. niri's overview). Disabled by default.
-
-To make the surface visible during niri overview, add a layer-rule to your niri config:
-
-```kdl
-layer-rule {
-    match namespace="^noctalia-backdrop"
-    place-within-backdrop true
-}
-```
-
-```toml
-[backdrop]
-enabled        = false
-blur_intensity = 0.5    # 0.0 = no blur, 1.0 = maximum blur
-tint_intensity = 0.3    # 0.0 = no tint, 1.0 = fully opaque tint
-```
-
-When `enabled` on a supported compositor, backdrop layer surfaces and wallpaper textures stay loaded in GPU memory for the lifetime of the shell. Noctalia renders the blurred/tinted backdrop at startup and reuses the cached result until the wallpaper, scale, or backdrop styling changes.
-
-The tint color is `palette.surface` and is not currently configurable.

@@ -197,7 +197,7 @@ namespace {
     bool ok = true;
     ok = expect(
              process::cgroupIndicatesSystemdUserManager(
-                 "0::/user.slice/user-1000.slice/user@1000.service/session.slice/wayland-wm@niri.service\n", 1000
+                 "0::/user.slice/user-1000.slice/user@1000.service/session.slice/wayland-wm@Hyprland.service\n", 1000
              ),
              "uwsm compositor unit should be detected as user-manager managed"
          )

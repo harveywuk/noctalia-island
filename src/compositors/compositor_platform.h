@@ -40,12 +40,6 @@ namespace compositors {
   class CompositorRuntimeRegistry;
   class FocusedOutputBackend;
   class OutputPowerBackend;
-  namespace niri {
-    class NiriRuntime;
-  }
-  namespace umbriel {
-    class UmbrielRuntime;
-  }
 } // namespace compositors
 
 class WorkspaceAlertService;
@@ -190,11 +184,6 @@ public:
   [[nodiscard]] bool isOverviewOpen() const noexcept;
 
   [[nodiscard]] compositors::hyprland::HyprlandRuntime& hyprlandRuntime() noexcept;
-  [[nodiscard]] compositors::niri::NiriRuntime& niriRuntime() noexcept;
-  [[nodiscard]] const compositors::niri::NiriRuntime& niriRuntime() const noexcept;
-
-  [[nodiscard]] compositors::umbriel::UmbrielRuntime& umbrielRuntime() noexcept;
-  [[nodiscard]] const compositors::umbriel::UmbrielRuntime& umbrielRuntime() const noexcept;
 
 private:
   struct WorkspaceModelSnapshot {

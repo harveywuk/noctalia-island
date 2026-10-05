@@ -87,8 +87,6 @@ body:
       label: Compositor
       description: Select the compositor where the issue occurs.
       options:
-        - Niri
-        - Umbriel
         - Hyprland
         - Sway
         - Scroll

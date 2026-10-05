@@ -1399,7 +1399,6 @@
         "keybinds": "Snarvegar",
         "launcher": "Programveljar",
         "location": "Stad",
-        "niri": "Niri",
         "notifications": "Varsel",
         "osd": "Skjermvising",
         "panels": "Fjøler",
@@ -3136,10 +3135,6 @@
           "description": "Ballar inn appar som køyrer frå veljaren, festepunktet og oppgåvelina; byter ut $CMD med den opphavlege kommandoen.",
           "label": "Sjølvvald veljarkommando",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Opna programveljaren når du skriv i niri-oversyn; brukar ei lita knappefjøl-åtgaumsflate medan oversyna er open",
-          "label": "Skriv for å køyra"
         },
         "offline-mode": {
           "description": "Sperra alle utgåande nettverkstrafikk",

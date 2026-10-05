@@ -55,7 +55,7 @@ namespace {
         return "appearance";
       return "other";
     }
-    if (root == "theme" || root == "wallpaper" || root == "backdrop" || root == "wallpaper_favorites")
+    if (root == "theme" || root == "wallpaper" || root == "wallpaper_favorites")
       return "appearance";
     if (root == "bar" || root == "widget" || root == "island")
       return "bars";

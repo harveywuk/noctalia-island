@@ -1508,7 +1508,6 @@
         "keybinds": "Scorciatoie",
         "launcher": "Launcher",
         "location": "Posizione",
-        "niri": "Niri",
         "notifications": "Notifiche",
         "osd": "OSD",
         "panels": "Pannelli",
@@ -1521,7 +1520,6 @@
         "shell": "Shell",
         "system": "Sistema",
         "templates": "Template",
-        "umbriel": "Umbriel",
         "wallpaper": "Sfondo",
         "island": "Dynamic Island",
         "workspaces": "Spazi di lavoro",
@@ -3346,10 +3344,6 @@
           "label": "Comando di avvio app personalizzato",
           "placeholder": "$CMD"
         },
-        "niri-overview-type-to-launch": {
-          "description": "Apre il launcher quando si digita nella panoramica niri (overiew)",
-          "label": "Digita per avviare launcher"
-        },
         "offline-mode": {
           "description": "Blocca tutte le richieste di rete in uscita",
           "label": "Modalità offline"
@@ -3568,10 +3562,6 @@
         "time-format": {
           "description": "Formato ora predefinito per la shell UI senza impostazione propria",
           "label": "Formato ora"
-        },
-        "umbriel-overview-type-to-launch": {
-          "description": "Apri il launcher mentre digiti in nella Overview di Umbriel; utilizza una piccola area di focus della tastiera mentre l'Overview è aperta",
-          "label": "Digita per avviare"
         },
         "window-switcher-current-workspace-only": {
           "description": "Elenca solo le finestre dell'area di lavoro attiva; disattiva questa opzione per includere le finestre di tutte le aree di lavoro",

@@ -299,7 +299,7 @@ private:
   std::unique_ptr<ContextMenuPopup> m_contextMenuPopup;
   std::vector<zwlr_foreign_toplevel_handle_v1*> m_contextMenuHandles;
   zwlr_foreign_toplevel_handle_v1* m_contextMenuPrimaryHandle = nullptr;
-  // KDE and Niri ext-foreign-toplevel tasks close through ToplevelInfo rather
+  // KDE ext-foreign-toplevel tasks close through ToplevelInfo rather
   // than a wlr foreign-toplevel handle.
   std::vector<ToplevelInfo> m_contextMenuInfoWindows;
   ToplevelInfo m_contextMenuInfoPrimary;

@@ -41,5 +41,8 @@ meson test -C build-rishot --no-rebuild annotation_document annotation_raster sc
 python3 tests/capture_smoke.py
 ```
 
-The smoke test uses a private headless Umbriel display and D-Bus session. It needs
-GPU and desktop audio access. Artifacts are in `build-rishot/capture-smoke`.
+The smoke test uses private labwc, D-Bus, PipeWire and PulseAudio sessions with a null audio
+sink. It requires labwc, PipeWire, WirePlumber, pactl, grim, wf-recorder, ffprobe, Pillow,
+wayland-scanner, a C compiler and the Wayland/xkbcommon development libraries. It checks
+layer changes through the client's Wayland protocol log. Artifacts are in
+`build-rishot/capture-smoke`. Set `NOCTALIA_TEST_BINARY` to test a different build.

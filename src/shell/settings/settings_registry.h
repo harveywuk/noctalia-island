@@ -52,8 +52,6 @@ namespace settings {
     Calendar,
     Power,
     Hooks,
-    Niri,
-    Umbriel,
     Bar,
     Plugins,
   };
@@ -308,9 +306,6 @@ namespace settings {
   // Runtime conditions that gate optional sections (e.g. compositor-specific features).
   struct RegistryEnvironment {
     bool hyprlandAppearanceSupported = false;
-    bool niriBackdropSupported = false;             // hide niri backdrop entries when false
-    bool niriOverviewTypeToLaunchSupported = false; // show niri-only type-to-launch integration
-    bool umbrielOverviewTypeToLaunchSupported = false;
     bool screencopySupported = false;           // lockscreen blurred desktop + screenshot features
     bool ddcutilAvailable = false;              // disable ddcutil toggle when ddcutil is not on PATH
     bool systemdUserManaged = false;            // disable systemd app launching when the shell is not a user unit

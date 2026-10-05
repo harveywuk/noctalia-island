@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
     bus=subprocess.Popen(['dbus-daemon','--config-file='+str(busconf),'--nofork','--print-address=1'],stdout=subprocess.PIPE,text=True)
     processes=[bus];address=bus.stdout.readline().strip()
     env=dict(os.environ,HOME=str(base),XDG_RUNTIME_DIR=str(runtime),XDG_CONFIG_HOME=str(base/'config'),XDG_STATE_HOME=str(base/'state'),XDG_DATA_HOME=str(base/'data'),XDG_CACHE_HOME=str(base/'cache'),DBUS_SESSION_BUS_ADDRESS=address,DBUS_SYSTEM_BUS_ADDRESS=address,HYPRLAND_NO_SD_VARS='1',HYPRLAND_NO_SD_NOTIFY='1',HYPRLAND_NO_RT='1',HYPRLAND_NO_CRASHREPORTER='1',LIBSEAT_BACKEND='none',WLR_BACKENDS='headless',WLR_HEADLESS_OUTPUTS='1',WLR_LIBINPUT_NO_DEVICES='1',WLR_RENDERER='gles2')
-    for key in ('DISPLAY','WAYLAND_DISPLAY','UMBRIEL_SOCKET','NIRI_SOCKET','SWAYSOCK','HYPRLAND_INSTANCE_SIGNATURE','XDG_SESSION_ID','XDG_SEAT','XDG_VTNR','LIBGL_ALWAYS_SOFTWARE'):env.pop(key,None)
+    for key in ('DISPLAY','WAYLAND_DISPLAY','SWAYSOCK','HYPRLAND_INSTANCE_SIGNATURE','XDG_SESSION_ID','XDG_SEAT','XDG_VTNR','LIBGL_ALWAYS_SOFTWARE'):env.pop(key,None)
     for key in ('XDG_CONFIG_HOME','XDG_STATE_HOME','XDG_DATA_HOME','XDG_CACHE_HOME'):
         pathlib.Path(env[key]).mkdir()
     env.update(XDG_CURRENT_DESKTOP='Hyprland',XDG_SESSION_TYPE='wayland',NOCTALIA_ASSETS_DIR=str(REPO/'assets'),NOCTALIA_CONFIG_HOME=env['XDG_CONFIG_HOME'],NOCTALIA_STATE_HOME=env['XDG_STATE_HOME'],NOCTALIA_DATA_HOME=env['XDG_DATA_HOME'],PIPEWIRE_RUNTIME_DIR=str(runtime),PULSE_SERVER='unix:'+str(runtime/'pulse/native'))

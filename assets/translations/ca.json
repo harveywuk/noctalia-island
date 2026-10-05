@@ -1378,7 +1378,6 @@
         "keybinds": "Dreceres de teclat",
         "launcher": "Llançador",
         "location": "Ubicació",
-        "niri": "Niri",
         "notifications": "Notificacions",
         "osd": "OSD",
         "panels": "Panells",
@@ -3125,10 +3124,6 @@
           "description": "Envolta les aplicacions iniciades des del llançador, el dock i la barra de tasques; substitueix $CMD per l'ordre original",
           "label": "Ordre personalitzada d'inici d'aplicacions",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Obre el launcher en escriure a la vista general de niri; utilitza una petita superfície d'enfocament del teclat mentre la vista general està oberta",
-          "label": "Escriu per llançar"
         },
         "offline-mode": {
           "description": "Bloqueja totes les sol·licituds de xarxa sortints",

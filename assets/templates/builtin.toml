@@ -52,10 +52,6 @@ category = "system"
 name = "Labwc"
 category = "compositor"
 
-[catalog.niri]
-name = "Niri"
-category = "compositor"
-
 [catalog.hyprland]
 name = "Hyprland"
 category = "compositor"
@@ -74,10 +70,6 @@ category = "compositor"
 
 [catalog.sway]
 name = "Sway"
-category = "compositor"
-
-[catalog.umbriel]
-name = "Umbriel"
 category = "compositor"
 
 [catalog.starship]
@@ -169,12 +161,6 @@ output_path = "$XDG_CONFIG_HOME/labwc/noctalia.conf"
 post_hook = "bash '{{ config_dir }}/labwc/apply.sh'"
 undo_hook = "bash '{{ config_dir }}/labwc/undo.sh'"
 
-[templates.niri]
-input_path = "./niri/niri.kdl"
-output_path_dynamic = "bash '{{ config_dir }}/niri/apply.sh' output"
-post_hook = "bash '{{ config_dir }}/niri/apply.sh' apply"
-undo_hook = "bash '{{ config_dir }}/niri/undo.sh'"
-
 [templates.hyprland]
 input_path_dynamic = "bash '{{ config_dir }}/hyprland/apply.sh' input"
 output_path_dynamic = "bash '{{ config_dir }}/hyprland/apply.sh' output"
@@ -204,12 +190,6 @@ input_path = "./sway/sway"
 output_path = "$XDG_CONFIG_HOME/sway/noctalia"
 post_hook = "bash '{{ config_dir }}/sway/apply.sh'"
 undo_hook = "bash '{{ config_dir }}/sway/undo.sh'"
-
-[templates.umbriel]
-input_path = "./umbriel/umbriel.toml"
-output_path = "$XDG_CONFIG_HOME/umbriel/noctalia.toml"
-post_hook = "bash '{{ config_dir }}/umbriel/apply.sh'"
-undo_hook = "bash '{{ config_dir }}/umbriel/undo.sh'"
 
 [templates.starship]
 input_path = "./starship/starship.toml"

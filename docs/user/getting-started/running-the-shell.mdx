@@ -11,11 +11,6 @@ Use compositor autostart as the primary method.
 ### Autostart by your Wayland compositor
 This is the recommended method for launching noctalia, as it integrates with your window manager.
 
-For the *Niri* compositor, add the following line to the end of your configuration file, typically located at `~/.config/niri/config.kdl`
-```ini
-spawn-at-startup "noctalia"
-```
-
 For the *Hyprland* compositor, append this to your existing `hyprland.start` event hook in your Lua configuration file, typically located at `~/.config/hypr/hyprland.lua`
 ```lua
 hl.on("hyprland.start", function()

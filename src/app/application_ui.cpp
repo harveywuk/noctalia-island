@@ -127,14 +127,6 @@
 namespace {
   constexpr Logger kLog("app");
 
-  [[nodiscard]] bool overviewTypeToLaunchEnabled(const ConfigService& configService) {
-    if (compositors::isUmbriel()) {
-      return configService.config().shell.umbrielOverviewTypeToLaunchEnabled;
-    } else if (compositors::isNiri()) {
-      return configService.config().shell.niriOverviewTypeToLaunchEnabled;
-    }
-    return false;
-  }
 } // namespace
 
 void Application::initUi() {
@@ -161,7 +153,6 @@ void Application::initUiRenderSurfacesAndSettings() {
   Style::setRtl(i18n::Service::instance().rtl());
   m_renderContext.setTextBaseDirection(i18n::Service::instance().rtl());
   m_wallpaper.initialize(m_wayland, &m_configService, &m_renderContext, &m_sharedTextureCache, &m_themeService);
-  m_backdrop.initialize(m_wayland, &m_configService, &m_sharedTextureCache, &m_glShared);
   m_settingsWindow.initialize(
       m_wayland, &m_configService, &m_renderContext, &m_dependencyService, m_upowerService.get(), &m_idleManager,
       &m_compositorPlatform, m_accountsService.get()
@@ -526,9 +517,6 @@ void Application::initInputDispatch() {
       m_settingsWindow.onKeyboardEvent(event);
       return;
     }
-    if (m_overviewLauncherCapture.handleKeyboardEvent(event)) {
-      return;
-    }
     if (m_island.onKeyboardEvent(event)) {
       return;
     }
@@ -754,26 +742,12 @@ void Application::initPanelManagerAndPanels() {
   reloadPluginLauncherProviders();
   reloadDmenuProviders();
   reloadPluginPanels();
-  m_overviewLauncherCapture.initialize(m_wayland, &m_renderContext, m_compositorPlatform, m_panelManager);
-  m_overviewLauncherCapture.setEnabled(overviewTypeToLaunchEnabled(m_configService));
-  m_overviewLauncherCapture.setOpenLauncherCallback(
-      [this](std::string_view initialQuery, wl_output* output, std::string_view sourceBarName) {
-        if (m_panelManager.isOpenPanel("launcher")) {
-          return;
-        }
-        m_panelManager.openPanel(
-            "launcher", PanelOpenRequest{.output = output, .context = initialQuery, .sourceBarName = sourceBarName}
-        );
-      }
-  );
   m_compositorPlatform.setOverviewChangeCallback([this]() {
-    m_overviewLauncherCapture.sync();
     m_bar.scheduleSmartAutoHideReevaluation();
     m_dock.scheduleSmartAutoHideReevaluation();
     m_island.refresh();
   });
   m_panelManager.setPanelOpenedCallback([this]() {
-    m_overviewLauncherCapture.sync();
     if (m_panelManager.isAttachedOpen()) {
       m_bar.revealAutoHideForAttachedPanel(
           m_panelManager.attachedPanelOutput(), m_panelManager.attachedSourceBarName()
@@ -781,16 +755,11 @@ void Application::initPanelManagerAndPanels() {
     }
   });
   m_panelManager.setPanelClosedCallback([this]() {
-    m_overviewLauncherCapture.sync();
     m_bar.rearmTooltipForHoveredWidget();
     m_bar.reevaluateAutoHide();
     // Widgets that stay visible while their panel is open re-evaluate on the next update.
     m_bar.refresh();
   });
-  m_configService.addReloadCallback([this]() {
-    m_overviewLauncherCapture.setEnabled(overviewTypeToLaunchEnabled(m_configService));
-  });
-  m_overviewLauncherCapture.sync();
   m_panelManager.registerPanel(
       "wallpaper",
       std::make_unique<WallpaperPanel>(
@@ -1180,7 +1149,6 @@ void Application::initWidgetControllersAndCallbacks() {
         m_lockScreen.onFontChanged();
         m_osdOverlay.requestLayout();
         m_trayMenu.onFontChanged();
-        m_backdrop.onFontChanged();
         m_settingsWindow.onFontChanged();
         m_colorPickerDialogPopup.requestLayout();
         m_glyphPickerDialogPopup.requestLayout();
@@ -1210,7 +1178,6 @@ void Application::initWidgetControllersAndCallbacks() {
         m_lockScreen.onFontChanged();
         m_osdOverlay.requestLayout();
         m_trayMenu.onFontChanged();
-        m_backdrop.onFontChanged();
         m_settingsWindow.onFontChanged();
         m_colorPickerDialogPopup.requestLayout();
         m_glyphPickerDialogPopup.requestLayout();

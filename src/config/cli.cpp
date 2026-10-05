@@ -455,9 +455,6 @@ namespace noctalia::config {
       // Assume every optional capability so pages gated on the running session are listed too.
       settings::RegistryEnvironment env;
       env.hyprlandAppearanceSupported = true;
-      env.niriBackdropSupported = true;
-      env.niriOverviewTypeToLaunchSupported = true;
-      env.umbrielOverviewTypeToLaunchSupported = true;
       env.screencopySupported = true;
       env.ddcutilAvailable = true;
       env.systemdUserManaged = true;

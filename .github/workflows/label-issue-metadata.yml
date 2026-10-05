@@ -31,8 +31,6 @@ jobs:
             const distributionValue = extractValue("Distribution");
 
             const compositorLabelMap = {
-              "Niri": "niri",
-              "Umbriel": "umbriel",
               "Hyprland": "hyprland",
               "Sway": "sway",
               "Scroll": "scroll",

@@ -2381,10 +2381,6 @@
           "description": "ランチャー、ドック、タスクバーから起動するアプリをこのコマンド経由で起動し、$CMDを元のコマンドに置き換えます",
           "label": "カスタムアプリ起動コマンド"
         },
-        "niri-overview-type-to-launch": {
-          "description": "niriのオーバービューで入力するとランチャーを開きます。オーバービュー表示中は、キーボードフォーカス用の小さな領域を使用します",
-          "label": "入力でランチャーを開く"
-        },
         "offline-mode": {
           "description": "すべての送信ネットワーク通信をブロック"
         },
@@ -2532,10 +2528,6 @@
         "time-format": {
           "description": "個別設定のないシェルUIで使用する既定時刻形式",
           "label": "時刻形式"
-        },
-        "umbriel-overview-type-to-launch": {
-          "description": "Umbrielのオーバービューで入力するとランチャーを開きます。オーバービュー表示中は、キーボードフォーカス用の小さな領域を使用します",
-          "label": "入力でランチャーを開く"
         },
         "window-switcher-current-workspace-only": {
           "description": "現在のワークスペースにあるウィンドウのみ表示。無効にすると、すべてのワークスペースのウィンドウを表示します",

@@ -1183,7 +1183,6 @@
         "dock": "Dock",
         "hooks": "Hooks",
         "location": "Lokalizacja",
-        "niri": "Niri",
         "notifications": "Powiadomienia",
         "osd": "OSD",
         "panels": "Panele",
@@ -2396,10 +2395,6 @@
         "launch-apps-as-systemd-services": {
           "description": "Uruchamia aplikacje w oddzielnych usługach systemd, aby nie udostępniały cgroup Noctalia",
           "label": "Uruchamiaj aplikacje jako usługi systemd"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Otwórz launcher podczas pisania w przeglądzie niri; używa małą powierzchnię fokusu klawiatury podczas otwartego przeglądu",
-          "label": "Pisanie aby uruchomić"
         },
         "offline-mode": {
           "description": "Zablokuj wszystkie wychodzące żądania sieciowe",

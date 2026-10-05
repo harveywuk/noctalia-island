@@ -1508,7 +1508,6 @@
         "keybinds": "Atalhos do Teclado",
         "launcher": "Launcher",
         "location": "Localização",
-        "niri": "Niri",
         "notifications": "Notificações",
         "osd": "OSD",
         "panels": "Painéis",
@@ -1521,7 +1520,6 @@
         "shell": "Shell",
         "system": "Sistema",
         "templates": "Modelos",
-        "umbriel": "Umbriel",
         "wallpaper": "Papel de Parede",
         "island": "Dynamic Island",
         "workspaces": "Espaços de trabalho",
@@ -3346,10 +3344,6 @@
           "label": "Comando de Launcher Personalizado",
           "placeholder": "$CMD"
         },
-        "niri-overview-type-to-launch": {
-          "description": "Abra o launcher ao digitar na visão geral do Niri; utiliza uma pequena superfície de foco do teclado enquanto a visão geral estiver aberta",
-          "label": "Digitar para Abrir Launcher"
-        },
         "offline-mode": {
           "description": "Bloquear todas as solicitações de saída de rede",
           "label": "Modo Off-line"
@@ -3568,10 +3562,6 @@
         "time-format": {
           "description": "Formato de hora padrão para a interface do usuário do shell sem configuração própria",
           "label": "Formato da Hora"
-        },
-        "umbriel-overview-type-to-launch": {
-          "description": "Abrir o Launcher enquanto digite na Overveiw do Umbriel; utiliza uma pequena superfície de foco de teclado enquanto a Overview está aberta",
-          "label": "Digitar para Abrir Launcher"
         },
         "window-switcher-current-workspace-only": {
           "description": "Listar somente janelas no espaço de trabalho ativo; desligue para incluir janelas de todos espaços de trabalho",

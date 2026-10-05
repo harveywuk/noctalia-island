@@ -43,7 +43,7 @@ namespace shell::dock {
       if (window.handle != nullptr) {
         return true;
       }
-      // Exact-identity ext toplevels (Hyprland/Niri via workspace-metadata backend) close
+      // Exact-identity ext toplevels (Hyprland via workspace-metadata backend) close
       // through `closeToplevelInfo` via the backend, without a wlr handle.
       if (window.exactIdentity && !window.identifier.empty()) {
         return true;

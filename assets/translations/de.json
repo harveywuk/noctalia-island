@@ -1395,7 +1395,6 @@
         "keybinds": "Tastenkombinationen",
         "launcher": "Launcher",
         "location": "Standort",
-        "niri": "Niri",
         "notifications": "Benachrichtigungen",
         "osd": "OSD",
         "panels": "Panels",
@@ -3153,10 +3152,6 @@
           "description": "Wird für Apps verwendet, die vom Launcher, Dock und der Taskleiste gestartet werden; ersetzt $CMD durch den ursprünglichen Befehl",
           "label": "Benutzerdefinierter App-Startbefehl",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "Öffne den Launcher, wenn du in der niri-Übersicht tippst; nutzt eine kleine Tastaturfokus-Oberfläche, während die Übersicht geöffnet ist",
-          "label": "Zum Starten tippen"
         },
         "offline-mode": {
           "description": "Alle ausgehenden Netzwerkanfragen blockieren",

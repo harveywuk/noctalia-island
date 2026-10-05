@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Exercise native capture controls on a private headless Umbriel display."""
-import os, subprocess, sys, tempfile, time, pathlib, json
+"""Exercise native capture controls on a private headless labwc display."""
+import os, subprocess, sys, tempfile, time, pathlib, json, re
 from PIL import Image
 REPO = pathlib.Path(__file__).resolve().parents[1]
 if '--worker' not in sys.argv:
@@ -16,10 +16,17 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
     cfg = base/'config/noctalia'; cfg.mkdir(parents=True)
     (cfg/'config.toml').write_text('[island]\nenabled=true\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n')
     (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
-    config = base/'umbriel.toml'; config.write_text('[output."HEADLESS-1"]\nmode="1280x720"\n')
+    config = base/'labwc'; config.mkdir()
+    (config/'rc.xml').write_text('<labwc_config/>')
+    (config/'autostart').write_text('')
     env=dict(os.environ, XDG_RUNTIME_DIR=str(runtime), XDG_CONFIG_HOME=str(base/'config'), XDG_STATE_HOME=str(base/'state'), XDG_DATA_HOME=str(base/'data'), XDG_CACHE_HOME=str(base/'cache'), NOCTALIA_CONFIG_HOME=str(base/'config'), NOCTALIA_STATE_HOME=str(base/'state'), NOCTALIA_DATA_HOME=str(base/'data'), WLR_BACKENDS='headless', WLR_HEADLESS_OUTPUTS='1', WLR_LIBINPUT_NO_DEVICES='1', LIBGL_ALWAYS_SOFTWARE='1', XDG_VIDEOS_DIR=str(out), PULSE_SERVER='unix:/run/user/1000/pulse/native')
     env.pop('WAYLAND_DISPLAY',None); env.pop('DISPLAY',None)
-    env.pop('UMBRIEL_SOCKET',None)
+    for key in ('HYPRLAND_INSTANCE_SIGNATURE','SWAYSOCK','TRIAD_SOCKET','MANGO_INSTANCE_SIGNATURE'):
+        env.pop(key,None)
+    env.update(XDG_CURRENT_DESKTOP='labwc',XDG_SESSION_TYPE='wayland',HOME=str(base))
+    env.update(NOCTALIA_ASSETS_DIR=str(REPO/'assets'), GSETTINGS_BACKEND='keyfile',
+               PIPEWIRE_RUNTIME_DIR=str(runtime), PULSE_SERVER='unix:'+str(runtime/'pulse/native'))
+    env['DBUS_SYSTEM_BUS_ADDRESS']=env['DBUS_SESSION_BUS_ADDRESS']
     processes=[]
     def run(args): return subprocess.check_output(args,env=env,text=True,stderr=subprocess.STDOUT,timeout=15)
     def start(args,name):
@@ -31,7 +38,14 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
             time.sleep(.1)
         raise AssertionError(reason)
     try:
-        compositor=start(['/usr/local/bin/umbriel','-c',str(config)],'umbriel.log')
+        wp=base/'config/wireplumber/wireplumber.conf.d';wp.mkdir(parents=True)
+        (wp/'test.conf').write_text('wireplumber.profiles = { main = { hardware.audio = disabled hardware.bluetooth = disabled hardware.video-capture = disabled } }')
+        start(['pipewire'],'pipewire.log');wait(lambda:(runtime/'pipewire-0').exists(),'PipeWire start')
+        start(['wireplumber'],'wireplumber.log')
+        start(['pipewire-pulse'],'pulse.log');wait(lambda:(runtime/'pulse/native').exists(),'Pulse start')
+        run(['pactl','load-module','module-null-sink','sink_name=capture-test'])
+        run(['pactl','set-default-sink','capture-test'])
+        compositor=start(['labwc','-C',str(config)],'labwc.log')
         wait(lambda:list(runtime.glob('wayland-*.lock')),'headless compositor start')
         env['WAYLAND_DISPLAY']=next(runtime.glob('wayland-*.lock')).name.removesuffix('.lock')
         for kind,proto,libs in [('pointer',REPO/'tests/fixtures/wlr-virtual-pointer-unstable-v1.xml',[]),('keyboard',REPO/'protocols/virtual-keyboard-unstable-v1.xml',['-lxkbcommon'])]:
@@ -45,7 +59,23 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
         def move(x,y): command(pointer,f'move {x} {y}')
         def click(): command(pointer,'press');command(pointer,'release')
         def key(code): command(keyboard,str(code))
-        binary=str(REPO/'build-rishot/noctalia'); shell=start([binary],'noctalia.log')
+        binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia'))
+        env['WAYLAND_DEBUG']='client'
+        shell=start([binary],'noctalia.log')
+        env.pop('WAYLAND_DEBUG')
+        def layers():
+            # Check the actual layer-shell requests without a compositor-specific IPC.
+            active={}
+            for line in (out/'noctalia.log').read_text().splitlines():
+                created=re.search(r'get_layer_surface\(new id zwlr_layer_surface_v1[#@](\d+),.*?,\s*(\d+),\s*"([^"]+)"\)',line)
+                if created:
+                    ident,layer,name=created.groups();active[ident]=(int(layer),name)
+                changed=re.search(r'zwlr_layer_surface_v1[#@](\d+)\.set_layer\((\d+)\)',line)
+                if changed and changed[1] in active:
+                    active[changed[1]]=(int(changed[2]),active[changed[1]][1])
+                destroyed=re.search(r'zwlr_layer_surface_v1[#@](\d+)\.destroy\(',line)
+                if destroyed:active.pop(destroyed[1],None)
+            return set(active.values())
         wait(lambda:(runtime/f"noctalia-{env['WAYLAND_DISPLAY']}.sock").exists(),'shell start')
         def msg(name): return run([binary,'msg',name])
         def ready():
@@ -59,9 +89,9 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
         assert msg('record-status').strip()=='idle', 'escape must cancel recording selection'
         assert msg('screenshot-annotate').strip()=='ok';time.sleep(1)
         run(['grim',str(out/'recording-toolbar.png')])
-        layers=run(['/usr/local/bin/umbriel','layers'])
-        (out/'capture-layers.txt').write_text(layers)
-        assert 'overlay\tnoctalia-island' in layers and 'noctalia-annotate' not in layers
+        active_layers=layers()
+        (out/'capture-layers.txt').write_text(repr(active_layers))
+        assert (3,'noctalia-island') in active_layers and not any(name=='noctalia-annotate' for _,name in active_layers), active_layers
         move(575,40);click();time.sleep(.5);run(['grim',str(out/'colour-picker.png')])
         # Enter a custom colour; keyboard events must stay in the picker.
         move(530,522);click();key(107)
@@ -99,8 +129,8 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
         move(400,350);key(23);move(400,350);command(pointer,'press');move(550,550);command(pointer,'release')
         key(44);move(650,300);command(pointer,'press');move(850,550);command(pointer,'release')
         run(['grim',str(out/'annotation-tools.png')]);key(1);time.sleep(.6)
-        layers=run(['/usr/local/bin/umbriel','layers'])
-        assert 'top\tnoctalia-island' in layers and 'noctalia-annotate' not in layers
+        active_layers=layers()
+        assert (2,'noctalia-island') in active_layers and not any(name=='noctalia-annotate' for _,name in active_layers), active_layers
         run(['grim',str(out/'island-restored.png')])
         videos=sorted((out/'Recordings').glob('*.mp4'),key=lambda p:p.stat().st_mtime)[-2:]
         assert len(videos)==2

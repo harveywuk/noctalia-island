@@ -87,8 +87,6 @@ namespace settings {
         return kOrange;
       case SettingsSection::Panels:
       case SettingsSection::Services:
-      case SettingsSection::Niri:
-      case SettingsSection::Umbriel:
         return kTeal;
       case SettingsSection::Keybinds:
         return kBrown;
@@ -289,8 +287,6 @@ namespace settings {
       case SettingsSection::WorkspaceTiling:
       case SettingsSection::AppPlacement:
       case SettingsSection::Keybinds:
-      case SettingsSection::Niri:
-      case SettingsSection::Umbriel:
         return "windows";
       case SettingsSection::Plugins:
       case SettingsSection::Hooks:

@@ -1395,7 +1395,6 @@
         "keybinds": "קיצורי מקשים",
         "launcher": "משגר",
         "location": "מיקום",
-        "niri": "Niri",
         "notifications": "התראות",
         "osd": "OSD",
         "panels": "חלוניות",
@@ -3153,10 +3152,6 @@
           "description": "עוטף אפליקציות שהופעלו מה-Launcher, מה-Dock ומה-Taskbar; מחליף את $CMD בפקודה המקורית",
           "label": "פקודת הפעלה מותאמת אישית ליישום",
           "placeholder": "$CMD"
-        },
-        "niri-overview-type-to-launch": {
-          "description": "פתח את ה-launcher בעת הקלדה ב-overview של Niri; משתמש במשטח מיקוד מקלדת קטן בזמן שה-overview פתוח",
-          "label": "הקלד כדי להפעיל"
         },
         "offline-mode": {
           "description": "חסום את כל בקשות הרשת היוצאות",

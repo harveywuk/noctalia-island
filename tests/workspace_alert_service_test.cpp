@@ -14,7 +14,7 @@ namespace {
   }
 
   // Mixed identifier shapes: numbered rows (id == name == index), a Sway-style
-  // named row (id == name, no numeric index), and a niri-style row that only
+  // named row (id == name, no numeric index), and an index-only row that only
   // carries a visible index (id and name empty).
   std::vector<Workspace> sampleWorkspaces() {
     return {
@@ -47,7 +47,7 @@ int main() {
   ok &= check(!overlaid[4].urgent, "overlay leaves unmatched workspaces alone");
   ok &= check(service.contains("2"), "overlay is pure read and keeps alert");
 
-  // niri-style: a workspace with empty id/name is alertable by its visible index.
+  // Index-only: a workspace with empty id/name is alertable by its visible index.
   WorkspaceAlertService indexService;
   ok &= check(indexService.add("5"), "index-only token add succeeds");
   auto indexRows = sampleWorkspaces();
@@ -68,7 +68,7 @@ int main() {
   activeService.applyOverlay(activeOverlay);
   ok &= check(!activeOverlay[2].urgent, "overlay never marks active workspace urgent");
 
-  // Per-output duplicate indexes (e.g. niri/mango/dwl): the same alert token must
+  // Per-output duplicate indexes (e.g. mango/dwl): the same alert token must
   // mark the inactive copy on one output while leaving the active copy alone.
   WorkspaceAlertService dupService;
   ok &= check(dupService.add("2"), "duplicate-index alert add succeeds");
