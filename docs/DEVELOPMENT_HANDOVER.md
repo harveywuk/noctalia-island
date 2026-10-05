@@ -306,6 +306,79 @@ Switching `mode` to light changed GTK 3/4, Qt and Kvantum, the icons, Kitty, Zen
 decoration under the dark-pinned shell, fixed in `57d56232d`. A state script and screenshots
 of a GTK and a Qt app on DP-2 before and after are the method to repeat.
 
+### Theme consistency audit: 5 October, afternoon
+
+The later audit checked rendered controls and already-open applications, exposing gaps that
+the earlier generated-value checks missed. It used temporary GTK 3, GTK 4/libadwaita, Qt 6,
+Chromium and Electron windows on DP-2 with the installed shell. The sequence was dark, light
+without restarting apps, light after reopening the native probes, then dark again. Browser
+profiles were isolated. All probes were closed, and settings plus the captured generated
+theme files were verified restored to their original values.
+
+| Area | Observed result |
+|------|-----------------|
+| Shell and window decoration | Glass remained dark; window border accent and blur brightness followed app mode and restored correctly. |
+| GTK 4/libadwaita | Rendered light/dark controls and named palette colours updated live. SF Pro 11, WhiteSur icons and the macOS cursor matched the desktop settings. |
+| GTK 3 | **Incorrect light surface in dark mode.** The dark named colours existed, but stock light Adwaita still drew the background and text. `adw-gtk3` was absent, so the GTK apply hook skipped the base-theme switch. Named colours also stayed stale in an open probe until it was restarted. Reading colour definitions alone is not a rendering check. |
+| Qt 6/Kvantum | Fresh probes used the correct palette in each mode. Open probes retained their old palette after switching. WhiteSur-dark remained selected even after reopening in light mode; the separate configuration bug below prevents icon switching. |
+| Chromium and Electron | Both followed the portal's light/dark preference live in both directions. Their default web controls used browser colours, not the exact Noctalia palette. The Electron probe used `nativeTheme.themeSource = system`; apps with their own theme override were not covered. |
+
+The Qt icon failure is reproducible without touching desktop settings: the Kvantum apply
+script's `ini_set` recognises `style=...` but misses `style = ...`, then appends a second key.
+The local `noctalia-icon-theme` hook uses strict Python `ConfigParser`, which raises
+`DuplicateOptionError` after updating GNOME/GTK but before updating Qt. A temporary config
+containing just a spaced style key reproduces this with the repository's apply script.
+Fix whitespace handling and existing duplicate keys before investigating Qt live reload;
+this failed hook may also prevent a configuration-change notification Qt would otherwise see.
+
+Repair order: GTK 3's base theme and rendered dark state; Kvantum INI handling and Qt icon
+switching; then repeat the live-update checks. Treat the Qt dark-hint boolean in this audit as
+inconclusive: it did not distinguish an unknown hint from an explicit light hint. Qt 5 was not
+installed and was not tested. This pass records findings; it does not install fixes.
+
+Local evidence and probe sources are in
+`build-rishot/theme-consistency-2026-10-05/`: `dark-start.json`, `light-live.json`,
+`light-reopened.json`, `dark-restored-live.json`, and corresponding per-toolkit PNGs.
+In particular, compare `dark-start-gtk3.png` with `dark-start-gtk4.png`; their matching named
+palette values conceal very different rendered surfaces.
+
+### Theme consistency repairs: 5 October
+
+The GTK 3 base-theme and Qt icon failures are now fixed on the development desktop:
+
+- Installed upstream [adw-gtk3 v6.5](https://github.com/lassekongo83/adw-gtk3/releases/tag/v6.5)
+  in `~/.local/share/themes/adw-gtk3{,-dark}` after verifying the release archive against
+  GitHub's SHA-256 digest. The existing GTK hook now selects the intended base theme.
+  Fresh GTK 3 windows actually render `#242426` / `#f5f5f7` in dark mode and
+  `#f2f2f7` / `#1d1d1f` in light mode, matching GTK 4 and Qt's generated palette.
+- The Kvantum apply/undo scripts accept whitespace around INI keys, values and section
+  headings. Apply removes duplicate managed keys; undo restores the original setting while
+  preserving later user choices. Both preserve config symlinks and unrelated settings.
+  Installed these two scripts into the live shell's asset directory and repaired the Qt
+  config by applying the fixed hook. The existing icon hook now completes without an error.
+- Added `kvantum_config` to Meson: the original scripts fail this regression test with
+  `DuplicateOptionError`; the fix passes, including apply twice, duplicate repair, undo,
+  symlinks, absent Qt configs and later user edits. It and `template_undo_signal` pass.
+
+Repeat visual/probe checks covered GTK 3, GTK 4, Qt 6, Chromium and Electron, with the shell
+pinned dark. GTK 4 and browser mode tracking still pass. Qt's icons now update live in both
+directions after qt6ct's delayed settings refresh; the final audit waits six seconds after
+each switch instead of sampling at the refresh boundary. Qt reports an **unknown** colour
+scheme hint (enum value 0), not an explicit light preference.
+
+**Remaining limitation:** open GTK 3 and Qt/Kvantum windows retain their previous colours;
+reopening them applies the current palette. GTK 3 loads the user `gtk.css` provider once
+([source](https://github.com/GNOME/gtk/blob/gtk-3-24/gtk/gtksettings.c)); switching the base theme
+does not reload those overriding colours. Kvantum also retains its running style instance
+([upstream explanation](https://github.com/tsujan/Kvantum/discussions/975)). Fixing this requires
+a separate reload design. The shell does not close or restart users' applications.
+
+Evidence, screenshots, release metadata and backups are in
+`build-rishot/theme-consistency-fixed-2026-10-05/`. Dark mode and original theme settings were
+restored after each probe run, and all temporary windows were closed. The repository repairs
+are included in the commit checkpoint below. Only the two Kvantum scripts and the user GTK
+base themes were installed; the earlier split-mode editor build remains uninstalled.
+
 ### Design direction for the desktop
 
 These extend the guiding decisions in [VENTURA_PROJECT.md](VENTURA_PROJECT.md).
@@ -339,21 +412,87 @@ These extend the guiding decisions in [VENTURA_PROJECT.md](VENTURA_PROJECT.md).
    with the real synced wallpaper, which the test harness cannot read.
 2. **3090 measurement:** read the desktop Hyprland's GPU use with the Island and Control Center open,
    to confirm the surface change on the real GPU.
-3. **Settings editor and split modes:** the Hyprland appearance editor still previews the profile
-   for the shell's mode (`isResolvedLightTheme()` in `hyprland_editor.cpp`). With split modes it
-   should show the window values for the apps' mode and the glass values for the shell's. The plan,
-   including the **Keep current look** bug it causes, is in [SPLIT_MODE_EDITOR.md](SPLIT_MODE_EDITOR.md).
-4. **Desktop theming follow-ups:** check Electron and Chromium apps, and GTK event sounds
-   through libcanberra; tune the synthesised sounds by ear; the white cursor variant is one flag
-   away (`--variant macOS-White`).
-5. **Hyprglass upstream:** follow [hyprnux/hyprglass#89](https://github.com/hyprnux/hyprglass/pull/89);
+3. **Desktop theming follow-ups:** GTK 3 dark appearance and Qt icon switching are repaired.
+   Design live colour reload for existing GTK 3/Qt windows if needed; current apps need reopening.
+   Chromium and Electron system-mode probes pass. GTK event sounds through libcanberra remain
+   to check; the white cursor variant is one flag away (`--variant macOS-White`).
+4. **Hyprglass upstream:** follow [hyprnux/hyprglass#89](https://github.com/hyprnux/hyprglass/pull/89);
    rebase the patched branch onto new releases until it merges.
-6. **Release preparation:** group remaining issues, run the full integration matrix (CI has not
+5. **Release preparation:** group remaining issues, run the full integration matrix (CI has not
    run on this branch), prepare release notes and decide which fixes to offer upstream (high
    contrast, logind fallback, greeter frame loop and the settings search ranking are generic).
 
 Done since the last list: thick sliders (`0e2b3b6ab`: knobless sliders, an 8 px Island seek bar)
 and the text-fit audit.
+
+Local follow-up on 5 October: the **split-mode appearance editor** now shares the runtime's
+resolver, shows separate window and glass profiles, and preserves the combined look through
+Keep, saved profiles, presets and undo. App-mode changes refresh the editor even with a pinned
+shell. All 153 Meson tests, the full release Hyprland smoke run with plugins, and translation
+checks passed; screenshots were inspected in both split directions.
+[SPLIT_MODE_EDITOR.md](SPLIT_MODE_EDITOR.md) records the implementation and regression evidence.
+These local source/build changes have not been installed on the development desktop.
+
+## Hyprland session audit: 5 October
+
+The desktop runs Hyprland 0.56.2 under UWSM, using NVIDIA's 615.71.09 open kernel driver.
+DP-1 is the AW3423DWF at 3440×1440 / 164.90 Hz; DP-2 is the Razer RZ39-0350 at
+2560×1440 / 165.08 Hz, scale 1, rotated 180° below DP-1. The audit preserved these modes,
+positions, colour settings and the fullscreen remote desktop's dimensions. Noctalia owns
+the saved DCI-P3 and VRR display overrides; the Lua monitor rules provide startup defaults.
+
+Host changes applied:
+
+- Session environment is now in `~/.config/uwsm/env` and `env-hyprland`: macOS cursor at 32 px,
+  qt6ct, and Qt's `wayland;xcb` backend order. Removed the duplicate cursor/Qt environment.d
+  files and cursor service override after backing them up. Imported the selected variables
+  into the running compositor and activation environment for new processes.
+- Kitty, Yazi and Zen shortcuts use `uwsm app --`; Super+Escape uses `uwsm stop` for ordered
+  logout. Noctalia shortcuts address the installed Island binary directly.
+- `start-shell.sh` queues the shell service without restarting portals or overriding UWSM's
+  environment. Hyprpolkitagent already starts through graphical-session.target. Disabled
+  Noctalia's competing agent in saved settings, matching the existing base config.
+
+`Hyprland --verify-config`, a live reload and `hyprctl configerrors` passed. Real shortcut and
+systemd probes received identical selected environment variables; the shortcut probe ran in
+`app-graphical.slice`. Shell, authentication and portal services remained running. Both GPUs'
+VA-API drivers initialized successfully without forcing a driver; GLX and Hyprland already
+select the RTX 3090. DRM modesetting/fbdev, explicit sync, VFR and blur optimizations are enabled.
+The NVIDIA driver reports `UseKernelSuspendNotifiers=1`; legacy suspend units were left alone.
+
+Existing processes keep their original environment until restarted. A fresh login and physical
+suspend/resume were not exercised. HDR, monitor OSD settings and colour calibration were not
+changed. Backups and probe evidence:
+`~/.local/share/hyprland-setup/audit-20261005-153102/`.
+Session changes follow [Hyprland's UWSM guidance](https://wiki.hypr.land/useful-utilities/uwsm/).
+
+Authentication follow-up: the user chose **Noctalia's integrated agent**. Set
+`shell.polkit_agent = true` in both base config and saved settings, and disabled/stopped
+`hyprpolkitagent.service`. The live Noctalia journal confirms registration at
+`/org/noctalia/PolkitAuthenticationAgent` and reports the agent active. This supersedes the
+agent choice above; `start-shell.sh` no longer starts hyprpolkitagent, so it stays disabled
+on the next login. Backups are in
+`~/.local/share/hyprland-setup/noctalia-auth-20261005-163925/`.
+
+## Commit checkpoint: 5 October
+
+The split-mode editor, Kvantum INI repairs, sound-preview tools and this handover are committed
+as separate changes on `feature/orbit-island`. The split-mode build remains uninstalled.
+
+Pre-commit validation passed all 154 registered Meson tests outside the socket-restricted
+sandbox, English translation-key checks, formatting checks for all 12 changed C++ files,
+Python compilation and shell syntax checks. `just` was unavailable, so formatting was checked
+directly with `clang-format --dry-run --Werror`. The earlier full Hyprland smoke evidence in
+[SPLIT_MODE_EDITOR.md](SPLIT_MODE_EDITOR.md) was reviewed; that GUI run was not repeated for
+this commit checkpoint.
+
+`scripts/make-island-sound-previews.py` and its HTML template generate original Glass, Warm,
+Playful and Modular sound sets, a local listening page and downloadable theme archives. Run
+with `--styles glass warm playful modular` to include all four. Validation generated all
+24 mono samples, checked sample rates and peak headroom, verified archive integrity and
+confirmed that the generated page embeds its manifest. Browser playback was not checked in
+this commit pass. Generated files stay outside version control; generating previews does
+not install or select a sound theme.
 
 ## Boundaries to preserve
 
