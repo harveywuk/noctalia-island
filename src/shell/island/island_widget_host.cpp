@@ -74,6 +74,7 @@ IslandWidgetHost::IslandWidgetHost(
         addChild(std::move(cell));
         m_widgets.push_back(std::move(widget));
         m_groups.push_back(group);
+        m_onlyTray = m_onlyTray && type == "tray";
       }
     }
   }

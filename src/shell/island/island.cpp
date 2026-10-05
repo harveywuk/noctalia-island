@@ -3226,7 +3226,10 @@ void Island::prepare(Instance& inst) {
     const float widgetHeight = inst.hoverWidgets->height() / s;
     footer->addChild(std::move(retainedWidgets));
     if (widgetHeight > 0) {
-      sectionCard(h, h + widgetHeight + 16);
+      // A card groups a row of widgets; the tray alone (often one or two icons) sits on the Island
+      // like the calendar above it, rather than on a mostly empty bar.
+      if (!inst.hoverWidgets->trayOnly())
+        sectionCard(h, h + widgetHeight + 16);
       h += widgetHeight + 16;
     }
   }

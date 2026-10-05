@@ -27,6 +27,8 @@ public:
   void updateWidgets(Renderer&, float availableWidth);
   void tickWidgets(float deltaMs);
   bool onPointerEvent(const PointerEvent&);
+  // True when the system tray is the only widget, so the row needs no card of its own.
+  [[nodiscard]] bool trayOnly() const noexcept { return m_widgets.size() == 1 && m_onlyTray; }
 
 private:
   float m_scale;
@@ -34,4 +36,5 @@ private:
   std::function<void()> m_frame;
   std::vector<std::unique_ptr<Widget>> m_widgets;
   std::vector<std::size_t> m_groups;
+  bool m_onlyTray = true;
 };
