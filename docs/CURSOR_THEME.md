@@ -1,47 +1,45 @@
-# Bibata following Noctalia colours
+# Apple cursors as Xcursors and Hyprcursors
 
-`scripts/theme-bibata.py` builds a separate cursor theme from the installed
-`Bibata-Material-Teal` SVG assets. It preserves the original theme, animation
-metadata, and aliases. The recolouring maps teal outlines to `primary`, dark
-interiors to `on_primary`, and shadow details to `shadow`. Other semantic colours
-(such as the prohibited-action mark) are preserved.
+`scripts/build-apple-hyprcursor.py` installs [ful1e5/apple_cursor](https://github.com/ful1e5/apple_cursor)
+as one theme that holds both formats:
 
-The generator produces SVG Hyprcursor archives and Xcursor files at 24, 32, 48,
-64, and 96 pixels. Variants are cached by palette under `~/.local/share/icons`.
-Changing the selected theme name refreshes compositor and GTK cursor caches.
-Some applications that cache their own cursors may require reopening.
+- `cursors/`: the project's release Xcursors (v2.0.1, 16 to 96 px), unchanged.
+- `hyprcursors/` and `manifest.hl`: scalable SVG Hyprcursors generated from the project's SVG
+  sources. Hotspots, aliases and frame delays come from its `configs/x.build.toml`, and colours
+  are replaced as its `render.json` does, so both formats draw the same cursor.
 
-Dependencies: Python, PyGObject, Pycairo, librsvg, GSettings, and Umbriel.
-No internet access is needed to generate a variant.
+Hyprland draws the SVGs at any size. Clients that load Xcursors directly get the release images.
+The `wait` and `progress` cursors are 40-frame animations at 20 ms per frame.
 
-## This installation
+The cursors keep Apple's colours and do not follow the Noctalia palette.
 
-- Generator: `~/.local/share/noctalia-cursor-theme/theme-bibata.py`
-- Template: `~/.config/noctalia/templates/bibata-cursor.json`
-- Rendered colours: `~/.cache/noctalia/cursor-palette.json`
-- Hook: `[theme.templates.user.bibata_cursor]` in Noctalia's config
-- Original settings: `~/.local/share/noctalia-cursor-theme/backup-20260928-080434`
+Dependencies: Python 3.11 or newer (for `tomllib`). Hyprland reads the result through
+libhyprcursor.
 
-Noctalia renders the palette template and runs the generator after theme changes.
-It selects the generated variant in Umbriel, GTK3/4, GSettings and the default
-Xcursor theme. Cursor size is left unchanged. A stable alias is exported through
-the user service environment and `environment.d`, and in Noctalia's `cursor.conf`
-service override so subsequently launched applications can find it.
-
-For a generation-only check, without changing desktop settings:
+## Building
 
 ```sh
-python3 scripts/theme-bibata.py \
-  --palette ~/.cache/noctalia/cursor-palette.json --build-only
+git clone --depth 1 https://github.com/ful1e5/apple_cursor
+gh release download v2.0.1 -R ful1e5/apple_cursor -p macOS.tar.xz && tar -xJf macOS.tar.xz
+python3 scripts/build-apple-hyprcursor.py --source apple_cursor --release .
 ```
 
-To revert, remove `[theme.templates.user.bibata_cursor]` from Noctalia's config,
-restore the backed-up cursor settings, select `Bibata-Material-Teal` in GSettings,
-and remove the generated cursor `environment.d` and service override entries.
-Reload the configuration and user service manager. The original cursor assets
-remain untouched.
+This writes `~/.local/share/icons/macOS`. Pass `--variant macOS-White` for the white cursors, and
+`--icons-dir` to install somewhere else.
 
-Validation: all 88 Xcursor shapes and aliases load with libXcursor; their decoded
-hotspots are within bounds. All generated Hyprcursor archives pass ZIP validation.
-The pointer SVG was visually checked, and Noctalia's template application was
-used to activate the current palette.
+## Selecting the theme
+
+Set `macOS` everywhere a cursor theme is named:
+
+- `XCURSOR_THEME` and `HYPRCURSOR_THEME` in the compositor (`hl.env` in Hyprland), in
+  `environment.d`, in the user service environment, and in any Noctalia service override
+- `org.gnome.desktop.interface cursor-theme`, and `gtk-cursor-theme-name` for GTK 3 and 4
+- `Inherits` in `~/.icons/default/index.theme`, the Xcursor fallback
+- `[input.cursor] theme` in Umbriel's config
+
+Then run `hyprctl setcursor macOS <size>`. Applications that are already open keep the cursor
+they loaded until they are reopened. A remote desktop window shows the remote machine's cursors.
+
+Validation: libhyprcursor loads the theme without warnings. All 34 cursor shape protocol names
+(`default`, `pointer`, `text`, `wait`, `progress`, the resize shapes, and so on) resolve to a shape
+or an alias in both formats. The rendered shapes were checked visually.
