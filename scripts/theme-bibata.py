@@ -181,7 +181,15 @@ def activate(name, icons, config_home, home):
     subprocess.run(['systemctl', '--user', 'set-environment',
                     'XCURSOR_THEME=Bibata-Material-Noctalia',
                     'HYPRCURSOR_THEME=Bibata-Material-Noctalia'], check=True)
-    subprocess.run(['/usr/local/bin/umbriel', 'msg', 'config-reload'], check=True)
+    # Reload the compositor that is running: Hyprland loads the new cursor with setcursor, Umbriel
+    # rereads its config. Neither running (a test session, say) is not an error.
+    if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
+        size = os.environ.get('XCURSOR_SIZE', '32')
+        subprocess.run(['hyprctl', 'setcursor', 'Bibata-Material-Noctalia', size], check=False,
+                       stdout=subprocess.DEVNULL)
+    elif shutil.which('umbriel') or Path('/usr/local/bin/umbriel').exists():
+        subprocess.run(['/usr/local/bin/umbriel', 'msg', 'config-reload'], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():
