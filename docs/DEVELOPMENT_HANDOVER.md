@@ -1,8 +1,8 @@
 # Dynamic Noctalia development handover
 
-Updated: 4 October 2026. Working branch: `feature/orbit-island`. The newest state is in
-[Checkpoint: 4 October 2026](#checkpoint-4-october-2026); the sections before it describe the
-1 October checkpoint and still apply.
+Updated: 5 October 2026. Working branch: `feature/orbit-island`. The newest state is in
+[Checkpoint: 5 October 2026](#checkpoint-5-october-2026), which also sets the design direction
+for the desktop beyond the shell. The earlier checkpoints still apply.
 
 This checkpoint brings together the recent Hyprland settings work, Dynamic Island
 integration, Cupertino-inspired shell styling, and dock improvements. The latest
@@ -184,7 +184,7 @@ installed on the development desktop.
 |------|--------|
 | Glass Island | `glass` on an Island bar (**Settings → Dynamic Island → Glass**) makes the capsule and the panels it hosts translucent over the compositor's blur. The blur region traces the capsule and split bubbles in up to 64 rectangles instead of bounding boxes (`Surface::tessellateRoundedRect`, `setBlurRegionRectLimit`), so corners stay round. |
 | Activities | Edge progress rings around the capsule; a second split bubble for a third concurrent activity, ordered by `activity_priority`; a white visualiser and solid transport controls. |
-| Notifications | Critical notifications pulse with the capture glow instead of taking an outline. The banner's app icon is 32 px, the same as the unread card in the expanded view (`adc7f120f`, local only). |
+| Notifications | Critical notifications pulse with the capture glow instead of taking an outline. The banner's app icon is 32 px, the same as the unread card in the expanded view (`adc7f120f`). |
 | Crossfades | The incoming view waits for the outgoing one to fade, and the outgoing view stays centred as the capsule morphs (`9fb647369`, `6f7b15112`). |
 | Control Center | Big Sur level sliders for volume and brightness, distinct tile icons, no percentages, Wired title. |
 | Lock screen | Artwork gradient background while media plays; each track's artwork is fetched once. |
@@ -252,6 +252,86 @@ Notification Centre, session menu, polkit prompt, wallpaper panel, OSD, dock too
 screen all clear 4.5:1 in both modes; the only exception is the polkit password placeholder
 (4.2:1 in dark mode), left fainter on purpose like other placeholders.
 
+## Checkpoint: 5 October 2026
+
+The morning finished the Island polish list. The rest of the day took the Cupertino look past
+the shell to the whole desktop: icons, Qt, fonts, window styling, the cursor and sounds, then a
+light-mode pass over all of it. Everything is pushed to `feature/orbit-island` and installed on
+the development desktop. 153 of 153 unit tests pass, and the default Hyprland smoke run passes
+with the desktop's plugins loaded (`NOCTALIA_TEST_HYPR_PLUGINS=~/.local/share/hyprland-plugins/0.56.2`).
+
+### Shell changes
+
+| Commit | Change |
+|--------|--------|
+| `156c2f1ff` | Settings search matches words in any order and ranks results (`settingSearchScore`, `rankedSettingMatches`); a hidden match shows its visible parent. |
+| `61285f26f` | No card behind a hover row that holds only the tray; with few tray apps the pill looked out of place. |
+| `42f56314b` | Hover highlights on hover-row widgets are no longer clipped (cell margin of 8 px × scale). |
+| `96193edbd` | Left click on a tray item that has no Activate method (most AppIndicator apps) opens its menu, as macOS menu extras do. |
+| `024955f9b` | Panels keep the media artwork gradient while they open and close; the card no longer flashes grey. |
+| `57d56232d` | With `shell_mode` pinned apart from `mode`, window decoration (shadow, dim, blur, border colours) follows the apps' mode and glass follows the shell's. Before, light app windows under a dark shell kept the dark profile's heavy shadow and dark borders. The smoke test now checks both mixed cases. |
+| `353c5213d`, `44093f94f` | Cursor tooling, below. |
+
+### Desktop theming
+
+These files live in the home directory, not the repository, except the three scripts noted.
+Each change kept a `*.before-*` backup next to the file it edited.
+
+| Area | State | Where |
+|------|-------|-------|
+| Icons | WhiteSur (vinceliuice, tag 2026-09-10), swapped light/dark by the `theme_mode_changed` hook | `~/.local/share/icons/WhiteSur*`, `~/.local/bin/noctalia-icon-theme`, `[hooks]` in `~/.config/noctalia/config.toml` |
+| Qt | qt6ct with the Kvantum `Noctalia` theme (built by the `kvantum` template from KvMojave) and the `qt` colour template | `~/.config/qt6ct/qt6ct.conf`; `QT_QPA_PLATFORMTHEME=qt6ct` in `hyprland.lua` and `environment.d/91-qt6ct.conf` |
+| Templates | `cava` removed (not installed) and `kvantum` added to the built-in templates; fastfetch got a generated config so its template applies | `[theme.templates]` in `~/.local/state/noctalia/settings.toml` |
+| Fonts | SF Pro 11 for interface text, GeistMono Nerd Font Mono 11 for monospace (Kitty's font), set in GNOME settings, GTK 3/4, qt6ct and fontconfig (`sans-serif`, `system-ui`, `monospace`) | `~/.config/fontconfig/fonts.conf` |
+| Zen | Already themed: the community template's `userChrome.css` imports load and follow the palette (checked against an unthemed headless render) | profile `ub65qn3d.Default (release)` |
+| Windows | Corners, shadow and motion match the shell (below). GTK header bars show no window buttons (`button-layout ':'`), since windows are managed from the keyboard. | `[shell.hyprland_appearance]` in `~/.config/noctalia/config.toml`; GNOME settings; `gtk-decoration-layout` |
+| Cursor | ful1e5/apple_cursor v2.0.1 as theme `macOS`: the release Xcursors plus scalable SVG Hyprcursors generated from its sources. Selected in every place that names a cursor theme, including the shell's service override and Umbriel. Bibata and its palette recolourer are removed. | `scripts/build-apple-hyprcursor.py`, [CURSOR_THEME.md](CURSOR_THEME.md); `~/.local/share/noctalia-cursor-theme/` holds the source checkout and release |
+| Sounds | Original synthesised theme `cupertino` (glass notes, soft volume pop, shutter clicks, plug chime; unplug silent). Undefined events fall back to freedesktop. | `scripts/make-cupertino-sounds.py`; `~/.local/share/sounds/cupertino`; `[audio] sound_theme` in config.toml, GNOME and GTK sound settings |
+
+Window values and where they come from:
+
+| Setting | Value | Source in the shell |
+|---------|-------|---------------------|
+| `rounding` / `rounding_power` | 24 / 3.26 | The rect shader draws a 16 px continuous corner as a superellipse spanning 1.528 × r with exponent 3.26 (`rect_program.cpp`). |
+| `shadow_range` / `shadow_offset_y` | 24 / 6 | Panel shadow: `kBlurRadius` 24 (`surface/shadow.h`), `kShadowOffset` 6 down. |
+| Opening curve | spring, stiffness 195, damping 20.9 | `islandExpand`: response 450 ms, damping 0.75 (`ui/motion.h`), converted to mass-spring terms. |
+| Closing curve | spring, stiffness 304.6, damping 30 | `islandCollapse`: response 360 ms, damping 0.86. |
+
+The floating-Zen app rule now inherits the global rounding, because app rules clamp rounding to 20.
+
+### Light-mode audit
+
+Switching `mode` to light changed GTK 3/4, Qt and Kvantum, the icons, Kitty, Zen and GNOME's
+`color-scheme` together, and switching back restored every value. The one failure was window
+decoration under the dark-pinned shell, fixed in `57d56232d`. A state script and screenshots
+of a GTK and a Qt app on DP-2 before and after are the method to repeat.
+
+### Design direction for the desktop
+
+These extend the guiding decisions in [VENTURA_PROJECT.md](VENTURA_PROJECT.md).
+
+- **One system, not a themed shell.** Apps, windows, cursor, fonts and sounds should look like
+  they belong to the same Cupertino desktop as the Island. Where the shell has a constant (corner
+  radius, shadow, spring), the desktop setting is derived from it, not chosen by eye.
+- **The Island stays black.** `shell_mode = "dark"` keeps the shell and its glass dark while
+  `mode` drives apps, like the iPhone's Dynamic Island. Anything that decorates app windows
+  follows `mode`; anything that is part of the shell follows `shell_mode`.
+- **Keyboard first, still.** Windows have no title-bar buttons; Hyprland binds manage them.
+- **Original or properly licensed assets only.** SF Pro stays a user install and is never
+  bundled. Apple's sounds are not used; the sound theme is synthesised in its spirit. The
+  cursor comes from a GPL project that draws Apple-style cursors.
+- **Light and dark are both first-class.** Every theming change is checked in both modes.
+
+### Working conventions on the development desktop
+
+- DP-1 (3440x1440) holds a remote-desktop VM that resizes when windows open there. Open test
+  windows silently on DP-2's workspace (`hl.dsp.exec_cmd(cmd, { workspace = "2 silent" })`),
+  close them afterwards, and put focus back on the VM; closing a window can move focus to DP-2.
+  A floating window's `move` rule is relative to its monitor.
+- The VM window shows the remote machine's cursors, so check cursor themes elsewhere.
+- In the harness, set `GSETTINGS_BACKEND=keyfile` for anything that reads GNOME settings, since
+  it has no dconf.
+
 ## Proposed next priorities
 
 1. **Greeter check:** build `1.5.0.r3.g5a82d5c` (branch `feature/cupertino`, pushed to the
@@ -259,12 +339,20 @@ screen all clear 4.5:1 in both modes; the only exception is the polkit password 
    with the real synced wallpaper, which the test harness cannot read.
 2. **3090 measurement:** read the desktop Hyprland's GPU use with the Island and Control Center open,
    to confirm the surface change on the real GPU.
-3. **Design decisions:** thick sliders for the media seek bar and Settings sliders.
-4. **Text fit:** `--text-fit-only` reports no newly cut-off labels (German and English at 1.5x).
-   Scrolling labels already stop when animations are off (`--marquee-motion-only`).
-5. **Release preparation:** group remaining issues, run the full integration matrix, prepare
-   release notes and decide which fixes to offer upstream (high contrast, logind fallback,
-   greeter frame loop are generic).
+3. **Settings editor and split modes:** the Hyprland appearance editor still previews the profile
+   for the shell's mode (`isResolvedLightTheme()` in `hyprland_editor.cpp`). With split modes it
+   should show the window values for the apps' mode and the glass values for the shell's.
+4. **Desktop theming follow-ups:** check Electron and Chromium apps, and GTK event sounds
+   through libcanberra; tune the synthesised sounds by ear; the white cursor variant is one flag
+   away (`--variant macOS-White`).
+5. **Hyprglass upstream:** follow [hyprnux/hyprglass#89](https://github.com/hyprnux/hyprglass/pull/89);
+   rebase the patched branch onto new releases until it merges.
+6. **Release preparation:** group remaining issues, run the full integration matrix (CI has not
+   run on this branch), prepare release notes and decide which fixes to offer upstream (high
+   contrast, logind fallback, greeter frame loop and the settings search ranking are generic).
+
+Done since the last list: thick sliders (`0e2b3b6ab`: knobless sliders, an 8 px Island seek bar)
+and the text-fit audit.
 
 ## Boundaries to preserve
 

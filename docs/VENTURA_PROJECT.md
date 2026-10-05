@@ -21,6 +21,9 @@ _State as of 3 October 2026, 19:00 UTC._
 - **Accent:** dark mode's accent is `#0072E3`, not Apple's `#0A84FF`, because the palette test requires 4.5:1 contrast for white text.
 - **Blur** comes from the compositor. On Hyprland, saturation is `decoration:blur:vibrancy`.
 - **On hold:** a floating Ventura-style Control Center. It won't start unless harvey asks.
+- **Beyond the shell:** from 5 October the same look covers the whole desktop (icons, Qt, fonts,
+  window styling, cursor, sounds). Its direction and state are in the
+  [5 October checkpoint](DEVELOPMENT_HANDOVER.md#checkpoint-5-october-2026).
 
 ## Work done
 
