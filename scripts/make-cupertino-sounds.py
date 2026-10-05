@@ -110,10 +110,10 @@ def finish(name, signal, peak_db):
 
 
 def write_oga(path, signal):
+    # Mono: every sound is centred, and players spread a mono file over both speakers.
     pcm = (np.clip(signal, -1, 1) * 32767).astype('<i2')
-    stereo = np.repeat(pcm[:, None], 2, axis=1)
-    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 's16le', '-ar', str(RATE), '-ac', '2', '-i', '-',
-                    '-c:a', 'libvorbis', '-q:a', '6', str(path)], input=stereo.tobytes(), check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 's16le', '-ar', str(RATE), '-ac', '1', '-i', '-',
+                    '-c:a', 'libvorbis', '-q:a', '6', str(path)], input=pcm.tobytes(), check=True)
 
 
 def build(theme):

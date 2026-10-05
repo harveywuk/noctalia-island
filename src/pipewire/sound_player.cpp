@@ -145,6 +145,37 @@ namespace {
     return {};
   }
 
+  // The directories that hold a theme's own sounds, under every sound base directory, whether or
+  // not they exist yet.
+  std::vector<fs::path> themeSoundDirs(std::string_view theme) {
+    const auto baseDirs = soundBaseDirs();
+    std::vector<std::string> directories{"stereo"};
+    for (const auto& baseDir : baseDirs) {
+      if (const auto parsed = freedesktop::parseKeyFile(baseDir / theme / "index.theme")) {
+        if (const auto listed = parsed->file.value("Sound Theme", "Directories"); listed.has_value()) {
+          directories = splitList(*listed);
+        }
+        break;
+      }
+    }
+    std::vector<fs::path> result;
+    for (const auto& baseDir : baseDirs) {
+      for (const auto& directory : directories) {
+        result.push_back(baseDir / theme / directory);
+      }
+    }
+    return result;
+  }
+
+  std::optional<fs::file_time_type> modifiedTime(const fs::path& path) {
+    std::error_code error;
+    const auto time = fs::last_write_time(path, error);
+    if (error) {
+      return std::nullopt;
+    }
+    return time;
+  }
+
   ThemeSoundLookupResult findThemeSound(std::string_view event, std::string_view theme) {
     std::set<std::string> visited;
     auto result = findThemeSoundInTree(event, theme, visited);
@@ -217,16 +248,18 @@ void SoundPlayer::loadTheme(std::string theme) {
       kLog.warn("failed to load sound \"{}\" from {}: {}", event, result.path.string(), *error);
       continue;
     }
-    std::error_code error;
-    const auto modified = fs::last_write_time(result.path, error);
     buffers[std::string(event)] = ThemeSound{
         .buffer = std::make_shared<const SoundBuffer>(std::move(buffer)),
-        .path = result.path,
-        .modified = modified,
+        .file = {.path = result.path, .modified = modifiedTime(result.path)},
     };
     kLog.info("sound theme '{}': loaded {} for event '{}'", theme, result.path.c_str(), event);
   }
 
+  m_themeDirs.clear();
+  for (auto& directory : themeSoundDirs(theme)) {
+    const auto modified = modifiedTime(directory);
+    m_themeDirs.push_back({.path = std::move(directory), .modified = modified});
+  }
   m_buffers = std::move(buffers);
   m_theme = std::move(theme);
 }
@@ -289,24 +322,28 @@ SoundPlayer::loadPluginSound(std::uint64_t ownerId, const std::string& name, con
 
 void SoundPlayer::unloadPluginSounds(std::uint64_t ownerId) { m_pluginBuffers.erase(ownerId); }
 
-void SoundPlayer::play(const std::string& name) {
-  auto it = m_buffers.find(name);
-  if (it == m_buffers.end()) {
-    return;
-  }
+bool SoundPlayer::themeChangedOnDisk(const ThemeSound* sound) const {
+  // A path that cannot be read for a moment, as during the sound script's directory swap, counts as
+  // unchanged, so the loaded copies keep playing.
+  const auto changed = [](const WatchedPath& watched) {
+    const auto current = modifiedTime(watched.path);
+    return current.has_value() && current != watched.modified;
+  };
+  return (sound != nullptr && changed(sound->file)) || std::ranges::any_of(m_themeDirs, changed);
+}
 
-  // A theme rebuilt while the shell runs (scripts/make-cupertino-sounds.py) replaces its files, so
-  // reload it rather than keep playing the copies decoded earlier. A file that cannot be read for
-  // a moment, as during the script's directory swap, keeps the loaded copy.
-  std::error_code error;
-  const auto modified = fs::last_write_time(it->second.path, error);
-  if (!error && modified != it->second.modified) {
+void SoundPlayer::play(const std::string& name) {
+  // A theme rebuilt or edited while the shell runs (scripts/make-cupertino-sounds.py) is heard
+  // without a restart: the file about to play and the theme's directories are checked, one stat
+  // each, and the theme reloads when any of them changed.
+  auto it = m_buffers.find(name);
+  if (themeChangedOnDisk(it == m_buffers.end() ? nullptr : &it->second)) {
     kLog.info("sound theme '{}' changed on disk; reloading", m_theme);
     loadTheme(m_theme);
     it = m_buffers.find(name);
-    if (it == m_buffers.end()) {
-      return;
-    }
+  }
+  if (it == m_buffers.end()) {
+    return;
   }
   playBuffer(name, it->second.buffer);
 }
@@ -365,6 +402,14 @@ void SoundPlayer::playBuffer(const std::string& name, const std::shared_ptr<cons
   audioInfo.format = SPA_AUDIO_FORMAT_F32;
   audioInfo.rate = buffer->sampleRate;
   audioInfo.channels = buffer->channels;
+  // Name the channels: an unpositioned mono stream played about 11 dB louder than the same sound in
+  // stereo. Positioned, mono spreads over both speakers at the level stereo plays at.
+  if (buffer->channels == 1) {
+    audioInfo.position[0] = SPA_AUDIO_CHANNEL_MONO;
+  } else if (buffer->channels == 2) {
+    audioInfo.position[0] = SPA_AUDIO_CHANNEL_FL;
+    audioInfo.position[1] = SPA_AUDIO_CHANNEL_FR;
+  }
   const spa_pod* params[1];
   params[0] = reinterpret_cast<spa_pod*>(spa_format_audio_raw_build(&builder, SPA_PARAM_EnumFormat, &audioInfo));
 

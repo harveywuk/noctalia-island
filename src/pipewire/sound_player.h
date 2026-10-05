@@ -42,10 +42,14 @@ private:
     std::uint32_t channels = 2;
   };
 
+  struct WatchedPath {
+    std::filesystem::path path;
+    std::optional<std::filesystem::file_time_type> modified;
+  };
+
   struct ThemeSound {
     std::shared_ptr<const SoundBuffer> buffer;
-    std::filesystem::path path;
-    std::filesystem::file_time_type modified;
+    WatchedPath file;
   };
 
   struct ActiveStream {
@@ -59,6 +63,7 @@ private:
   };
 
   void loadTheme(std::string theme);
+  [[nodiscard]] bool themeChangedOnDisk(const ThemeSound* sound) const;
   [[nodiscard]] static std::optional<std::string> decode(const std::filesystem::path& path, SoundBuffer& out);
   void playBuffer(const std::string& name, const std::shared_ptr<const SoundBuffer>& buffer);
 
@@ -70,6 +75,8 @@ private:
   float m_volume = 1.0F;
   std::string m_theme;
   std::unordered_map<std::string, ThemeSound> m_buffers;
+  // The theme's sound directories, so files added, removed or renamed there reload it too.
+  std::vector<WatchedPath> m_themeDirs;
   std::unordered_map<std::uint64_t, std::unordered_map<std::string, std::shared_ptr<const SoundBuffer>>>
       m_pluginBuffers;
   std::vector<std::unique_ptr<ActiveStream>> m_active;
