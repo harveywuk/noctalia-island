@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Noctalia · Sound studio</title>
+<style>
+  :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#111217;color:#f3f2f5}
+  *{box-sizing:border-box}body{margin:0}main{max-width:1060px;margin:auto;padding:64px 28px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;color:#a2a0ae;text-transform:uppercase}
+  h1{font-size:clamp(32px,5vw,44px);font-weight:550;letter-spacing:-.045em;margin:12px 0}
+  .intro{color:#aaa9b6;line-height:1.7;max-width:620px;font-size:16px}
+  .controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:30px 0}
+  label{display:flex;gap:12px;align-items:center;font-size:13px;color:#bab8c6}
+  input{accent-color:#c5b5ff;width:130px}button,a{font:inherit;-webkit-tap-highlight-color:transparent}
+  button{cursor:pointer;border:1px solid #ffffff16;border-radius:11px;background:#ffffff09;color:inherit;padding:12px 16px;transition:background .15s}
+  button:hover{background:#ffffff15}button:focus-visible,a:focus-visible{outline:2px solid #b9d9ff;outline-offset:4px}
+  button[aria-pressed=true]{border-color:var(--tint);background:color-mix(in srgb,var(--tint) 14%,transparent);color:var(--tint)}
+  #now{color:#cbc7d7;font-size:13px;min-height:20px;margin-left:auto}
+  .sets{display:grid;grid-template-columns:repeat(var(--set-count,3),1fr);gap:16px;margin:24px 0 36px}
+  article{background:linear-gradient(145deg,color-mix(in srgb,var(--tint) 9%,#17181f),#17181f);border:1px solid #ffffff12;border-radius:20px;padding:24px}
+  .orb{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 30% 25%,#fff,var(--tint) 40%,#252531);box-shadow:0 0 24px color-mix(in srgb,var(--tint) 12%,transparent);margin-bottom:22px}
+  h2{font-size:24px;letter-spacing:-.03em;margin:0 0 8px}article p{color:#b4b0bf;line-height:1.6;font-size:14px;min-height:46px;margin:0 0 20px}
+  article button{width:100%;background:color-mix(in srgb,var(--tint) 12%,transparent);color:var(--tint)}
+  article a{display:block;color:#a6a1b5;text-align:center;font-size:12px;margin-top:17px;text-decoration:none}article a:hover{text-decoration:underline}
+  .comparison{border:1px solid #ffffff12;border-radius:18px;overflow:hidden}
+  .row{display:grid;grid-template-columns:1.15fr repeat(var(--set-count,3),1fr);gap:12px;align-items:center;padding:14px 20px;border-bottom:1px solid #ffffff0c}
+  .row:last-child{border:0}.row.head{color:#a6a1b5;font-size:12px;letter-spacing:.04em;background:#ffffff03}
+  .row.head span:not(:first-child){text-align:center}.event{font-size:14px}.event small{display:block;color:#767481;font-size:11px;margin-top:4px}
+  .row button{font-size:13px;padding:10px 12px}.note{color:#85818f;font-size:12px;line-height:1.8;margin-top:22px}
+  @media(max-width:680px){main{padding:32px 16px}h1{font-size:34px}.sets{grid-template-columns:1fr}article p{min-height:0}.orb{float:right;margin:0}article button{max-width:240px}article a{text-align:left}.row{padding:12px 10px;gap:6px;grid-template-columns:1.2fr repeat(var(--set-count,3),1fr)}.row button{padding:10px 4px}#now{width:100%;margin:0}}
+</style>
+<main>
+  <div class="eyebrow">Noctalia / Sound studio</div>
+  <h1>Find your desktop’s sound.</h1>
+  <p class="intro">Listen to a whole set, or compare the same moment across the different sounds.</p>
+  <div class="controls"><button id="stop">Stop playback</button><label>Preview volume <input id="volume" type="range" min="0" max="1" value="0.8" step="0.01"></label><span id="now" role="status" aria-live="polite">Ready when you are.</span></div>
+  <section class="sets" id="sets" aria-label="Sound sets"></section>
+  <section class="comparison" id="comparison" aria-label="Compare individual sounds"></section>
+  <p class="note">Each set plays: notification → volume → screenshot → charging → alert → complete.<br>Original sounds, created for Noctalia. Previewing a sound does not change your desktop theme.</p>
+</main>
+<script>
+const data=/* SOUND_DATA */;
+document.documentElement.style.setProperty('--set-count',Object.keys(data.styles).length);
+if(data.title)document.querySelector('h1').textContent=data.title;
+if(data.description)document.querySelector('.intro').textContent=data.description;
+const audio=new Audio();audio.volume=.8;let active=null,queue=[],currentStyle='';
+const now=document.getElementById('now');
+function reset(){if(active)active.setAttribute('aria-pressed','false');active=null;}
+function stop(){queue=[];audio.pause();audio.currentTime=0;reset();now.textContent='Playback stopped.';}
+function next(){if(!queue.length){reset();now.textContent='Ready for another listen.';return;}const item=queue.shift();audio.src=data.styles[currentStyle].sounds[item.id].file;now.textContent=data.styles[currentStyle].title+' · '+item.title;audio.play().catch(()=>{queue=[];reset();now.textContent='Could not play this sound. Try the downloadable preview.';});}
+function play(style,events,button){stop();currentStyle=style;active=button;active.setAttribute('aria-pressed','true');queue=events.slice();next();}
+audio.addEventListener('ended',()=>{if(queue.length){const source=audio.src;setTimeout(()=>{if(audio.src===source&&audio.ended)next()},650)}else next()});
+document.getElementById('stop').onclick=stop;
+document.getElementById('volume').oninput=e=>audio.volume=Number(e.target.value);
+for(const [id,style] of Object.entries(data.styles)){
+  const card=document.createElement('article');card.style.setProperty('--tint',style.color);
+  card.innerHTML=`<div class="orb" aria-hidden="true"></div><h2>${style.title}</h2><p>${style.description}</p><button aria-pressed="false">▶ Listen to the set</button><a href="${style.preview}" download>Download preview · MP3</a><a href="noctalia-${id}.zip" download>Download theme · ZIP</a>`;
+  card.querySelector('button').onclick=e=>play(id,data.events,e.currentTarget);document.getElementById('sets').append(card);
+}
+const table=document.getElementById('comparison');
+table.innerHTML='<div class="row head"><span>EVENT</span>'+Object.values(data.styles).map(s=>`<span>${s.title.toUpperCase()}</span>`).join('')+'</div>';
+for(const event of data.events){const row=document.createElement('div');row.className='row';const label=document.createElement('span');label.className='event';label.textContent=event.title;row.append(label);
+  for(const [id,style] of Object.entries(data.styles)){const button=document.createElement('button');button.textContent='▶ Play';button.style.setProperty('--tint',style.color);button.setAttribute('aria-pressed','false');button.setAttribute('aria-label',style.title+' '+event.title);button.onclick=()=>play(id,[event],button);row.append(button);}table.append(row);
+}
+</script>
+</html>
