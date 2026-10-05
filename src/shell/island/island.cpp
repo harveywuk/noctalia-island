@@ -3703,9 +3703,8 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   inst.suppressHover = true;
   if (m_notification && m_notification->urgency != Urgency::Critical && m_notification->timeout > 0)
     m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
-  return IslandPanelSurface{
-      inst.surface.get(), inst.output, inst.width * inst.scale, inst.height * inst.scale, inst.scale
-  };
+  return IslandPanelSurface{inst.surface.get(),       inst.output, inst.width * inst.scale,
+                            inst.height * inst.scale, inst.scale,  inst.flowShown ? inst.flowTexture : TextureHandle{}};
 }
 
 Color Island::capsuleColor() const { return resolveColorSpec(islandRole(ColorRole::Surface)); }

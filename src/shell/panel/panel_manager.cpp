@@ -1578,6 +1578,7 @@ void PanelManager::destroyPanel() {
     m_activePanel->onClose();
   }
   m_bgNode = nullptr;
+  m_islandFlow = nullptr;
   m_contentNode = nullptr;
   m_detachedRevealClipNode = nullptr;
   m_detachedRevealContentNode = nullptr;

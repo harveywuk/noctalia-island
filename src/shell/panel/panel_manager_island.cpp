@@ -7,6 +7,7 @@
 #include "shell/panel/panel_manager.h"
 #include "shell/tooltip/tooltip_manager.h"
 #include "ui/controls/box.h"
+#include "ui/controls/image.h"
 #include "ui/controls/select_dropdown_popup.h"
 #include "ui/motion.h"
 #include "ui/palette.h"
@@ -89,6 +90,15 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
     capsule->setFill(colorSpecFromRole(ColorRole::Surface));
     capsule->setClipChildren(true);
     m_bgNode = m_sceneRoot->addChild(std::move(capsule));
+    // While media plays the capsule shows the artwork gradient; keep it behind the card so opening
+    // and closing don't flash a plain capsule.
+    if (m_islandSurface->flow.id != 0) {
+      auto flow = std::make_unique<Image>();
+      flow->setFit(ImageFit::Cover);
+      flow->setHitTestVisible(false);
+      flow->setExternalTexture(renderer, m_islandSurface->flow);
+      m_islandFlow = m_bgNode->addChild(std::move(flow));
+    }
     auto content = std::make_unique<Node>();
     m_contentNode = m_bgNode->addChild(std::move(content));
     m_activePanel->setAnimationManager(&m_animations);
@@ -182,6 +192,11 @@ void PanelManager::applyIslandReveal(float progress) {
   auto* capsule = static_cast<Box*>(m_bgNode);
   const float radius = island::surfaceRadius(m_islandHeight, scale);
   capsule->setRadius(radius);
+  if (auto* flow = static_cast<Image*>(m_islandFlow)) {
+    flow->setPosition(0, 0);
+    flow->setSize(m_islandWidth, m_islandHeight);
+    flow->setRadius(radius);
+  }
   // A glass Island stays glass while it hosts a panel: the same tint, and the morphing card's
   // shape as the blur region (hyprglass glasses exactly this).
   const float glass = m_islandHost->capsuleOpacity();
@@ -201,7 +216,12 @@ void PanelManager::applyIslandReveal(float progress) {
     capsule->setFill(glassFill(
         lerpColor(m_islandHost->capsuleColor(), colorForRole(ColorRole::Surface), blend * blend * (3.0F - 2.0F * blend))
     ));
+    // The gradient fades as the card takes the panel's colour, and returns as it closes to a pill.
+    if (m_islandFlow)
+      m_islandFlow->setOpacity(1.0F - blend * blend * (3.0F - 2.0F * blend));
   }
+  if (m_islandFlow && m_islandResizing)
+    m_islandFlow->setOpacity(0.0F);
   if (glass < 1.0F)
     m_surface->setBlurRegion(Surface::tessellateRoundedRect(
         static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)), static_cast<int>(std::lround(m_islandWidth)),

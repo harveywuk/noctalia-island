@@ -266,6 +266,8 @@ private:
   AnimationManager m_animations;
   std::unique_ptr<Node> m_sceneRoot;
   Node* m_bgNode = nullptr;
+  // The Island's artwork gradient behind an Island-hosted panel's card; see applyIslandReveal.
+  Node* m_islandFlow = nullptr;
   Node* m_contentNode = nullptr;
   Node* m_detachedRevealClipNode = nullptr;
   Node* m_detachedRevealContentNode = nullptr;
