@@ -31,11 +31,13 @@ This writes `~/.local/share/icons/macOS`. Pass `--variant macOS-White` for the w
 
 Set `macOS` everywhere a cursor theme is named:
 
-- `XCURSOR_THEME` and `HYPRCURSOR_THEME` in the compositor (`hl.env` in Hyprland), in
-  `environment.d`, in the user service environment, and in any Noctalia service override
+- With UWSM, set `XCURSOR_THEME=macOS` and `XCURSOR_SIZE=32` in `~/.config/uwsm/env`,
+  and `HYPRCURSOR_THEME=macOS` and `HYPRCURSOR_SIZE=32` in `~/.config/uwsm/env-hyprland`.
+  These files supply apps and user services; avoid duplicate compositor or service overrides.
+  The [setup guide](SETUP.md) includes sourceable examples.
+- With plain Hyprland, export the equivalent variables before launching the session.
 - `org.gnome.desktop.interface cursor-theme`, and `gtk-cursor-theme-name` for GTK 3 and 4
 - `Inherits` in `~/.icons/default/index.theme`, the Xcursor fallback
-- `[input.cursor] theme` in Umbriel's config
 
 Then run `hyprctl setcursor macOS <size>`. Applications that are already open keep the cursor
 they loaded until they are reopened. A remote desktop window shows the remote machine's cursors.

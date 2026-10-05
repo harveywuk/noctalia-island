@@ -44,10 +44,17 @@ pinned = []
 source = "community"
 community_palette = "macOS"
 mode = "auto"
+shell_mode = "dark"
+
+# Install adw-gtk-theme, qt6ct and Kvantum (including KvMojave) first.
+[theme.templates]
+builtin_ids = ["gtk3", "gtk4", "qt", "kvantum"]
 
 [shell]
 # Keep the first-run wizard: it sets location, avatar and wallpaper interactively.
 setup_wizard_enabled = true
+# Use one authentication agent for the desktop. Stop any separate agent first.
+polkit_agent = true
 
 [plugins]
 auto_update = "none"

@@ -1,0 +1,8 @@
+# Source this from ~/.config/uwsm/env after installing qt6ct.
+# UWSM passes these values to applications and user services at login.
+export QT_QPA_PLATFORMTHEME=qt6ct
+export QT_QPA_PLATFORM='wayland;xcb'
+
+# After installing the optional cursor theme described in docs/CURSOR_THEME.md:
+# export XCURSOR_THEME=macOS
+# export XCURSOR_SIZE=32

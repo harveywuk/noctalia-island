@@ -10,7 +10,8 @@ import time
 def prepare(base, cfg, env):
     repo = pathlib.Path(__file__).resolve().parents[1]
     starter = (repo/'examples/starter.toml').read_text()
-    starter = starter.replace('setup_wizard_enabled = true', 'setup_wizard_enabled = false\npolkit_agent = false\noffline_mode = true')
+    starter = starter.replace('setup_wizard_enabled = true', 'setup_wizard_enabled = false\noffline_mode = true')
+    starter = starter.replace('polkit_agent = true', 'polkit_agent = false')
     (cfg/'config.toml').write_text(starter)
 
 

@@ -48,27 +48,33 @@ own features add these runtime tools:
 | `xdg-desktop-portal-hyprland` | Screenshots, screen sharing, file pickers |
 | `wf-recorder` | Screen recording |
 | `kitty` | Default terminal (change it in Settings → System → Default applications) |
-| `polkit` and an agent (e.g. `hyprpolkitagent`) | Privileged actions such as greeter appearance sync |
+| `polkit` | Privileged actions; the starter configuration enables Noctalia's integrated agent |
+| `adw-gtk-theme` | GTK 3 light and dark base themes for generated colours |
+| `qt6ct`, `kvantum` | Qt settings and the KvMojave base used by the generated Kvantum theme |
 | `upower` | Batteries, including Bluetooth device batteries in the Island |
 | `ddcutil` (optional) | External monitor brightness |
 | `labwc`, `grim`, `tesseract`, `tesseract-data-eng`, `python-pillow`, `mpv` (optional) | Running the integration tests |
 
 ```sh
 sudo pacman -S --needed hyprland xdg-desktop-portal-hyprland wf-recorder kitty \
-  polkit hyprpolkitagent upower
+  polkit upower adw-gtk-theme qt6ct kvantum
 ```
 
 ## 2. Build and install
 
 ```sh
-git clone <your fork URL> dynamic-noctalia
+git clone --branch feature/orbit-island https://github.com/harveywuk/noctalia-island.git dynamic-noctalia
 cd dynamic-noctalia
 scripts/install-local.sh
 ```
 
-The script configures a release build in `build-release/`, runs the unit tests, and installs
+The script configures a release build in `build-release/`, enables and runs the unit tests
+even when reusing an existing build, and installs
 to `~/.local/lib/dynamic-noctalia`. It links `~/.local/bin/noctalia` to the installed binary
 and writes `~/.config/systemd/user/dynamic-noctalia.service` if that unit does not exist yet.
+It also installs the start hook under the XDG data directory when none exists. Existing units
+and hooks are preserved. The binary and assets are staged together before replacing the
+installation; a failed build, test or staging step leaves the installed tree untouched.
 Options:
 
 | Option | Default |
@@ -76,6 +82,7 @@ Options:
 | `--prefix DIR` / `NOCTALIA_PREFIX` | `~/.local/lib/dynamic-noctalia` |
 | `--unit NAME` / `NOCTALIA_UNIT` | `dynamic-noctalia.service` |
 | `NOCTALIA_BUILD_DIR` | `build-release` |
+| `--jobs N` / `NOCTALIA_BUILD_JOBS` | `6` build/test jobs |
 | `--skip-tests` | run tests |
 | `--no-restart` | restart the unit if it is running |
 
@@ -83,10 +90,12 @@ Assets are installed with the binary. Copying only `noctalia` is not enough.
 
 ## 3. Start it with Hyprland
 
-Copy the start hook and call it once Hyprland is ready:
+The installer supplies the start hook. For an existing installation, inspect and back up the
+old hook before updating it. Keep its custom `NOCTALIA_UNIT` default if applicable:
 
 ```sh
-install -Dm755 examples/hyprland/start-shell.sh ~/.local/share/dynamic-noctalia/start-shell.sh
+cp ~/.local/share/dynamic-noctalia/start-shell.sh ~/.local/share/dynamic-noctalia/start-shell.sh.backup
+install -m755 examples/hyprland/start-shell.sh ~/.local/share/dynamic-noctalia/start-shell.sh
 ```
 
 ```lua
@@ -96,12 +105,44 @@ hl.on("hyprland.start", function()
 end)
 ```
 
-The hook exports the Wayland and Hyprland variables to the systemd user manager, clears
-sockets left by other compositors, restarts the shell unit and restarts the portal. The shell
-runs outside your login session, as user services do. It finds your graphical session through
-logind, so locking before suspend and brightness control work as usual.
+Under UWSM, the hook leaves environment import, session ordering and portal activation to
+the session manager. With plain Hyprland, it imports the required display variables itself.
+It queues an idempotent shell start without blocking session activation. It does not restart
+portals or start a second authentication agent. A custom unit can be selected with
+`NOCTALIA_UNIT`; the installer embeds its selected unit as the new hook's default.
+
+Noctalia runs as a user service and finds the graphical session through logind for locking
+before suspend and brightness control.
 
 Do not also start `noctalia` from `exec-once` or an XDG autostart entry, or two shells will run.
+
+### UWSM environment and application shortcuts
+
+Install the example environment fragments:
+
+```sh
+install -Dm644 examples/uwsm/env ~/.config/uwsm/noctalia-env
+install -Dm644 examples/uwsm/env-hyprland ~/.config/uwsm/noctalia-env-hyprland
+```
+
+Add this line once to `~/.config/uwsm/env`, preserving its existing settings:
+
+```sh
+. "${XDG_CONFIG_HOME:-$HOME/.config}/uwsm/noctalia-env"
+```
+
+Add this line once to `~/.config/uwsm/env-hyprland`:
+
+```sh
+. "${XDG_CONFIG_HOME:-$HOME/.config}/uwsm/noctalia-env-hyprland"
+```
+
+The fragments select qt6ct and Qt's Wayland/X11 backend order. Optional cursor settings are
+commented until that theme is installed. They take effect at the next login. Keep these
+variables in UWSM's files instead of duplicating them across `environment.d`, compositor
+configuration and service overrides. Launch application shortcuts through `uwsm app --`, for
+example `uwsm app -- kitty`, and use `uwsm stop` for session logout. See
+[Hyprland's UWSM guidance](https://wiki.hypr.land/useful-utilities/uwsm/).
 
 ## 4. Try the starter configuration
 
@@ -118,12 +159,57 @@ systemctl --user restart dynamic-noctalia.service
 - an Island bar presentation instead of the top bar
 - a floating, magnifying dock with live window previews
 - the bundled macOS palette following light/dark mode
+- a dark shell while application colours follow light/dark mode
+- GTK 3/4, Qt and Kvantum templates, with the dependencies above
+- Noctalia's integrated authentication agent
+
+Run only one authentication agent. If `hyprpolkitagent.service` is enabled, stop and disable
+it before starting this configuration:
+
+```sh
+systemctl --user disable --now hyprpolkitagent.service
+```
 
 The lock screen and Island use their macOS-style appearance by default. The first-run wizard
 then asks for your location, avatar and wallpaper.
 
 Changes made in Settings are written to `~/.local/state/noctalia/settings.toml` and override
 `config.toml` without editing it. Settings → System → Backups saves and restores both.
+
+### Optional matching icons, cursor and sounds
+
+The starter uses installed system fonts and icons. SF Pro is a personal installation and is
+not bundled. The matching cursor has its own reproducible build instructions in
+[CURSOR_THEME.md](CURSOR_THEME.md); enable the cursor lines in the UWSM fragments after
+installing it.
+
+For the optional [WhiteSur icon theme](https://github.com/vinceliuice/WhiteSur-icon-theme),
+install both `WhiteSur-light` and `WhiteSur-dark`, then install the repository's mode hook:
+
+```sh
+install -Dm755 scripts/sync-icon-theme.py ~/.local/bin/noctalia-icon-theme
+```
+
+Add it to `[hooks]` in the Noctalia configuration, incorporating it into any existing
+`theme_mode_changed` command rather than replacing that command:
+
+```toml
+[hooks]
+theme_mode_changed = '"$HOME/.local/bin/noctalia-icon-theme"'
+```
+
+The hook checks that the chosen theme exists, updates GTK and existing Qt settings, and
+preserves settings-file symlinks. `--light NAME --dark NAME` selects another installed pair.
+
+Generate the original sound theme with NumPy and ffmpeg installed:
+
+```sh
+python3 scripts/make-cupertino-sounds.py
+```
+
+Then select `cupertino` in Sound settings, or set `[audio] sound_theme = "cupertino"`.
+No Apple sound recordings are included. Open GTK 3 and Qt/Kvantum applications may need
+reopening after a colour-mode change; see the [GTK/Qt guide](user/templates/official/gtk-qt.mdx).
 
 ## 5. Optional: matching login screen
 
@@ -157,16 +243,25 @@ git pull
 scripts/install-local.sh
 ```
 
-The script keeps the previous binary as `bin/noctalia.previous-<timestamp>` (the newest five
-are retained) and restarts the running unit. After a Hyprland upgrade, rebuild every plugin
+The script keeps the previous binary and assets together in a sibling directory named
+`dynamic-noctalia.previous-<timestamp>.<suffix>` and prints its exact path. Backups are retained
+until you remove them. It restarts the running unit unless `--no-restart` is set.
+After a Hyprland upgrade, rebuild every plugin
 against the new version before logging back in, or Hyprland refuses to load them.
 
 ## Rolling back
 
 ```sh
-prefix=~/.local/lib/dynamic-noctalia
-cp -p "$(ls -1t $prefix/bin/noctalia.previous-* | head -1)" $prefix/bin/noctalia
-systemctl --user restart dynamic-noctalia.service
+(
+set -e
+install_prefix=~/.local/lib/dynamic-noctalia
+previous_install=/path/printed/by/the/installer
+test -x "$previous_install/bin/noctalia" && test -d "$previous_install/share/noctalia/assets"
+systemctl --user stop dynamic-noctalia.service
+mv "$install_prefix" "$install_prefix.before-rollback-$(date +%Y%m%d-%H%M%S)"
+cp -a "$previous_install" "$install_prefix"
+systemctl --user start dynamic-noctalia.service
+)
 ```
 
 A `settings.toml` written by a newer build may contain keys an older build reports as

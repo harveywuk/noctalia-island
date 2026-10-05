@@ -1,8 +1,9 @@
 # Dynamic Noctalia development handover
 
 Updated: 5 October 2026. Working branch: `feature/orbit-island`. The newest state is in
-[Checkpoint: 5 October 2026](#checkpoint-5-october-2026), which also sets the design direction
-for the desktop beyond the shell. The earlier checkpoints still apply.
+[Compositor removal and reproducible setup](#compositor-removal-and-reproducible-setup).
+[Checkpoint: 5 October 2026](#checkpoint-5-october-2026) sets the desktop design direction.
+Earlier checkpoints are historical where superseded below.
 
 This checkpoint brings together the recent Hyprland settings work, Dynamic Island
 integration, Cupertino-inspired shell styling, and dock improvements. The latest
@@ -493,6 +494,47 @@ with `--styles glass warm playful modular` to include all four. Validation gener
 confirmed that the generated page embeds its manifest. Browser playback was not checked in
 this commit pass. Generated files stay outside version control; generating previews does
 not install or select a sound theme.
+
+## Compositor removal and reproducible setup
+
+Niri and Umbriel support has been removed at the user's request: compositor detection and
+backends, exclusive overview typing and wallpaper backdrop code, settings/schema entries,
+template definitions, current support pages, issue choices and obsolete translated strings.
+Generic Wayland behavior and the other compositor backends remain. The two backend-specific
+tests were retired, leaving 152 registered Meson tests. Upstream attribution and historical
+records remain intact.
+
+The Island settings and capture smoke harnesses now run on private labwc displays. Capture
+uses its own PipeWire/PulseAudio null sink and inspects the Wayland client protocol log for
+layer changes. Both harnesses accept `NOCTALIA_TEST_BINARY`. Existing configurations can drop
+`shell.niri_overview_type_to_launch_enabled`, `shell.umbriel_overview_type_to_launch_enabled`,
+`[backdrop]`, and the `niri`/`umbriel` template selections.
+
+The installer stages the complete binary/assets tree, retains the previous tree for rollback,
+reenables tests in existing builds, limits parallel jobs, validates arguments and preserves
+existing service units and start hooks. The Hyprland hook queues an idempotent start and
+respects UWSM's ownership of environment import and portals. The starter selects a dark shell,
+GTK/Qt/Kvantum templates and Noctalia's integrated polkit agent. Sourceable UWSM environment
+examples and a reusable GTK/Qt icon-mode hook accompany the revised [setup guide](SETUP.md).
+CI now runs on pushes to `feature/orbit-island` and can also be dispatched manually.
+
+Validation: debug and release builds pass; all 152 Meson tests pass; ten isolated installer,
+startup and icon-hook checks and 23 workflow-script tests pass; English translation keys,
+changed C++ formatting, shell syntax and Python compilation pass. The full release Hyprland
+smoke run with plugins passed at `build-rishot/hyprland-smoke-uu597zdc/`; the revised starter
+passed at `build-rishot/hyprland-smoke-g36i3n6i/`. The labwc capture and hover-layout suites
+also passed. The release binary remains local and has not been installed into the desktop.
+An actual staged Meson installation also passed configuration validation with isolated user
+directories and contains neither removed compositor's templates.
+GitHub CI and a fresh hardware login were not run during this checkpoint.
+
+On the development machine, Niri's package and the manual Umbriel compositor, portal, units
+and login entry were removed. Root-owned files are backed up in
+`/var/backups/noctalia-compositor-removal-20261005.qIADVg/`; inactive user configuration and the
+previous template selection are in `~/.local/share/noctalia-compositor-removal/20261005/user/`.
+The selected Umbriel template was removed from the live shell settings. Hyprland, the running
+Noctalia service and its portal stayed active. Personal backups and inactive source checkouts
+were retained.
 
 ## Boundaries to preserve
 

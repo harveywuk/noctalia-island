@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, feature/orbit-island]
   pull_request:
+  workflow_dispatch:
 
 # Cancel in-progress runs for the same branch/PR when new commits land.
 concurrency:
@@ -48,7 +49,7 @@ jobs:
             libqalculate libxml2 \
             md4c tomlplusplus libical \
             nlohmann-json stb \
-            jemalloc just clang
+            jemalloc just clang dbus python
 
       - uses: actions/checkout@v6
 
@@ -57,6 +58,12 @@ jobs:
 
       - name: Test
         run: just test debug --print-errorlogs
+
+      - name: Check translations and setup scripts
+        run: |
+          python3 tools/i18n-check.py
+          python3 tests/desktop_setup_test.py
+          python3 -m unittest discover -s .github/workflows/scripts -p 'test_*.py'
 
       - name: Lint
         run: just lint

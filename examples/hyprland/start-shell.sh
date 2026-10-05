@@ -5,14 +5,14 @@
 set -euo pipefail
 [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && -n ${WAYLAND_DISPLAY:-} ]] || exit 1
 unit=${NOCTALIA_UNIT:-dynamic-noctalia.service}
-export XDG_CURRENT_DESKTOP=Hyprland
-export XDG_SESSION_TYPE=wayland
-# Clear sockets left by another compositor so the shell picks the Hyprland backend.
-systemctl --user unset-environment UMBRIEL_SOCKET NIRI_SOCKET SWAYSOCK LABWC_PID
-dbus-update-activation-environment --systemd \
-  WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE HYPRLAND_INSTANCE_SIGNATURE
-systemctl --user restart "$unit"
-# Portals read the environment at start; restart them so screenshots and pickers work.
-systemctl --user restart xdg-desktop-portal.service 2>/dev/null || true
-# A polkit agent for privileged actions, if one is installed as a user unit.
-systemctl --user start hyprpolkitagent.service 2>/dev/null || true
+# UWSM imports the session environment and orders graphical-session.target.
+# Plain Hyprland needs an explicit import before starting a user service.
+if ! command -v uwsm >/dev/null || ! uwsm check is-active compositor-only >/dev/null 2>&1; then
+  export XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_TYPE=wayland
+  systemctl --user unset-environment SWAYSOCK LABWC_PID TRIAD_SOCKET MANGO_INSTANCE_SIGNATURE
+  dbus-update-activation-environment --systemd \
+    WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE HYPRLAND_INSTANCE_SIGNATURE
+fi
+# Queue the start so a session hook cannot block graphical-session activation.
+# Repeated calls leave an already-running shell alone.
+systemctl --user --no-block start "$unit"

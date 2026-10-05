@@ -1,0 +1,6 @@
+# Source this from ~/.config/uwsm/env-hyprland after selecting an Xcursor theme.
+# Hyprland uses the same theme and size when the theme also supplies Hyprcursors.
+if [ -n "${XCURSOR_THEME:-}" ]; then
+    export HYPRCURSOR_THEME="$XCURSOR_THEME"
+    export HYPRCURSOR_SIZE="${XCURSOR_SIZE:-32}"
+fi
