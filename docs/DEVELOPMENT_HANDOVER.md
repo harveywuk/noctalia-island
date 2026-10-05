@@ -293,7 +293,7 @@ Window values and where they come from:
 | Setting | Value | Source in the shell |
 |---------|-------|---------------------|
 | `rounding` / `rounding_power` | 24 / 3.26 | The rect shader draws a 16 px continuous corner as a superellipse spanning 1.528 × r with exponent 3.26 (`rect_program.cpp`). |
-| `shadow_range` / `shadow_offset_y` | 24 / 6 | Panel shadow: `kBlurRadius` 24 (`surface/shadow.h`), `kShadowOffset` 6 down. |
+| `shadow_range` / `shadow_offset_y` | 24 / 6 | Panel shadow: `kBlurRadius` 24 (`shell/surface/shadow.h`), `kShadowOffset` 6 down (`shadowDirectionOffset()` in `config/config_types.h`). |
 | Opening curve | spring, stiffness 195, damping 20.9 | `islandExpand`: response 450 ms, damping 0.75 (`ui/motion.h`), converted to mass-spring terms. |
 | Closing curve | spring, stiffness 304.6, damping 30 | `islandCollapse`: response 360 ms, damping 0.86. |
 

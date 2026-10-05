@@ -27,21 +27,31 @@ def envelope(t, attack, decay):
     return rise * np.exp(-t / decay)
 
 
+def taper(signal, seconds=0.01):
+    """Fade the last few milliseconds to zero, so a sound cut off while ringing does not click."""
+    n = min(len(signal), int(RATE * seconds))
+    out = signal.copy()
+    out[len(out) - n:] *= np.linspace(1, 0, n)
+    return out
+
+
 def glass(freq, decay, seconds, attack=0.002):
     t = timeline(seconds)
     tone = np.zeros_like(t)
     for ratio, gain, decay_scale in GLASS:
         tone += gain * np.sin(2 * np.pi * freq * ratio * t) * envelope(t, attack, decay * decay_scale)
-    return tone
+    return taper(tone)
 
 
 def place(length, *parts):
-    """Mix (start seconds, signal) parts into one buffer."""
+    """Mix (start seconds, signal) parts into one buffer. A part that does not fit is an error,
+    not a silent cut, so retuning a start or a length cannot truncate a note unnoticed."""
     out = np.zeros(int(RATE * length))
     for start, signal in parts:
         i = int(RATE * start)
-        n = min(len(signal), len(out) - i)
-        out[i:i + n] += signal[:n]
+        if i < 0 or i + len(signal) > len(out):
+            raise ValueError(f'a {len(signal) / RATE:.3f} s part at {start} s does not fit in {length} s')
+        out[i:i + len(signal)] += signal
     return out
 
 
@@ -90,13 +100,11 @@ def tink():
 
 def complete():
     # A gentle rising pair (G5, D6), for finished tasks.
-    return place(0.7, (0, 0.8 * glass(784.0, 0.16, 0.6)), (0.11, glass(1174.7, 0.2, 0.6)))
+    return place(0.72, (0, 0.8 * glass(784.0, 0.16, 0.6)), (0.11, glass(1174.7, 0.2, 0.6)))
 
 
 def finish(signal, peak_db):
-    fade = min(len(signal), int(RATE * 0.01))
-    signal = signal.copy()
-    signal[-fade:] *= np.linspace(1, 0, fade)
+    signal = taper(signal)
     return signal / np.abs(signal).max() * 10 ** (peak_db / 20)
 
 
@@ -113,17 +121,10 @@ def write_oga(path, signal):
                         str(path)], check=True)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sounds-dir', type=Path, default=Path.home() / '.local/share/sounds')
-    args = parser.parse_args()
+def build(theme):
     rng = np.random.default_rng(7)  # Fixed, so a rebuild produces the same sounds.
-    theme = args.sounds_dir / 'cupertino'
     stereo = theme / 'stereo'
-    stereo.mkdir(parents=True, exist_ok=True)
-    (theme / 'index.theme').write_text(
-        '[Sound Theme]\nName=Cupertino\nComment=Soft glassy event sounds for Noctalia\n'
-        'Inherits=freedesktop\nDirectories=stereo\n\n[stereo]\nOutputProfile=stereo\n')
+    stereo.mkdir(parents=True)
     sounds = {
         'message-new-instant': (message(), -12),
         'audio-volume-change': (volume(), -16),
@@ -137,11 +138,34 @@ def main():
     aliases = {'message': 'message-new-instant', 'camera-shutter': 'screen-capture',
                'dialog-warning': 'bell', 'dialog-information': 'bell', 'window-attention': 'bell'}
     for alias, target in aliases.items():
-        link = stereo / f'{alias}.oga'
-        link.unlink(missing_ok=True)
-        link.symlink_to(f'{target}.oga')
+        (stereo / f'{alias}.oga').symlink_to(f'{target}.oga')
     # macOS stays quiet when the charger is removed.
     (stereo / 'power-unplug.disabled').touch()
+    (theme / 'index.theme').write_text(
+        '[Sound Theme]\nName=Cupertino\nComment=Soft glassy event sounds for Noctalia\n'
+        'Inherits=freedesktop\nDirectories=stereo\n\n[stereo]\nOutputProfile=stereo\n')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--sounds-dir', type=Path, default=Path.home() / '.local/share/sounds')
+    args = parser.parse_args()
+    theme = args.sounds_dir / 'cupertino'
+    args.sounds_dir.mkdir(parents=True, exist_ok=True)
+    # Build beside the theme and swap it in only once every sound has encoded: a failed run keeps
+    # the previous theme, and files for events no longer in the list do not linger.
+    with tempfile.TemporaryDirectory(dir=args.sounds_dir, prefix='.cupertino-') as staging:
+        staging = Path(staging)
+        try:
+            build(staging / 'cupertino')
+        except FileNotFoundError as error:
+            parser.exit(1, f'ffmpeg is required to encode the sounds: {error}\n')
+        except subprocess.CalledProcessError:
+            parser.exit(1, 'ffmpeg could not encode the sounds (it needs libvorbis); '
+                           f'{theme} is unchanged\n')
+        if theme.exists():
+            theme.rename(staging / 'previous')
+        (staging / 'cupertino').rename(theme)
     print(theme)
 
 
