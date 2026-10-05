@@ -72,6 +72,11 @@ Use `/usr/local/share/noctalia/...` instead if you installed with Meson’s defa
 ### Troubleshooting
 
 - **Theme not applying:** Completely restart GTK applications (close and reopen)
+- **GTK 3 remains light in dark mode:** Verify that both `adw-gtk3` and `adw-gtk3-dark`
+  are installed. The generated colour definitions depend on that base theme; stock Adwaita
+  can still draw light controls even when `noctalia.css` contains dark colours.
+- **Open GTK 3 apps keep the previous colours:** Reopen them after switching modes. GTK 3
+  caches the user stylesheet, so a base-theme change alone does not reload its colour overrides.
 - **Some apps still look wrong:** Some GTK apps may need GTK 4 theme separately:
   ```bash
   gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3'
@@ -154,7 +159,8 @@ Qt applications include KDE apps and many cross-platform applications. KDE apps 
 
 - **Qt apps not themed:** Ensure the environment variable is set before launching applications
 - **qt6ct not found:** Make sure qt6ct is installed and in your PATH
-- **Theme not updating:** Restart Qt applications after changing color schemes
+- **Theme not updating:** Restart Qt applications after changing color schemes. With Kvantum,
+  icons can update in an open app while its widget colours still need a restart.
 - **"The application is not configured correctly":** If opening qt6ct states this, it is likely that the `QT_QPA_PLATFORMTHEME` environment variable is not correctly set to `qt6ct` (Note: This may require a reboot if you set it for the first time).
 
 ---

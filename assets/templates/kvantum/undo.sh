@@ -13,13 +13,24 @@ previous() {
 
 # restore <file> <section> <key> <noctalia value> <previous value>: only undoes our own setting.
 restore() {
-    local file="$1" section="$2" key="$3" ours="$4" value="$5" tmp
+    local file="$1" section="$2" key="$3" ours="$4" value="$5" tmp current
     [ -f "$file" ] || return 0
+    # QSettings accepts spaces around keys and values. Check the effective value first so
+    # a later user edit wins, including when an older apply hook left duplicate keys.
+    current=$(awk -F= -v section="[$section]" -v key="$key" '
+        function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+        /^[[:space:]]*\[/ { in_section = (trim($0) == section); next }
+        in_section && trim($1) == key { value = trim(substr($0, index($0, "=") + 1)) }
+        END { print value }
+    ' "$file")
+    [ "$current" = "$ours" ] || return 0
     tmp="$(mktemp "${file}.tmp.XXXXXX")"
-    awk -v section="[$section]" -v key="$key" -v ours="$ours" -v value="$value" '
-        /^\[/ { in_section = ($0 == section); print; next }
-        in_section && $0 == key "=" ours {
-            if (value != "") print key "=" value
+    awk -F= -v section="[$section]" -v key="$key" -v value="$value" '
+        function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+        /^[[:space:]]*\[/ { in_section = (trim($0) == section); print; next }
+        in_section && trim($1) == key {
+            if (!done && value != "") print key "=" value
+            done = 1
             next
         }
         { print }

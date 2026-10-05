@@ -1411,6 +1411,11 @@ if build_tests
   )
 
   bash_program = find_program('bash')
+  test('kvantum_config',
+    find_program('python3'),
+    args: ['tests/kvantum_config_test.py', meson.current_source_dir() / 'assets/templates/kvantum'],
+    workdir: meson.current_source_dir(),
+  )
   test('template_undo_signal',
     bash_program,
     args: ['tests/template_undo_signal_test.sh', meson.current_source_dir() / 'assets/templates'],

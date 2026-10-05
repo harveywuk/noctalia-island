@@ -123,8 +123,10 @@ mv -f "$theme_dir/Noctalia.kvconfig.tmp" "$theme_dir/Noctalia.kvconfig"
 ini_get() {
     [ -f "$1" ] || return 0
     awk -F= -v section="[$2]" -v key="$3" '
-        /^\[/ { in_section = ($0 == section); next }
-        in_section && $1 == key { print substr($0, length(key) + 2); exit }
+        function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+        /^[[:space:]]*\[/ { in_section = (trim($0) == section); next }
+        in_section && trim($1) == key { value = trim(substr($0, index($0, "=") + 1)) }
+        END { if (value != "") print value }
     ' "$1"
 }
 
@@ -135,14 +137,16 @@ ini_set() {
     [ -e "$file" ] || : > "$file"
     tmp="$(mktemp "${file}.tmp.XXXXXX")"
     awk -v section="[$section]" -v key="$key" -v value="$value" '
-        /^\[/ {
+        function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+        function matches(s, eq) { eq = index(s, "="); return eq > 0 && trim(substr(s, 1, eq - 1)) == key }
+        /^[[:space:]]*\[/ {
             if (in_section && !done) { print key "=" value; done = 1 }
-            in_section = ($0 == section)
+            in_section = (trim($0) == section)
             if (in_section) found = 1
             print
             next
         }
-        in_section && index($0, key "=") == 1 {
+        in_section && matches($0) {
             if (!done) { print key "=" value; done = 1 }
             next
         }
