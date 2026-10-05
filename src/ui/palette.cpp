@@ -9,6 +9,7 @@
 
 Palette palette = noctalia::theme::findBuiltinPalette("Noctalia")->dark.palette;
 bool g_resolvedThemeLight = false;
+bool g_resolvedAppsLight = false;
 
 namespace {
 
@@ -108,6 +109,10 @@ bool isLightPalette() noexcept { return relativeLuminance(palette.surface) > 0.1
 bool isResolvedLightTheme() noexcept { return g_resolvedThemeLight; }
 
 void setResolvedThemeLight(bool light) noexcept { g_resolvedThemeLight = light; }
+
+bool isResolvedAppsLight() noexcept { return g_resolvedAppsLight; }
+
+void setResolvedAppsLight(bool light) noexcept { g_resolvedAppsLight = light; }
 
 Signal<>& paletteChanged() {
   static Signal<> signal;

@@ -35,8 +35,10 @@ namespace {
     noctalia::theme::ThemeService theme(config, http);
 
     Resolution result;
-    theme.setResolvedCallback([&result](const noctalia::theme::GeneratedPalette&, std::string_view mode) {
+    theme.setResolvedCallback([&result, &theme](const noctalia::theme::GeneratedPalette&, std::string_view mode) {
       result.appliedMode = std::string(mode);
+      TEST_CHECK(isResolvedAppsLight() == (mode == "light"));
+      TEST_CHECK(isResolvedLightTheme() == theme.isLightMode());
     });
     theme.apply();
     for (auto& call : DeferredCall::takePending()) {
@@ -99,6 +101,37 @@ int main() {
     TEST_CHECK(r.shellMode == "dark");
     TEST_CHECK(!r.shellLight);
     TEST_CHECK(r.appliedMode == "dark");
+  }
+
+  // Changing apps alone must publish the new mode before notifying the editor, even though
+  // the shell palette is identical and both the animated and immediate paths can return early.
+  for (const bool shellLight : {false, true}) {
+    ConfigService config;
+    TEST_CHECK(config.setOverride({"theme", "shell_mode"}, std::string(shellLight ? "light" : "dark")));
+    config.setThemeMode(ThemeMode::Dark);
+    HttpClient http;
+    noctalia::theme::ThemeService theme(config, http);
+    int callbacks = 0;
+    theme.setResolvedCallback([&](const noctalia::theme::GeneratedPalette&, std::string_view mode) {
+      ++callbacks;
+      TEST_CHECK(isResolvedAppsLight() == (mode == "light"));
+      TEST_CHECK(isResolvedLightTheme() == shellLight);
+    });
+    theme.apply();
+    const auto pinnedPalette = palette;
+    for (const bool animate : {false, true}) {
+      for (const auto mode : {ThemeMode::Light, ThemeMode::Dark}) {
+        const auto before = callbacks;
+        config.setThemeMode(mode);
+        if (animate)
+          theme.onConfigReload();
+        else
+          theme.apply();
+        TEST_CHECK(callbacks == before + 1);
+        TEST_CHECK(isResolvedAppsLight() == (mode == ThemeMode::Light));
+        TEST_CHECK(palette == pinnedPalette);
+      }
+    }
   }
 
   std::filesystem::remove_all(root);

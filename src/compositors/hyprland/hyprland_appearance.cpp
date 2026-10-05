@@ -16,6 +16,20 @@
 namespace compositors::hyprland {
   namespace {
     constexpr Logger kLog("hyprland_appearance");
+    void copyGlass(const HyprlandAppearanceConfig& from, HyprlandAppearanceConfig& to) {
+      to.glassManaged = from.glassManaged;
+      to.glassEnabled = from.glassEnabled;
+      to.glassLight = from.glassLight;
+      to.glassLayers = from.glassLayers;
+      to.glassBlur = from.glassBlur;
+      to.glassRefraction = from.glassRefraction;
+      to.glassChromatic = from.glassChromatic;
+      to.glassLens = from.glassLens;
+      to.glassOpacity = from.glassOpacity;
+      to.glassFresnel = from.glassFresnel;
+      to.glassSpecular = from.glassSpecular;
+    }
+
     std::string classMatch(std::string_view appClass) {
       std::string match = "^";
       for (const char ch : appClass) {
@@ -272,6 +286,13 @@ namespace compositors::hyprland {
     }
     result.fallback = true;
     return result;
+  }
+
+  HyprlandAppearanceConfig resolveEffectiveAppearance(const ShellConfig& shell, bool appsLight, bool shellLight) {
+    auto appearance = resolveAppearanceProfile(shell, appsLight).appearance;
+    if (appsLight != shellLight)
+      copyGlass(resolveAppearanceProfile(shell, shellLight).appearance, appearance);
+    return appearance;
   }
 
   HyprlandMotionCurve resolvedMotionCurve(HyprlandMotionCurve c) {

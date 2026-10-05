@@ -15,6 +15,9 @@ namespace compositors::hyprland {
     bool fallback = false;
   };
   [[nodiscard]] AppearanceProfileResolution resolveAppearanceProfile(const ShellConfig& shell, bool light);
+  // Window decoration follows the apps' mode; glass follows the shell's mode.
+  [[nodiscard]] HyprlandAppearanceConfig
+  resolveEffectiveAppearance(const ShellConfig& shell, bool appsLight, bool shellLight);
 
   [[nodiscard]] HyprlandMotionCurve resolvedMotionCurve(HyprlandMotionCurve curve);
   [[nodiscard]] std::string

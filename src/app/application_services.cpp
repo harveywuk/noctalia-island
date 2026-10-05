@@ -121,30 +121,17 @@ namespace {
   // apps' mode. Glass is what the Island is made of, so it keeps the shell's mode: a dark shell over
   // light apps keeps a dark Island instead of turning its glass light.
   HyprlandAppearanceConfig hyprlandAppearanceFor(const Config& config, bool appsLight, bool shellLight) {
-    auto appearance = compositors::hyprland::resolveAppearanceProfile(config.shell, appsLight).appearance;
-    if (appsLight != shellLight) {
-      const auto shell = compositors::hyprland::resolveAppearanceProfile(config.shell, shellLight).appearance;
-      appearance.glassManaged = shell.glassManaged;
-      appearance.glassEnabled = shell.glassEnabled;
-      appearance.glassLight = shell.glassLight;
-      appearance.glassLayers = shell.glassLayers;
-      appearance.glassBlur = shell.glassBlur;
-      appearance.glassRefraction = shell.glassRefraction;
-      appearance.glassChromatic = shell.glassChromatic;
-      appearance.glassLens = shell.glassLens;
-      appearance.glassOpacity = shell.glassOpacity;
-      appearance.glassFresnel = shell.glassFresnel;
-      appearance.glassSpecular = shell.glassSpecular;
-    }
+    auto appearance = compositors::hyprland::resolveEffectiveAppearance(config.shell, appsLight, shellLight);
     // Island bars carry their own settings; the top-level [island] table only applies when no
     // bar is presented as the Island (the legacy single Island).
     const bool islandBars = std::ranges::any_of(config.bars, [](const BarConfig& bar) {
       return bar.presentation == BarPresentation::Island;
     });
     const bool islandGlass = islandBars
-        ? std::ranges::any_of(config.bars, [](const BarConfig& bar) {
-            return bar.presentation == BarPresentation::Island && bar.island.glass;
-          })
+        ? std::ranges::any_of(
+              config.bars,
+              [](const BarConfig& bar) { return bar.presentation == BarPresentation::Island && bar.island.glass; }
+          )
         : config.island.enabled && config.island.glass;
     if (islandGlass)
       appearance.glassLayers = true;

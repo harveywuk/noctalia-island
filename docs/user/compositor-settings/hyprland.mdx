@@ -395,6 +395,10 @@ show your apps, while glass follows `shell_mode`, because the Island and other
 glass shell surfaces belong to Noctalia. A dark shell over light apps therefore
 keeps a dark Island while windows get the light look.
 
+When the modes differ, the editor shows both active profiles: **Windows follow
+light/dark mode** and **Glass follows the light/dark shell**. The status updates
+when either mode changes, including scheduled app-mode changes with a pinned shell.
+
 The built-in dark variant uses the current Soft Glass effect strengths. The
 light variant uses light Hyprglass, brighter blur, softer shadows and reduced
 glow and dimming. Both preserve your underlying layout, motion, cursor and
@@ -406,8 +410,10 @@ While automatic switching is on, individual appearance controls are hidden.
 and pauses switching. Choosing a preset or using appearance undo also pauses
 switching. This manual choice persists through theme changes, compositor
 reloads and shell restarts until you choose **Follow light/dark mode** again.
-Theme colour roles still follow Noctalia's palette. **Save current look** captures
-the active profile; it does not change the automatic selection.
+Theme colour roles still follow Noctalia's palette. **Keep current look & edit**,
+appearance undo and **Save current look** capture the combined appearance under
+split modes: window settings from the apps' profile and glass settings from the
+shell's profile. Saving a look does not change the automatic selection.
 
 App rules stay separate from these profiles. Missing or malformed saved profiles
 fall back to the manual appearance settings, with a message in Theme profiles.
@@ -417,7 +423,7 @@ Configuration uses `[shell.hyprland_profile_switching]` with `enabled`,
 `light_profile` and `dark_profile`. Defaults are disabled,
 `"@soft-glass-light"` and `"@soft-glass-dark"`. Setting `enabled=false` directly
 uses the underlying `[shell.hyprland_appearance]` values; the Keep current look
-button also copies the resolved profile there before disabling switching.
+button also copies the combined appearance there before disabling switching.
 
 ### App appearance rules
 

@@ -122,11 +122,11 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-tray-only' in sys.argv:
             from island_tray_smoke import prepare
             prepare(base,cfg,env)
-        binary=str(REPO/'build-rishot/noctalia')
+        binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia'))
         if '--performance-only' in sys.argv:
             import shutil
             immutable=base/'noctalia-benchmark'
-            shutil.copy2(os.environ.get('NOCTALIA_TEST_BINARY',binary),immutable)
+            shutil.copy2(binary,immutable)
             binary=str(immutable)
         shell=start([binary],'noctalia.log')
         wait(lambda:(runtime/f"noctalia-{env['WAYLAND_DISPLAY']}.sock").exists(),'Noctalia start')
@@ -426,11 +426,11 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         def page(name,shot):
             msg('settings-open',name);time.sleep(1)
             run(['grim','-o','TEST-1',str(out/(shot+'.png'))])
-        def find_text(text,min_x=0):
+        def find_text(text,min_x=0,*,exact=False):
             import ocr
             dispatch('hl.dsp.cursor.move({x=1276,y=716})');time.sleep(.2)  # keep the pointer off the text
             path=out/'ocr.png';run(['grim','-o','TEST-1',str(path)])
-            point=ocr.find(path,text,min_x=min_x)
+            point=ocr.find(path,text,min_x=min_x,exact=exact)
             if point is None:raise AssertionError('Settings control not found: '+text)
             return point
         def click_text(text,min_x=0):click(*find_text(text,min_x))
@@ -606,13 +606,69 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         apply_profile_mode('dark')
         wait(lambda:abs(profile_brightness()-.95)<.001,'dark appearance profile')
         assert abs(prop('opacity')-.94)<.001 and has_glass_tag(),'Profile changed per-app rules'
-        # Apps and shell in different modes: window decoration follows the apps, glass the shell.
-        apply_profile_mode('light',shell_mode='dark')
-        wait(lambda:abs(profile_brightness()-1.04)<.001,'light apps under a dark shell decorate windows light')
-        if plugin_dir:assert option('plugin:hyprglass:default_theme')['str']=='dark','Glass left the shell mode'
-        apply_profile_mode('dark',shell_mode='light')
-        wait(lambda:abs(profile_brightness()-.95)<.001,'dark apps under a light shell decorate windows dark')
-        if plugin_dir:wait(lambda:option('plugin:hyprglass:default_theme')['str']=='light','glass follows a light shell')
+        # Editor status, Keep, saved presets and undo must all use the same combined look
+        # as the compositor, in both split directions and when the modes agree.
+        def assert_profile_look(apps_mode,shell_mode):
+            expected=1.04 if apps_mode=='light' else .95
+            assert abs(profile_brightness()-expected)<.001,(apps_mode,shell_mode,profile_brightness())
+            if plugin_dir:
+                assert option('plugin:hyprglass:default_theme')['str']==shell_mode
+                assert abs(option('plugin:hyprglass:blur_strength')['float']-(1.2 if shell_mode=='light' else 1.5))<.001
+        def resume_profiles():
+            page('appearance/hyprland-presets','theme-reset-manual')
+            click_text('Reset all appearance overrides')
+            page('appearance/hyprland-theme-profiles','theme-resume')
+            click_text('Follow light/dark mode')
+            wait(lambda:tomllib.loads(settings_state.read_text())['shell'].get('hyprland_profile_switching',{}).get('enabled',True) is True,'Resume automatic switching')
+        for apps_mode,shell_mode in (('light','dark'),('dark','light'),('light','light'),('dark','dark')):
+            label=f'theme-{apps_mode}-apps-{shell_mode}-shell'
+            apply_profile_mode(apps_mode,shell_mode=shell_mode)
+            wait(lambda:abs(profile_brightness()-(1.04 if apps_mode=='light' else .95))<.001,label)
+            page('appearance/hyprland-theme-profiles',label+'-before')
+            if apps_mode!=shell_mode:
+                find_text(f'Windows follow {apps_mode} mode: Soft Glass {apps_mode.title()}')
+                find_text(f'Glass follows the {shell_mode} shell: Soft Glass {shell_mode.title()}')
+            else:
+                find_text(f'{apps_mode.title()} mode profile: Soft Glass {apps_mode.title()}')
+            # Change apps while this page stays open and the shell's palette stays pinned.
+            opposite='dark' if apps_mode=='light' else 'light'
+            apply_profile_mode(opposite,shell_mode=shell_mode);time.sleep(.6)
+            if opposite==shell_mode:
+                find_text(f'{opposite.title()} mode profile: Soft Glass {opposite.title()}')
+            else:
+                find_text(f'Windows follow {opposite} mode: Soft Glass {opposite.title()}')
+                find_text(f'Glass follows the {shell_mode} shell: Soft Glass {shell_mode.title()}')
+            apply_profile_mode(apps_mode,shell_mode=shell_mode);time.sleep(.6)
+            click_text('Keep current look & edit')
+            wait(lambda:tomllib.loads(settings_state.read_text())['shell']['hyprland_profile_switching']['enabled'] is False,'Keep current look pauses automatic switching')
+            time.sleep(.5)
+            run(['grim','-o','TEST-1',str(out/(label+'-after.png'))])
+            assert_profile_look(apps_mode,shell_mode)
+            # Once captured, the manual look stays put when both theme modes change.
+            apply_profile_mode(opposite,shell_mode='dark' if shell_mode=='light' else 'light');time.sleep(.6)
+            assert_profile_look(apps_mode,shell_mode)
+            apply_profile_mode(apps_mode,shell_mode=shell_mode)
+            resume_profiles()
+            page('appearance/hyprland-presets',label+'-presets')
+            save_x,save_y=find_text('Save current look',exact=True)  # button, not the automatic-mode hint
+            click(save_x,save_y-44);type_text((31,25,38,23,20))  # "split"
+            click(save_x,save_y);time.sleep(.5)
+            run(['grim','-o','TEST-1',str(out/(label+'-saved.png'))])
+            state=tomllib.loads(settings_state.read_text())['shell']
+            saved=tomllib.loads(state['hyprland_appearance_profiles']['split'])
+            assert state.get('hyprland_profile_switching',{}).get('enabled',True) is True,'Saving a profile paused automatic switching'
+            assert abs(saved['blur_brightness']-(1.04 if apps_mode=='light' else .95))<.001
+            assert saved['glass_light']==(shell_mode=='light')
+            assert abs(saved['glass_blur']-(1.2 if shell_mode=='light' else 1.5))<.001
+            click_text('Minimal')
+            wait(lambda:option('decoration:rounding')['int']==4,'Apply preset from effective look')
+            assert_profile_look(apps_mode,shell_mode)
+            click_text('Undo last change')
+            wait(lambda:option('decoration:rounding')['int']==23,'Undo restores effective look')
+            assert_profile_look(apps_mode,shell_mode)
+            resume_profiles()
+            print('PASS: '+label+' status, Keep, save, preset and undo',flush=True)
+        print('PASS: editor status, live mode changes, Keep current look, saved profiles, presets and undo in all four mode combinations',flush=True)
         apply_profile_mode('light')
         wait(lambda:abs(profile_brightness()-1.04)<.001,'light mode appearance profile')
         if plugin_dir:assert option('plugin:hyprglass:default_theme')['str']=='light'

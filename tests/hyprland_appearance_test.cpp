@@ -765,6 +765,71 @@ workspace_animation = "vertical"
   }
   assert(manualSwitchFound);
 
+  // Compare the whole persisted appearance, including nested curves and optional colours.
+  // Every glass field must come from the shell; all other fields must come from the apps.
+  const auto appearanceTable = [](const HyprlandAppearanceConfig& appearance) {
+    ShellConfig shell;
+    shell.hyprlandAppearance = appearance;
+    return *writeTable(shell, shellSchema())["hyprland_appearance"].as_table();
+  };
+  const auto checkEffectiveAppearance = [&](const ShellConfig& shell) {
+    for (const bool appsLight : {false, true}) {
+      for (const bool shellLight : {false, true}) {
+        auto expected = appearanceTable(resolveAppearanceProfile(shell, appsLight).appearance);
+        const auto glass = appearanceTable(resolveAppearanceProfile(shell, shellLight).appearance);
+        for (const auto& [key, value] : glass)
+          if (key.str().starts_with("glass_"))
+            expected.insert_or_assign(key, value);
+        assert(appearanceTable(resolveEffectiveAppearance(shell, appsLight, shellLight)) == expected);
+      }
+    }
+  };
+  ShellConfig splitProfiles;
+  splitProfiles.hyprlandAppearance = settings::softGlassAppearance({});
+  checkEffectiveAppearance(splitProfiles); // Manual look ignores both modes.
+  splitProfiles.hyprlandProfileSwitching.enabled = true;
+  checkEffectiveAppearance(splitProfiles); // Built-ins, matching and split modes.
+  auto customDark = darkLook.appearance;
+  auto customLight = lightLook.appearance;
+  customDark.glassManaged = customDark.glassEnabled = customDark.glassLayers = false;
+  customLight.glassManaged = customLight.glassEnabled = customLight.glassLayers = true;
+  customDark.glassLens = .1F;
+  customLight.glassLens = .4F;
+  customDark.glassOpacity = .6F;
+  customLight.glassOpacity = .9F;
+  customDark.rounding = 13;
+  customLight.rounding = 23;
+  customDark.openingCurve.x1 = .2F;
+  customLight.openingCurve.x1 = .4F;
+  customLight.shadowColor = fixedColorSpec(hex("#123456"));
+  const auto darkTable = appearanceTable(customDark);
+  const auto lightTable = appearanceTable(customLight);
+  for (const auto& [key, value] : darkTable)
+    if (key.str().starts_with("glass_")) {
+      // A new glass field must also get distinct fixtures, or a missed copy could go unnoticed.
+      auto changed = darkTable;
+      changed.insert_or_assign(key, *lightTable.get(key));
+      assert(changed != darkTable);
+    }
+  std::ostringstream savedDark, savedLight;
+  savedDark << darkTable;
+  savedLight << lightTable;
+  splitProfiles.hyprlandAppearanceProfiles = {{"Dark", savedDark.str()}, {"Light", savedLight.str()}};
+  splitProfiles.hyprlandProfileSwitching.darkProfile = "Dark";
+  splitProfiles.hyprlandProfileSwitching.lightProfile = "Light";
+  assert(!resolveAppearanceProfile(splitProfiles, false).fallback);
+  assert(!resolveAppearanceProfile(splitProfiles, true).fallback);
+  checkEffectiveAppearance(splitProfiles);
+  splitProfiles.hyprlandAppearance.enabled = false;
+  checkEffectiveAppearance(splitProfiles); // Master management stays authoritative.
+  splitProfiles.hyprlandAppearanceProfiles["Light"] = "invalid toml";
+  checkEffectiveAppearance(splitProfiles); // Invalid apps or glass profile falls back independently.
+  splitProfiles.hyprlandAppearanceProfiles["Light"] = savedLight.str();
+  splitProfiles.hyprlandAppearanceProfiles.erase("Dark");
+  checkEffectiveAppearance(splitProfiles);
+  splitProfiles.hyprlandProfileSwitching.enabled = false;
+  checkEffectiveAppearance(splitProfiles);
+
   const auto overrides = settings::appearanceOverrides(motion);
   for (const auto& [path, value] : overrides) {
     if (path.back() == "rounding")

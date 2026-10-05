@@ -536,9 +536,11 @@ namespace noctalia::theme {
     queueResolvedCallback(resolved->generated, resolved->mode);
     m_isLightMode = resolved->mode == "light";
     m_isShellLightMode = resolved->shellMode == "light";
+    // Publish both modes before callbacks, including when a pinned shell keeps the same palette.
+    setResolvedAppsLight(m_isLightMode);
+    setResolvedThemeLight(m_isShellLightMode);
 
     if (animate) {
-      setResolvedThemeLight(m_isShellLightMode);
       notifyShellAppIconColorizationChanged();
       startTransition(resolved->palette);
     } else {
@@ -552,7 +554,6 @@ namespace noctalia::theme {
         m_transitionAnimId = 0;
       }
       m_transitionTimer.stop();
-      setResolvedThemeLight(m_isShellLightMode);
       notifyShellAppIconColorizationChanged();
       setPalette(resolved->palette);
       if (m_changeCallback) {

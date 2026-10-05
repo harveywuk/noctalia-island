@@ -126,9 +126,11 @@ extern Palette palette;
 [[nodiscard]] ColorSpec fixedColorSpec(const Color& color) noexcept;
 [[nodiscard]] Color resolveColorSpec(const ColorSpec& color) noexcept;
 [[nodiscard]] bool isLightPalette() noexcept;
-// Set by ThemeService from resolved light/dark mode (not inferred from palette colors).
+// Set by ThemeService from the resolved shell and apps modes (not inferred from palette colors).
 [[nodiscard]] bool isResolvedLightTheme() noexcept;
 void setResolvedThemeLight(bool light) noexcept;
+[[nodiscard]] bool isResolvedAppsLight() noexcept;
+void setResolvedAppsLight(bool light) noexcept;
 
 void setPalette(const Palette& p);
 

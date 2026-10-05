@@ -151,8 +151,9 @@ void SettingsWindow::setSettingOverride(std::vector<std::string> path, ConfigOve
     const bool needsSceneRebuild = settingPathNeedsSceneRebuild(path);
     const ConfigOverrideValue patchValue = value;
     const auto previousResetPaths = currentPageResetPaths();
-    const auto appearanceBefore =
-        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
+    const auto appearanceBefore = compositors::hyprland::resolveEffectiveAppearance(
+        m_config->config().shell, isResolvedAppsLight(), isResolvedLightTheme()
+    );
     if (m_config->setOverride(path, std::move(value), &changed)) {
       if (changed && isHyprlandAppearancePath(path))
         m_hyprlandUndo = appearanceBefore;
@@ -182,8 +183,9 @@ void SettingsWindow::setSettingOverrides(
     });
     const auto patchOverrides = overrides;
     const auto previousResetPaths = currentPageResetPaths();
-    const auto appearanceBefore =
-        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
+    const auto appearanceBefore = compositors::hyprland::resolveEffectiveAppearance(
+        m_config->config().shell, isResolvedAppsLight(), isResolvedLightTheme()
+    );
     if (m_config->setOverrides(std::move(overrides), &changed)) {
       if (changed
           && std::ranges::any_of(patchOverrides, [](const auto& v) { return isHyprlandAppearancePath(v.first); }))
@@ -204,8 +206,9 @@ void SettingsWindow::clearSettingOverride(std::vector<std::string> path) {
     bool changed = false;
     const bool needsSceneRebuild = settingPathNeedsSceneRebuild(path);
     const auto previousResetPaths = currentPageResetPaths();
-    const auto appearanceBefore =
-        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
+    const auto appearanceBefore = compositors::hyprland::resolveEffectiveAppearance(
+        m_config->config().shell, isResolvedAppsLight(), isResolvedLightTheme()
+    );
     if (!m_config->clearOverrides({path}, &changed)) {
       markSettingsWriteError(i18n::tr("settings.errors.write"));
       return;
@@ -230,8 +233,9 @@ void SettingsWindow::clearSettingOverrides(std::vector<std::vector<std::string>>
     bool changed = false;
     const bool needsSceneRebuild = settingPathsNeedSceneRebuild(paths);
     const auto previousResetPaths = currentPageResetPaths();
-    const auto appearanceBefore =
-        compositors::hyprland::resolveAppearanceProfile(m_config->config().shell, isResolvedLightTheme()).appearance;
+    const auto appearanceBefore = compositors::hyprland::resolveEffectiveAppearance(
+        m_config->config().shell, isResolvedAppsLight(), isResolvedLightTheme()
+    );
     const bool success = m_config->clearOverrides(paths, &changed);
     if (success && changed && std::ranges::any_of(paths, isHyprlandAppearancePath))
       m_hyprlandUndo = appearanceBefore;

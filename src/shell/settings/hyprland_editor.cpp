@@ -327,26 +327,33 @@ namespace settings {
     std::unique_ptr<Node> makeThemeProfilesEditor(const SettingsContentContext& ctx) {
       auto column = ui::column({.gap = 10 * ctx.scale, .fillWidth = true});
       const auto& switching = ctx.config.shell.hyprlandProfileSwitching;
-      const auto resolved = compositors::hyprland::resolveAppearanceProfile(ctx.config.shell, isResolvedLightTheme());
+      const bool appsLight = isResolvedAppsLight();
+      const bool shellLight = isResolvedLightTheme();
+      const auto look = compositors::hyprland::resolveEffectiveAppearance(ctx.config.shell, appsLight, shellLight);
       const auto label = [&](std::string text) {
         return ui::label({.text = std::move(text), .fontSize = Style::fontSizeBody * ctx.scale, .maxLines = 5});
       };
       column->addChild(label(tr(switching.enabled ? "profile-auto-status" : "profile-manual-status")));
       if (switching.enabled) {
-        column->addChild(label(
-            tr(isResolvedLightTheme() ? "profile-light-active" : "profile-dark-active")
-            + " "
-            + profileLabel(resolved.profile)
-        ));
-        if (resolved.fallback)
-          column->addChild(label(tr("profile-fallback")));
+        const auto status = [&](bool light, std::string_view key) {
+          const auto resolved = compositors::hyprland::resolveAppearanceProfile(ctx.config.shell, light);
+          column->addChild(label(tr(key) + " " + profileLabel(resolved.profile)));
+          if (resolved.fallback)
+            column->addChild(label(tr("profile-fallback")));
+        };
+        if (appsLight == shellLight) {
+          status(appsLight, appsLight ? "profile-light-active" : "profile-dark-active");
+        } else {
+          status(appsLight, appsLight ? "profile-windows-light-active" : "profile-windows-dark-active");
+          status(shellLight, shellLight ? "profile-glass-light-active" : "profile-glass-dark-active");
+        }
       }
       column->addChild(label(tr("profile-switching-hint")));
       column->addChild(
           ui::button(
               {.text = tr(switching.enabled ? "profile-keep-current" : "profile-follow-mode"),
                .fontSize = Style::fontSizeBody * ctx.scale,
-               .onClick = [automatic = switching.enabled, look = resolved.appearance, commit = ctx.setOverrides] {
+               .onClick = [automatic = switching.enabled, look, commit = ctx.setOverrides] {
                  if (automatic)
                    commit(manualAppearanceOverrides(look));
                  else
@@ -1553,7 +1560,9 @@ namespace settings {
         || entry.path[1] != "hyprland_appearance")
       return nullptr;
     const auto key = entry.path.back();
-    const auto c = compositors::hyprland::resolveAppearanceProfile(ctx.config.shell, isResolvedLightTheme()).appearance;
+    const auto c = compositors::hyprland::resolveEffectiveAppearance(
+        ctx.config.shell, isResolvedAppsLight(), isResolvedLightTheme()
+    );
     auto column = ui::column({.gap = 10 * ctx.scale, .fillWidth = true});
     const auto button = [&](std::string label, std::function<void()> action) {
       return ui::button(

@@ -699,8 +699,7 @@ void SettingsWindow::destroyWindow() {
 }
 
 void SettingsWindow::updateBackgroundBlur(std::uint32_t width, std::uint32_t height) {
-  const bool translucent =
-      m_config != nullptr && ui::material::settingsWindowOpacity(m_config->config().shell) < 1.0F;
+  const bool translucent = m_config != nullptr && ui::material::settingsWindowOpacity(m_config->config().shell) < 1.0F;
   if (translucent == m_backgroundBlurApplied
       && (!translucent || (width == m_backgroundBlurWidth && height == m_backgroundBlurHeight))) {
     return;
@@ -1258,11 +1257,14 @@ void SettingsWindow::onKeyboardEvent(const KeyboardEvent& event) {
 }
 
 void SettingsWindow::onThemeChanged() {
-  const bool modeChanged = m_hyprlandProfileLightMode != isResolvedLightTheme();
+  const bool modeChanged =
+      m_hyprlandProfileLightMode != isResolvedLightTheme() || m_hyprlandProfileAppsLightMode != isResolvedAppsLight();
   m_hyprlandProfileLightMode = isResolvedLightTheme();
+  m_hyprlandProfileAppsLightMode = isResolvedAppsLight();
   if (modeChanged) {
     // Card fills and the window's glass tint differ between light and dark, and are chosen when
-    // the content is built, so a mode change rebuilds it.
+    // the content is built, so a mode change rebuilds it. Profiles also depend on the apps' mode,
+    // which can change while the shell's palette stays pinned.
     const bool profiles = m_config && m_config->config().shell.hyprlandProfileSwitching.enabled;
     // Only while open: closing frees the scene without clearing m_panelBackground, and the next
     // open builds the background with the current mode's tint anyway.

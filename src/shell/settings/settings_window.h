@@ -355,6 +355,7 @@ private:
   std::shared_ptr<settings::HoverLayout> m_hoverLayoutUndo;
   std::optional<HyprlandAppearanceConfig> m_hyprlandUndo;
   std::optional<bool> m_hyprlandProfileLightMode;
+  std::optional<bool> m_hyprlandProfileAppsLightMode;
   std::string m_pendingDeleteWidgetName;
   std::string m_pendingDeleteWidgetSettingPath;
   std::string m_renamingWidgetName;
