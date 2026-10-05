@@ -195,8 +195,11 @@ void SoundPlayer::setTheme(std::string theme) {
   if (theme == m_theme) {
     return;
   }
+  loadTheme(std::move(theme));
+}
 
-  std::unordered_map<std::string, std::shared_ptr<const SoundBuffer>> buffers;
+void SoundPlayer::loadTheme(std::string theme) {
+  std::unordered_map<std::string, ThemeSound> buffers;
   for (const std::string_view event :
        {"message-new-instant", "audio-volume-change", "power-plug", "power-unplug", "screen-capture"}) {
     const auto result = findThemeSound(event, theme);
@@ -214,7 +217,13 @@ void SoundPlayer::setTheme(std::string theme) {
       kLog.warn("failed to load sound \"{}\" from {}: {}", event, result.path.string(), *error);
       continue;
     }
-    buffers[std::string(event)] = std::make_shared<const SoundBuffer>(std::move(buffer));
+    std::error_code error;
+    const auto modified = fs::last_write_time(result.path, error);
+    buffers[std::string(event)] = ThemeSound{
+        .buffer = std::make_shared<const SoundBuffer>(std::move(buffer)),
+        .path = result.path,
+        .modified = modified,
+    };
     kLog.info("sound theme '{}': loaded {} for event '{}'", theme, result.path.c_str(), event);
   }
 
@@ -281,11 +290,25 @@ SoundPlayer::loadPluginSound(std::uint64_t ownerId, const std::string& name, con
 void SoundPlayer::unloadPluginSounds(std::uint64_t ownerId) { m_pluginBuffers.erase(ownerId); }
 
 void SoundPlayer::play(const std::string& name) {
-  const auto it = m_buffers.find(name);
+  auto it = m_buffers.find(name);
   if (it == m_buffers.end()) {
     return;
   }
-  playBuffer(name, it->second);
+
+  // A theme rebuilt while the shell runs (scripts/make-cupertino-sounds.py) replaces its files, so
+  // reload it rather than keep playing the copies decoded earlier. A file that cannot be read for
+  // a moment, as during the script's directory swap, keeps the loaded copy.
+  std::error_code error;
+  const auto modified = fs::last_write_time(it->second.path, error);
+  if (!error && modified != it->second.modified) {
+    kLog.info("sound theme '{}' changed on disk; reloading", m_theme);
+    loadTheme(m_theme);
+    it = m_buffers.find(name);
+    if (it == m_buffers.end()) {
+      return;
+    }
+  }
+  playBuffer(name, it->second.buffer);
 }
 
 void SoundPlayer::playPluginSound(std::uint64_t ownerId, const std::string& name) {

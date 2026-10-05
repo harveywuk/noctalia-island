@@ -286,7 +286,7 @@ Each change kept a `*.before-*` backup next to the file it edited.
 | Zen | Already themed: the community template's `userChrome.css` imports load and follow the palette (checked against an unthemed headless render) | profile `ub65qn3d.Default (release)` |
 | Windows | Corners, shadow and motion match the shell (below). GTK header bars show no window buttons (`button-layout ':'`), since windows are managed from the keyboard. | `[shell.hyprland_appearance]` in `~/.config/noctalia/config.toml`; GNOME settings; `gtk-decoration-layout` |
 | Cursor | ful1e5/apple_cursor v2.0.1 as theme `macOS`: the release Xcursors plus scalable SVG Hyprcursors generated from its sources. Selected in every place that names a cursor theme, including the shell's service override and Umbriel. Bibata and its palette recolourer are removed. | `scripts/build-apple-hyprcursor.py`, [CURSOR_THEME.md](CURSOR_THEME.md); `~/.local/share/noctalia-cursor-theme/` holds the source checkout and release |
-| Sounds | Original synthesised theme `cupertino` (glass notes, soft volume pop, shutter clicks, plug chime; unplug silent). Undefined events fall back to freedesktop. | `scripts/make-cupertino-sounds.py`; `~/.local/share/sounds/cupertino`; `[audio] sound_theme` in config.toml, GNOME and GTK sound settings |
+| Sounds | Original synthesised theme `cupertino` (glass notes, soft volume pop, shutter clicks, plug chime; unplug silent). Undefined events fall back to freedesktop. Re-running the script while the shell runs takes effect at the next sound: the shell reloads a theme whose files changed. | `scripts/make-cupertino-sounds.py`; `~/.local/share/sounds/cupertino`; `[audio] sound_theme` in config.toml, GNOME and GTK sound settings |
 
 Window values and where they come from:
 

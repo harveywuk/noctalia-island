@@ -8,7 +8,6 @@ import argparse
 from pathlib import Path
 import subprocess
 import tempfile
-import wave
 
 import numpy as np
 
@@ -103,22 +102,18 @@ def complete():
     return place(0.72, (0, 0.8 * glass(784.0, 0.16, 0.6)), (0.11, glass(1174.7, 0.2, 0.6)))
 
 
-def finish(signal, peak_db):
-    signal = taper(signal)
-    return signal / np.abs(signal).max() * 10 ** (peak_db / 20)
+def finish(name, signal, peak_db):
+    peak = np.abs(signal).max() if len(signal) else 0.0
+    if not peak > 0:  # Also catches NaN, which would encode as silence.
+        raise ValueError(f'{name} came out empty or silent')
+    return taper(signal) / peak * 10 ** (peak_db / 20)
 
 
 def write_oga(path, signal):
     pcm = (np.clip(signal, -1, 1) * 32767).astype('<i2')
     stereo = np.repeat(pcm[:, None], 2, axis=1)
-    with tempfile.NamedTemporaryFile(suffix='.wav') as tmp:
-        with wave.open(tmp.name, 'wb') as out:
-            out.setnchannels(2)
-            out.setsampwidth(2)
-            out.setframerate(RATE)
-            out.writeframes(stereo.tobytes())
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', tmp.name, '-c:a', 'libvorbis', '-q:a', '6',
-                        str(path)], check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 's16le', '-ar', str(RATE), '-ac', '2', '-i', '-',
+                    '-c:a', 'libvorbis', '-q:a', '6', str(path)], input=stereo.tobytes(), check=True)
 
 
 def build(theme):
@@ -134,7 +129,7 @@ def build(theme):
         'complete': (complete(), -13),
     }
     for name, (signal, peak) in sounds.items():
-        write_oga(stereo / f'{name}.oga', finish(signal, peak))
+        write_oga(stereo / f'{name}.oga', finish(name, signal, peak))
     aliases = {'message': 'message-new-instant', 'camera-shutter': 'screen-capture',
                'dialog-warning': 'bell', 'dialog-information': 'bell', 'window-attention': 'bell'}
     for alias, target in aliases.items():
