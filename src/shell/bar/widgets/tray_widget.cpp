@@ -781,17 +781,22 @@ void TrayWidget::rebuild(Renderer& renderer) {
         return;
       }
       const auto [x, y] = trayPointerCoords(*areaPtr, data);
+      // Open the item's menu, as a right click does; also left click's fallback for items without Activate.
+      const auto openMenu = [tray = m_tray, itemId, scale = m_contentScale, position = m_barPosition, x, y] {
+        if (tray->itemUsesDBusMenu(itemId)) {
+          tray->requestMenuToggle(itemId, scale, position);
+        } else {
+          (void)tray->openContextMenu(itemId, x, y);
+        }
+      };
       if (data.button == BTN_LEFT) {
-        (void)m_tray->activateItem(itemId, x, y);
-        if (m_itemActivated) {
+        const bool menuOnly = m_tray->activateUnsupported(itemId);
+        (void)m_tray->activateItem(itemId, x, y, openMenu);
+        if (m_itemActivated && !menuOnly) {
           m_itemActivated();
         }
       } else if (data.button == BTN_RIGHT) {
-        if (m_tray->itemUsesDBusMenu(itemId)) {
-          m_tray->requestMenuToggle(itemId, m_contentScale, m_barPosition);
-        } else {
-          (void)m_tray->openContextMenu(itemId, x, y);
-        }
+        openMenu();
       }
     });
     area->addChild(std::move(iconNode));

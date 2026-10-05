@@ -55,7 +55,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
 
     try:
         ctl('dismissnotify'); dispatch('hl.dsp.focus({monitor="TEST-1"})')
-        start([sys.executable, str(repo/'tests/fixtures/island_tray.py')], 'tray.log'); time.sleep(2)
+        fixture = start([sys.executable, str(repo/'tests/fixtures/island_tray.py')], 'tray.log'); time.sleep(2)
         move(1100, 600); time.sleep(1)
         compact = Image.open(shot('tray-compact')).convert('RGB')
         xs = [x for x in range(compact.width) if max(compact.getpixel((x, 20))) < 12]
@@ -89,8 +89,23 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         ex, ey = (x0+x1)//2, (y0+y1)//2
         move(ex, ey); click(); time.sleep(.5)
         assert 'MenuEvent 1 clicked' in events(), 'Menu entry did not reach the app: '+events()
+        # An item without Activate (AppIndicator apps such as Steam) opens its menu on left click instead.
+        fixture.terminate(); fixture.wait(timeout=5); time.sleep(1)
+        before = events()
+        menu_only = dict(env, ISLAND_TRAY_MENU_ONLY='1')
+        fixture = subprocess.Popen([sys.executable, str(repo/'tests/fixtures/island_tray.py')], env=menu_only,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(2)
+        move((left+right)//2 - 60, (top+bottom)//2); time.sleep(1.5)
+        move(*square); click(); time.sleep(1.5)
+        menu = Image.open(shot('tray-menu-only')).convert('RGB')
+        region = menu.crop((x0, y0, x1, y1)).convert('L')
+        region.resize((region.width*3, region.height*3), Image.LANCZOS).save(out/'tray-menu-only-ocr.png')
+        words = run(['tesseract', str(out/'tray-menu-only-ocr.png'), 'stdout', '--tessdata-dir', tessdata, '--psm', '7'])
+        assert 'Fixture' in words, 'Left click on a menu-only tray item did not open its menu: '+words
+        assert 'Activate' not in events()[len(before):].replace('SecondaryActivate', ''), events()
+        fixture.terminate(); fixture.wait(timeout=5)
         assert shell.poll() is None
         print(f'PASS: tray item at {square} in the expanded Island activates, opens its menu with the Island held '
-              f'open, and the menu entry reaches the app', flush=True)
+              f'open, the menu entry reaches the app, and a menu-only item opens its menu on left click', flush=True)
     finally:
         pointer.terminate(); pointer.wait(timeout=5)

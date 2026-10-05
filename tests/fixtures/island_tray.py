@@ -25,7 +25,9 @@ item_xml = '<node><interface name="org.kde.StatusNotifierItem">' + ''.join(
     f'<property name="{key}" type="{value.get_type_string()}" access="read"/>' for key, value in item.items()
 ) + ''.join(
     f'<method name="{method}"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>'
-    for method in ('Activate', 'SecondaryActivate', 'ContextMenu')
+    # ISLAND_TRAY_MENU_ONLY=1 behaves like an AppIndicator item (Steam, Discord): no Activate method.
+    for method in (('SecondaryActivate', 'ContextMenu') if os.environ.get('ISLAND_TRAY_MENU_ONLY') == '1'
+                   else ('Activate', 'SecondaryActivate', 'ContextMenu'))
 ) + '<method name="Scroll"><arg type="i" direction="in"/><arg type="s" direction="in"/></method></interface></node>'
 
 menu_xml = '''<node><interface name="com.canonical.dbusmenu">

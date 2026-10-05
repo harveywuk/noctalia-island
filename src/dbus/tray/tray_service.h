@@ -87,7 +87,15 @@ public:
   void notifyMenuOpened(const std::string& itemId, std::int32_t entryId = 0);
   void notifyMenuClosed(const std::string& itemId, std::int32_t entryId = 0);
   [[nodiscard]] std::vector<std::string> registeredItems() const;
-  [[nodiscard]] bool activateItem(const std::string& itemId, std::int32_t x = 0, std::int32_t y = 0);
+  // Left click. AppIndicator items (Steam, Discord, many Electron apps) implement no Activate; when the
+  // call reports that, `unsupported` runs on the main loop (open the item's menu instead) and the item
+  // is remembered, so later clicks go straight to it.
+  [[nodiscard]] bool activateItem(
+      const std::string& itemId, std::int32_t x = 0, std::int32_t y = 0, std::function<void()> unsupported = {}
+  );
+  [[nodiscard]] bool activateUnsupported(const std::string& itemId) const {
+    return m_activateUnsupported.contains(itemId);
+  }
   [[nodiscard]] bool openContextMenu(const std::string& itemId, std::int32_t x = 0, std::int32_t y = 0);
 
 private:
@@ -154,6 +162,7 @@ private:
   std::unique_ptr<sdbus::IProxy> m_watcherProxy;
   std::unique_ptr<sdbus::IProxy> m_dbusProxy;
   std::unordered_map<std::string, TrayItemInfo> m_items;
+  std::unordered_set<std::string> m_activateUnsupported;
   std::unordered_map<std::string, std::unique_ptr<sdbus::IProxy>> m_itemProxies;
   std::unordered_map<std::string, MenuCache> m_menuCache;
   std::unordered_set<std::string> m_pathOnlyResolutionsInFlight;
