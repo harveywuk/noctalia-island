@@ -16,7 +16,7 @@ IslandWidgetHost::IslandWidgetHost(
     std::function<void()> frame, const IslandConfig& island, const std::string& barName
 )
     : m_scale(scale), m_frame(std::move(frame)) {
-  setClipChildren(true);
+  // Each widget's cell clips it (below), with a margin for hover highlights.
   BarConfig bar;
   bar.name = barName;
   bar.position = "top";
@@ -106,13 +106,16 @@ void IslandWidgetHost::updateWidgets(Renderer& renderer, float availableWidth) {
     sizes[i] = {widget.width(), std::max(rowHeight, widget.height()), m_groups[i]};
   }
   const auto layout = island::layoutHoverWidgets(sizes, availableWidth, gap);
+  // A cell clips a widget that doesn't fit its slot, but hover highlights (a tray icon's rounded box)
+  // reach a few pixels past the widget, so the cell extends that far beyond the slot on every side.
+  const float margin = 8 * m_scale;
   for (std::size_t i = 0; i < m_widgets.size(); ++i) {
     const auto& rect = layout.items[i];
     auto& cell = *children()[i];
-    cell.setPosition(rect.x, rect.y);
-    cell.setSize(rect.width, rect.height);
+    cell.setPosition(rect.x - margin, rect.y - margin);
+    cell.setSize(rect.width + 2 * margin, rect.height + 2 * margin);
     if (auto* outer = m_widgets[i]->outerNode())
-      outer->setPosition(0, (rect.height - m_widgets[i]->height()) / 2);
+      outer->setPosition(margin, margin + (rect.height - m_widgets[i]->height()) / 2);
   }
   setSize(availableWidth, layout.height);
   if (std::ranges::any_of(m_widgets, [](const auto& widget) { return widget->needsFrameTick(); }))
