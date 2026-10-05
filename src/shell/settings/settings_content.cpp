@@ -36,6 +36,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -1246,11 +1247,67 @@ namespace settings {
     const std::optional<SettingsSection> selectedSettingsSection =
         ctx.selectedSection != "bar" ? settingsSectionFromId(ctx.selectedSection) : std::nullopt;
 
+    // A matching setting can be hidden until its group is managed (pointer speed until "Manage mouse
+    // settings" is on). Search then offers the group's first visible entry, that switch, in its place.
+    std::unordered_map<std::string, int> hiddenMatchGroups;
+    std::unordered_map<std::string, const SettingEntry*> firstVisibleInGroup;
+    if (!ctx.searchQuery.empty()) {
+      for (const auto& entry : registry) {
+        const auto key = barSettingContentSectionKey(entry) + '\x1F' + entry.group;
+        if (isEntryVisible(entry)) {
+          firstVisibleInGroup.try_emplace(key, &entry);
+        } else if (const int value = settingSearchScore(entry, normalizedSearchQuery); value > 0) {
+          auto& best = hiddenMatchGroups[key];
+          best = std::max(best, value);
+        }
+      }
+    }
+    const auto standsInForHiddenMatch = [&](const SettingEntry& entry) {
+      const auto key = barSettingContentSectionKey(entry) + '\x1F' + entry.group;
+      const auto found = firstVisibleInGroup.find(key);
+      return hiddenMatchGroups.contains(key) && found != firstVisibleInGroup.end() && found->second == &entry;
+    };
     // Coalesce entries by (content section, group) so each group renders once even if its entries were
     // declared non-contiguously in the registry. See coalesceByGroupKey().
-    const auto entryOrder = coalesceByGroupKey(registry.size(), [&](std::size_t i) {
+    auto entryOrder = coalesceByGroupKey(registry.size(), [&](std::size_t i) {
       return barSettingContentSectionKey(registry[i]) + '\x1F' + registry[i].group;
     });
+    // Search results come best first: sections by their best match, then groups within a section,
+    // then entries within a group, so related settings stay together.
+    if (!ctx.searchQuery.empty()) {
+      std::unordered_map<std::string, int> sectionBest, groupBest;
+      std::unordered_map<std::string, std::size_t> sectionFirst, groupFirst;
+      std::vector<int> score(registry.size(), 0);
+      for (std::size_t position = 0; position < entryOrder.size(); ++position) {
+        const std::size_t i = entryOrder[position];
+        score[i] = settingSearchScore(registry[i], normalizedSearchQuery);
+        if (standsInForHiddenMatch(registry[i]))
+          score[i] = std::max(
+              score[i], hiddenMatchGroups[barSettingContentSectionKey(registry[i]) + '\x1F' + registry[i].group]
+          );
+        const auto section = barSettingContentSectionKey(registry[i]);
+        const auto group = section + '\x1F' + registry[i].group;
+        sectionBest[section] = std::max(sectionBest[section], score[i]);
+        groupBest[group] = std::max(groupBest[group], score[i]);
+        sectionFirst.try_emplace(section, position);
+        groupFirst.try_emplace(group, position);
+      }
+      using Key = std::tuple<int, std::size_t, int, std::size_t, int, std::size_t>;
+      std::vector<std::pair<Key, std::size_t>> keyed;
+      keyed.reserve(entryOrder.size());
+      for (std::size_t position = 0; position < entryOrder.size(); ++position) {
+        const std::size_t i = entryOrder[position];
+        const auto section = barSettingContentSectionKey(registry[i]);
+        const auto group = section + '\x1F' + registry[i].group;
+        keyed.push_back(
+            {{-sectionBest[section], sectionFirst[section], -groupBest[group], groupFirst[group], -score[i], position},
+             i}
+        );
+      }
+      std::ranges::sort(keyed);
+      for (std::size_t position = 0; position < keyed.size(); ++position)
+        entryOrder[position] = keyed[position].second;
+    }
     const auto entryPassesFilters = [&](const SettingEntry& entry) -> bool {
       if (ctx.searchQuery.empty()
           && !ctx.selectedSection.empty()
@@ -1274,7 +1331,7 @@ namespace settings {
           && !settingEntryHasEffectiveOverride(entry, *ctx.configService)) {
         return false;
       }
-      return matchesNormalizedSettingQuery(entry, normalizedSearchQuery);
+      return matchesNormalizedSettingQuery(entry, normalizedSearchQuery) || standsInForHiddenMatch(entry);
     };
 
     std::vector<std::string> pageGroupKeys;

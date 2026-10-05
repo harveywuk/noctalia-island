@@ -339,6 +339,13 @@ namespace settings {
   [[nodiscard]] std::string normalizedSettingQuery(std::string_view query);
   [[nodiscard]] bool matchesNormalizedSettingQuery(const SettingEntry& entry, std::string_view normalizedQuery);
   [[nodiscard]] bool matchesSettingQuery(const SettingEntry& entry, std::string_view query);
+  // How well `entry` matches `query` (0: no match). Every query word must appear in the entry, in any
+  // order, ignoring case and separators; a word in the title counts most, then the description,
+  // then the page, then tags.
+  [[nodiscard]] int settingSearchScore(const SettingEntry& entry, std::string_view query);
+  // Entries matching `query`, best first.
+  [[nodiscard]] std::vector<const SettingEntry*>
+  rankedSettingMatches(const std::vector<SettingEntry>& registry, std::string_view query);
   [[nodiscard]] bool isBarMonitorOverrideSettingPath(const std::vector<std::string>& path);
   [[nodiscard]] bool settingEntryMatchesBarNavigation(
       const SettingEntry& entry, std::string_view selectedBarName, std::string_view selectedMonitorOverride

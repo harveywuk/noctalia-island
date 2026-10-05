@@ -928,6 +928,23 @@ namespace settings {
     });
     const auto& input = current.shell.hyprlandInput;
     const auto inputTr = [](std::string_view key) { return i18n::tr("settings.hyprland-input." + std::string(key)); };
+    const auto inputGroupKeywords = [](std::string_view group) -> std::string_view {
+      if (group == "keyboard")
+        return "keyboard layout language repeat caps lock numlock";
+      if (group == "mouse")
+        return "mouse pointer speed acceleration";
+      if (group == "touchpad")
+        return "touchpad trackpad tapping dragging";
+      if (group == "gestures")
+        return "gestures swipe workspace hyprspace";
+      if (group == "cursor")
+        return "cursor pointer motion dynamic shake";
+      if (group == "scroll")
+        return "kinetic scroll inertia momentum";
+      if (group == "edge")
+        return "edge hover screen edges";
+      return "";
+    };
     const auto addInput = [&](std::string group, std::string key, SettingControl control,
                               SettingVisibility visible = {}) {
       entries.push_back(
@@ -937,12 +954,17 @@ namespace settings {
            .subtitle = inputTr(key + "-description"),
            .path = {"shell", "hyprland_input", key},
            .control = std::move(control),
+           // Each group's own words only: a shared list made every input setting match "lock" (caps
+           // lock) or "language" (layout).
            .searchText = StringUtils::toLower(
-               "hyprland input gestures swipe workspace hyprspace keyboard layout language repeat caps numlock mouse "
-               "pointer touchpad tapping dragging acceleration motion cursor kinetic scroll edge hover "
+               "hyprland input "
+               + std::string(inputGroupKeywords(group))
+               + " "
                + key
                + " "
                + inputTr(key)
+               + " "
+               + inputTr(key + "-description")
            ),
            .visibleWhen = std::move(visible)}
       );

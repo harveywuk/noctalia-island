@@ -415,15 +415,144 @@ namespace settings {
 
   std::string normalizedSettingQuery(std::string_view query) { return StringUtils::toLower(query); }
 
+  namespace {
+    // Lower case, with separators as spaces, so "auto-hide", "auto_hide" and "auto hide" compare equal.
+    std::string foldSearchText(std::string_view text) {
+      std::string out = StringUtils::toLower(text);
+      for (char& c : out)
+        if (c == '-' || c == '_' || c == '/' || c == '.' || c == ':' || c == ',')
+          c = ' ';
+      return out;
+    }
+
+    std::string withoutSpaces(std::string_view text) {
+      std::string out;
+      out.reserve(text.size());
+      for (char c : text)
+        if (c != ' ')
+          out.push_back(c);
+      return out;
+    }
+
+    // Words people search with that the settings themselves don't use.
+    std::vector<std::string_view> searchSynonyms(std::string_view word) {
+      static const std::vector<std::pair<std::string_view, std::vector<std::string_view>>> kSynonyms = {
+          {"mouse", {"pointer", "cursor"}},
+          {"speed", {"sensitivity", "rate"}},
+          {"transparency", {"opacity", "translucent"}},
+          {"transparent", {"opacity", "translucent"}},
+          {"rounded", {"round", "corner", "rounding", "radius"}},
+          {"round", {"corner", "rounding", "radius"}},
+          {"trackpad", {"touchpad"}},
+          {"hotkey", {"shortcut", "keybind"}},
+          {"hotkeys", {"shortcut", "keybind"}},
+          {"sleep", {"suspend"}},
+          {"sound", {"audio", "volume"}},
+          {"bar", {"island"}},
+          {"dark", {"theme"}},
+          {"light", {"theme"}},
+          {"colour", {"color"}},
+          {"color", {"colour"}},
+      };
+      for (const auto& [key, synonyms] : kSynonyms)
+        if (key == word)
+          return synonyms;
+      return {};
+    }
+
+    struct SearchField {
+      std::string folded;
+      std::string squashed;
+      int weight;
+    };
+
+    bool fieldHas(const SearchField& field, std::string_view word) {
+      return field.folded.contains(word) || field.squashed.contains(word);
+    }
+  } // namespace
+
+  int settingSearchScore(const SettingEntry& entry, std::string_view query) {
+    // Words split at spaces only; a hyphenated word stays one word ("wi-fi" -> "wifi"), and matches
+    // either spelling through the squashed fields.
+    const std::string lowered = StringUtils::toLower(query);
+    std::vector<std::string> words;
+    for (std::size_t start = 0; start < lowered.size();) {
+      const auto end = lowered.find(' ', start);
+      const auto raw = lowered.substr(start, end == std::string::npos ? std::string::npos : end - start);
+      const auto word = withoutSpaces(foldSearchText(raw));
+      if (!word.empty())
+        words.push_back(word);
+      if (end == std::string::npos)
+        break;
+      start = end + 1;
+    }
+    const std::string folded = foldSearchText(query);
+    if (words.empty())
+      return 1;
+    const auto field = [](std::string_view text, int weight) {
+      auto f = foldSearchText(text);
+      return SearchField{f, withoutSpaces(f), weight};
+    };
+    // Where a word lands decides how well the entry matches: its title, its description, its page,
+    // then anything else it is tagged with (config path, keywords).
+    const std::array<SearchField, 4> fields{
+        field(entry.title, 10), field(entry.subtitle, 4),
+        field(std::string(settingsSectionId(entry.section)) + " " + entry.group, 3), field(entry.searchText, 1)
+    };
+    int score = 0;
+    for (const auto& word : words) {
+      int best = 0;
+      // A plural also matches its singular ("corners" finds "Corner Roundness").
+      const std::string singular =
+          word.size() > 3 && word.ends_with('s') && !word.ends_with("ss") ? word.substr(0, word.size() - 1) : word;
+      for (const auto& f : fields) {
+        if (fieldHas(f, word) || fieldHas(f, singular)) {
+          best = std::max(best, f.weight);
+          continue;
+        }
+        for (const auto synonym : searchSynonyms(word))
+          if (fieldHas(f, synonym))
+            best = std::max(best, f.weight - 1);
+      }
+      if (best == 0)
+        return 0; // every word must match somewhere
+      score += best;
+    }
+    const std::string title = foldSearchText(entry.title);
+    const std::string& phrase = folded;
+    if (title == phrase)
+      score += 40;
+    else if (title.starts_with(phrase))
+      score += 25;
+    else if (title.contains(phrase))
+      score += 15;
+    return score;
+  }
+
   bool matchesNormalizedSettingQuery(const SettingEntry& entry, std::string_view normalizedQuery) {
     if (normalizedQuery.empty()) {
       return true;
     }
-    return entry.searchText.contains(normalizedQuery);
+    return settingSearchScore(entry, normalizedQuery) > 0;
   }
 
   bool matchesSettingQuery(const SettingEntry& entry, std::string_view query) {
     return matchesNormalizedSettingQuery(entry, normalizedSettingQuery(query));
+  }
+
+  std::vector<const SettingEntry*>
+  rankedSettingMatches(const std::vector<SettingEntry>& registry, std::string_view query) {
+    const auto normalized = normalizedSettingQuery(query);
+    std::vector<std::pair<int, const SettingEntry*>> scored;
+    for (const auto& entry : registry)
+      if (const int score = settingSearchScore(entry, normalized); score > 0)
+        scored.emplace_back(score, &entry);
+    std::ranges::stable_sort(scored, [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::vector<const SettingEntry*> hits;
+    hits.reserve(scored.size());
+    for (const auto& [score, entry] : scored)
+      hits.push_back(entry);
+    return hits;
   }
 
   bool isBarMonitorOverrideSettingPath(const std::vector<std::string>& path) {

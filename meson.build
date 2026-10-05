@@ -1279,6 +1279,7 @@ if build_tests
     'startup_apps',
     'poll_timeout',
     'hyprland_appearance',
+    'settings_search',
     'hyprland_workspace_backend',
     'i18n_language_tag',
     'i18n_supported_languages',
@@ -1369,7 +1370,7 @@ if build_tests
       override_options: ['b_ndebug=false'],
     )
     test_args = []
-    if test_name == 'desktop_entry_localization' or test_name == 'community_palettes'
+    if test_name == 'desktop_entry_localization' or test_name == 'community_palettes' or test_name == 'settings_search'
       test_args = [meson.project_source_root() / 'assets']
     elif test_name == 'i18n_supported_languages'
       test_args = [meson.project_source_root() / 'assets' / 'translations']
