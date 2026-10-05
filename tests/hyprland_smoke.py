@@ -598,16 +598,23 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         (cfg/'config.toml').write_text(original_config);msg('config-reload')
         wait(lambda:option('decoration:rounding')['int']==initial_rounding,'restore after app rule tests')
         switching='\n[shell.hyprland_profile_switching]\nenabled=true\n'
-        def apply_profile_mode(mode,selection='',profiles=''):
+        def apply_profile_mode(mode,selection='',profiles='',shell_mode=None):
             (cfg/'config.toml').write_text(original_config+'\n'+appearance+'overview_managed=true\noverview_style_managed=true\n'+rule+switching+selection+profiles
-                +'\n[theme]\nmode="dark"\nshell_mode='+json.dumps(mode)+'\n')
+                +'\n[theme]\nmode='+json.dumps(mode)+'\nshell_mode='+json.dumps(shell_mode or mode)+'\n')
             msg('config-reload')
         def profile_brightness():return option('decoration:blur:brightness')['float']
         apply_profile_mode('dark')
         wait(lambda:abs(profile_brightness()-.95)<.001,'dark appearance profile')
         assert abs(prop('opacity')-.94)<.001 and has_glass_tag(),'Profile changed per-app rules'
+        # Apps and shell in different modes: window decoration follows the apps, glass the shell.
+        apply_profile_mode('light',shell_mode='dark')
+        wait(lambda:abs(profile_brightness()-1.04)<.001,'light apps under a dark shell decorate windows light')
+        if plugin_dir:assert option('plugin:hyprglass:default_theme')['str']=='dark','Glass left the shell mode'
+        apply_profile_mode('dark',shell_mode='light')
+        wait(lambda:abs(profile_brightness()-.95)<.001,'dark apps under a light shell decorate windows dark')
+        if plugin_dir:wait(lambda:option('plugin:hyprglass:default_theme')['str']=='light','glass follows a light shell')
         apply_profile_mode('light')
-        wait(lambda:abs(profile_brightness()-1.04)<.001,'shell light mode appearance profile')
+        wait(lambda:abs(profile_brightness()-1.04)<.001,'light mode appearance profile')
         if plugin_dir:assert option('plugin:hyprglass:default_theme')['str']=='light'
         if plugin_dir:
             wait(lambda:option('plugin:overview:workspaceActiveBorder')['int']&0xffffff == int(option('general:col.active_border')['gradient'][:8],16)&0xffffff,'overview light palette')

@@ -87,6 +87,7 @@
 #include "system/keyboard_backlight_service.h"
 #include "system/system_monitor_service.h"
 #include "system/terminal_launch.h"
+#include "theme/fixed_palette.h"
 #include "ui/app_icon_colorization.h"
 #include "ui/controls/input.h"
 #include "ui/dialogs/color_picker_dialog.h"
@@ -116,8 +117,25 @@ namespace {
 
   // The resolved Hyprland appearance, with hyprglass's layer glass turned on whenever a glass
   // Island needs it: the Island setting is the one switch for glass shell surfaces.
-  HyprlandAppearanceConfig hyprlandAppearanceFor(const Config& config, bool light) {
-    auto appearance = compositors::hyprland::resolveAppearanceProfile(config.shell, light).appearance;
+  // Windows hold app content, so the profile for their decoration (shadow, dim, blur) follows the
+  // apps' mode. Glass is what the Island is made of, so it keeps the shell's mode: a dark shell over
+  // light apps keeps a dark Island instead of turning its glass light.
+  HyprlandAppearanceConfig hyprlandAppearanceFor(const Config& config, bool appsLight, bool shellLight) {
+    auto appearance = compositors::hyprland::resolveAppearanceProfile(config.shell, appsLight).appearance;
+    if (appsLight != shellLight) {
+      const auto shell = compositors::hyprland::resolveAppearanceProfile(config.shell, shellLight).appearance;
+      appearance.glassManaged = shell.glassManaged;
+      appearance.glassEnabled = shell.glassEnabled;
+      appearance.glassLight = shell.glassLight;
+      appearance.glassLayers = shell.glassLayers;
+      appearance.glassBlur = shell.glassBlur;
+      appearance.glassRefraction = shell.glassRefraction;
+      appearance.glassChromatic = shell.glassChromatic;
+      appearance.glassLens = shell.glassLens;
+      appearance.glassOpacity = shell.glassOpacity;
+      appearance.glassFresnel = shell.glassFresnel;
+      appearance.glassSpecular = shell.glassSpecular;
+    }
     // Island bars carry their own settings; the top-level [island] table only applies when no
     // bar is presented as the Island (the legacy single Island).
     const bool islandBars = std::ranges::any_of(config.bars, [](const BarConfig& bar) {
@@ -165,6 +183,21 @@ namespace {
     }
   }
 } // namespace
+
+void Application::syncHyprlandAppearance() {
+  if (!m_hyprlandAppearance) {
+    return;
+  }
+  const auto& shell = m_configService.config().shell;
+  const Palette& windows = m_appsPalette.value_or(palette);
+  m_hyprlandAppearance->sync(
+      hyprlandAppearanceFor(
+          m_configService.config(), m_themeService.resolvedMode() == "light", m_themeService.isLightMode()
+      ),
+      windows.primary, windows.surface, shell.hyprlandAppRules, shell.hyprlandInput, shell.hyprlandWindowBehaviour,
+      shell.hyprlandTiling, shell.hyprlandPlacementRules, shell.hyprlandWorkspaces, shell.hyprlandKeybinds
+  );
+}
 
 void Application::scheduleNotificationShellRefresh() {
   if (m_notificationShellRefreshScheduled) {
@@ -770,14 +803,9 @@ void Application::initStyleThemeAndWayland() {
     const bool colorsChanged = !lastGeneratedPalette.has_value() || *lastGeneratedPalette != generated;
     lastGeneratedPalette = generated;
     m_templateApplyService.apply(generated, mode, /*force=*/false, /*paletteChanged=*/colorsChanged);
+    m_appsPalette = noctalia::theme::mapGeneratedPaletteMode(mode == "light" ? generated.light : generated.dark);
     if (m_hyprlandAppearance) {
-      m_hyprlandAppearance->sync(
-          hyprlandAppearanceFor(m_configService.config(), m_themeService.isLightMode()),
-          palette.primary, palette.surface, m_configService.config().shell.hyprlandAppRules,
-          m_configService.config().shell.hyprlandInput, m_configService.config().shell.hyprlandWindowBehaviour,
-          m_configService.config().shell.hyprlandTiling, m_configService.config().shell.hyprlandPlacementRules,
-          m_configService.config().shell.hyprlandWorkspaces, m_configService.config().shell.hyprlandKeybinds
-      );
+      syncHyprlandAppearance();
       m_settingsWindow.onThemeChanged();
     }
     if (previousMode.has_value() && *previousMode != resolvedMode) {
@@ -819,17 +847,8 @@ void Application::initStyleThemeAndWayland() {
   if (compositors::isHyprland()) {
     m_hyprlandAppearance =
         std::make_unique<compositors::hyprland::HyprlandAppearance>(m_compositorPlatform.hyprlandRuntime());
-    auto syncAppearance = [this]() {
-      m_hyprlandAppearance->sync(
-          hyprlandAppearanceFor(m_configService.config(), m_themeService.isLightMode()),
-          palette.primary, palette.surface, m_configService.config().shell.hyprlandAppRules,
-          m_configService.config().shell.hyprlandInput, m_configService.config().shell.hyprlandWindowBehaviour,
-          m_configService.config().shell.hyprlandTiling, m_configService.config().shell.hyprlandPlacementRules,
-          m_configService.config().shell.hyprlandWorkspaces, m_configService.config().shell.hyprlandKeybinds
-      );
-    };
-    syncAppearance();
-    m_configService.addReloadCallback(syncAppearance, "hyprland-appearance");
+    syncHyprlandAppearance();
+    m_configService.addReloadCallback([this]() { syncHyprlandAppearance(); }, "hyprland-appearance");
     m_hyprlandDisplays =
         std::make_unique<compositors::hyprland::HyprlandDisplays>(m_compositorPlatform.hyprlandRuntime());
     m_settingsWindow.setHyprlandDisplays(m_hyprlandDisplays.get());

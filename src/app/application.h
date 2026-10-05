@@ -218,6 +218,8 @@ private:
   [[nodiscard]] bool defaultSecretCollectionUnlocked();
   void retrySecretServiceConsumers();
   void scheduleNotificationShellRefresh();
+  // Pushes the window look to Hyprland: decoration in the apps' mode, glass in the shell's.
+  void syncHyprlandAppearance();
   void syncPolkitAgent();
   [[nodiscard]] bool likelySupportsInSessionPolkit() const noexcept;
   void syncClipboardService();
@@ -243,6 +245,9 @@ private:
   WorkspaceAlertService m_workspaceAlertService;
   CompositorPlatform m_compositorPlatform{m_wayland};
   std::unique_ptr<compositors::hyprland::HyprlandAppearance> m_hyprlandAppearance;
+  // The apps' palette ([theme].mode), which colours window borders. It differs from the shell's
+  // palette when [theme].shell_mode is set apart, and is empty until the theme first resolves.
+  std::optional<Palette> m_appsPalette;
   std::unique_ptr<compositors::hyprland::HyprlandDisplays> m_hyprlandDisplays;
   security::SecretStore m_secretStore;
   security::StorageKeyProvider m_storageKeyProvider{m_secretStore};

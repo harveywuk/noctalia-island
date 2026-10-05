@@ -386,10 +386,14 @@ Hyprspace style while retaining the basic managed panel layout.
 ### Theme-linked appearance profiles
 
 **Appearance → Theme profiles → Follow light/dark mode** selects a look from
-Noctalia's resolved shell mode, including its existing automatic schedule. The
+Noctalia's resolved light/dark mode, including its existing automatic schedule. The
 light and dark selectors accept the built-in Soft Glass variants or any saved
-appearance preset. They follow the shell's light/dark override when it differs
-from the mode used for application templates.
+appearance preset. When [`shell_mode`](/noctalia/theming/#shell_mode) differs
+from `mode`, the two parts of a look follow different modes: window decoration
+(blur, shadows, glow, dimming and border colours) follows `mode`, because windows
+show your apps, while glass follows `shell_mode`, because the Island and other
+glass shell surfaces belong to Noctalia. A dark shell over light apps therefore
+keeps a dark Island while windows get the light look.
 
 The built-in dark variant uses the current Soft Glass effect strengths. The
 light variant uses light Hyprglass, brighter blur, softer shadows and reduced
