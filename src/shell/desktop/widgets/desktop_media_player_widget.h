@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget.h"
 #include "ui/palette.h"
 
@@ -12,6 +13,8 @@ class Flex;
 class HttpClient;
 class Image;
 class Label;
+class Glyph;
+class ProgressBar;
 class MprisService;
 
 class DesktopMediaPlayerWidget : public DesktopWidget {
@@ -21,13 +24,14 @@ public:
     ColorSpec color = colorSpecFromRole(ColorRole::OnSurface);
     bool shadow = true;
     bool hideWhenNoMedia = false;
+    desktop_cards::Size cardSize = desktop_cards::Size::Classic;
   };
 
   DesktopMediaPlayerWidget(MprisService* mpris, HttpClient* httpClient, Options options);
   ~DesktopMediaPlayerWidget() override;
 
   void create() override;
-  [[nodiscard]] bool wantsSecondTicks() const override { return true; }
+  [[nodiscard]] bool wantsSecondTicks() const override;
   void setEditorPreview(bool enabled) noexcept override;
   bool applySetting(
       const std::string& key, const WidgetSettingValue& value,
@@ -35,6 +39,9 @@ public:
   ) override;
 
 private:
+  bool usesCardLayout() const noexcept override { return m_cardSize != desktop_cards::Size::Classic; }
+  void layoutCard(Renderer& renderer);
+  void updateProgress();
   void doLayout(Renderer& renderer) override;
   void doUpdate(Renderer& renderer) override;
   void onFontFamilyChanged(const std::string& family, Renderer& renderer) override;
@@ -48,6 +55,17 @@ private:
   bool applyVisibility();
   void setVisibilityCollapsed(bool collapsed);
 
+  desktop_cards::Size m_cardSize;
+  bool m_syncInitialized = false;
+  bool m_lastCanPlayPause = false;
+  Box* m_artPlaceholder = nullptr;
+  Glyph* m_musicGlyph = nullptr;
+  Label* m_sourceLabel = nullptr;
+  Label* m_elapsed = nullptr;
+  Label* m_duration = nullptr;
+  ProgressBar* m_progress = nullptr;
+  bool m_showProgress = false;
+  std::string m_lastIdentity;
   MprisService* m_mpris;
   HttpClient* m_httpClient;
   bool m_vertical;

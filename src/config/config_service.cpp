@@ -1761,6 +1761,9 @@ void ConfigService::parseConfigTable(
     if (auto schemaVersion = (*desktopWidgetsTbl)["schema_version"].value<int64_t>()) {
       desktopWidgets.schemaVersion = static_cast<std::int32_t>(*schemaVersion);
     }
+    if (auto v = (*desktopWidgetsTbl)["always_full_color"].value<bool>()) {
+      desktopWidgets.alwaysFullColor = *v;
+    }
     parseWidgetsPlacementSection(*desktopWidgetsTbl, desktopWidgets.grid, desktopWidgets.widgets, "desktop_widgets");
   }
 

@@ -1,7 +1,7 @@
 #include "render/render_context.h"
 
-#include "core/font_defaults.h"
 #include "core/files/resource_paths.h"
+#include "core/font_defaults.h"
 #include "core/log.h"
 #include "core/scoped_timer.h"
 #include "core/ui_phase.h"
@@ -226,7 +226,8 @@ void RenderContext::renderScene(RenderTarget& target, Node* sceneRoot, const Wal
       const auto bw = static_cast<float>(target.bufferWidth());
       const auto bh = static_cast<float>(target.bufferHeight());
       renderNode(
-          renderScale, sceneRoot, Mat3::identity(), 1.0F, sw, sh, bw, bh, 0.0F, 0.0F, sw, sh, false, false, false
+          renderScale, sceneRoot, Mat3::identity(), 1.0F, sw, sh, bw, bh, 0.0F, 0.0F, sw, sh, false, false, false,
+          target.colorSaturation()
       );
     }
     if (wallpaperMask != nullptr && wallpaperMask->texture != 0) {
@@ -341,7 +342,7 @@ void RenderContext::handleGraphicsReset(RenderGraphicsResetStatus status) {
 void RenderContext::renderNode(
     float renderScale, const Node* node, const Mat3& parentTransform, float parentOpacity, float sw, float sh, float bw,
     float bh, float clipLeft, float clipTop, float clipRight, float clipBottom, bool hasClip, bool ignoreNodeOpacity,
-    bool parentPaintContained
+    bool parentPaintContained, float saturation
 ) {
   if (!node->visible()) {
     return;
@@ -379,9 +380,12 @@ void RenderContext::renderNode(
     const auto* rect = static_cast<const RectNode*>(node);
     auto style = rect->style();
     style.fill.a *= effectiveOpacity;
+    style.fill = withSaturation(style.fill, saturation);
     style.border.a *= effectiveOpacity;
+    style.border = withSaturation(style.border, saturation);
     for (auto& stop : style.gradientStops) {
       stop.color.a *= effectiveOpacity;
+      stop.color = withSaturation(stop.color, saturation);
     }
     m_backend->drawRect(sw, sh, node->width(), node->height(), style, worldTransform);
     break;
@@ -393,18 +397,20 @@ void RenderContext::renderNode(
       if (text->hasShadow()) {
         auto shadowColor = text->shadowColor();
         shadowColor.a *= effectiveOpacity;
+
         const Mat3 shadowTransform = worldTransform * Mat3::translation(text->shadowOffsetX(), text->shadowOffsetY());
         m_textRenderer.draw(
             renderScale, sw, sh, 0.0F, 0.0F, text->text(), text->fontSize(), shadowColor, shadowTransform,
             text->fontWeight(), text->maxWidth(), text->maxLines(), text->textAlign(), font, text->ellipsize(),
-            text->useMarkup()
+            text->useMarkup(), saturation
         );
       }
       auto color = text->color();
       color.a *= effectiveOpacity;
+
       m_textRenderer.draw(
           renderScale, sw, sh, 0.0F, 0.0F, text->text(), text->fontSize(), color, worldTransform, text->fontWeight(),
-          text->maxWidth(), text->maxLines(), text->textAlign(), font, text->ellipsize(), text->useMarkup()
+          text->maxWidth(), text->maxLines(), text->textAlign(), font, text->ellipsize(), text->useMarkup(), saturation
       );
     }
     break;
@@ -433,6 +439,7 @@ void RenderContext::renderNode(
               .textureHeight = static_cast<float>(img->textureHeight()),
               .transform = worldTransform,
               .scrim = img->scrim(),
+              .saturation = saturation,
           }
       );
     }
@@ -444,6 +451,7 @@ void RenderContext::renderNode(
       if (icon->hasShadow()) {
         auto shadowColor = icon->shadowColor();
         shadowColor.a *= effectiveOpacity;
+        shadowColor = withSaturation(shadowColor, saturation);
         const Mat3 shadowTransform = worldTransform * Mat3::translation(icon->shadowOffsetX(), icon->shadowOffsetY());
         m_glyphRenderer.drawGlyph(
             renderScale, sw, sh, 0.0F, 0.0F, icon->codepoint(), icon->fontSize(), shadowColor, shadowTransform
@@ -451,6 +459,7 @@ void RenderContext::renderNode(
       }
       auto color = icon->color();
       color.a *= effectiveOpacity;
+      color = withSaturation(color, saturation);
       m_glyphRenderer.drawGlyph(
           renderScale, sw, sh, 0.0F, 0.0F, icon->codepoint(), icon->fontSize(), color, worldTransform
       );
@@ -461,6 +470,7 @@ void RenderContext::renderNode(
     const auto* spinner = static_cast<const SpinnerNode*>(node);
     auto style = spinner->style();
     style.color.a *= effectiveOpacity;
+    style.color = withSaturation(style.color, saturation);
     m_backend->drawSpinner(sw, sh, node->width(), node->height(), style, worldTransform);
     break;
   }
@@ -468,6 +478,7 @@ void RenderContext::renderNode(
     const auto* ring = static_cast<const CountdownRingNode*>(node);
     auto style = ring->style();
     style.color.a *= effectiveOpacity;
+    style.color = withSaturation(style.color, saturation);
     m_backend->drawCountdownRing(sw, sh, node->width(), node->height(), style, worldTransform);
     break;
   }
@@ -475,6 +486,7 @@ void RenderContext::renderNode(
     const auto* corner = static_cast<const ScreenCornerNode*>(node);
     auto style = corner->style();
     style.color.a *= effectiveOpacity;
+    style.color = withSaturation(style.color, saturation);
     m_backend->drawScreenCorner(sw, sh, node->width(), node->height(), style, worldTransform);
     break;
   }
@@ -482,7 +494,9 @@ void RenderContext::renderNode(
     const auto* spectrum = static_cast<const AudioSpectrumNode*>(node);
     auto style = spectrum->style();
     style.color1.a *= effectiveOpacity;
+    style.color1 = withSaturation(style.color1, saturation);
     style.color2.a *= effectiveOpacity;
+    style.color2 = withSaturation(style.color2, saturation);
     const float pixelScaleX = sw > 0.0F ? bw / sw : 1.0F;
     const float pixelScaleY = sh > 0.0F ? bh / sh : 1.0F;
     m_backend->drawAudioSpectrum(
@@ -495,7 +509,9 @@ void RenderContext::renderNode(
     if (visualizer->textureId() != 0) {
       auto style = visualizer->style();
       style.primaryColor.a *= effectiveOpacity;
+      style.primaryColor = withSaturation(style.primaryColor, saturation);
       style.secondaryColor.a *= effectiveOpacity;
+      style.secondaryColor = withSaturation(style.secondaryColor, saturation);
       m_backend->drawFancyAudioVisualizer(
           visualizer->textureId(), visualizer->textureWidth(), sw, sh, node->width(), node->height(), style,
           worldTransform
@@ -507,6 +523,7 @@ void RenderContext::renderNode(
     const auto* effect = static_cast<const EffectNode*>(node);
     auto style = effect->style();
     style.bgColor.a *= effectiveOpacity;
+    style.bgColor = withSaturation(style.bgColor, saturation);
     m_backend->drawEffect(sw, sh, node->width(), node->height(), style, worldTransform);
     break;
   }
@@ -515,8 +532,11 @@ void RenderContext::renderNode(
     if (graph->textureId() != 0) {
       auto style = graph->style();
       style.lineColor1.a *= effectiveOpacity;
+      style.lineColor1 = withSaturation(style.lineColor1, saturation);
       style.lineColor2.a *= effectiveOpacity;
+      style.lineColor2 = withSaturation(style.lineColor2, saturation);
       style.lineColor3.a *= effectiveOpacity;
+      style.lineColor3 = withSaturation(style.lineColor3, saturation);
       style.graphFillOpacity *= effectiveOpacity;
       m_backend->drawGraph(
           graph->textureId(), graph->textureWidth(), sw, sh, node->width(), node->height(), style, worldTransform
@@ -599,7 +619,7 @@ void RenderContext::renderNode(
       const Mat3 sourceParent = worldTransform * Mat3::translation(-source->x(), -source->y());
       renderNode(
           renderScale, source, sourceParent, effectiveOpacity, sw, sh, bw, bh, clipLeft, clipTop, clipRight, clipBottom,
-          hasClip, true, false
+          hasClip, true, false, saturation
       );
     }
     return;
@@ -653,14 +673,14 @@ void RenderContext::renderNode(
     for (const auto& child : children) {
       renderNode(
           renderScale, child.get(), worldTransform, effectiveOpacity, sw, sh, bw, bh, childClipLeft, childClipTop,
-          childClipRight, childClipBottom, childHasClip, false, paintContained
+          childClipRight, childClipBottom, childHasClip, false, paintContained, saturation
       );
     }
   } else {
     for (const auto* child : orderedChildren) {
       renderNode(
           renderScale, child, worldTransform, effectiveOpacity, sw, sh, bw, bh, childClipLeft, childClipTop,
-          childClipRight, childClipBottom, childHasClip, false, paintContained
+          childClipRight, childClipBottom, childHasClip, false, paintContained, saturation
       );
     }
   }

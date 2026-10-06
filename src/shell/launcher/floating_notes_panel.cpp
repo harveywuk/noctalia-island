@@ -15,6 +15,7 @@
 #include "ui/style.h"
 
 #include <chrono>
+#include <format>
 #include <fstream>
 #include <sstream>
 
@@ -29,7 +30,9 @@ FloatingNotesPanel::FloatingNotesPanel(ConfigService* config) : m_config(config)
 
 FloatingNotesPanel::~FloatingNotesPanel() = default;
 
-std::filesystem::path FloatingNotesPanel::file() const { return NotesProvider(nullptr, m_config).file(); }
+std::filesystem::path FloatingNotesPanel::file() const {
+  return m_contextFile.empty() ? NotesProvider(nullptr, m_config).file() : m_contextFile;
+}
 
 std::string FloatingNotesPanel::panelScreenPosition() const {
   if (m_config != nullptr && !m_config->config().shell.launcher.floatingNotesPosition.empty()) {
@@ -64,6 +67,7 @@ void FloatingNotesPanel::create() {
   );
   header->addChild(
       ui::label({
+          .out = &m_title,
           .text = i18n::tr("launcher.floating-notes.title"),
           .fontSize = Style::fontSizeBody * scale,
           .fontWeight = FontWeight::Medium,
@@ -141,7 +145,29 @@ void FloatingNotesPanel::create() {
   setRoot(std::move(container));
 }
 
-void FloatingNotesPanel::onOpen(std::string_view /*context*/) { load(); }
+void FloatingNotesPanel::onOpen(std::string_view context) {
+  const bool journal = context.starts_with("journal:");
+  m_contextFile = journal            ? std::string(context.substr(8))
+      : context.starts_with("file:") ? std::string(context.substr(5))
+                                     : std::string();
+  load();
+  if (!m_contextFile.empty() && m_title)
+    m_title->setText(m_contextFile.filename().string());
+  if (journal && m_editor) {
+    // Start a dated entry in the editor; opening a card alone never writes a file.
+    const auto today =
+        std::chrono::floor<std::chrono::days>(std::chrono::current_zone()->to_local(std::chrono::system_clock::now()));
+    auto text = m_loaded;
+    if (!text.empty() && text.back() != '\n')
+      text += '\n';
+    text += std::format("- [{:%Y-%m-%d}] ", today);
+    m_editor->setValue(text);
+    m_loaded = text;
+    m_dirty = false;
+    m_saveTimer.stop();
+    setStatus(i18n::tr("desktop-widgets.cards.journal-writing"));
+  }
+}
 
 void FloatingNotesPanel::onClose() {
   m_saveTimer.stop();
@@ -149,6 +175,8 @@ void FloatingNotesPanel::onClose() {
   m_container = nullptr;
   m_editor = nullptr;
   m_status = nullptr;
+  m_title = nullptr;
+  m_contextFile.clear();
   m_loaded.clear();
   m_dirty = false;
 }

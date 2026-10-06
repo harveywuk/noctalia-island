@@ -536,3 +536,8 @@ void DesktopWidgetsController::normalizeSnapshot() {
     // with an estimate can push widgets that the editor had legitimately placed at the edge.
   }
 }
+
+void DesktopWidgetsController::setWindowFocused(bool focused) {
+  if (m_host != nullptr)
+    m_host->setWindowFocused(focused);
+}

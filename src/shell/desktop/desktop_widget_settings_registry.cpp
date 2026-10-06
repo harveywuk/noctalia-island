@@ -3,14 +3,53 @@
 #include "i18n/i18n.h"
 #include "scripting/plugin_i18n.h"
 #include "scripting/plugin_registry.h"
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/settings/font_family_catalog.h"
 #include "shell/settings/widget_settings_registry.h"
+#include "ui/style.h"
 #include "util/string_utils.h"
 
 #include <algorithm>
 #include <cstdint>
 
 namespace desktop_settings {
+  std::unordered_map<std::string, WidgetSettingValue>
+  newDesktopWidgetSettings(std::string_view type, std::string_view cardSize) {
+    std::unordered_map<std::string, WidgetSettingValue> settings;
+    if (type == "audio_visualizer") {
+      settings.emplace("bands", static_cast<std::int64_t>(32));
+      settings.emplace("show_when_idle", true);
+    }
+    if (type == "fancy_audio_visualizer") {
+      settings.emplace("background", false);
+    }
+    if (type == "button") {
+      settings.emplace("background", true);
+      settings.emplace("glyph", std::string("heart"));
+      settings.emplace("variant", std::string("default"));
+    }
+    if (desktop_cards::supportsSizePresets(type)) {
+      settings.emplace(
+          "card_size",
+          std::string(cardSize.empty() ? ((type == "weather" || type == "clock") ? "small" : "medium") : cardSize)
+      );
+      settings.emplace("background_padding", static_cast<std::int64_t>(Style::cardPadding));
+      settings.emplace("background_radius", static_cast<std::int64_t>(Style::radiusXl));
+      if (type == "weather" || type == "clock" || type == "media_player")
+        settings.emplace("shadow", false);
+      if (type == "clock") {
+        settings.emplace("clock_style", std::string("analog"));
+        settings.emplace("show_seconds", false);
+      }
+    }
+    if (type == "sysmon") {
+      settings.emplace("stat", std::string("cpu_usage"));
+      settings.emplace("stat2", std::string("cpu_temp"));
+    }
+
+    return settings;
+  }
+
   namespace {
 
     using settings::WidgetControlKind;
@@ -22,6 +61,7 @@ namespace desktop_settings {
     const std::vector<DesktopWidgetTypeSpec> kDesktopWidgetTypeSpecs = {
         {.type = "audio_visualizer", .labelKey = "desktop-widgets.editor.types.audio-visualizer"},
         {.type = "button", .labelKey = "desktop-widgets.editor.types.button"},
+        {.type = "batteries", .labelKey = "desktop-widgets.editor.types.batteries"},
         {.type = "calendar", .labelKey = "desktop-widgets.editor.types.calendar"},
         {.type = "clock", .labelKey = "desktop-widgets.editor.types.clock"},
         {.type = "fancy_audio_visualizer", .labelKey = "desktop-widgets.editor.types.fancy-audio-visualizer"},
@@ -29,6 +69,21 @@ namespace desktop_settings {
         {.type = "media_player", .labelKey = "desktop-widgets.editor.types.media-player"},
         {.type = "sticker", .labelKey = "desktop-widgets.editor.types.sticker"},
         {.type = "sysmon", .labelKey = "desktop-widgets.editor.types.system-monitor"},
+        {.type = "screen_time", .labelKey = "desktop-widgets.editor.types.screen-time"},
+        {.type = "notes", .labelKey = "desktop-widgets.editor.types.notes"},
+        {.type = "reminders", .labelKey = "desktop-widgets.editor.types.reminders"},
+        {.type = "shortcuts", .labelKey = "desktop-widgets.editor.types.shortcuts"},
+        {.type = "contacts", .labelKey = "desktop-widgets.editor.types.contacts"},
+        {.type = "reading_list", .labelKey = "desktop-widgets.editor.types.reading-list"},
+        {.type = "journal", .labelKey = "desktop-widgets.editor.types.journal"},
+        {.type = "tips", .labelKey = "desktop-widgets.editor.types.tips"},
+        {.type = "photos", .labelKey = "desktop-widgets.editor.types.photos"},
+        {.type = "news", .labelKey = "desktop-widgets.editor.types.news"},
+        {.type = "podcasts", .labelKey = "desktop-widgets.editor.types.podcasts"},
+        {.type = "stocks", .labelKey = "desktop-widgets.editor.types.stocks"},
+        {.type = "home", .labelKey = "desktop-widgets.editor.types.home"},
+        {.type = "find_my", .labelKey = "desktop-widgets.editor.types.find-my"},
+        {.type = "video_library", .labelKey = "desktop-widgets.editor.types.video-library"},
         {.type = "volume", .labelKey = "desktop-widgets.editor.types.volume"},
         {.type = "weather", .labelKey = "desktop-widgets.editor.types.weather"},
     };
@@ -243,6 +298,80 @@ namespace desktop_settings {
     std::vector<WidgetSettingSpec> specs;
     auto add = [&](WidgetSettingSpec spec) { specs.push_back(std::move(spec)); };
 
+    if (desktop_cards::supportsSizePresets(type)) {
+      const bool classic = type == "weather" || type == "calendar" || type == "clock" || type == "media_player";
+      auto size = selectSpec(
+          "card_size", classic ? "classic" : "medium",
+          {
+              {"classic", "desktop-widgets.editor.settings.card-size-classic"},
+              {"small", "desktop-widgets.editor.settings.card-size-small"},
+              {"medium", "desktop-widgets.editor.settings.card-size-medium"},
+              {"large", "desktop-widgets.editor.settings.card-size-large"},
+          }
+      );
+      size.descriptionKey = "desktop-widgets.editor.settings.card-size-description";
+      if (!classic) {
+        size.options.erase(size.options.begin());
+        size.schema.enumValues.erase(size.schema.enumValues.begin());
+      }
+      add(std::move(size));
+    }
+    if (type == "photos") {
+      add(baseSpec("image_path", WidgetControlKind::File, std::string()));
+      add(baseSpec("folder_path", WidgetControlKind::Folder, std::string()));
+      add(intSpec("interval_minutes", 5, 1, 1440, 1));
+    }
+    if (type == "video_library")
+      add(baseSpec("folder_path", WidgetControlKind::Folder, std::string()));
+    if (type == "news" || type == "podcasts") {
+      auto feed = stringSpec("feed_url");
+      feed.descriptionKey = "desktop-widgets.editor.settings.feed-url-description";
+      add(std::move(feed));
+      add(intSpec("refresh_minutes", 15, 1, 1440, 1));
+    }
+    if (type == "home" || type == "find_my") {
+      auto server = stringSpec("server_url");
+      server.descriptionKey = "desktop-widgets.editor.settings.server-url-description";
+      add(std::move(server));
+      add(baseSpec("token_file", WidgetControlKind::File, std::string()));
+      auto entities = baseSpec("entities", WidgetControlKind::StringList, std::vector<std::string>());
+      entities.descriptionKey = type == "home" ? "desktop-widgets.editor.settings.home-entities-description"
+                                               : "desktop-widgets.editor.settings.location-entities-description";
+      add(std::move(entities));
+      add(intSpec("refresh_minutes", 1, 1, 1440, 1));
+    }
+    if (type == "stocks") {
+      auto token = baseSpec("token_file", WidgetControlKind::File, std::string());
+      token.descriptionKey = "desktop-widgets.editor.settings.stock-token-description";
+      add(std::move(token));
+      auto symbols = baseSpec("symbols", WidgetControlKind::StringList, std::vector<std::string>());
+      symbols.descriptionKey = "desktop-widgets.editor.settings.symbols-description";
+      add(std::move(symbols));
+      add(intSpec("refresh_minutes", 360, 1, 1440, 1));
+    }
+    if (type == "notes" || type == "journal") {
+      auto file = baseSpec("file_path", WidgetControlKind::File, std::string());
+      file.descriptionKey = type == "journal" ? "desktop-widgets.editor.settings.journal-file-description"
+                                              : "desktop-widgets.editor.settings.notes-file-description";
+      add(std::move(file));
+    }
+    if (type == "reminders") {
+      add(stringSpec("list_name", "Reminders"));
+      add(baseSpec("items", WidgetControlKind::StringList, std::vector<std::string>()));
+    }
+    if (type == "contacts" || type == "shortcuts" || type == "reading_list") {
+      auto entries = baseSpec("entries", WidgetControlKind::StringMap, WidgetSettingStringMap());
+      entries.descriptionKey = type == "contacts" ? "desktop-widgets.editor.settings.contacts-description"
+          : type == "shortcuts"                   ? "desktop-widgets.editor.settings.shortcuts-description"
+                                                  : "desktop-widgets.editor.settings.reading-list-description";
+      add(std::move(entries));
+    }
+    if (desktop_cards::supportsSizePresets(type)
+        && type != "weather"
+        && type != "calendar"
+        && type != "clock"
+        && type != "media_player")
+      add(fontFamilySpec());
     if (type == "calendar") {
       add(boolSpec("show_events", true));
       add(boolSpec("show_week_numbers", false));
@@ -259,7 +388,7 @@ namespace desktop_settings {
       format.visibleWhen = digitalOnly;
       add(std::move(format));
       auto centerText = boolSpec("center_text", true);
-      centerText.visibleWhen = digitalOnly;
+      centerText.visibleWhen = WidgetSettingVisibility{{"clock_style", {"digital"}}, {"card_size", {"classic"}}};
       add(std::move(centerText));
       auto timezone = stringSpec("timezone", "");
       timezone.labelKey = "settings.widgets.settings.timezone.label";
@@ -269,11 +398,14 @@ namespace desktop_settings {
       add(fontFamilySpec());
       // Shadow is a text shadow on the digital label; analog mode has no shadow.
       auto shadow = boolSpec("shadow", true);
-      shadow.visibleWhen = digitalOnly;
+      shadow.visibleWhen = WidgetSettingVisibility{{"clock_style", {"digital"}}, {"card_size", {"classic"}}};
       add(std::move(shadow));
       auto circle = boolSpec("circle", true);
       circle.visibleWhen = analogOnly;
       add(std::move(circle));
+      auto seconds = boolSpec("show_seconds", true);
+      seconds.visibleWhen = analogOnly;
+      add(std::move(seconds));
     } else if (type == "audio_visualizer") {
       add(intSpec("bands", 32, 4.0, 128.0, 4.0));
       add(boolSpec("mirrored", true));
@@ -318,20 +450,28 @@ namespace desktop_settings {
     } else if (type == "weather") {
       add(colorSpec("color", "on_surface"));
       add(fontFamilySpec());
-      add(boolSpec("shadow", true));
-      add(boolSpec("show_forecast", false));
+      auto shadow = boolSpec("shadow", true);
+      shadow.visibleWhen = WidgetSettingVisibility{"card_size", {"classic"}};
+      add(std::move(shadow));
+      auto showForecast = boolSpec("show_forecast", false);
+      showForecast.visibleWhen = WidgetSettingVisibility{"card_size", {"classic"}};
+      add(std::move(showForecast));
       auto forecastDays = stepperIntSpec("forecast_days", 3, 1.0, 6.0, 1.0);
-      forecastDays.visibleWhen = WidgetSettingVisibility{"show_forecast", {"true"}};
+      forecastDays.visibleWhen = WidgetSettingVisibility{{"card_size", {"classic"}}, {"show_forecast", {"true"}}};
       add(std::move(forecastDays));
     } else if (type == "media_player") {
-      add(segmentedSpec(
+      auto layout = segmentedSpec(
           "layout", "horizontal",
           {{"horizontal", "desktop-widgets.editor.settings.horizontal"},
            {"vertical", "desktop-widgets.editor.settings.vertical"}}
-      ));
+      );
+      layout.visibleWhen = WidgetSettingVisibility{"card_size", {"classic"}};
+      add(std::move(layout));
       add(colorSpec("color", "on_surface"));
       add(fontFamilySpec());
-      add(boolSpec("shadow", true));
+      auto shadow = boolSpec("shadow", true);
+      shadow.visibleWhen = WidgetSettingVisibility{"card_size", {"classic"}};
+      add(std::move(shadow));
       add(boolSpec("hide_when_no_media", false));
     } else if (type == "label") {
       add(stringSpec("title", "Title"));

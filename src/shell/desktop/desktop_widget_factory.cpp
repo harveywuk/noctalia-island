@@ -8,10 +8,13 @@
 #include "shell/desktop/widgets/desktop_button_widget.h"
 #include "shell/desktop/widgets/desktop_calendar_widget.h"
 #include "shell/desktop/widgets/desktop_clock_widget.h"
+#include "shell/desktop/widgets/desktop_collection_widget.h"
 #include "shell/desktop/widgets/desktop_fancy_audio_visualizer_widget.h"
 #include "shell/desktop/widgets/desktop_label_widget.h"
 #include "shell/desktop/widgets/desktop_login_box_widget.h"
 #include "shell/desktop/widgets/desktop_media_player_widget.h"
+#include "shell/desktop/widgets/desktop_photos_widget.h"
+#include "shell/desktop/widgets/desktop_status_card_widget.h"
 #include "shell/desktop/widgets/desktop_sticker_widget.h"
 #include "shell/desktop/widgets/desktop_sysmon_widget.h"
 #include "shell/desktop/widgets/desktop_volume_widget.h"
@@ -185,17 +188,55 @@ namespace {
 DesktopWidgetFactory::DesktopWidgetFactory(DesktopWidgetRuntimeServices services)
     : m_calendar(services.calendar), m_pipewire(services.pipewire), m_pipewireSpectrum(services.pipewireSpectrum),
       m_weather(services.weather), m_mpris(services.mpris), m_httpClient(services.httpClient),
-      m_sysmon(services.sysmon), m_scriptDeps(services.scriptDeps) {}
+      m_sysmon(services.sysmon), m_scriptDeps(services.scriptDeps), m_services(services) {}
 
 std::unique_ptr<DesktopWidget> DesktopWidgetFactory::create(
     const std::string& type, const std::unordered_map<std::string, WidgetSettingValue>& settings, float contentScale
 ) const {
+  if (type == "notes"
+      || type == "reminders"
+      || type == "shortcuts"
+      || type == "contacts"
+      || type == "reading_list"
+      || type == "journal"
+      || type == "tips"
+      || type == "news"
+      || type == "podcasts"
+      || type == "stocks"
+      || type == "home"
+      || type == "find_my"
+      || type == "video_library") {
+    auto widget = std::make_unique<DesktopCollectionWidget>(type, settings, m_services);
+    applyCommonSettings(*widget, settings);
+    widget->setContentScale(contentScale);
+    return widget;
+  }
+  if (type == "photos") {
+    auto widget = std::make_unique<DesktopPhotosWidget>(
+        getStringSetting(settings, "image_path"), getStringSetting(settings, "folder_path"),
+        getIntSetting(settings, "interval_minutes", 5),
+        desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "medium"))
+    );
+    applyCommonSettings(*widget, settings);
+    widget->setContentScale(contentScale);
+    return widget;
+  }
+  if (type == "batteries" || type == "screen_time") {
+    auto widget = std::make_unique<DesktopStatusCardWidget>(
+        type == "batteries" ? DesktopStatusCardWidget::Kind::Batteries : DesktopStatusCardWidget::Kind::ScreenTime,
+        m_services, desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "medium"))
+    );
+    applyCommonSettings(*widget, settings);
+    widget->setContentScale(contentScale);
+    return widget;
+  }
   if (type == "calendar") {
     auto widget = std::make_unique<DesktopCalendarWidget>(
         m_scriptDeps.configService, m_calendar,
         DesktopCalendarWidget::Options{
             .showEvents = getBoolSetting(settings, "show_events", true),
             .showWeekNumbers = getBoolSetting(settings, "show_week_numbers", false),
+            .cardSize = desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "classic")),
         }
     );
     applyCommonSettings(*widget, settings);
@@ -215,6 +256,8 @@ std::unique_ptr<DesktopWidget> DesktopWidgetFactory::create(
         .showCircle = getBoolSetting(settings, "circle", true),
         .centerText = getBoolSetting(settings, "center_text", true),
         .timezone = getStringSetting(settings, "timezone", ""),
+        .cardSize = desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "classic")),
+        .showSeconds = getBoolSetting(settings, "show_seconds", true),
     });
     applyCommonSettings(*widget, settings);
     widget->setContentScale(contentScale);
@@ -294,6 +337,7 @@ std::unique_ptr<DesktopWidget> DesktopWidgetFactory::create(
             .shadow = getBoolSetting(settings, "shadow", true),
             .showForecast = getBoolSetting(settings, "show_forecast", false),
             .forecastDays = getIntSetting(settings, "forecast_days", 3),
+            .cardSize = desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "classic")),
         }
     );
     applyCommonSettings(*widget, settings);
@@ -313,6 +357,7 @@ std::unique_ptr<DesktopWidget> DesktopWidgetFactory::create(
             .color = getColorSpecSetting(settings, "color", colorSpecFromRole(ColorRole::OnSurface)),
             .shadow = getBoolSetting(settings, "shadow", true),
             .hideWhenNoMedia = getBoolSetting(settings, "hide_when_no_media", false),
+            .cardSize = desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "classic")),
         }
     );
     applyCommonSettings(*widget, settings);

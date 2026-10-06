@@ -42,6 +42,7 @@ public:
   void requestUpdate();
   void requestLayout();
   void requestRedraw();
+  void setWindowFocused(bool focused);
   void setWallpaperMask(std::uint64_t ownerId, const std::string& outputName, std::optional<OutputWallpaperMask> mask);
   void clearWallpaperMasks(std::uint64_t ownerId);
 

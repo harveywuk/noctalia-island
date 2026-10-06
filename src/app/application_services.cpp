@@ -846,6 +846,7 @@ void Application::initStyleThemeAndWayland() {
   m_screenTimeService.initialize(&m_wayland);
   syncScreenTimeService();
   m_screenTimeService.setChangeCallback([this]() {
+    m_desktopWidgetsController.requestUpdate();
     if (m_panelManager.isOpenPanel("control-center") && m_panelManager.isActivePanelContext("screen-time")) {
       m_panelManager.refresh();
     }
@@ -924,6 +925,7 @@ void Application::initWaylandCallbacks() {
   m_scriptApi.setClipboardText(m_clipboardService.clipboardText());
   m_compositorPlatform.setWorkspaceAlertService(&m_workspaceAlertService);
   m_compositorPlatform.setWorkspaceChangeCallback([this]() {
+    m_desktopWidgetsController.setWindowFocused(m_compositorPlatform.activeToplevel().has_value());
     // Clear alerts for the workspace the user just switched to. Limit to the
     // focused output so activity on one monitor doesn't dismiss alerts on
     // another; fall back to all outputs when no focused output is known.
@@ -948,6 +950,7 @@ void Application::initWaylandCallbacks() {
     }
   });
   m_compositorPlatform.setToplevelChangeCallback([this]() {
+    m_desktopWidgetsController.setWindowFocused(m_compositorPlatform.activeToplevel().has_value());
     m_screenTimeService.onFocusChange();
     m_bar.scheduleSmartAutoHideReevaluation();
     m_dock.scheduleSmartAutoHideReevaluation();
@@ -1288,6 +1291,7 @@ void Application::initSystemBusServices() {
       m_prevBatteryPluggedForEvents = initialPower.isPresent ? batteryStatePlugged(initialPower.state) : std::nullopt;
       m_batteryWarningMonitor.evaluate(m_configService.config().battery, *m_upowerService, m_notificationManager);
       m_upowerService->setChangeCallback([this, shouldRefreshControlCenter](const UPowerChange& change) {
+        m_desktopWidgetsController.requestUpdate();
         m_island.refresh();
         if (change.origin != UPowerService::ChangeOrigin::DeviceState) {
           if (shouldRefreshControlCenter()) {
@@ -1428,6 +1432,7 @@ void Application::initSystemBusServices() {
     try {
       m_bluetoothService = std::make_unique<BluetoothService>(*m_systemBus, m_upowerService.get());
       auto refreshBluetoothUi = [this, shouldRefreshControlCenter]() {
+        m_desktopWidgetsController.requestUpdate();
         m_bar.refresh();
         m_island.refresh();
         if (shouldRefreshControlCenter()) {

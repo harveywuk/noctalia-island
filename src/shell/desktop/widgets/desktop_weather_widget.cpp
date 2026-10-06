@@ -6,6 +6,7 @@
 #include "system/weather_service.h"
 #include "time/time_format.h"
 #include "ui/builders.h"
+#include "ui/controls/box.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 
@@ -70,11 +71,47 @@ namespace {
 
 DesktopWeatherWidget::DesktopWeatherWidget(const WeatherService* weather, Options options)
     : m_weather(weather), m_color(options.color), m_shadow(options.shadow), m_showForecast(options.showForecast),
-      m_forecastDays(std::clamp(options.forecastDays, 1, static_cast<int>(kMaxForecastRows))) {}
+      m_forecastDays(std::clamp(options.forecastDays, 1, static_cast<int>(kMaxForecastRows))),
+      m_cardSize(options.cardSize) {}
 
 void DesktopWeatherWidget::create() {
   auto rootNode = ui::node({});
   rootNode->setClipChildren(true);
+
+  rootNode->addChild(
+      ui::label({
+          .out = &m_location,
+          .fontWeight = FontWeight::Medium,
+          .color = colorSpecFromRole(ColorRole::OnSurface),
+          .maxLines = 1,
+          .visible = usesCardLayout(),
+      })
+  );
+  rootNode->addChild(
+      ui::label({
+          .out = &m_range,
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          .maxLines = 1,
+          .visible = usesCardLayout(),
+      })
+  );
+  rootNode->addChild(
+      ui::label({
+          .out = &m_forecastTitle,
+          .text = i18n::tr("desktop-widgets.weather.forecast"),
+          .fontWeight = FontWeight::Medium,
+          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+          .maxLines = 1,
+          .visible = false,
+      })
+  );
+  rootNode->addChild(
+      ui::box({
+          .out = &m_separator,
+          .fill = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+          .visible = false,
+      })
+  );
 
   auto glyph = ui::glyph({
       .out = &m_glyph,
@@ -132,6 +169,20 @@ void DesktopWeatherWidget::create() {
         .visible = false,
     });
     rootNode->addChild(std::move(temps));
+    rootNode->addChild(
+        ui::label(
+            {.out = &row.low, .color = colorSpecFromRole(ColorRole::OnSurfaceVariant), .maxLines = 1, .visible = false}
+        )
+    );
+    rootNode->addChild(ui::label({.out = &row.high, .color = m_color, .maxLines = 1, .visible = false}));
+    rootNode->addChild(
+        ui::box(
+            {.out = &row.rangeTrack, .fill = colorSpecFromRole(ColorRole::OnSurfaceVariant, 0.12F), .visible = false}
+        )
+    );
+    rootNode->addChild(
+        ui::box({.out = &row.rangeFill, .fill = colorSpecFromRole(ColorRole::Primary, 0.75F), .visible = false})
+    );
   }
 
   setRoot(std::move(rootNode));
@@ -142,6 +193,14 @@ bool DesktopWeatherWidget::applySetting(
     const std::string& key, const WidgetSettingValue& value,
     const std::unordered_map<std::string, WidgetSettingValue>& allSettings, Renderer& renderer
 ) {
+  if (key == "card_size") {
+    if (const auto* v = std::get_if<std::string>(&value)) {
+      m_cardSize = desktop_cards::sizeFromSetting(*v);
+      layout(renderer);
+      return true;
+    }
+    return false;
+  }
   if (key == "color") {
     if (const auto* v = std::get_if<std::string>(&value)) {
       m_color = colorSpecFromConfigString(*v, key);
@@ -163,6 +222,9 @@ bool DesktopWeatherWidget::applySetting(
         }
         if (row.temps != nullptr) {
           row.temps->setColor(m_color);
+        }
+        if (row.high != nullptr) {
+          row.high->setColor(m_color);
         }
       }
       return true;
@@ -202,6 +264,10 @@ bool DesktopWeatherWidget::applySetting(
 }
 
 void DesktopWeatherWidget::onFontFamilyChanged(const std::string& family, Renderer& /*renderer*/) {
+  for (Label* label : {m_location, m_range, m_forecastTitle}) {
+    if (label != nullptr)
+      label->setFontFamily(family);
+  }
   if (m_temperature != nullptr) {
     m_temperature->setFontFamily(family);
   }
@@ -209,6 +275,10 @@ void DesktopWeatherWidget::onFontFamilyChanged(const std::string& family, Render
     m_condition->setFontFamily(family);
   }
   for (const auto& row : m_forecastRows) {
+    if (row.low != nullptr)
+      row.low->setFontFamily(family);
+    if (row.high != nullptr)
+      row.high->setFontFamily(family);
     if (row.day != nullptr) {
       row.day->setFontFamily(family);
     }
@@ -222,6 +292,19 @@ void DesktopWeatherWidget::doLayout(Renderer& renderer) {
   if (root() == nullptr || m_glyph == nullptr || m_temperature == nullptr || m_condition == nullptr) {
     return;
   }
+
+  m_location->setVisible(usesCardLayout());
+  m_range->setVisible(usesCardLayout());
+  m_forecastTitle->setVisible(false);
+  m_separator->setVisible(false);
+  if (usesCardLayout()) {
+    layoutCard(renderer);
+    return;
+  }
+  m_temperature->setFontWeight(FontWeight::Bold);
+  m_glyph->setColor(m_color);
+  for (auto& row : m_forecastRows)
+    row.glyph->setColor(m_color);
 
   const float scale = contentScale();
   const float width = kBaseWidth * scale;
@@ -309,9 +392,112 @@ void DesktopWeatherWidget::doLayout(Renderer& renderer) {
   root()->setSize(width, height);
 }
 
+desktop_cards::Layout DesktopWeatherWidget::cardLayout() const noexcept {
+  return desktop_cards::resolve(m_cardSize, contentScale(), boxInnerWidth(), boxInnerHeight(), backgroundPadding());
+}
+
+int DesktopWeatherWidget::forecastRowCount() const noexcept {
+  if (!usesCardLayout())
+    return m_showForecast ? m_forecastDays : 0;
+  const auto size = cardLayout().size;
+  return size == desktop_cards::Size::Small ? 0 : (size == desktop_cards::Size::Medium ? 3 : 6);
+}
+
+void DesktopWeatherWidget::layoutCard(Renderer& renderer) {
+  const auto card = cardLayout();
+  const float scale = card.scale;
+  const bool medium = card.size == desktop_cards::Size::Medium;
+  const bool large = card.size == desktop_cards::Size::Large;
+  const float summaryWidth = medium ? 156.0F * scale : card.width;
+  const float summaryHeight = large ? 152.0F * scale : card.height;
+  const auto place = [&](Label* label, float x, float y, float width, float fontSize) {
+    label->setFontSize(fontSize * scale);
+    label->setMaxWidth(std::max(1.0F, width));
+    label->measure(renderer);
+    label->setPosition(Style::rtl() ? card.width - x - label->width() : x, y);
+  };
+  sync();
+  syncForecast(renderer);
+  applyShadow();
+  m_temperature->setFontWeight(FontWeight::Normal);
+  m_glyph->setColor(colorSpecFromRole(ColorRole::Primary));
+  const bool hasData =
+      m_weather != nullptr && m_weather->enabled() && m_weather->locationConfigured() && m_weather->hasData();
+  place(m_location, 0.0F, 0.0F, summaryWidth, Style::fontSizeTitle);
+  place(m_temperature, 0.0F, 28.0F * scale, summaryWidth, hasData ? Style::fontSizeBody * 4.0F : Style::fontSizeHeader);
+  const float conditionY = summaryHeight - 46.0F * scale;
+  place(m_condition, 0.0F, conditionY, summaryWidth, Style::fontSizeBody);
+  place(m_range, 0.0F, summaryHeight - 22.0F * scale, summaryWidth, Style::fontSizeCaption);
+  m_glyph->setGlyphSize((large ? 64.0F : 34.0F) * scale);
+  m_glyph->measure(renderer);
+  const float glyphX = summaryWidth - m_glyph->width();
+  m_glyph->setPosition(
+      Style::rtl() ? card.width - glyphX - m_glyph->width() : glyphX, large ? 36.0F * scale : 72.0F * scale
+  );
+
+  const bool forecast = (medium || large) && hasData;
+  m_separator->setVisible(forecast);
+  m_forecastTitle->setVisible(forecast);
+  const float forecastX = medium ? summaryWidth + 2.0F * Style::spaceMd * scale : 0.0F;
+  const float forecastY = large ? summaryHeight + Style::spaceMd * scale : 0.0F;
+  const float forecastWidth = card.width - forecastX;
+  if (forecast) {
+    place(m_forecastTitle, forecastX, forecastY, forecastWidth, Style::fontSizeCaption);
+    const float separatorX = medium ? summaryWidth + Style::spaceMd * scale : 0.0F;
+    m_separator->setSize(
+        medium ? Style::borderWidth * scale : card.width, medium ? card.height : Style::borderWidth * scale
+    );
+    m_separator->setPosition(
+        Style::rtl() ? card.width - separatorX - m_separator->width() : separatorX, medium ? 0.0F : summaryHeight
+    );
+  }
+  const int count = forecastRowCount();
+  double minimum = 0.0;
+  double maximum = 0.0;
+  bool first = true;
+  for (const auto& row : m_forecastRows) {
+    if (!row.day->visible())
+      continue;
+    minimum = first ? row.minimum : std::min(minimum, row.minimum);
+    maximum = first ? row.maximum : std::max(maximum, row.maximum);
+    first = false;
+  }
+  const double span = std::max(1.0, maximum - minimum);
+  const float rowHeight = large ? 32.0F * scale : 42.0F * scale;
+  const float rowsY = forecastY + 28.0F * scale;
+  for (int i = 0; i < count; ++i) {
+    auto& row = m_forecastRows[static_cast<std::size_t>(i)];
+    const float y = rowsY + static_cast<float>(i) * rowHeight;
+    place(row.day, forecastX, y + 7.0F * scale, 48.0F * scale, Style::fontSizeBody);
+    row.glyph->setGlyphSize(20.0F * scale);
+    row.glyph->setColor(colorSpecFromRole(ColorRole::Primary));
+    row.glyph->measure(renderer);
+    const float x = forecastX + 52.0F * scale;
+    row.glyph->setPosition(Style::rtl() ? card.width - x - row.glyph->width() : x, y + 4.0F * scale);
+    if (large) {
+      place(row.low, 92.0F * scale, y + 7.0F * scale, 40.0F * scale, Style::fontSizeBody);
+      place(row.high, card.width - 34.0F * scale, y + 7.0F * scale, 34.0F * scale, Style::fontSizeBody);
+      const float trackX = 140.0F * scale;
+      const float trackWidth = std::max(1.0F, card.width - trackX - 48.0F * scale);
+      const float start = static_cast<float>((row.minimum - minimum) / span) * trackWidth;
+      const float length = std::max(4.0F * scale, static_cast<float>((row.maximum - row.minimum) / span) * trackWidth);
+      row.rangeTrack->setSize(trackWidth, 4.0F * scale);
+      row.rangeTrack->setRadius(2.0F * scale);
+      row.rangeTrack->setPosition(Style::rtl() ? card.width - trackX - trackWidth : trackX, y + 12.0F * scale);
+      row.rangeFill->setSize(std::min(length, trackWidth - start), 4.0F * scale);
+      row.rangeFill->setRadius(2.0F * scale);
+      const float fillX = trackX + start;
+      row.rangeFill->setPosition(Style::rtl() ? card.width - fillX - row.rangeFill->width() : fillX, y + 12.0F * scale);
+    }
+    const float tempsX = forecastX + 82.0F * scale;
+    place(row.temps, tempsX, y + 7.0F * scale, std::max(1.0F, forecastWidth - 82.0F * scale), Style::fontSizeBody);
+  }
+  root()->setSize(card.width, card.height);
+}
+
 void DesktopWeatherWidget::doUpdate(Renderer& renderer) {
   bool changed = sync();
-  if (m_showForecast) {
+  if (forecastRowCount() > 0) {
     changed = syncForecast(renderer) || changed;
   }
   if (changed) {
@@ -325,7 +511,7 @@ void DesktopWeatherWidget::applyShadow() {
     if (label == nullptr) {
       return;
     }
-    if (m_shadow) {
+    if (m_shadow && !usesCardLayout()) {
       const float offset = kShadowOffset * contentScale();
       label->setShadow(shadow, offset, offset);
     } else {
@@ -336,7 +522,7 @@ void DesktopWeatherWidget::applyShadow() {
   if (m_glyph == nullptr || m_temperature == nullptr || m_condition == nullptr) {
     return;
   }
-  if (m_shadow) {
+  if (m_shadow && !usesCardLayout()) {
     const float offset = kShadowOffset * contentScale();
     m_glyph->setShadow(shadow, offset, offset);
     m_temperature->setShadow(shadow, offset, offset);
@@ -351,7 +537,7 @@ void DesktopWeatherWidget::applyShadow() {
     applyToLabel(row.day);
     applyToLabel(row.temps);
     if (row.glyph != nullptr) {
-      if (m_shadow) {
+      if (m_shadow && !usesCardLayout()) {
         const float offset = kShadowOffset * contentScale();
         row.glyph->setShadow(shadow, offset, offset);
       } else {
@@ -369,6 +555,8 @@ bool DesktopWeatherWidget::sync() {
   std::string glyphName = "weather-cloud";
   std::string temperatureText = "--";
   std::string conditionText;
+  std::string locationText = i18n::tr("desktop-widgets.editor.types.weather");
+  std::string rangeText;
 
   if (m_weather == nullptr || !m_weather->enabled()) {
     temperatureText = i18n::tr("desktop-widgets.weather.off");
@@ -376,10 +564,27 @@ bool DesktopWeatherWidget::sync() {
     temperatureText = i18n::tr("desktop-widgets.weather.no-location");
   } else if (m_weather->hasData()) {
     const auto& snapshot = m_weather->snapshot();
+    locationText = snapshot.locationName.empty() ? locationText : snapshot.locationName;
     glyphName = WeatherService::glyphForCode(snapshot.current.weatherCode, snapshot.current.isDay);
     const int temp = static_cast<int>(std::lround(m_weather->displayTemperature(snapshot.current.temperatureC)));
     temperatureText = std::format("{}{}", temp, m_weather->displayTemperatureUnit());
     conditionText = WeatherService::shortDescriptionForCode(snapshot.current.weatherCode);
+    if (!snapshot.forecastDays.empty()
+        && snapshot.forecastDays.front().dateIso == todayIso(snapshot.utcOffsetSeconds)) {
+      const auto& day = snapshot.forecastDays.front();
+      rangeText = i18n::tr(
+          "desktop-widgets.weather.high-low", "high",
+          std::format(
+              "{}{}", static_cast<int>(std::lround(m_weather->displayTemperature(day.temperatureMaxC))),
+              m_weather->displayTemperatureUnit()
+          ),
+          "low",
+          std::format(
+              "{}{}", static_cast<int>(std::lround(m_weather->displayTemperature(day.temperatureMinC))),
+              m_weather->displayTemperatureUnit()
+          )
+      );
+    }
   } else if (m_weather->loading()) {
     temperatureText = i18n::tr("desktop-widgets.weather.loading");
   } else if (!m_weather->error().empty()) {
@@ -387,6 +592,8 @@ bool DesktopWeatherWidget::sync() {
   }
 
   bool changed = false;
+  changed = m_location->setText(locationText) || changed;
+  changed = m_range->setText(rangeText) || changed;
 
   if (glyphName != m_lastGlyph) {
     m_lastGlyph = glyphName;
@@ -410,8 +617,17 @@ bool DesktopWeatherWidget::sync() {
 }
 
 bool DesktopWeatherWidget::syncForecast(Renderer& renderer) {
-  const int rowCount = m_showForecast ? std::clamp(m_forecastDays, 1, static_cast<int>(kMaxForecastRows)) : 0;
-  const bool hasWeatherData = m_weather != nullptr && m_weather->hasData();
+  const int rowCount = forecastRowCount();
+  const bool hasWeatherData =
+      m_weather != nullptr && m_weather->enabled() && m_weather->locationConfigured() && m_weather->hasData();
+  std::size_t forecastStart = 0;
+  if (hasWeatherData) {
+    const auto& snapshot = m_weather->snapshot();
+    forecastStart =
+        !snapshot.forecastDays.empty() && snapshot.forecastDays.front().dateIso == todayIso(snapshot.utcOffsetSeconds)
+        ? 1
+        : 0;
+  }
   bool changed = false;
 
   for (std::size_t i = 0; i < kMaxForecastRows; ++i) {
@@ -420,31 +636,30 @@ bool DesktopWeatherWidget::syncForecast(Renderer& renderer) {
       continue;
     }
 
-    const bool visible = hasWeatherData && static_cast<int>(i) < rowCount;
+    const std::size_t dayIndex = forecastStart + i;
+    const bool visible =
+        hasWeatherData && static_cast<int>(i) < rowCount && dayIndex < m_weather->snapshot().forecastDays.size();
     if (row.day->visible() != visible) {
       changed = true;
     }
     row.day->setVisible(visible);
     row.glyph->setVisible(visible);
-    row.temps->setVisible(visible);
+    const bool ranges = usesCardLayout() && cardLayout().size == desktop_cards::Size::Large;
+    row.temps->setVisible(visible && !ranges);
+    row.low->setVisible(visible && ranges);
+    row.high->setVisible(visible && ranges);
+    row.rangeTrack->setVisible(visible && ranges);
+    row.rangeFill->setVisible(visible && ranges);
     if (!visible) {
       continue;
     }
 
     const auto& snapshot = m_weather->snapshot();
-    const bool firstForecastIsToday =
-        !snapshot.forecastDays.empty() && snapshot.forecastDays.front().dateIso == todayIso(snapshot.utcOffsetSeconds);
-    const std::size_t forecastStart = firstForecastIsToday ? 1 : 0;
-    const std::size_t dayIndex = forecastStart + i;
-    if (dayIndex >= snapshot.forecastDays.size()) {
-      row.day->setVisible(false);
-      row.glyph->setVisible(false);
-      row.temps->setVisible(false);
-      changed = true;
-      continue;
-    }
-
     const auto& day = snapshot.forecastDays[dayIndex];
+    row.minimum = m_weather->displayTemperature(day.temperatureMinC);
+    row.maximum = m_weather->displayTemperature(day.temperatureMaxC);
+    changed = row.low->setText(std::format("{}°", static_cast<int>(std::lround(row.minimum)))) || changed;
+    changed = row.high->setText(std::format("{}°", static_cast<int>(std::lround(row.maximum)))) || changed;
     const std::string dayText = weekdayAbbrev(day.dateIso);
     const std::string glyphName = WeatherService::glyphForCode(day.weatherCode, true);
     const std::string tempsText = std::format(

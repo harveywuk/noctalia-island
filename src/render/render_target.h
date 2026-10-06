@@ -94,6 +94,8 @@ public:
   // Physical render scale = buffer-to-logical ratio. Set by the owning surface
   // from its resolved scale; the renderer view reads it on every call.
   void setContentScale(float scale) noexcept;
+  void setColorSaturation(float saturation) noexcept;
+  [[nodiscard]] float colorSaturation() const noexcept { return m_colorSaturation; }
   [[nodiscard]] float contentScale() const noexcept { return m_contentScale; }
 
   void setLogicalSize(std::uint32_t w, std::uint32_t h) noexcept {
@@ -105,6 +107,7 @@ private:
   std::unique_ptr<RenderSurfaceTarget> m_surfaceTarget;
   ScaledRenderer m_renderer;
   float m_contentScale = 1.0F;
+  float m_colorSaturation = 1.0F;
   std::uint32_t m_bufferWidth = 0;
   std::uint32_t m_bufferHeight = 0;
   std::uint32_t m_logicalWidth = 0;

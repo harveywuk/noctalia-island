@@ -13,6 +13,9 @@ class SharedTextureCache;
 class SystemMonitorService;
 class WaylandConnection;
 class WeatherService;
+class UPowerService;
+class BluetoothService;
+class ScreenTimeService;
 
 namespace scripting {
   class ScriptApiContext;
@@ -35,6 +38,9 @@ struct DesktopWidgetRuntimeServices {
   MprisService* mpris = nullptr;
   HttpClient* httpClient = nullptr;
   SystemMonitorService* sysmon = nullptr;
+  UPowerService* upower = nullptr;
+  BluetoothService* bluetooth = nullptr;
+  ScreenTimeService* screenTime = nullptr;
   DesktopWidgetScriptDeps scriptDeps;
 };
 

@@ -6,6 +6,7 @@
 #include "net/http_client.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
+#include "time/time_format.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -31,14 +32,26 @@ namespace {
 } // namespace
 
 DesktopMediaPlayerWidget::DesktopMediaPlayerWidget(MprisService* mpris, HttpClient* httpClient, Options options)
-    : m_mpris(mpris), m_httpClient(httpClient), m_vertical(options.vertical), m_color(options.color),
-      m_shadow(options.shadow), m_hideWhenNoMedia(options.hideWhenNoMedia) {}
+    : m_cardSize(options.cardSize), m_mpris(mpris), m_httpClient(httpClient), m_vertical(options.vertical),
+      m_color(options.color), m_shadow(options.shadow), m_hideWhenNoMedia(options.hideWhenNoMedia) {}
 
 DesktopMediaPlayerWidget::~DesktopMediaPlayerWidget() { m_aliveGuard.reset(); }
 
 void DesktopMediaPlayerWidget::create() {
   auto rootNode = ui::node({});
 
+  rootNode->addChild(
+      ui::box(
+          {.out = &m_artPlaceholder,
+           .fill = colorSpecFromRole(ColorRole::SurfaceVariant),
+           .radius = Style::scaledRadiusLg()}
+      )
+  );
+  rootNode->addChild(
+      ui::glyph({.out = &m_musicGlyph, .glyph = "music", .color = colorSpecFromRole(ColorRole::OnSurfaceVariant)})
+  );
+  m_artPlaceholder->setVisible(usesCardLayout());
+  m_musicGlyph->setVisible(usesCardLayout());
   auto artwork = ui::image({
       .out = &m_artwork,
       .fit = ImageFit::Cover,
@@ -105,6 +118,25 @@ void DesktopMediaPlayerWidget::create() {
   );
 
   rootNode->addChild(std::move(controls));
+  rootNode->addChild(
+      ui::label(
+          {.out = &m_sourceLabel,
+           .fontSize = Style::fontSizeCaption,
+           .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+           .maxLines = 1}
+      )
+  );
+  rootNode->addChild(ui::progressBar({.out = &m_progress}));
+  rootNode->addChild(
+      ui::label({.out = &m_elapsed, .color = colorSpecFromRole(ColorRole::OnSurfaceVariant), .maxLines = 1})
+  );
+  rootNode->addChild(
+      ui::label({.out = &m_duration, .color = colorSpecFromRole(ColorRole::OnSurfaceVariant), .maxLines = 1})
+  );
+  m_sourceLabel->setVisible(usesCardLayout());
+  m_progress->setVisible(false);
+  m_elapsed->setVisible(false);
+  m_duration->setVisible(false);
   setRoot(std::move(rootNode));
   applyShadow();
 }
@@ -146,6 +178,12 @@ bool DesktopMediaPlayerWidget::applySetting(
 }
 
 void DesktopMediaPlayerWidget::onFontFamilyChanged(const std::string& family, Renderer& /*renderer*/) {
+  if (m_sourceLabel != nullptr)
+    m_sourceLabel->setFontFamily(family);
+  if (m_elapsed != nullptr)
+    m_elapsed->setFontFamily(family);
+  if (m_duration != nullptr)
+    m_duration->setFontFamily(family);
   if (m_title != nullptr) {
     m_title->setFontFamily(family);
   }
@@ -177,6 +215,10 @@ void DesktopMediaPlayerWidget::doLayout(Renderer& renderer) {
   sync(renderer);
   applyShadow();
 
+  if (usesCardLayout()) {
+    layoutCard(renderer);
+    return;
+  }
   const float scale = contentScale();
   if (m_vertical) {
     layoutVertical(renderer, scale);
@@ -294,6 +336,7 @@ void DesktopMediaPlayerWidget::doUpdate(Renderer& renderer) {
     requestLayout();
   }
   sync(renderer);
+  updateProgress();
 }
 
 void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
@@ -314,10 +357,13 @@ void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
     artist = joinArtists(active->artists);
     artUrl = effectiveArtUrl(*active);
     playbackStatus = active->playbackStatus;
-    canGoPrevious = active->canGoPrevious;
-    canGoNext = active->canGoNext;
+    canGoPrevious = active->canControl && active->canGoPrevious;
+    canGoNext = active->canControl && active->canGoNext;
   }
 
+  const bool canPlayPause =
+      active && active->canControl && (playbackStatus == "Playing" ? active->canPause : active->canPlay);
+  const std::string identity = active ? active->identity : std::string();
   const bool titleChanged = title != m_lastTitle;
   const bool artistChanged = artist != m_lastArtist;
   const bool artChanged = artUrl != m_lastArtUrl;
@@ -325,7 +371,10 @@ void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
   const bool canGoPreviousChanged = canGoPrevious != m_lastCanGoPrevious;
   const bool canGoNextChanged = canGoNext != m_lastCanGoNext;
   const bool artAwaitingDecode = m_artwork != nullptr && !artUrl.empty() && !m_artwork->hasImage();
-  if (!titleChanged
+  if (m_syncInitialized
+      && canPlayPause == m_lastCanPlayPause
+      && identity == m_lastIdentity
+      && !titleChanged
       && !artistChanged
       && !artChanged
       && !statusChanged
@@ -335,6 +384,10 @@ void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
     return;
   }
 
+  const bool firstSync = !m_syncInitialized;
+  m_syncInitialized = true;
+  m_lastCanPlayPause = canPlayPause;
+  m_lastIdentity = identity;
   m_lastTitle = title;
   m_lastArtist = artist;
   m_lastArtUrl = artUrl;
@@ -343,19 +396,23 @@ void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
   m_lastCanGoNext = canGoNext;
 
   m_title->setText(m_lastTitle.empty() ? i18n::tr("desktop-widgets.media.nothing-playing") : m_lastTitle);
-  m_artist->setText(m_lastArtist);
-  m_artist->setVisible(!m_lastArtist.empty());
+  m_artist->setText(!active && usesCardLayout() ? i18n::tr("desktop-widgets.media.start-playback") : m_lastArtist);
+  m_artist->setVisible(!m_lastArtist.empty() || (!active && usesCardLayout()));
+  m_sourceLabel->setText(identity.empty() ? i18n::tr("desktop-widgets.media.now-playing") : identity);
+  m_playPause->setEnabled(canPlayPause);
 
   m_playPause->setGlyph(m_lastPlaybackStatus == "Playing" ? "media-pause" : "media-play");
   if (m_prev != nullptr) {
-    m_prev->setVisible(canGoPrevious);
+    m_prev->setVisible(usesCardLayout() || canGoPrevious);
+    m_prev->setEnabled(canGoPrevious);
   }
   if (m_next != nullptr) {
-    m_next->setVisible(canGoNext);
+    m_next->setVisible(usesCardLayout() || canGoNext);
+    m_next->setEnabled(canGoNext);
   }
 
   if (m_artwork != nullptr) {
-    const int targetPx = static_cast<int>(std::round(kArtSize * contentScale()));
+    const int targetPx = static_cast<int>(std::round((usesCardLayout() ? 432.0F : kArtSize) * contentScale()));
     if (artChanged) {
       const std::string artPath = resolveArtworkSource(
           m_httpClient, m_pendingArtDownloads, m_lastArtUrl, [this] { requestUpdate(); }, m_aliveGuard
@@ -373,7 +430,8 @@ void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
     }
   }
 
-  if (titleChanged || artistChanged || canGoPreviousChanged || canGoNextChanged) {
+  m_musicGlyph->setVisible(usesCardLayout() && (m_artwork == nullptr || !m_artwork->hasImage()));
+  if ((firstSync || titleChanged || artistChanged || canGoPreviousChanged || canGoNextChanged) && !isLayingOut()) {
     requestLayout();
   } else {
     requestRedraw();
@@ -384,7 +442,7 @@ void DesktopMediaPlayerWidget::applyShadow() {
   if (m_title == nullptr || m_artist == nullptr) {
     return;
   }
-  if (m_shadow) {
+  if (m_shadow && !usesCardLayout()) {
     const float offset = kShadowOffset * contentScale();
     const ColorSpec shadow = colorSpecFromRole(ColorRole::Shadow, kShadowAlpha);
     m_title->setShadow(shadow, offset, offset);
@@ -430,4 +488,82 @@ void DesktopMediaPlayerWidget::setVisibilityCollapsed(bool collapsed) {
   if (Node* node = presentationRoot(); node != nullptr) {
     node->setVisible(!collapsed);
   }
+}
+
+bool DesktopMediaPlayerWidget::wantsSecondTicks() const {
+  return !usesCardLayout() || (m_visible && m_showProgress && m_lastPlaybackStatus == "Playing");
+}
+
+void DesktopMediaPlayerWidget::updateProgress() {
+  if (m_progress == nullptr)
+    return;
+  const auto active = m_mpris != nullptr ? m_mpris->activePlayer() : std::nullopt;
+  const bool show = m_showProgress && active && active->lengthUs > 0;
+  m_progress->setVisible(show);
+  m_elapsed->setVisible(show);
+  m_duration->setVisible(show);
+  if (!show)
+    return;
+  const auto position = std::clamp(m_mpris->positionActive().value_or(0), std::int64_t{0}, active->lengthUs);
+  m_progress->setProgress(static_cast<float>(position) / static_cast<float>(active->lengthUs));
+  m_elapsed->setText(formatClockTime(position / 1000000));
+  m_duration->setText(formatClockTime(active->lengthUs / 1000000));
+}
+
+void DesktopMediaPlayerWidget::layoutCard(Renderer& renderer) {
+  const auto card =
+      desktop_cards::resolve(m_cardSize, contentScale(), boxInnerWidth(), boxInnerHeight(), backgroundPadding());
+  const float scale = card.scale;
+  const bool large = card.size == desktop_cards::Size::Large;
+  const bool medium = card.size == desktop_cards::Size::Medium;
+  const float artSize =
+      large ? std::min(card.width * 0.65F, card.height - 180.0F * scale) : (medium ? 144.0F : 80.0F) * scale;
+  const float artX = large ? (card.width - artSize) * 0.5F : 0.0F;
+  const float artY = 28.0F * scale;
+  auto place = [&](Node* node, float x, float y) {
+    node->setPosition(Style::rtl() ? card.width - x - node->width() : x, y);
+  };
+  m_artPlaceholder->setSize(artSize, artSize);
+  m_artPlaceholder->setRadius(Style::scaledRadiusLg(scale));
+  m_artwork->setSize(artSize, artSize);
+  m_artwork->setRadius(Style::scaledRadiusLg(scale));
+  place(m_artPlaceholder, artX, artY);
+  place(m_artwork, artX, artY);
+  m_musicGlyph->setGlyphSize(artSize * 0.35F);
+  m_musicGlyph->layout(renderer);
+  place(
+      m_musicGlyph, artX + (artSize - m_musicGlyph->width()) * 0.5F, artY + (artSize - m_musicGlyph->height()) * 0.5F
+  );
+  m_musicGlyph->setVisible(!m_artwork->hasImage());
+  auto label = [&](Label* node, float x, float y, float width, float fontSize, int lines = 1) {
+    node->setFontSize(fontSize * scale);
+    node->setMinWidth(width);
+    node->setMaxWidth(width);
+    node->setMaxLines(lines);
+    node->setTextAlign(large ? TextAlign::Center : TextAlign::Start);
+    node->measure(renderer);
+    place(node, x, y);
+  };
+  label(m_sourceLabel, 0.0F, 0.0F, card.width, Style::fontSizeCaption);
+  const float textX = large ? 0.0F : artSize + 12.0F * scale;
+  const float textWidth = card.width - textX;
+  const float titleY = large ? artY + artSize + 12.0F * scale : 40.0F * scale;
+  label(
+      m_title, textX, titleY, textWidth, large || medium ? Style::fontSizeHeader : Style::fontSizeBody, large ? 1 : 2
+  );
+  label(m_artist, textX, large ? titleY + 28.0F * scale : 86.0F * scale, textWidth, Style::fontSizeCaption);
+  layoutButtons(renderer, scale);
+  const float controlsX = medium ? textX : (card.width - m_controls->width()) * 0.5F;
+  place(m_controls, controlsX, large ? card.height - 90.0F * scale : card.height - m_controls->height());
+  m_showProgress = large;
+  updateProgress();
+  m_progress->setSize(card.width, 3.0F * scale);
+  place(m_progress, 0.0F, card.height - 27.0F * scale);
+  label(m_elapsed, 0.0F, card.height - 20.0F * scale, card.width * 0.5F, Style::fontSizeMini);
+  label(m_duration, card.width * 0.5F, card.height - 20.0F * scale, card.width * 0.5F, Style::fontSizeMini);
+  m_elapsed->setTextAlign(TextAlign::Start);
+  m_duration->setTextAlign(TextAlign::End);
+  m_elapsed->measure(renderer);
+  m_duration->measure(renderer);
+  root()->setSize(card.width, card.height);
 }

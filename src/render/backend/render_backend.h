@@ -68,6 +68,7 @@ struct RenderImageDraw {
   float textureHeight = 0.0F;
   Mat3 transform = Mat3::identity();
   ImageScrim scrim{};
+  float saturation = 1.0F;
 };
 
 struct RenderGlyphDraw {
@@ -84,6 +85,7 @@ struct RenderGlyphDraw {
   Color tint = rgba(1.0F, 1.0F, 1.0F, 1.0F);
   bool tinted = false;
   Mat3 transform = Mat3::identity();
+  float saturation = 1.0F;
 };
 
 struct RenderScissor {

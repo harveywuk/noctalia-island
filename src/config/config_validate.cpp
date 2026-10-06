@@ -524,9 +524,9 @@ namespace noctalia::config {
       if (dw == nullptr) {
         return;
       }
-      static const std::unordered_set<std::string> kTopLevel = {
-          "enabled", "schema_version", "grid", "widget", "widget_order"
-      };
+      static const std::unordered_set<std::string> kTopLevel = {"enabled",        "always_full_color",
+                                                                "schema_version", "grid",
+                                                                "widget",         "widget_order"};
       for (const auto& [key, node] : *dw) {
         (void)node;
         if (!kTopLevel.contains(std::string(key.str()))) {

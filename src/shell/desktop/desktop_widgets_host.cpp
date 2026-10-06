@@ -176,6 +176,36 @@ void DesktopWidgetsHost::requestLayout() {
   }
 }
 
+void DesktopWidgetsHost::setWindowFocused(bool focused) {
+  if (m_windowFocused == focused)
+    return;
+  m_windowFocused = focused;
+  for (auto& instance : m_instances)
+    updateBlending(*instance);
+}
+
+void DesktopWidgetsHost::updateBlending(DesktopWidgetInstance& instance, bool animate) {
+  if (instance.surface == nullptr)
+    return;
+  const float target = m_windowFocused && !m_snapshot.alwaysFullColor && !instance.pointerInside ? 0.18F : 1.0F;
+  if (animate && instance.blendTarget == target)
+    return;
+  instance.blendTarget = target;
+  instance.animations.cancel(instance.blendAnimation);
+  auto apply = [ptr = &instance](float value) {
+    ptr->surface->renderTarget().setColorSaturation(value);
+    ptr->surface->requestRedraw();
+  };
+  if (!animate) {
+    apply(target);
+    return;
+  }
+  instance.blendAnimation = instance.animations.animate(
+      instance.surface->renderTarget().colorSaturation(), target, Style::animNormal, Easing::EaseOutCubic, apply
+  );
+  instance.surface->requestRedraw();
+}
+
 void DesktopWidgetsHost::requestRedraw() {
   for (auto& instance : m_instances) {
     if (instance->surface != nullptr) {
@@ -232,6 +262,7 @@ void DesktopWidgetsHost::syncInstances() {
       continue;
     }
 
+    updateBlending(*existing);
     if (!(existing->state == state)) {
       existing->state = state;
       if (existing->surface != nullptr) {
@@ -351,6 +382,7 @@ void DesktopWidgetsHost::createInstance(const DesktopWidgetState& state, const W
   // stable view before the temporary dies.
   instance->widget->rebindRenderer(instance->surface->renderTarget().renderer());
 
+  updateBlending(*instance, false);
   m_instances.push_back(std::move(instance));
 }
 
@@ -521,9 +553,13 @@ bool DesktopWidgetsHost::onPointerEvent(const PointerEvent& event) {
 
   switch (event.type) {
   case PointerEvent::Type::Enter:
+    target->pointerInside = true;
+    updateBlending(*target);
     target->inputDispatcher.pointerEnter(static_cast<float>(event.sx), static_cast<float>(event.sy), event.serial);
     break;
   case PointerEvent::Type::Leave:
+    target->pointerInside = false;
+    updateBlending(*target);
     target->inputDispatcher.pointerLeave();
     break;
   case PointerEvent::Type::Motion:

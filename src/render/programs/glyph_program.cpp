@@ -43,6 +43,7 @@ precision highp float;
 
 uniform sampler2D u_texture;
 uniform float u_opacity;
+uniform float u_saturation;
 uniform vec4 u_tint;        // straight (non-premul) rgba
 uniform float u_tint_mode;  // 0 = RGBA texture, 1 = alpha coverage + u_tint
 varying vec2 v_texcoord;
@@ -55,6 +56,7 @@ void main() {
     } else {
         gl_FragColor = vec4(c.rgb * u_opacity, c.a * u_opacity);
     }
+    gl_FragColor.rgb = mix(vec3(dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722))), gl_FragColor.rgb, u_saturation);
 }
 )";
 
@@ -71,6 +73,7 @@ void GlyphProgram::ensureInitialized() {
   m_surfaceSizeLocation = glGetUniformLocation(m_program.id(), "u_surface_size");
   m_rectLocation = glGetUniformLocation(m_program.id(), "u_size");
   m_opacityLocation = glGetUniformLocation(m_program.id(), "u_opacity");
+  m_saturationLocation = glGetUniformLocation(m_program.id(), "u_saturation");
   m_samplerLocation = glGetUniformLocation(m_program.id(), "u_texture");
   m_transformLocation = glGetUniformLocation(m_program.id(), "u_transform");
   m_tintLocation = glGetUniformLocation(m_program.id(), "u_tint");
@@ -96,6 +99,7 @@ void GlyphProgram::destroy() {
   m_surfaceSizeLocation = -1;
   m_rectLocation = -1;
   m_opacityLocation = -1;
+  m_saturationLocation = -1;
   m_samplerLocation = -1;
   m_transformLocation = -1;
   m_tintLocation = -1;
@@ -136,12 +140,13 @@ void GlyphProgram::bindCommon(
 
 void GlyphProgram::draw(
     TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0, float u1,
-    float v1, float opacity, const Mat3& transform
+    float v1, float opacity, const Mat3& transform, float saturation
 ) const {
   if (!m_program.isValid() || texture == 0 || width <= 0.0F || height <= 0.0F) {
     return;
   }
   glUseProgram(m_program.id());
+  glUniform1f(m_saturationLocation, saturation);
   glUniform1f(m_tintModeLocation, 0.0F);
   glUniform4f(m_tintLocation, 1.0F, 1.0F, 1.0F, 1.0F);
   bindCommon(texture, surfaceWidth, surfaceHeight, width, height, u0, v0, u1, v1, opacity, transform);
@@ -149,12 +154,13 @@ void GlyphProgram::draw(
 
 void GlyphProgram::drawTinted(
     TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0, float u1,
-    float v1, float opacity, const Color& tint, const Mat3& transform
+    float v1, float opacity, const Color& tint, const Mat3& transform, float saturation
 ) const {
   if (!m_program.isValid() || texture == 0 || width <= 0.0F || height <= 0.0F) {
     return;
   }
   glUseProgram(m_program.id());
+  glUniform1f(m_saturationLocation, saturation);
   glUniform1f(m_tintModeLocation, 1.0F);
   glUniform4f(m_tintLocation, tint.r, tint.g, tint.b, tint.a);
   bindCommon(texture, surfaceWidth, surfaceHeight, width, height, u0, v0, u1, v1, opacity, transform);

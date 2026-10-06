@@ -3,6 +3,7 @@
 #include "core/ui_phase.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
+#include "ui/style.h"
 
 #include <algorithm>
 #include <cmath>
@@ -49,7 +50,7 @@ void DesktopWidget::layout(Renderer& renderer) {
   // When the tile has an explicit box, scale the content to fill it (aspect-preserved) and
   // re-lay out so text/glyphs are rasterized crisp at the fitted scale. The fit tracks the widest
   // content seen (high-water mark) so dynamic text keeps a stable font instead of breathing.
-  if (m_boxWidth > 0.0F && m_boxHeight > 0.0F && m_contentRoot != nullptr) {
+  if (!usesCardLayout() && m_boxWidth > 0.0F && m_boxHeight > 0.0F && m_contentRoot != nullptr) {
     if (m_fitRefScale != m_baseScale) {
       m_maxNaturalWidth = 0.0F;
       m_maxNaturalHeight = 0.0F;
@@ -69,6 +70,9 @@ void DesktopWidget::layout(Renderer& renderer) {
 }
 
 float DesktopWidget::contentScaleForBox(float boxWidth, float boxHeight) const noexcept {
+  if (usesCardLayout()) {
+    return m_baseScale;
+  }
   if (boxWidth <= 0.0F || boxHeight <= 0.0F || m_maxNaturalWidth <= 0.0F || m_maxNaturalHeight <= 0.0F) {
     return m_contentScale;
   }
@@ -238,7 +242,11 @@ void DesktopWidget::applyBackground() {
     m_bgBox->setPosition(0.0F, 0.0F);
     m_bgBox->setSize(boxW, boxH);
     m_bgBox->setFill(m_bgColor);
-    m_bgBox->setRadius(std::round(m_bgRadius * m_baseScale));
+    m_bgBox->setRadius(backgroundRadius());
+    m_bgBox->setBorder(
+        colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+        usesCardLayout() && Style::cardBordersEnabled() ? Style::borderWidth * m_baseScale : 0.0F
+    );
   }
 
   Node* outerRoot = m_outerRoot ? m_outerRoot.get() : m_outerRootPtr;

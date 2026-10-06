@@ -27,7 +27,7 @@ public:
   // RGBA path: sample the texture as premultiplied RGBA, scale by opacity.
   void draw(
       TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0,
-      float u1, float v1, float opacity, const Mat3& transform = Mat3::identity()
+      float u1, float v1, float opacity, const Mat3& transform = Mat3::identity(), float saturation = 1.0F
   ) const;
 
   // Alpha-tint path: sample the texture's alpha channel as coverage, multiply
@@ -35,7 +35,8 @@ public:
   // it internally), scale by opacity.
   void drawTinted(
       TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0,
-      float u1, float v1, float opacity, const Color& tint, const Mat3& transform = Mat3::identity()
+      float u1, float v1, float opacity, const Color& tint, const Mat3& transform = Mat3::identity(),
+      float saturation = 1.0F
   ) const;
 
 private:
@@ -50,6 +51,7 @@ private:
   GLint m_surfaceSizeLocation = -1;
   GLint m_rectLocation = -1;
   GLint m_opacityLocation = -1;
+  GLint m_saturationLocation = -1;
   GLint m_samplerLocation = -1;
   GLint m_transformLocation = -1;
   GLint m_tintLocation = -1;

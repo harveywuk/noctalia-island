@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget.h"
 #include "ui/controls/calendar_view.h"
 
@@ -21,6 +22,7 @@ public:
   struct Options {
     bool showEvents = true;
     bool showWeekNumbers = false;
+    desktop_cards::Size cardSize = desktop_cards::Size::Classic;
   };
 
   DesktopCalendarWidget(ConfigService* config, CalendarService* calendar, Options options);
@@ -34,6 +36,8 @@ public:
 
 private:
   void doLayout(Renderer& renderer) override;
+  void layoutCard(Renderer& renderer);
+  [[nodiscard]] bool usesCardLayout() const noexcept override { return m_cardSize != desktop_cards::Size::Classic; }
   void doUpdate(Renderer& renderer) override;
   void onFontFamilyChanged(const std::string& family, Renderer& renderer) override;
   void changeMonthBy(int delta);
@@ -47,8 +51,16 @@ private:
   bool m_showEvents = true;
   bool m_showWeekNumbers = false;
   bool m_dirty = true;
+  desktop_cards::Size m_cardSize;
+  float m_cardGridWidth = 0.0F;
+  float m_cardDayHeight = 0.0F;
+  float m_cardScale = 1.0F;
 
   Flex* m_rootLayout = nullptr;
+  Flex* m_dateSummary = nullptr;
+  Label* m_weekdayLabel = nullptr;
+  Label* m_dayLabel = nullptr;
+  Label* m_dateMonthLabel = nullptr;
   InputArea* m_calendarArea = nullptr;
   Flex* m_calendarColumn = nullptr;
   Flex* m_header = nullptr;

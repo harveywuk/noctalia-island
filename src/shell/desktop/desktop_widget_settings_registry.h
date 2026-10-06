@@ -30,6 +30,9 @@ namespace desktop_settings {
     std::string label;
   };
 
+  [[nodiscard]] std::unordered_map<std::string, WidgetSettingValue>
+  newDesktopWidgetSettings(std::string_view type, std::string_view cardSize = {});
+
   [[nodiscard]] const std::vector<DesktopWidgetTypeSpec>& desktopWidgetTypeSpecs();
   [[nodiscard]] std::vector<DesktopWidgetTypeOption> desktopWidgetTypeOptions();
   [[nodiscard]] std::string desktopWidgetTypeLabel(std::string_view type);

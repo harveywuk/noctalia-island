@@ -6,6 +6,7 @@
 #include "render/scene/node.h"
 #include "shell/desktop/desktop_widget_factory.h"
 #include "shell/desktop/editor/desktop_widgets_editor_types.h"
+#include "ui/controls/scroll_view.h"
 #include "ui/controls/select_dropdown_popup.h"
 #include "ui/dialogs/layer_popup_host.h"
 #include "wayland/layer_surface.h"
@@ -116,6 +117,9 @@ private:
     std::array<Box*, 4> scaleHandleShadows{};
     std::array<InputArea*, 4> scaleAreas{};
     Box* lassoBox = nullptr;
+    std::unique_ptr<DesktopWidget> galleryPreview;
+    Box* snapGuideX = nullptr;
+    Box* snapGuideY = nullptr;
     Node* toolbar = nullptr;
     float toolbarX = 0.0F;
     float toolbarY = 0.0F;
@@ -167,7 +171,10 @@ private:
   // of re-laying out the dragged widget every pointer move. finishDrag() does the crisp re-fit.
   void applyScaleDragPreview(const DesktopWidgetState& state);
   void updateSelectionVisuals(OverlaySurface& surface);
-  void addWidget(const std::string& outputName, const std::string& type);
+  void addWidget(const std::string& outputName, const std::string& type, const std::string& cardSize = {});
+  void buildGallery(OverlaySurface& surface, Node& root);
+  void closeGallery();
+  void hideSnapGuides();
   void removeSelectedWidget();
   void toggleSelectedWidgetEnabled();
   void sendSelectedWidgetToBack();
@@ -224,7 +231,10 @@ private:
   RenderContext* m_renderContext = nullptr;
   SharedTextureCache* m_textureCache = nullptr;
   std::unique_ptr<DesktopWidgetFactory> m_factory;
-  std::string m_addWidgetType = "clock";
+  std::string m_galleryOutputName;
+  std::string m_galleryWidgetType = "weather";
+  std::string m_galleryCardSize = "small";
+  ScrollViewState m_galleryScroll;
   std::function<void()> m_exitRequestedCallback;
   DesktopWidgetsEditorSnapshot m_snapshot;
   std::vector<std::unique_ptr<OverlaySurface>> m_surfaces;

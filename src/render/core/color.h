@@ -154,3 +154,14 @@ void rgbToHsv(const Color& rgb, float& h, float& s, float& v);
 [[nodiscard]] bool tryParseCssColor(std::string_view text, Color& out);
 // Like tryParseCssColor(), but also accepts CSS named colors.
 [[nodiscard]] bool tryParseCssColorWithNamedColors(std::string_view text, Color& out);
+
+// Linear RGB mixing preserves the luminance and alpha of text, artwork, and translucent surfaces.
+inline Color withSaturation(Color color, float saturation) {
+  if (saturation >= 1.0F)
+    return color;
+  const float luminance = color.r * 0.2126F + color.g * 0.7152F + color.b * 0.0722F;
+  color.r = luminance + (color.r - luminance) * saturation;
+  color.g = luminance + (color.g - luminance) * saturation;
+  color.b = luminance + (color.b - luminance) * saturation;
+  return color;
+}

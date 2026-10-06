@@ -592,7 +592,7 @@ void GlesRenderBackend::drawImage(const RenderImageDraw& draw) {
   m_imageProgram.draw(
       draw.texture, draw.surfaceWidth, draw.surfaceHeight, draw.width, draw.height, draw.tint, draw.monochromeTint,
       draw.alphaMaskTint, draw.opacity, draw.radius, draw.borderColor, draw.borderWidth, static_cast<int>(draw.fitMode),
-      draw.textureWidth, draw.textureHeight, draw.transform, draw.scrim
+      draw.textureWidth, draw.textureHeight, draw.transform, draw.scrim, draw.saturation
   );
 }
 
@@ -605,14 +605,14 @@ void GlesRenderBackend::drawGlyph(const RenderGlyphDraw& draw) {
   if (draw.tinted) {
     m_glyphProgram.drawTinted(
         draw.texture, draw.surfaceWidth, draw.surfaceHeight, draw.width, draw.height, draw.u0, draw.v0, draw.u1,
-        draw.v1, draw.opacity, draw.tint, draw.transform
+        draw.v1, draw.opacity, draw.tint, draw.transform, draw.saturation
     );
     return;
   }
 
   m_glyphProgram.draw(
       draw.texture, draw.surfaceWidth, draw.surfaceHeight, draw.width, draw.height, draw.u0, draw.v0, draw.u1, draw.v1,
-      draw.opacity, draw.transform
+      draw.opacity, draw.transform, draw.saturation
   );
 }
 

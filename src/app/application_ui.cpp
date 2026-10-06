@@ -1089,6 +1089,9 @@ void Application::initWidgetControllersAndCallbacks() {
       .mpris = m_mprisService.get(),
       .httpClient = &m_httpClient,
       .sysmon = m_systemMonitor.get(),
+      .upower = m_upowerService.get(),
+      .bluetooth = m_bluetoothService.get(),
+      .screenTime = &m_screenTimeService,
       .scriptDeps = desktopWidgetScriptDeps,
   };
   const DesktopWidgetServices lockscreenWidgetServices{
@@ -1116,6 +1119,7 @@ void Application::initWidgetControllersAndCallbacks() {
       .widgets = desktopWidgetServices,
       .lockscreenWidgets = &m_lockscreenWidgetsController,
   });
+  m_desktopWidgetsController.setWindowFocused(m_compositorPlatform.activeToplevel().has_value());
   m_desktopWidgetsController.setOnEnterEditCallback([this]() { m_settingsWindow.closeForWidgetEditor(); });
   m_lockscreenWidgetsController.setOnEnterEditCallback([this]() { m_settingsWindow.closeForWidgetEditor(); });
   const auto restoreSettingsAfterWidgetEditor = [this]() {

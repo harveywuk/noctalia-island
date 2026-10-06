@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget.h"
 #include "ui/palette.h"
 
@@ -25,6 +26,8 @@ public:
     bool showCircle = true;
     bool centerText = true;
     std::string timezone;
+    desktop_cards::Size cardSize = desktop_cards::Size::Classic;
+    bool showSeconds = true;
   };
 
   explicit DesktopClockWidget(Options options);
@@ -37,6 +40,9 @@ public:
   ) override;
 
 private:
+  bool usesCardLayout() const noexcept override { return m_cardSize != desktop_cards::Size::Classic; }
+  void layoutCard(Renderer& renderer);
+  bool updateCardText();
   [[nodiscard]] std::string formatText() const;
   void doLayout(Renderer& renderer) override;
   void doUpdate(Renderer& renderer) override;
@@ -55,6 +61,10 @@ private:
   void updateAnalogHands();
   [[nodiscard]] static Style styleFromSetting(std::string_view value);
 
+  desktop_cards::Size m_cardSize;
+  bool m_showSeconds;
+  Label* m_zoneLabel = nullptr;
+  Label* m_dateLabel = nullptr;
   Style m_style;
   std::string m_format;
   ColorSpec m_color;
@@ -85,4 +95,5 @@ private:
   char m_widestDigit = '0';
   float m_metricsFontSize = -1.0F;
   std::string m_metricsFontFamily;
+  Signal<>::ScopedConnection m_paletteConn;
 };

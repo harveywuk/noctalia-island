@@ -3,6 +3,7 @@
 #include "config/config_types.h"
 #include "render/scene/node.h"
 #include "ui/palette.h"
+#include "ui/style.h"
 
 #include <cmath>
 #include <functional>
@@ -83,7 +84,9 @@ public:
   [[nodiscard]] bool hasBackground() const noexcept { return m_bgEnabled; }
   [[nodiscard]] bool hasVisibleBackground() const noexcept;
   [[nodiscard]] float backgroundRadius() const noexcept {
-    return m_bgEnabled ? std::round(m_bgRadius * m_baseScale) : 0.0F;
+    return m_bgEnabled
+        ? (usesCardLayout() ? Style::scaledRadius(m_bgRadius, m_baseScale) : std::round(m_bgRadius * m_baseScale))
+        : 0.0F;
   }
 
   virtual bool applySetting(
@@ -101,6 +104,10 @@ protected:
   }
 
   void requestLayout() {
+    // A model-only change during frame preparation must also invalidate the scene,
+    // so the surface schedules the follow-up layout even when no node changed yet.
+    if (m_contentRoot != nullptr)
+      m_contentRoot->markLayoutDirty();
     if (m_layoutCallback) {
       m_layoutCallback();
     }
@@ -120,6 +127,11 @@ protected:
 
   [[nodiscard]] float boxInnerWidth() const noexcept;
   [[nodiscard]] float boxInnerHeight() const noexcept;
+  [[nodiscard]] float backgroundPadding() const noexcept {
+    return m_bgEnabled ? std::round(m_bgPadding * m_baseScale) : 0.0F;
+  }
+  // Cards reflow into their tile and retain shell-sized text when resized.
+  [[nodiscard]] virtual bool usesCardLayout() const noexcept { return false; }
   // True while layout() runs, including the nested update() calls a doLayout may make (which open
   // their own Update phase scope). Subclasses use this to avoid re-arming a layout from within one.
   [[nodiscard]] bool isLayingOut() const noexcept { return m_inLayout; }

@@ -926,6 +926,7 @@ struct DesktopWidgetState {
 
 struct DesktopWidgetsConfig {
   bool enabled = true;
+  bool alwaysFullColor = false;
   std::int32_t schemaVersion = 2;
   DesktopWidgetsGridState grid;
   std::vector<DesktopWidgetState> widgets;

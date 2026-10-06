@@ -1016,7 +1016,7 @@ CairoTextRenderer::CacheEntry* CairoTextRenderer::lookupOrRasterize(
 void CairoTextRenderer::draw(
     float contentScale, float surfaceWidth, float surfaceHeight, float x, float baselineY, std::string_view text,
     float fontSize, const Color& color, const Mat3& transform, FontWeight fontWeight, float maxWidth, int maxLines,
-    TextAlign align, std::string_view fontFamily, TextEllipsize ellipsize, bool useMarkup
+    TextAlign align, std::string_view fontFamily, TextEllipsize ellipsize, bool useMarkup, float saturation
 ) {
   maybeSyncFontConfig();
   if (m_pangoContext == nullptr || m_backend == nullptr || text.empty()) {
@@ -1081,6 +1081,7 @@ void CairoTextRenderer::draw(
               .tint = color,
               .tinted = true,
               .transform = tileWorld,
+              .saturation = saturation,
           }
       );
     } else {
@@ -1095,6 +1096,7 @@ void CairoTextRenderer::draw(
               .height = tileH,
               .opacity = color.a,
               .transform = tileWorld,
+              .saturation = saturation,
           }
       );
     }

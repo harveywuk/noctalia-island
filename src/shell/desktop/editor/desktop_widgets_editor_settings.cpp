@@ -4,6 +4,7 @@
 #include "render/core/render_styles.h"
 #include "render/render_context.h"
 #include "render/scene/input_area.h"
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget_settings_registry.h"
 #include "shell/desktop/editor/desktop_widgets_editor.h"
 #include "shell/lockscreen/lockscreen_login_box.h"
@@ -910,6 +911,11 @@ void DesktopWidgetsEditor::applySettingChange(const std::string& key, WidgetSett
     const bool rebuildInspector =
         settingChangeAffectsInspectorVisibility(state->type, key) || key == "background" || collectionValue;
     state->settings[key] = value;
+    if (key == "card_size" && desktop_cards::supportsSizePresets(state->type)) {
+      // Choosing a preset restores its footprint after a free resize.
+      state->boxWidth = 0.0F;
+      state->boxHeight = 0.0F;
+    }
 
     if (lockscreen_login_box::isLoginBoxWidget(*state)
         && (key == lockscreen_login_box::kLayoutKey
@@ -954,8 +960,24 @@ void DesktopWidgetsEditor::applySettingChange(const std::string& key, WidgetSett
     m_renderContext->makeCurrent(surface->surface->renderTarget());
     Renderer& renderer = surface->surface->renderTarget().renderer();
 
+    const auto keepPresetOnOutput = [&]() {
+      if (key == "card_size") {
+        // A wider preset near a screen edge should remain reachable on this output.
+        const float width = static_cast<float>(surface->surface->width());
+        const float height = static_cast<float>(surface->surface->height());
+        state->cx = view.intrinsicWidth >= width
+            ? width * 0.5F
+            : std::clamp(state->cx, view.intrinsicWidth * 0.5F, width - view.intrinsicWidth * 0.5F);
+        state->cy = view.intrinsicHeight >= height
+            ? height * 0.5F
+            : std::clamp(state->cy, view.intrinsicHeight * 0.5F, height - view.intrinsicHeight * 0.5F);
+      }
+    };
+
     if (view.widget != nullptr && view.widget->applySetting(key, value, state->settings, renderer)) {
       applyViewState(view, *state, true);
+      keepPresetOnOutput();
+      applyViewState(view, *state, false);
       updateSelectionVisuals(*surface);
       if (rebuildInspector) {
         requestLayout();
@@ -980,9 +1002,7 @@ void DesktopWidgetsEditor::applySettingChange(const std::string& key, WidgetSett
     }
 
     newWidget->create();
-    if (state->type == "audio_visualizer" || state->type == "fancy_audio_visualizer" || state->type == "button") {
-      newWidget->setEditorPreview(true);
-    }
+    newWidget->setEditorPreview(true);
     newWidget->setAnimationManager(&surface->animations);
     auto* surfacePtr = surface;
     newWidget->setUpdateCallback([surfacePtr]() {
@@ -1017,6 +1037,7 @@ void DesktopWidgetsEditor::applySettingChange(const std::string& key, WidgetSett
     view.transformNode->addChild(std::move(widgetRoot));
     view.widget = std::move(newWidget);
 
+    keepPresetOnOutput();
     applyViewState(view, *state, false);
     if ((state->type == "audio_visualizer" || state->type == "fancy_audio_visualizer") && surface->surface != nullptr) {
       surface->surface->requestFrameTick();

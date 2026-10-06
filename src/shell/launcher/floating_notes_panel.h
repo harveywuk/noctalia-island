@@ -49,6 +49,8 @@ private:
   Flex* m_container = nullptr;
   Input* m_editor = nullptr;
   Label* m_status = nullptr;
+  Label* m_title = nullptr;
+  std::filesystem::path m_contextFile;
   std::string m_loaded;
   bool m_dirty = false;
   Timer m_saveTimer;

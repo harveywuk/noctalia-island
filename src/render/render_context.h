@@ -1,7 +1,7 @@
 #pragma once
 
-#include "render/core/renderer.h"
 #include "core/font_defaults.h"
+#include "render/core/renderer.h"
 #include "render/text/cairo_glyph_renderer.h"
 #include "render/text/cairo_text_renderer.h"
 
@@ -83,7 +83,7 @@ private:
   void renderNode(
       float renderScale, const Node* node, const Mat3& parentTransform, float parentOpacity, float sw, float sh,
       float bw, float bh, float clipLeft, float clipTop, float clipRight, float clipBottom, bool hasClip,
-      bool ignoreNodeOpacity, bool parentPaintContained
+      bool ignoreNodeOpacity, bool parentPaintContained, float saturation
   );
 
   std::unique_ptr<RenderBackend> m_backend;

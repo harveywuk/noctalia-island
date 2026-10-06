@@ -3,6 +3,7 @@
 #include "render/backend/render_backend.h"
 #include "render/render_context.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <stdexcept>
@@ -118,4 +119,8 @@ void RenderTarget::destroy() {
   m_bufferHeight = 0;
   m_logicalWidth = 0;
   m_logicalHeight = 0;
+}
+
+void RenderTarget::setColorSaturation(float saturation) noexcept {
+  m_colorSaturation = std::isfinite(saturation) ? std::clamp(saturation, 0.0F, 1.0F) : 1.0F;
 }

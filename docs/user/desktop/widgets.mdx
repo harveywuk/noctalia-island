@@ -32,9 +32,188 @@ flip_y   = false
 format = "{:%H:%M}"
 ```
 
-When enabled, Noctalia renders each desktop widget as its own tightly-sized layer-shell surface on the `Bottom` layer. The current implementation ships `button`, `calendar`, `clock`, `label`, `audio_visualizer`, `fancy_audio_visualizer`, `sticker`, `weather`, `media_player`, `volume`, and `sysmon` widget types plus an interactive edit mode.
+When enabled, Noctalia renders each desktop widget as its own tightly-sized layer-shell surface on the `Bottom` layer.
+Built-in cards cover the categories below. The gallery also includes `button`, `label`, `audio_visualizer`,
+`fancy_audio_visualizer`, `sticker`, `volume`, and `sysmon`, alongside installed desktop-widget plugins.
 
 ---
+
+## Widget cards
+
+All the card types below support **Small**, **Medium**, and **Large** cards in the widget inspector's
+**Card Size** picker. The proportions and information hierarchy take inspiration from
+[macOS desktop widgets](https://support.apple.com/guide/mac-help/add-and-customize-widgets-mchl52be5da5/mac).
+They use the shell's palette, font, accent, corner-radius scale, and card-border preference.
+
+| Size | Weather | Calendar |
+|------|---------|----------|
+| Small | Location, temperature, condition, and today's high/low | Weekday, date, and month |
+| Medium | Current conditions and the next three forecast days | Interactive month grid |
+| Large | Current conditions and up to six days with temperature-range bars | Month grid and the selected day's events |
+
+| Size | Clock | Now Playing |
+|------|-------|-------------|
+| Small | Analog or digital time, timezone, and date | Compact artwork, track details, and playback controls |
+| Medium | Clock beside timezone and date details | Larger artwork beside track details and controls |
+| Large | Prominent clock face with timezone and date | Artwork, track details, controls, and a playback timeline |
+
+New widgets added in the editor start with Small Weather and Clock cards, or Medium Calendar and Now Playing cards.
+New Clock cards use an analog face without a second hand; both choices can be changed in the inspector.
+Existing configurations keep the **Classic** layout until you select a card size.
+Small cards are 208 × 208 logical pixels, Medium 432 × 208, and Large 432 × 432 at the default shell scale.
+Dragging a resize handle reflows the content to fit the available space while retaining the shell's text size;
+selecting a size again restores its standard footprint. Positions, custom sizes, and card settings are saved
+through the existing editor, including separate layouts for each monitor.
+
+```toml
+[desktop_widgets.widget.weather_main.settings]
+card_size = "small"
+background_padding = 14
+background_radius = 16
+
+[desktop_widgets.widget.calendar_main.settings]
+card_size = "large"
+show_events = true
+```
+
+The accepted `card_size` values are `small`, `medium`, and `large`. Weather, Calendar, Clock, and Now Playing also
+accept `classic`, which remains their configuration default. Additional card types default to `medium` in config.
+Weather cards choose their forecast length from the available space; `show_forecast`, `forecast_days`, and text
+`shadow` apply to Classic. Calendar cards retain month navigation, date selection, event indicators, and the
+configured calendar sources. `show_events` controls the agenda in Large and Classic layouts.
+Weather and Calendar cards do not use continuous animation or a second timer. Clock cards tick once a minute
+unless you enable the second hand or use seconds in a digital format. Now Playing updates its timeline once a
+second during playback and stays idle when paused. Cards reuse the shell's MPRIS player selection and capabilities;
+controls are disabled when the active player cannot perform an action. A missing cover has a themed placeholder.
+The Now Playing configuration type remains `media_player`; `layout` and text `shadow` apply to its Classic layout.
+
+## Built-in widget coverage
+
+These are Linux equivalents of Apple's built-in widget categories, using Noctalia's design and existing services.
+The reference is Apple's [desktop widget guide](https://support.apple.com/guide/mac-help/add-and-customize-widgets-mchl52be5da5/mac)
+and [widget design guidance](https://developer.apple.com/design/human-interface-guidelines/widgets).
+Category coverage does not imply every Apple widget variant or access to Apple's private services. iPhone widgets,
+third-party WidgetKit extensions, Apple subscription libraries, and automatic iCloud synchronisation are outside
+this implementation. These cards are built into the shell; they require no separate plugin installation.
+
+| Category | Config type | Data and interaction |
+|----------|-------------|----------------------|
+| Weather | `weather` | Shell weather service, current conditions and forecast |
+| Calendar | `calendar` | Shell calendar accounts, dates and agenda |
+| Clock | `clock` | Analog or digital clock with an IANA timezone; add multiple cards for world clocks |
+| Now Playing | `media_player` | Active MPRIS player, artwork and supported transport controls |
+| Batteries | `batteries` | UPower system/peripheral batteries and connected Bluetooth batteries |
+| Screen Time | `screen_time` | Today's tracked application usage and hourly activity; requires Screen Time enabled in Settings |
+| Photos | `photos` | A local image or folder slideshow with previous/next and open actions |
+| Notes | `notes` | Shell quick notes or a chosen Markdown file; edit with Floating Notes |
+| Reminders | `reminders` | Configured task list with persistent completion checkboxes |
+| Shortcuts | `shortcuts` | Named commands that run when clicked |
+| Contacts | `contacts` | Configured email/telephone links opened by the system's URI handler |
+| Safari Reading List | `reading_list` | Configured web links opened in the default browser |
+| Journal | `journal` | Local dated Markdown entries, written in the floating editor |
+| Tips | `tips` | Shell usage tips linking to Noctalia documentation |
+| News | `news` | RSS or Atom headlines from a configured feed; click to open an article |
+| Podcasts | `podcasts` | RSS or Atom episodes; click to open the audio enclosure URL, falling back to the episode page |
+| Stocks | `stocks` | Alpha Vantage quotes for up to three symbols, including change and latest trading date |
+| Home | `home` | Selected Home Assistant entity states; click lights, switches or input booleans to toggle |
+| Find My | `find_my` | Home Assistant people/device trackers; valid reported coordinates open an OpenStreetMap link |
+| TV | `video_library` | Local video folder opened in your default player; no Apple TV streaming library |
+
+Collection cards show more rows at larger sizes and page through longer lists. Empty cards explain their setup.
+The inspector exposes each card's source settings. Service cards make no requests before a source is configured.
+Cards use the shell's background, border, typography, scaling and desktop blending preferences.
+
+### Local sources
+
+`photos` accepts `image_path` or `folder_path`; a specific image takes precedence. `interval_minutes` controls
+slideshow rotation (default 5). Albums contain up to 500 supported images; a scan examines at most 4096 entries.
+`video_library` uses `folder_path` and lists up to 128 MP4, MKV, WebM, MOV or AVI files. Folder scans refresh at most
+once a minute. Neither card recurses into subdirectories.
+
+`notes` uses the same file as Floating Notes unless `file_path` is set. The card lists Markdown bullet entries such
+as `- [2026-10-05 12:00] Your note`, newest first, or non-empty text lines when there are no bullet entries.
+`journal` uses `$XDG_DATA_HOME/noctalia/Journal.md` (or the
+`NOCTALIA_DATA_HOME` override), unless a file is specified. Its edit button starts a dated entry in Floating Notes;
+the file is written after you type. Notes and Journal read files up to 1 MiB and display up to 128 entries.
+
+Reminders are local tasks, separate from calendar-account reminders. Completion is stored in the shell's state
+store by `list_name` and task text; cards with the same list name share completion state. Renaming a task makes it
+a new task. Editing tasks is done in the widget inspector's Items list. Example settings:
+
+```toml
+[desktop_widgets.widget.tasks]
+type = "reminders"
+output = "DP-1"
+cx = 240.0
+cy = 240.0
+
+[desktop_widgets.widget.tasks.settings]
+card_size = "medium"
+list_name = "Today"
+items = ["Review changes", "Take a break"]
+```
+
+Shortcuts, Contacts and Reading List each use an `entries` table mapping a displayed name to an action:
+
+```toml
+[desktop_widgets.widget.actions.settings.entries]
+Terminal = "alacritty"
+
+[desktop_widgets.widget.people.settings.entries]
+Alex = "mailto:alex@example.com"
+
+[desktop_widgets.widget.reading.settings.entries]
+Documentation = "https://docs.noctalia.dev/"
+```
+
+These tables belong to widgets with types `shortcuts`, `contacts` and `reading_list`, respectively. Shortcuts run
+commands through the shell only on activation. Contacts accept `mailto:` and `tel:` links; Reading List accepts
+HTTP(S) URLs. Their editor and gallery previews do not execute actions.
+
+### Connected sources
+
+News and Podcasts need a `feed_url`. `refresh_minutes` defaults to 15. They support RSS 2.0 and Atom, up to 128
+entries and 2 MiB per response. Podcasts opens the feed's audio link with the system URL handler; playback and
+subscription management depend on the chosen handler. It does not synchronise an Apple Podcasts library.
+
+Home and Devices & People need a `server_url`, `token_file` containing a Home Assistant long-lived access token,
+and an `entities` list. They use the documented [Home Assistant REST API](https://developers.home-assistant.io/docs/api/rest/).
+Credentials remain in your chosen file. Authenticated requests do not follow redirects. Example Home settings:
+
+```toml
+[desktop_widgets.widget.home.settings]
+card_size = "medium"
+server_url = "https://home.example.com"
+token_file = "~/.config/noctalia/home-token"
+entities = ["light.desk", "switch.lamp", "sensor.room_temperature"]
+refresh_minutes = 1
+```
+
+Home can toggle `light.*`, `switch.*`, and `input_boolean.*` entities. Other states are read-only; unavailable or
+unknown entities have disabled controls. `find_my` accepts `person.*` and `device_tracker.*`, displaying the source's
+state and timestamp. It does not connect to Apple's Find My network, HomeKit or AirTags.
+
+Stocks uses a `token_file` containing an Alpha Vantage API key and a `symbols` list, limited to the first three.
+It calls the provider's [Global Quote endpoint](https://www.alphavantage.co/documentation/#latestprice).
+The default `refresh_minutes = 360` limits request volume; provider quotas, market coverage and quote delays depend
+on your account. The card shows the returned trading date and does not imply real-time quotes. Network failures
+show an error status, retaining previous data where available. Live provider credentials are needed for real quotes.
+
+## Desktop blending
+
+By default, desktop widgets soften their colours when an application has focus. Text, artwork, and accents lose
+saturation without reducing their opacity. Hovering over a widget restores full colour for interaction, and
+returning to the desktop restores all widgets. The editor and gallery always show full colour.
+
+Choose **Settings → Desktop → Always Full Colour** to disable blending, or configure:
+
+```toml
+[desktop_widgets]
+always_full_color = true
+```
+
+Blending uses the compositor's focus events and has no polling timer. Compositors that do not report an active
+window keep widgets in full colour. Transitions follow the shell's animation speed and reduced-motion setting.
 
 ## Edit mode
 
@@ -50,6 +229,18 @@ You can also turn edit mode on from **Settings → Desktop → Toggle Editor**. 
 
 Widget previews are non-interactive in edit mode. Clicking anywhere within a widget selects or moves it instead of activating its buttons or other controls; normal widget interaction resumes after you exit the editor.
 
+### Widget gallery
+
+Choose **Add Widgets** in the editor toolbar to browse built-in widgets and installed desktop-widget plugins.
+Select a widget to see its preview. Card widgets offer **Small**, **Medium**, and **Large** buttons so you
+can compare layouts before choosing **Add Widget**. Previews use your current theme and available service data.
+Stickers open an image picker when added.
+
+The editor places additions in available space on the monitor where you opened the gallery, leaving at least a
+16-pixel gap at the default shell scale. If that monitor is full, the new widget starts in its center so you can
+move it yourself. Existing widgets stay in place. Close the gallery with its close button, a click outside it,
+or `Escape`; the editor remains open.
+
 ### Controls
 
 | Action | Effect |
@@ -62,18 +253,20 @@ Widget previews are non-interactive in edit mode. Clicking anywhere within a wid
 | Drag corner handles | Resize (scales the whole multi-selection about the resize anchor) |
 | Drag toolbar handle | Reposition the editor toolbar on that output |
 | `G` | Toggle snap grid |
-| `Shift` + drag | Temporarily disable snapping |
+| `Shift` + drag | Temporarily reverse the grid snapping toggle |
 | `Delete` / `Backspace` | Remove selected widgets |
 | `Ctrl`+`C` / `Ctrl`+`V` | Copy / paste selection |
 | Settings inspector → **Reset to Defaults** | Restore all settings for the selected widget to built-in defaults |
 | `Escape` / click `Done` | Exit edit mode |
 
-When the snap grid is active, moving a widget snaps the nearest outer edge or center line to the grid, screen edges, and
-nearby widgets. Resizing keeps the opposite edge anchored and snaps the dragged edge to the same guides, with a horizontal
-bias for corner drags so matching widget widths is easier.
+When snapping is active, moving a widget aligns its edges or center with nearby widgets and the monitor.
+Adjacent widgets snap to a consistent gap of 16 logical pixels at the default shell scale. Nearby alignment and
+spacing targets take priority over the background grid, and bright accent guides show the active alignment while
+you drag. A multi-selection snaps as a group. Resizing keeps the opposite corner anchored and snaps the box size
+to grid increments.
 
-Primary-colored center guides are always shown in edit mode. Dragging a widget snaps its center to the monitor center
-when nearby, even if the snap grid is hidden or temporarily disabled with `Shift`.
+Faint monitor-center guides remain visible in edit mode. Holding `Shift` with the grid enabled lets you position
+widgets freely, including across the monitor center. With the grid hidden, holding `Shift` temporarily enables snapping.
 
 ---
 
@@ -191,9 +384,11 @@ circle = true
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
+| `card_size` | string | `"classic"` | `"small"`, `"medium"`, or `"large"` select responsive cards; Classic preserves the original layout. |
+| `show_seconds` | bool | `true` | Show the analog second hand. New Clock cards set this to `false`. |
 | `clock_style` | string | `"digital"` | `"digital"` renders a formatted text clock; `"analog"` renders a circular clock with hour, minute, and second hands. |
-| `format` | string | `"{:%H:%M}"` | Digital clock format string. Ignored when `clock_style = "analog"`. Supports the same syntax and tokens as the bar clock `format`; see [Date format tokens](/noctalia/configuration/date-format-tokens/). |
-| `center_text` | bool | `false` | Digital only. Center-aligns the formatted time inside the clock box. When `false`, the clock keeps the leading edge stable as digits change width. |
+| `format` | string | `"{:%H:%M}"` | Digital clock format string, also used for the time beside a Medium analog card. Supports the same syntax and tokens as the bar clock `format`; see [Date format tokens](/noctalia/configuration/date-format-tokens/). |
+| `center_text` | bool | `false` | Classic digital only. Center-aligns the formatted time inside the clock box. When `false`, the clock keeps the leading edge stable as digits change width. |
 | `circle` | bool | `true` | Analog only. Shows the outer ring and minute tick marks around the dial. When disabled, only the hands are drawn. |
 | `timezone` | string | `""` | Optional timezone identifier (e.g. `Europe/Berlin`, `UTC`) to use for this clock. If empty, uses the system's local time. |
 

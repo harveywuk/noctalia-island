@@ -33,4 +33,5 @@ private:
   HttpClient* m_httpClient = nullptr;
   SystemMonitorService* m_sysmon = nullptr;
   DesktopWidgetScriptDeps m_scriptDeps;
+  DesktopWidgetRuntimeServices m_services;
 };

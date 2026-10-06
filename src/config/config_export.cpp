@@ -322,9 +322,11 @@ namespace config_export {
     }
 
     toml::table desktopWidgetsTable(const DesktopWidgetsConfig& desktopWidgets) {
-      return widgetsPlacementTable(
+      auto table = widgetsPlacementTable(
           desktopWidgets.enabled, desktopWidgets.schemaVersion, desktopWidgets.grid, desktopWidgets.widgets
       );
+      table.insert_or_assign("always_full_color", desktopWidgets.alwaysFullColor);
+      return table;
     }
 
   } // namespace

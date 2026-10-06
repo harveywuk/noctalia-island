@@ -1116,6 +1116,14 @@ blend = false
 
 int main() {
   checkIdleActionResolution();
+  for (const bool fullColor : {false, true}) {
+    Config probe;
+    probe.desktopWidgets.alwaysFullColor = fullColor;
+    const auto exported = config_export::serialize(probe);
+    if (exported["desktop_widgets"]["always_full_color"].value<bool>() != fullColor) {
+      fail("desktop widgets: full colour preference was lost during export");
+    }
+  }
   // Captured from the pre-refactor config_export::serialize for the fully-specified probe
   // bar. Pins byte-identical bar serialization across the schema migration: the
   // resolve-and-flatten monitor write and the conditional/optional fields must

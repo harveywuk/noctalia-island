@@ -1,5 +1,6 @@
 #include "shell/desktop/widgets/desktop_clock_widget.h"
 
+#include "i18n/i18n.h"
 #include "render/core/color.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
@@ -207,9 +208,10 @@ DesktopClockWidget::Style DesktopClockWidget::styleFromSetting(std::string_view 
 }
 
 DesktopClockWidget::DesktopClockWidget(Options options)
-    : m_style(options.style), m_format(std::move(options.format)), m_color(options.color), m_shadow(options.shadow),
+    : m_cardSize(options.cardSize), m_showSeconds(options.showSeconds), m_style(options.style),
+      m_format(std::move(options.format)), m_color(options.color), m_shadow(options.shadow),
       m_showCircle(options.showCircle), m_timezone(std::move(options.timezone)), m_centerText(options.centerText),
-      m_showsSeconds(m_style == Style::Analog || formatShowsSeconds(m_format)) {}
+      m_showsSeconds((m_style == Style::Analog ? m_showSeconds : formatShowsSeconds(m_format))) {}
 
 void DesktopClockWidget::create() {
   auto rootNode = ui::node({});
@@ -272,6 +274,13 @@ void DesktopClockWidget::create() {
   m_analogRoot->addChild(std::move(hub));
 
   rootNode->addChild(std::move(analogRoot));
+  rootNode->addChild(
+      ui::label({.out = &m_zoneLabel, .color = colorSpecFromRole(ColorRole::OnSurfaceVariant), .maxLines = 1})
+  );
+  rootNode->addChild(ui::label({.out = &m_dateLabel, .color = m_color, .maxLines = 1}));
+  m_zoneLabel->setVisible(usesCardLayout());
+  m_dateLabel->setVisible(usesCardLayout());
+  m_secondPivot->setVisible(m_showSeconds);
   setRoot(std::move(rootNode));
   syncDigitalTextAlign();
   syncStyleVisibility();
@@ -279,6 +288,10 @@ void DesktopClockWidget::create() {
   applyShadow();
   syncAnalogColors();
   updateAnalogHands();
+  m_paletteConn = paletteChanged().connect([this]() {
+    syncAnalogColors();
+    requestRedraw();
+  });
 }
 
 bool DesktopClockWidget::wantsSecondTicks() const { return m_showsSeconds; }
@@ -342,6 +355,11 @@ void DesktopClockWidget::syncAnalogColors() {
   applyHandColor(m_hourPivot, handColor);
   applyHandColor(m_minutePivot, handColor);
   applyHandColor(m_secondPivot, secondColor);
+  if (m_hub != nullptr) {
+    auto style = m_hub->style();
+    style.fill = handColor;
+    m_hub->setStyle(style);
+  }
 
   if (m_ticksRoot != nullptr && m_showCircle) {
     layoutAnalogTicks(*m_ticksRoot, metrics, handColor);
@@ -374,7 +392,7 @@ void DesktopClockWidget::layoutAnalog(Renderer& /*renderer*/, float size) {
   const float hourWidth = std::max(2.2F, 2.65F * scale);
   const float minuteWidth = std::max(1.75F, 2.0F * scale);
   const float secondWidth = std::max(1.0F, 1.25F * scale);
-  const auto resizeHand = [](Node* pivot, float width, float length) {
+  const auto resizeHand = [](Node* pivot, float width, float length, const Color& color) {
     if (pivot == nullptr || pivot->children().empty()) {
       return;
     }
@@ -382,12 +400,16 @@ void DesktopClockWidget::layoutAnalog(Renderer& /*renderer*/, float size) {
     hand->setSize(width, length);
     hand->setPosition(-width * 0.5F, -length);
     RoundedRectStyle style = hand->style();
+    style.fill = color;
     style.radius = width * 0.5F;
     hand->setStyle(style);
   };
-  resizeHand(m_hourPivot, hourWidth, metrics.dialRadius * kHourHandReach);
-  resizeHand(m_minutePivot, minuteWidth, metrics.dialRadius * kMinuteHandReach);
-  resizeHand(m_secondPivot, secondWidth, metrics.dialRadius * kSecondHandReach);
+  resizeHand(m_hourPivot, hourWidth, metrics.dialRadius * kHourHandReach, handColor);
+  resizeHand(m_minutePivot, minuteWidth, metrics.dialRadius * kMinuteHandReach, handColor);
+  resizeHand(
+      m_secondPivot, secondWidth, metrics.dialRadius * kSecondHandReach,
+      Color(handColor.r, handColor.g, handColor.b, handColor.a * 0.72F)
+  );
 
   if (m_hub != nullptr) {
     const float hubSize = std::max(4.0F, 5.0F * scale);
@@ -459,10 +481,20 @@ bool DesktopClockWidget::applySetting(
     const std::string& key, const WidgetSettingValue& value,
     const std::unordered_map<std::string, WidgetSettingValue>& allSettings, Renderer& renderer
 ) {
+  if (key == "show_seconds") {
+    if (const auto* v = std::get_if<bool>(&value)) {
+      m_showSeconds = *v;
+      m_showsSeconds = m_style == Style::Analog ? m_showSeconds : formatShowsSeconds(m_format);
+      m_secondPivot->setVisible(m_showSeconds);
+      requestLayout();
+      return true;
+    }
+    return false;
+  }
   if (key == "clock_style") {
     if (const auto* v = std::get_if<std::string>(&value)) {
       m_style = styleFromSetting(*v);
-      m_showsSeconds = m_style == Style::Analog || formatShowsSeconds(m_format);
+      m_showsSeconds = (m_style == Style::Analog ? m_showSeconds : formatShowsSeconds(m_format));
       syncStyleVisibility();
       syncCircleVisibility();
       requestLayout();
@@ -485,7 +517,7 @@ bool DesktopClockWidget::applySetting(
   if (key == "format") {
     if (const auto* v = std::get_if<std::string>(&value)) {
       m_format = *v;
-      m_showsSeconds = m_style == Style::Analog || formatShowsSeconds(m_format);
+      m_showsSeconds = (m_style == Style::Analog ? m_showSeconds : formatShowsSeconds(m_format));
       m_lastText.clear();
       requestUpdate();
       return true;
@@ -498,6 +530,8 @@ bool DesktopClockWidget::applySetting(
       if (m_label != nullptr) {
         m_label->setColor(m_color);
       }
+      if (m_dateLabel != nullptr)
+        m_dateLabel->setColor(m_color);
       syncAnalogColors();
       requestRedraw();
       return true;
@@ -538,6 +572,10 @@ bool DesktopClockWidget::applySetting(
 }
 
 void DesktopClockWidget::onFontFamilyChanged(const std::string& family, Renderer& /*renderer*/) {
+  if (m_zoneLabel != nullptr)
+    m_zoneLabel->setFontFamily(family);
+  if (m_dateLabel != nullptr)
+    m_dateLabel->setFontFamily(family);
   if (m_label != nullptr) {
     m_label->setFontFamily(family);
   }
@@ -545,6 +583,11 @@ void DesktopClockWidget::onFontFamilyChanged(const std::string& family, Renderer
 
 void DesktopClockWidget::doLayout(Renderer& renderer) {
   if (root() == nullptr) {
+    return;
+  }
+
+  if (usesCardLayout()) {
+    layoutCard(renderer);
     return;
   }
 
@@ -614,6 +657,12 @@ void DesktopClockWidget::updateStableDigitalWidth(Renderer& renderer, const std:
 }
 
 void DesktopClockWidget::doUpdate(Renderer& renderer) {
+  if (usesCardLayout()) {
+    updateAnalogHands();
+    if (updateCardText() && !isLayingOut())
+      requestLayout();
+    return;
+  }
   if (m_style == Style::Analog) {
     updateAnalogHands();
     return;
@@ -639,10 +688,83 @@ void DesktopClockWidget::applyShadow() {
   if (m_label == nullptr) {
     return;
   }
-  if (m_shadow) {
+  if (m_shadow && !usesCardLayout()) {
     const float offset = kShadowOffset * contentScale();
     m_label->setShadow(colorSpecFromRole(ColorRole::Shadow, kShadowAlpha), offset, offset);
   } else {
     m_label->clearShadow();
   }
+}
+
+bool DesktopClockWidget::updateCardText() {
+  if (m_zoneLabel == nullptr || m_dateLabel == nullptr || m_label == nullptr)
+    return false;
+  const std::string time = formatText();
+  const std::string date = formatTimezoneTime("{:%a, %e %b}", m_timezone);
+  std::string zone = m_timezone.empty() ? i18n::tr("desktop-widgets.clock.local-time") : m_timezone;
+  if (const auto slash = zone.find_last_of('/'); slash != std::string::npos)
+    zone.erase(0, slash + 1);
+  std::replace(zone.begin(), zone.end(), '_', ' ');
+  const bool changed = time != m_lastText || date != m_dateLabel->text() || zone != m_zoneLabel->text();
+  m_lastText = time;
+  m_label->setText(time);
+  m_dateLabel->setText(date);
+  m_zoneLabel->setText(zone);
+  return changed;
+}
+
+void DesktopClockWidget::layoutCard(Renderer& renderer) {
+  const auto card =
+      desktop_cards::resolve(m_cardSize, contentScale(), boxInnerWidth(), boxInnerHeight(), backgroundPadding());
+  const float scale = card.scale;
+  const bool medium = card.size == desktop_cards::Size::Medium;
+  const bool large = card.size == desktop_cards::Size::Large;
+  const bool analog = m_style == Style::Analog;
+  updateCardText();
+  m_analogRoot->setVisible(analog);
+  m_digitalRoot->setVisible(!analog || medium);
+  m_secondPivot->setVisible(m_showSeconds);
+  m_label->clearShadow();
+  m_label->setFontWeight(FontWeight::Normal);
+  m_label->setMaxLines(1);
+  auto placeText = [&](Label* label, float x, float y, float width, float fontSize, TextAlign align) {
+    label->setFontSize(fontSize * scale);
+    label->setMinWidth(width);
+    label->setMaxWidth(width);
+    label->setTextAlign(align);
+    label->measure(renderer);
+    label->setPosition(::Style::rtl() ? card.width - x - width : x, y);
+  };
+  const float detailX = medium ? card.width * 0.5F + 12.0F * scale : 0.0F;
+  const float detailWidth = card.width - detailX;
+  placeText(
+      m_zoneLabel, detailX, medium ? 20.0F * scale : 0.0F, detailWidth, ::Style::fontSizeCaption,
+      medium ? TextAlign::Start : TextAlign::Center
+  );
+  placeText(
+      m_dateLabel, detailX, medium ? 122.0F * scale : card.height - 22.0F * scale, detailWidth, ::Style::fontSizeBody,
+      medium ? TextAlign::Start : TextAlign::Center
+  );
+  if (analog) {
+    const float size = medium ? std::min(card.height, card.width * 0.5F - 12.0F * scale)
+                              : std::min(card.width, card.height - 54.0F * scale);
+    layoutAnalog(renderer, size);
+    const float x = medium ? 0.0F : (card.width - size) * 0.5F;
+    m_analogRoot->setPosition(
+        ::Style::rtl() ? card.width - x - size : x, medium ? (card.height - size) * 0.5F : 25.0F * scale
+    );
+    updateAnalogHands();
+  }
+  if (!analog || medium) {
+    const float textX = medium && analog ? detailX : 0.0F;
+    const float textWidth = medium ? (analog ? detailWidth : card.width * 0.5F) : card.width;
+    const float fontSize = analog ? 32.0F : (large ? 80.0F : 44.0F);
+    placeText(m_label, textX, 0.0F, textWidth, fontSize, TextAlign::Center);
+    m_label->setPosition(0.0F, 0.0F);
+    m_digitalRoot->setSize(textWidth, m_label->height());
+    m_digitalRoot->setPosition(
+        ::Style::rtl() ? card.width - textX - textWidth : textX, (card.height - m_label->height()) * 0.5F
+    );
+  }
+  root()->setSize(card.width, card.height);
 }

@@ -2050,6 +2050,11 @@ namespace settings {
         ToggleSetting{cfg.desktopWidgets.enabled}, "desktop"
     ));
     entries.push_back(makeEntry(
+        SettingsSection::Desktop, "widgets", tr("settings.schema.desktop.always-full-color.label"),
+        tr("settings.schema.desktop.always-full-color.description"), {"desktop_widgets", "always_full_color"},
+        ToggleSetting{cfg.desktopWidgets.alwaysFullColor}, "desktop widgets blending saturation colour focus"
+    ));
+    entries.push_back(makeEntry(
         SettingsSection::Desktop, "screen-corners", tr("settings.schema.desktop.screen-corners-enabled.label"),
         tr("settings.schema.desktop.screen-corners-enabled.description"), {"shell", "screen_corners", "enabled"},
         ToggleSetting{cfg.shell.screenCorners.enabled}, "screen corners rounded"

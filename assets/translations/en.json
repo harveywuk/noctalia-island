@@ -642,6 +642,9 @@
     }
   },
   "desktop-widgets": {
+    "clock": {
+      "local-time": "Local Time"
+    },
     "editor": {
       "actions": {
         "add": "Add",
@@ -655,6 +658,13 @@
         "stack-back": "Stack Behind",
         "stack-front": "Stack In Front",
         "trash": "Delete"
+      },
+      "gallery": {
+        "title": "Add Widgets",
+        "close": "Close Gallery",
+        "add": "Add Widget",
+        "choose-image": "Choose an image when you add this widget.",
+        "customize-hint": "Move, resize, and customize your widget after adding it."
       },
       "dialogs": {
         "select-sticker-image": "Select Sticker Image"
@@ -670,6 +680,12 @@
         "bands": "Bands",
         "bar-width": "Bar Width",
         "bloom-intensity": "Bloom",
+        "card-size": "Card Size",
+        "card-size-classic": "Classic",
+        "card-size-small": "Small",
+        "card-size-medium": "Medium",
+        "card-size-large": "Large",
+        "card-size-description": "Choose a card size, or keep the classic layout. Cards adapt their content when resized.",
         "center-password-text": "Center Password Text",
         "center-text": "Center Text",
         "centered": "Centered",
@@ -728,6 +744,7 @@
         "shadow": "Shadow",
         "show-caps-lock": "Caps Lock Warning",
         "show-device": "Show Device",
+        "show-seconds": "Show Seconds",
         "show-events": "Show Events",
         "show-forecast": "Show Forecast",
         "show-keyboard-layout": "Keyboard Layout",
@@ -773,7 +790,30 @@
         "visualization-mode-wave": "Wave",
         "visualization-mode-wave-rings": "Wave + Rings",
         "wave-thickness": "Wave Thickness",
-        "widget-section": "Widget"
+        "widget-section": "Widget",
+        "file-path": "File",
+        "folder-path": "Folder",
+        "interval-minutes": "Change Photo Every (minutes)",
+        "list-name": "List Name",
+        "items": "Items",
+        "entries": "Items",
+        "notes-file-description": "A Noctalia notes file with lines such as - [2026-10-05 12:00] Your note. Notes uses Floating Notes by default.",
+        "contacts-description": "Use a contact name as the label and mailto:address@example.com or tel:+123 as the value.",
+        "shortcuts-description": "Use an action name as the label and a shell command as the value. Commands run only when clicked.",
+        "reading-list-description": "Use a page title as the label and an https:// or http:// address as the value.",
+        "feed-url": "Feed URL",
+        "feed-url-description": "RSS or Atom feed. News opens article links; Podcasts opens episode audio links.",
+        "server-url": "Home Assistant URL",
+        "server-url-description": "Your own Home Assistant server, such as http://homeassistant.local:8123.",
+        "token-file": "Access Token File",
+        "entities": "Entities",
+        "home-entities-description": "Home Assistant entity IDs. Lights, switches and input booleans can be toggled; other entities show their state.",
+        "location-entities-description": "Home Assistant person.* or device_tracker.* entities. Click a located item to open its map.",
+        "refresh-minutes": "Refresh Every (minutes)",
+        "stock-token-description": "A file containing your Alpha Vantage API key. Quotes show their latest trading date.",
+        "symbols": "Symbols",
+        "symbols-description": "Up to three Alpha Vantage symbols. The default six-hour interval limits provider requests.",
+        "journal-file-description": "Optional Markdown journal file. Leave blank to use the shell’s local Journal.md file."
       },
       "state": {
         "grid": "Grid"
@@ -788,14 +828,32 @@
         "fancy-audio-visualizer": "Fancy Audio Visualizer",
         "label": "Label",
         "login-box": "Login Box",
-        "media-player": "Media Player",
+        "media-player": "Now Playing",
         "sticker": "Sticker",
         "system-monitor": "System Monitor",
         "volume": "Volume",
-        "weather": "Weather"
+        "weather": "Weather",
+        "batteries": "Batteries",
+        "screen-time": "Screen Time",
+        "notes": "Notes",
+        "reminders": "Reminders",
+        "shortcuts": "Shortcuts",
+        "contacts": "Contacts",
+        "reading-list": "Reading List",
+        "journal": "Journal",
+        "tips": "Tips",
+        "photos": "Photos",
+        "news": "News",
+        "podcasts": "Podcasts",
+        "stocks": "Stocks",
+        "home": "Home",
+        "find-my": "Devices & People",
+        "video-library": "TV & Videos"
       }
     },
     "media": {
+      "now-playing": "Now Playing",
+      "start-playback": "Start playback in a media app",
       "nothing-playing": "Nothing Playing"
     },
     "volume": {
@@ -804,10 +862,43 @@
       "volume": "Volume"
     },
     "weather": {
+      "forecast": "Forecast",
+      "high-low": "H: {high}  L: {low}",
       "error": "Error",
       "loading": "Loading…",
       "no-location": "No location",
       "off": "Weather off"
+    },
+    "cards": {
+      "this-device": "This Device",
+      "battery": "Battery",
+      "charging": "Charging",
+      "no-batteries": "No battery devices connected",
+      "today": "Today",
+      "screen-time-disabled": "Enable Screen Time in Settings to see your activity",
+      "tip-gallery": "Make room for widgets",
+      "tip-gallery-detail": "Add cards and choose a size in the desktop editor",
+      "tip-shortcuts": "Your favourite actions",
+      "tip-shortcuts-detail": "Run commands from a Shortcuts card",
+      "tip-theme": "Make it yours",
+      "tip-theme-detail": "Widget colours follow your shell theme",
+      "save-failed": "Could not save this change",
+      "remaining": "{count} remaining",
+      "item-count": "{count} items",
+      "notes-empty": "Capture a note with Floating Notes, or choose a notes file in widget settings.",
+      "collection-empty": "Add items in this widget’s settings to get started.",
+      "photos-empty": "Choose an image or an album folder in widget settings.",
+      "source-unavailable": "Data service is unavailable",
+      "configure-stocks": "Choose an Alpha Vantage API key file and up to three symbols in widget settings.",
+      "configure-home": "Choose your Home Assistant server, access token file, and entities in widget settings.",
+      "configure-feed": "Choose an RSS or Atom feed address in widget settings.",
+      "refreshing": "Refreshing…",
+      "refresh-failed": "Could not refresh. Previous data may be outdated.",
+      "source-empty": "No matching items from this source",
+      "feed": "Feed",
+      "action-failed": "The action failed. Check your connection.",
+      "journal-empty": "Use the edit button to start a dated journal entry.",
+      "journal-writing": "Write an entry to save it."
     }
   },
   "dock": {
@@ -2894,6 +2985,10 @@
         }
       },
       "desktop": {
+        "always-full-color": {
+          "label": "Always Full Colour",
+          "description": "Keep widgets colourful while an app has focus. When off, widgets soften their colours and return to full colour on hover."
+        },
         "hot-corners-bottom-left": {
           "description": "Action when the pointer hits the bottom left corner",
           "label": "Bottom Left Corner"

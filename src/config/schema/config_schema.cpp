@@ -451,6 +451,7 @@ namespace noctalia::config::schema {
   const Schema<DesktopWidgetsConfig>& desktopWidgetsSchema() {
     static const Schema<DesktopWidgetsConfig> s = {
         field(&DesktopWidgetsConfig::enabled, "enabled"),
+        field(&DesktopWidgetsConfig::alwaysFullColor, "always_full_color"),
         field(&DesktopWidgetsConfig::schemaVersion, "schema_version"),
         subTable(&DesktopWidgetsConfig::grid, "grid", desktopWidgetsGridSchema()),
     };

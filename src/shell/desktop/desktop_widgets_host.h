@@ -40,6 +40,7 @@ public:
   void requestUpdate();
   void requestLayout();
   void requestRedraw();
+  void setWindowFocused(bool focused);
   void setWallpaperMasks(const OutputWallpaperMaskMap& masks);
   bool onPointerEvent(const PointerEvent& event);
 
@@ -54,6 +55,9 @@ private:
     std::unique_ptr<Node> sceneRoot;
     Node* transformNode = nullptr;
     std::unique_ptr<DesktopWidget> widget;
+    bool pointerInside = false;
+    float blendTarget = 1.0F;
+    AnimationManager::Id blendAnimation = 0;
     float intrinsicWidth = 0.0F;
     float intrinsicHeight = 0.0F;
   };
@@ -64,6 +68,7 @@ private:
   };
 
   void syncInstances();
+  void updateBlending(DesktopWidgetInstance& instance, bool animate = true);
   void createInstance(const DesktopWidgetState& state, const WaylandOutput& output);
   void buildScene(DesktopWidgetInstance& instance);
   void prepareFrame(DesktopWidgetInstance& instance, bool needsUpdate, bool needsLayout);
@@ -78,6 +83,7 @@ private:
   std::unique_ptr<DesktopWidgetFactory> m_factory;
   DesktopWidgetsSnapshot m_snapshot;
   bool m_visible = false;
+  bool m_windowFocused = false;
   std::vector<std::unique_ptr<DesktopWidgetInstance>> m_instances;
   std::unordered_map<std::string, LoadedWallpaperMask> m_wallpaperMasks;
 };
