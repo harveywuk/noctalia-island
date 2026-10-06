@@ -30,11 +30,13 @@ public:
   // True when the system tray is the only widget, so the row needs no card of its own.
   [[nodiscard]] bool trayOnly() const noexcept { return m_trayOnlyMode || (m_widgets.size() == 1 && m_onlyTray); }
   [[nodiscard]] bool trayOnlyMode() const noexcept { return m_trayOnlyMode; }
+  [[nodiscard]] float contentWidth() const noexcept { return m_contentWidth; }
 
 private:
   float m_scale;
   bool m_trayOnlyMode;
   bool m_dirty = true;
+  float m_contentWidth = 0;
   std::function<void()> m_frame;
   std::vector<std::unique_ptr<Widget>> m_widgets;
   std::vector<std::size_t> m_groups;

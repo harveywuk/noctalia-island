@@ -1621,6 +1621,7 @@ void Application::initEarlySessionBusAndTray() {
   m_trayService = std::make_unique<TrayService>(*m_bus);
   m_trayService->setChangeCallback([this]() {
     m_bar.refresh();
+    m_island.refresh();
     m_trayMenu.onTrayChanged();
     m_keyboardLayoutOsd.onTrayChanged(
         *m_trayService, m_configService.config(), m_configService.config().osd.kinds.keyboardLayout

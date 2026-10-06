@@ -111,14 +111,20 @@ void IslandWidgetHost::updateWidgets(Renderer& renderer, float availableWidth) {
   // A cell clips a widget that doesn't fit its slot, but hover highlights (a tray icon's rounded box)
   // reach a few pixels past the widget, so the cell extends that far beyond the slot on every side.
   const float margin = 8 * m_scale;
+  float left = availableWidth, right = 0;
   for (std::size_t i = 0; i < m_widgets.size(); ++i) {
     const auto& rect = layout.items[i];
+    if (rect.width > 0) {
+      left = std::min(left, rect.x);
+      right = std::max(right, rect.x + rect.width);
+    }
     auto& cell = *children()[i];
     cell.setPosition(rect.x - margin, rect.y - margin);
     cell.setSize(rect.width + 2 * margin, rect.height + 2 * margin);
     if (auto* outer = m_widgets[i]->outerNode())
       outer->setPosition(margin, margin + (rect.height - m_widgets[i]->height()) / 2);
   }
+  m_contentWidth = std::max(0.0F, right - left);
   setSize(availableWidth, layout.height);
   if (std::ranges::any_of(m_widgets, [](const auto& widget) { return widget->needsFrameTick(); }))
     m_frame();

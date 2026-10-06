@@ -1346,7 +1346,7 @@ void Island::prepare(Instance& inst) {
       : std::span<const DownloadProgress>(downloads);
   // Cupertino focuses an expanded activity on that activity alone, like Apple's Dynamic
   // Island; batteries, unread history and hover widgets stay in the idle (calendar) view.
-  // The media card also keeps a compact tray row below its playback controls.
+  // The media card keeps its tray beside the privacy and unread icons below playback controls.
   // Temporary OSDs keep their own content; capture resumes in the following view.
   const bool showExtras = !gCupertino || view == island::View::Calendar;
   const auto batteryList =
@@ -1498,8 +1498,10 @@ void Island::prepare(Instance& inst) {
   if (expandedView && inst.hoverWidgets && inst.hoverWidgets->trayOnlyMode() == !showExtras) {
     m_renderContext->makeCurrent(inst.surface->renderTarget());
     const float oldHeight = inst.hoverWidgets->height();
+    const float oldContentWidth = inst.hoverWidgets->contentWidth();
     inst.hoverWidgets->updateWidgets(renderer, inst.hoverWidgets->width());
-    if (oldHeight != inst.hoverWidgets->height())
+    if (oldHeight != inst.hoverWidgets->height()
+        || (inst.hoverWidgets->trayOnlyMode() && oldContentWidth != inst.hoverWidgets->contentWidth()))
       inst.signature.clear();
   }
   const bool outlineTimer = cfg.outerProgressRing
@@ -2889,14 +2891,50 @@ void Island::prepare(Instance& inst) {
   // section itself is not shown (the Cupertino Island keeps it to the calendar view), unless
   // the hover view's unread section is turned off.
   const bool rowBell = expandedView && showUnread && cfg.hoverShowUnread && !showExtras;
-  if (!privacyList.empty() || rowBell) {
+  const bool mediaTray = view == island::View::Media && !showExtras;
+  const float statusWidth = static_cast<float>(privacyList.size() + (rowBell ? 1 : 0)) * 24;
+  const float trayGap = statusWidth > 0 ? 8.0F : 0.0F;
+  const bool showHoverWidgets = expandedView
+      && (showExtras || view == island::View::Media)
+      && m_widgetFactory
+      && (cfg.hoverShowTray
+          || !cfg.hoverWidgets.empty()
+          || !cfg.hoverWidgetsCenter.empty()
+          || !cfg.hoverWidgetsRight.empty());
+  if (showHoverWidgets) {
+    if (!retainedWidgets) {
+      retainedWidgets = std::make_unique<IslandWidgetHost>(
+          *m_widgetFactory, m_config->config(), inst.output, s, &inst.animations, &m_widgetActions,
+          [&inst] {
+            if (!inst.panelHosted)
+              inst.surface->requestUpdate();
+          },
+          [&inst] {
+            if (!inst.panelHosted)
+              inst.surface->requestRedraw();
+          },
+          [&inst] {
+            if (!inst.panelHosted)
+              inst.surface->requestFrameTick();
+          },
+          cfg, inst.barConfig.name, !showExtras
+      );
+    }
+    inst.hoverWidgets = static_cast<IslandWidgetHost*>(retainedWidgets.get());
+    const float availableWidth = w - 44 - (mediaTray ? statusWidth + trayGap : 0);
+    inst.hoverWidgets->updateWidgets(renderer, std::max(1.0F, availableWidth * s));
+  }
+  const bool inlineTray = mediaTray && inst.hoverWidgets && inst.hoverWidgets->height() > 0;
+  const float trayWidth = inlineTray ? inst.hoverWidgets->contentWidth() / s : 0;
+  const float statusHeight = inlineTray ? std::max(24.0F, inst.hoverWidgets->height() / s) : 24.0F;
+  if (!privacyList.empty() || rowBell || inlineTray) {
     // Capture indicators are clickable icons in compact views and beside notifications,
     // and as a centred row in the expanded Island. Hovering names the capturing app.
-    const float rowWidth = static_cast<float>(privacyList.size() + (rowBell ? 1 : 0)) * 24 + 8;
+    const float rowWidth = statusWidth + (inlineTray ? trayGap + trayWidth : 0);
     const float x = compactView
         ? w - (showUnread ? (view == island::View::Activity ? 48 : 38) : 14) - (showBattery ? 42 : 0) - privacyWidth
-        : (w - rowWidth + 8) / 2;
-    const float y = compactView ? (cfg.height - 24) / 2 : h;
+        : (w - rowWidth) / 2;
+    const float y = compactView ? (cfg.height - 24) / 2 : h + (inlineTray ? 8 + (statusHeight - 24) / 2 : 0);
     for (std::size_t i = 0; i < privacyList.size(); ++i) {
       const auto& activity = privacyList[i];
       if (!compactView && !expandedView && activity.kind != PrivacyCaptureKind::Microphone) {
@@ -3006,7 +3044,13 @@ void Island::prepare(Instance& inst) {
       bellPalette.normal.label = islandRole(ColorRole::Primary);
       bell->setCustomPalette(std::move(bellPalette));
     }
-    if (!compactView)
+    if (inlineTray) {
+      // The tray centers its contents in the remaining width; center the status icons
+      // beside those contents so the complete row stays centered as tray items change.
+      inst.hoverWidgets->setPosition((22 + statusWidth + trayGap) * s, (h + 8) * s);
+      footer->addChild(std::move(retainedWidgets));
+      h += statusHeight + 16;
+    } else if (!compactView)
       h += 32;
   }
   const auto batteryRing = [&](const island::Battery& battery, float x, float y, float diameter, bool drawRing = true) {
@@ -3215,33 +3259,7 @@ void Island::prepare(Instance& inst) {
     pill(close);
     h += 42;
   }
-  if (expandedView
-      && (showExtras || view == island::View::Media)
-      && m_widgetFactory
-      && (cfg.hoverShowTray
-          || !cfg.hoverWidgets.empty()
-          || !cfg.hoverWidgetsCenter.empty()
-          || !cfg.hoverWidgetsRight.empty())) {
-    if (!retainedWidgets) {
-      retainedWidgets = std::make_unique<IslandWidgetHost>(
-          *m_widgetFactory, m_config->config(), inst.output, s, &inst.animations, &m_widgetActions,
-          [&inst] {
-            if (!inst.panelHosted)
-              inst.surface->requestUpdate();
-          },
-          [&inst] {
-            if (!inst.panelHosted)
-              inst.surface->requestRedraw();
-          },
-          [&inst] {
-            if (!inst.panelHosted)
-              inst.surface->requestFrameTick();
-          },
-          cfg, inst.barConfig.name, !showExtras
-      );
-    }
-    inst.hoverWidgets = static_cast<IslandWidgetHost*>(retainedWidgets.get());
-    inst.hoverWidgets->updateWidgets(renderer, std::max(1.0F, (w - 44) * s));
+  if (showHoverWidgets && retainedWidgets) {
     inst.hoverWidgets->setPosition(22 * s, (h + 8) * s);
     const float widgetHeight = inst.hoverWidgets->height() / s;
     footer->addChild(std::move(retainedWidgets));

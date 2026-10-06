@@ -4,6 +4,7 @@ A fixture StatusNotifierItem (a white square with a one-entry menu) must appear 
 view; left click activates it, right click opens its menu from the Island (which stays expanded
 meanwhile), and choosing the entry reaches the app.
 """
+import json
 import os
 import pathlib
 import subprocess
@@ -15,7 +16,7 @@ def prepare(base, cfg, env):
     path = cfg/'config.toml'
     text = path.read_text().replace(
         '[island]\nenabled=true\n',
-        '[island]\nenabled=true\nheight=64\nclock_size=24\nreserve_space=true\n', 1)
+        '[island]\nenabled=true\nheight=64\nclock_size=24\nreserve_space=true\npaused_media_seconds=30\n', 1)
     text = text.replace('[shell]\n', '[shell]\noffline_mode=true\n', 1)
     path.write_text(text)
 
@@ -34,6 +35,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
     events_path = base/'tray-events.txt'
     events_path.write_text('')
     env['ISLAND_TEST_EVENTS'] = str(events_path)
+    capture = None
 
     def command(value):
         pointer.stdin.write(value+'\n'); pointer.stdin.flush()
@@ -62,6 +64,26 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
                        for dx in range(0, 12, 3) for dy in range(0, 12, 3)):
                     return x+6, y+6
         return None
+
+    def status_row(name, count):
+        # Paused media has a black background, so all three icon types can be located together.
+        picture = Image.open(shot(name)).convert('RGB')
+        columns = {}
+        for x in range(560, 720):
+            ys = [y for y in range(200, 240) if max(picture.getpixel((x, y))) > 100]
+            if ys:
+                columns[x] = ys
+        groups = []
+        for x in columns:
+            if not groups or x > groups[-1][-1] + 1:
+                groups.append([])
+            groups[-1].append(x)
+        assert len(groups) == count, ('Status icons and tray do not share one row', name, groups)
+        centers = [((xs[0]+xs[-1])/2, (min(y for x in xs for y in columns[x])
+                    + max(y for x in xs for y in columns[x]))/2) for xs in groups]
+        assert max(y for x, y in centers)-min(y for x, y in centers) <= 3, ('Icons are not aligned', centers)
+        assert abs((groups[0][0]+groups[-1][-1])/2-640) < 5, ('Combined row is not centered', centers)
+        return [(round(x), round(y)) for x, y in centers]
 
     try:
         ctl('dismissnotify'); dispatch('hl.dsp.focus({monitor="TEST-1"})')
@@ -147,6 +169,42 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         move(640, 169); click()
         assert events().count('PlayPause') == before+1, 'Tray footer interfered with playback controls'
 
+        # Privacy, unread history and tray items occupy one shared row, including after tray changes.
+        run(['pactl', 'load-module', 'module-remap-source', 'source_name=tray-mic',
+             'master=hyprland-test.monitor'])
+        capture = subprocess.Popen(['parec', '--device=tray-mic', '--client-name=Tray privacy test',
+                                    '--stream-name=Tray capture'], env=env, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+        time.sleep(2.5)
+        run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications', '--object-path',
+             '/org/freedesktop/Notifications', '--method', 'org.freedesktop.Notifications.Notify',
+             'Mail', '0', '', 'Tray row notification', 'Unread fixture', '[]', '{}', '0'])
+        msg('notification-clear-active'); move(580, 40); time.sleep(.5)
+        run(['gdbus', 'call', '--session', '--dest', 'org.mpris.MediaPlayer2.islandtest', '--object-path',
+             '/org/mpris/MediaPlayer2', '--method', 'org.mpris.MediaPlayer2.Player.Pause'])
+        time.sleep(.5)
+        icons = status_row('media-tray-status-row', 3)
+        extra = start([sys.executable, str(repo/'tests/fixtures/island_tray.py')], 'extra-tray.log')
+        time.sleep(1)
+        wider = status_row('media-tray-status-row-added', 4)
+        assert wider[0][0] < icons[0][0]-5, 'Status icons did not recenter when another tray item appeared'
+        extra.terminate(); extra.wait(timeout=5); time.sleep(.8)
+        icons = status_row('media-tray-status-row-removed', 3)
+        before = events().count('Activate')
+        move(*icons[-1]); click()
+        assert events().count('Activate') == before+1, 'Tray click missed after sharing the status row'
+        move(*icons[0]); click()
+        assert json.loads(msg('status'))['activePanelId'] == 'control-center', 'Microphone button missed its panel'
+        msg('panel-close'); move(1100, 600); move(580, 40); time.sleep(.5)
+        icons = status_row('media-tray-status-row-panel-return', 3)
+        move(*icons[1]); click()
+        assert json.loads(msg('status'))['activePanelId'] == 'notification-center', 'Unread button missed its panel'
+        msg('panel-close')
+        run(['gdbus', 'call', '--session', '--dest', 'org.mpris.MediaPlayer2.islandtest', '--object-path',
+             '/org/mpris/MediaPlayer2', '--method', 'org.mpris.MediaPlayer2.Player.Play'])
+        capture.terminate(); capture.wait(timeout=5); capture = None
+        msg('notification-clear-history'); time.sleep(2.5)
+
         # The existing tray preference also controls the media footer.
         path = cfg/'config.toml'
         original = path.read_text()
@@ -162,6 +220,9 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert shell.poll() is None
         print('PASS: idle and media trays activate, hold the Island for menus, dispatch menu actions, '
               'survive playback updates, preserve playback controls, respect the tray preference, '
-              'and hide removed items; menu-only items open on left click', flush=True)
+              'and hide removed items; media status icons share a centered row with the tray, '
+              'recenter on item changes and open their panels; menu-only items open on left click', flush=True)
     finally:
+        if capture:
+            capture.terminate(); capture.wait(timeout=5)
         pointer.terminate(); pointer.wait(timeout=5)
