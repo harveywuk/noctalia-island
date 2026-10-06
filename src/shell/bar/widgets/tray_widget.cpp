@@ -1,9 +1,11 @@
 #include "shell/bar/widgets/tray_widget.h"
 
 #include "config/config_service.h"
+#include "core/input/keybind_matcher.h"
 #include "core/log.h"
 #include "core/ui_phase.h"
 #include "dbus/tray/tray_service.h"
+#include "i18n/i18n.h"
 #include "render/core/image_file_loader.h"
 #include "render/core/image_source_log.h"
 #include "render/core/texture_manager.h"
@@ -12,9 +14,11 @@
 #include "render/text/glyph_registry.h"
 #include "shell/panel/panel_manager.h"
 #include "shell/tray/tray_identifier.h"
+#include "shell/tray/tray_overflow.h"
 #include "system/desktop_entry.h"
 #include "ui/app_icon_colorization.h"
 #include "ui/builders.h"
+#include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
@@ -24,6 +28,7 @@
 #include <filesystem>
 #include <linux/input-event-codes.h>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 
@@ -167,8 +172,9 @@ namespace {
 TrayWidget::TrayWidget(ConfigService& config, TrayService* tray, Options options)
     : m_config(config), m_tray(tray), m_hiddenItems(std::move(options.hiddenItems)),
       m_pinnedItems(std::move(options.pinnedItems)), m_hidePassive(options.hidePassive),
-      m_drawerMode(options.drawerMode), m_itemActivated(std::move(options.itemActivated)),
-      m_barPosition(std::move(options.barPosition)), m_panelGridMode(options.panelGridMode),
+      m_drawerMode(options.drawerMode), m_drawerExcludedItems(std::move(options.drawerExcludedItems)),
+      m_itemActivated(std::move(options.itemActivated)), m_barPosition(std::move(options.barPosition)),
+      m_panelGridMode(options.panelGridMode),
       m_panelGridColumns(std::clamp<std::size_t>(options.panelGridColumns, 1U, 5U)),
       m_inlineEntryGap(std::max(0.0F, options.inlineEntryGap)), m_matchAdjacentSpacing(options.matchAdjacentSpacing),
       m_customItemSize(options.customItemSize) {
@@ -282,7 +288,7 @@ void TrayWidget::doLayout(Renderer& renderer, float containerWidth, float contai
   if (m_container == nullptr) {
     return;
   }
-  if (m_drawerMode && m_drawerChevron != nullptr && m_drawerTrigger != nullptr) {
+  if ((m_drawerMode || m_inlineItemLimit) && m_drawerChevron != nullptr && m_drawerTrigger != nullptr) {
     const bool panelOpen = PanelManager::instance().isOpenPanel("tray-drawer");
     const std::string glyphName = drawerChevronGlyph(panelOpen);
     if (m_drawerChevronGlyph != glyphName) {
@@ -308,12 +314,14 @@ void TrayWidget::doLayout(Renderer& renderer, float containerWidth, float contai
     layoutHoverOverlays();
     return;
   }
-  const bool vertical = containerHeight > containerWidth;
+  const bool vertical = !m_inlineItemLimit && containerHeight > containerWidth;
   if (vertical != m_isVertical) {
     m_isVertical = vertical;
     m_container->setDirection(m_isVertical ? FlexDirection::Vertical : FlexDirection::Horizontal);
   }
   syncState(renderer);
+  if (m_inlineItemLimit)
+    updateInlineItems(containerWidth);
   if (containerHeight > 0.0F && std::abs(containerHeight - m_contentHeight) > 0.5F) {
     m_contentHeight = containerHeight;
     m_rebuildPending = true;
@@ -341,6 +349,25 @@ void TrayWidget::doUpdate(Renderer& renderer) {
   if (m_appIconColorizeDirty) {
     refreshAppIconColorization(renderer);
     m_appIconColorizeDirty = false;
+  }
+}
+
+void TrayWidget::updateInlineItems(float availableWidth) {
+  std::vector<tray::OverflowItem> eligible;
+  for (const auto& item : m_items)
+    if (!(m_hidePassive && tray::isPassiveStatus(item)) && !isHiddenItem(item))
+      eligible.push_back({item.id, isPinnedItem(item)});
+  const float itemSize = m_customItemSize.value_or(Style::baseGlyphSize) * m_contentScale;
+  const float gap = resolvedInlineEntryGap();
+  const auto slots = static_cast<std::size_t>(std::max(1.0F, std::floor((availableWidth + gap) / (itemSize + gap))));
+  const auto limit = std::min(*m_inlineItemLimit, eligible.size() > slots ? slots - 1 : slots);
+  const bool drawerOpen = PanelManager::instance().isOpenPanel("tray-drawer");
+  auto selected = tray::selectInlineItems(eligible, m_inlineItems, limit, drawerOpen);
+  const bool overflow = eligible.size() > selected.size();
+  if (selected != m_inlineItems || overflow != m_hasOverflow) {
+    m_inlineItems = std::move(selected);
+    m_hasOverflow = overflow;
+    m_rebuildPending = true;
   }
 }
 
@@ -460,6 +487,12 @@ void TrayWidget::rebuild(Renderer& renderer) {
   }
 
   auto attachHover = [this](InputArea& area, float size) {
+    const bool islandTray = m_inlineItemLimit.has_value() || m_drawerExcludedItems.has_value();
+    if (islandTray) {
+      const float side = std::min(4.0F * m_contentScale, resolvedInlineEntryGap() * 0.5F);
+      const float vertical = m_inlineItemLimit ? 8.0F * m_contentScale : side;
+      area.setHitTestOutset({side, vertical, side, vertical});
+    }
     if (!barCapsuleSpec().hoverHighlight) {
       return;
     }
@@ -467,7 +500,7 @@ void TrayWidget::rebuild(Renderer& renderer) {
     Box* hoverBoxPtr = nullptr;
     ColorSpec hoverFill = widgetForegroundOr(colorSpecFromRole(ColorRole::OnSurface));
     hoverFill.alpha = 0.0F;
-    const float padding = barCapsuleSpec().padding * m_contentScale;
+    const float padding = islandTray ? 4.0F * m_contentScale : barCapsuleSpec().padding * m_contentScale;
     const float boxSize = size + padding * 2.0F;
 
     auto hoverBox = ui::box({
@@ -491,53 +524,45 @@ void TrayWidget::rebuild(Renderer& renderer) {
     }
 
     auto progress = std::make_shared<float>(0.0F);
-    area.setOnEnter([this, hoverBoxPtr, progress](const InputArea::PointerData&) {
-      if (m_animations == nullptr)
-        return;
-      m_animations->cancelForOwner(hoverBoxPtr);
+    const auto feedback = [this, areaPtr = &area, hoverBoxPtr, progress] {
+      const float target = areaPtr->pressed() ? 0.18F : (areaPtr->hovered() || areaPtr->focused()) ? 0.1F : 0.0F;
       const ColorSpec fill = widgetForegroundOr(colorSpecFromRole(ColorRole::OnSurface));
+      const auto apply = [this, hoverBoxPtr, fill, progress](float p) {
+        *progress = p;
+        hoverBoxPtr->setVisible(p > 0.001F);
+        ColorSpec c = fill;
+        c.alpha *= p;
+        hoverBoxPtr->setFill(c);
+        requestRedraw();
+      };
+      if (!m_animations) {
+        apply(target);
+        return;
+      }
+      m_animations->cancelForOwner(hoverBoxPtr);
       m_animations->animate(
-          *progress, 1.0F, Style::animFast, Easing::EaseOutCubic,
-          [this, hoverBoxPtr, fill, progress](float p) {
-            *progress = p;
-            hoverBoxPtr->setVisible(p > 0.001F);
-            ColorSpec c = fill;
-            c.alpha = 0.1F * p;
-            hoverBoxPtr->setFill(c);
-            requestRedraw();
-          },
-          {}, hoverBoxPtr
+          *progress, target, areaPtr->pressed() ? Motion::pressMs : Motion::feedbackMs, Motion::reveal, apply, {},
+          hoverBoxPtr
       );
       requestFrameTick();
-    });
-
-    area.setOnLeave([this, hoverBoxPtr, progress]() {
-      if (m_animations == nullptr)
-        return;
-      m_animations->cancelForOwner(hoverBoxPtr);
-      const ColorSpec fill = widgetForegroundOr(colorSpecFromRole(ColorRole::OnSurface));
-      m_animations->animate(
-          *progress, 0.0F, Style::animFast, Easing::EaseOutCubic,
-          [this, hoverBoxPtr, fill, progress](float p) {
-            *progress = p;
-            hoverBoxPtr->setVisible(p > 0.001F);
-            ColorSpec c = fill;
-            c.alpha = 0.1F * p;
-            hoverBoxPtr->setFill(c);
-            requestRedraw();
-          },
-          {}, hoverBoxPtr
-      );
-      requestFrameTick();
-    });
+    };
+    area.setOnEnter([feedback](const InputArea::PointerData&) { feedback(); });
+    area.setOnLeave(feedback);
+    area.setOnPress([feedback](const InputArea::PointerData&) { feedback(); });
+    area.setOnCancel(feedback);
+    area.setOnFocusGain(feedback);
+    area.setOnFocusLoss(feedback);
   };
 
-  if (m_drawerMode) {
-    m_drawerTrigger = nullptr;
-    m_drawerChevron = nullptr;
-    m_drawerChevronGlyph.clear();
-    bool hasDrawerItems = false;
+  m_drawerTrigger = nullptr;
+  m_drawerChevron = nullptr;
+  m_drawerChevronGlyph.clear();
+  std::unique_ptr<Node> overflowTrigger;
+  if (m_drawerMode || m_inlineItemLimit) {
+    bool hasDrawerItems = m_inlineItemLimit && m_hasOverflow;
     for (const auto& item : m_items) {
+      if (m_inlineItemLimit)
+        break;
       if ((m_hidePassive && tray::isPassiveStatus(item)) || isHiddenItem(item) || isPinnedItem(item)) {
         continue;
       }
@@ -550,7 +575,9 @@ void TrayWidget::rebuild(Renderer& renderer) {
       auto* triggerPtr = triggerArea.get();
       m_drawerTrigger = triggerPtr;
       triggerArea->setSize(itemSize, itemSize);
-      triggerArea->setOnClick([this, triggerPtr](const InputArea::PointerData& data) {
+      triggerArea->setTooltip(i18n::tr("tray.drawer.more"));
+      triggerArea->setTabFocusKey("tray-overflow");
+      const auto openDrawer = [this, triggerPtr](const InputArea::PointerData& data) {
         if (data.button == BTN_LEFT) {
           float ax = 0.0F;
           float ay = 0.0F;
@@ -569,8 +596,17 @@ void TrayWidget::rebuild(Renderer& renderer) {
           } else if (m_barPosition == "right") {
             anchorX -= triggerPtr->width() * 0.5F + Style::spaceXs * m_contentScale;
           }
-          requestPanelToggle("tray-drawer", {}, anchorX, anchorY);
+          const std::string context = m_inlineItemLimit ? std::string(tray::kIslandOverflowContext)
+                  + nlohmann::json{{"widget", configName()}, {"excluded", m_inlineItems}}.dump()
+                                                        : std::string{};
+          requestPanelToggle("tray-drawer", context, anchorX, anchorY);
         }
+      };
+      triggerArea->setOnClick(openDrawer);
+      triggerArea->setFocusable(true);
+      triggerArea->setOnKeyDown([openDrawer](const InputArea::KeyData& key) {
+        if (key.pressed && !key.preedit && KeybindMatcher::matches(KeybindAction::Validate, key.sym, key.modifiers))
+          openDrawer({.button = BTN_LEFT});
       });
       const bool panelOpen = PanelManager::instance().isOpenPanel("tray-drawer");
       m_drawerChevronGlyph = drawerChevronGlyph(panelOpen);
@@ -586,20 +622,36 @@ void TrayWidget::rebuild(Renderer& renderer) {
       m_drawerChevron = glyph.get();
       triggerArea->addChild(std::move(glyph));
       attachHover(*triggerArea, itemSize);
-      m_container->addChild(std::move(triggerArea));
+      if (m_inlineItemLimit)
+        overflowTrigger = std::move(triggerArea);
+      else
+        m_container->addChild(std::move(triggerArea));
     }
   }
 
   Flex* gridRow = nullptr;
   std::size_t gridCol = 0;
-  for (const auto& item : m_items) {
+  std::vector<const TrayItemInfo*> displayItems;
+  if (m_inlineItemLimit) {
+    for (const auto& id : m_inlineItems)
+      if (const auto found = std::ranges::find(m_items, id, &TrayItemInfo::id); found != m_items.end())
+        displayItems.push_back(&*found);
+  } else {
+    for (const auto& item : m_items)
+      displayItems.push_back(&item);
+  }
+  for (const auto* itemPtr : displayItems) {
+    const auto& item = *itemPtr;
     if ((m_hidePassive && tray::isPassiveStatus(item)) || isHiddenItem(item)) {
       continue;
     }
-    if (m_drawerMode && !isPinnedItem(item)) {
+    if (m_drawerMode && !m_inlineItemLimit && !isPinnedItem(item)) {
       continue;
     }
-    if (m_panelGridMode && isPinnedItem(item)) {
+    if (m_panelGridMode && !m_drawerExcludedItems && isPinnedItem(item)) {
+      continue;
+    }
+    if (m_drawerExcludedItems && std::ranges::contains(*m_drawerExcludedItems, item.id)) {
       continue;
     }
     const std::string iconPath = resolveIconPath(item);
@@ -776,7 +828,7 @@ void TrayWidget::rebuild(Renderer& renderer) {
     auto itemId = item.id;
     area->setAcceptedButtons(InputArea::buttonMask({BTN_LEFT, BTN_RIGHT}));
     InputArea* areaPtr = area.get();
-    area->setOnClick([this, itemId, areaPtr](const InputArea::PointerData& data) {
+    const auto activate = [this, itemId, areaPtr](const InputArea::PointerData& data) {
       if (m_tray == nullptr) {
         return;
       }
@@ -798,6 +850,13 @@ void TrayWidget::rebuild(Renderer& renderer) {
       } else if (data.button == BTN_RIGHT) {
         openMenu();
       }
+    };
+    area->setOnClick(activate);
+    area->setFocusable(true);
+    area->setTabFocusKey("tray-" + itemId);
+    area->setOnKeyDown([activate, areaPtr](const InputArea::KeyData& key) {
+      if (key.pressed && !key.preedit && KeybindMatcher::matches(KeybindAction::Validate, key.sym, key.modifiers))
+        activate({.localX = areaPtr->width() / 2, .localY = areaPtr->height() / 2, .button = BTN_LEFT});
     });
     area->addChild(std::move(iconNode));
 
@@ -824,6 +883,8 @@ void TrayWidget::rebuild(Renderer& renderer) {
     }
   }
 
+  if (overflowTrigger)
+    m_container->addChild(std::move(overflowTrigger));
   m_container->setVisible(!m_container->children().empty());
 }
 
@@ -1101,6 +1162,10 @@ void TrayWidget::clearHoverOverlays() {
       if (entry.area != nullptr) {
         entry.area->setOnEnter(nullptr);
         entry.area->setOnLeave(nullptr);
+        entry.area->setOnPress(nullptr);
+        entry.area->setOnCancel(nullptr);
+        entry.area->setOnFocusGain(nullptr);
+        entry.area->setOnFocusLoss(nullptr);
       }
       if (entry.box != nullptr) {
         m_hoverOverlayParent->removeChild(entry.box);

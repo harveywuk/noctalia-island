@@ -7011,6 +7011,7 @@
   },
   "tray": {
     "drawer": {
+      "more": "More tray apps",
       "empty": "No menu bar apps are running"
     },
     "menu": {

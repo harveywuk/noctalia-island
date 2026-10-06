@@ -47,6 +47,8 @@ struct PanelOpenRequest {
   float anchorY = 0.0F;
   bool hasExplicitAnchor = false;
   bool hasAnchorPosition = false;
+  // Float below an output-local anchor instead of aligning to the host bar edge.
+  bool anchorBelow = false;
   std::string_view context;
   std::string_view sourceBarName;
 };
@@ -312,6 +314,7 @@ private:
   bool m_attachedContactShadow = false;
   float m_attachedRevealProgress = 1.0F;
   float m_detachedRevealProgress = 1.0F;
+  bool m_detachedAnchorBelow = false;
   AttachedRevealDirection m_attachedRevealDirection = AttachedRevealDirection::Down;
   AttachedRevealDirection m_detachedRevealDirection = AttachedRevealDirection::Down;
   Timer m_keyboardRelaxTimer;

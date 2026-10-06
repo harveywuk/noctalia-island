@@ -9,10 +9,11 @@ from gi.repository import Gio, GLib
 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 name = f'org.kde.StatusNotifierItem-{os.getpid()}-1'
 size = 22
-pixels = bytes([255, 255, 255, 255]) * size * size  # ARGB, opaque white.
+rgb = bytes.fromhex(os.environ.get('ISLAND_TRAY_COLOR', 'ffffff'))
+pixels = bytes([255, *rgb]) * size * size  # ARGB, opaque test color.
 item = {
     'Category': GLib.Variant('s', 'ApplicationStatus'),
-    'Id': GLib.Variant('s', 'island-tray-test'),
+    'Id': GLib.Variant('s', os.environ.get('ISLAND_TRAY_LABEL', 'island-tray-test')),
     'Title': GLib.Variant('s', 'Tray test'),
     'Status': GLib.Variant('s', 'Active'),
     'IconName': GLib.Variant('s', ''),
@@ -49,7 +50,8 @@ entry = {'label': GLib.Variant('s', 'Fixture action'), 'enabled': GLib.Variant('
 
 def log(text):
     with open(os.environ['ISLAND_TEST_EVENTS'], 'a') as events:
-        events.write(text + '\n')
+        label = os.environ.get('ISLAND_TRAY_LABEL', '')
+        events.write(text + (' '+label if label else '') + '\n')
 
 
 def item_method(connection, sender, path, interface, method, parameters, invocation):

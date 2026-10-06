@@ -194,8 +194,13 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         move(*icons[-1]); click()
         assert events().count('Activate') == before+1, 'Tray click missed after sharing the status row'
         move(*icons[0]); click()
-        assert json.loads(msg('status'))['activePanelId'] == 'control-center', 'Microphone button missed its panel'
-        msg('panel-close'); move(1100, 600); move(580, 40); time.sleep(.5)
+        panel_status = json.loads(msg('status'))
+        if panel_status['activePanelId'] != 'control-center':
+            shot('media-tray-microphone-miss')
+        assert panel_status['activePanelId'] == 'control-center', ('Microphone button missed its panel', icons, panel_status)
+        move(1100, 600); click()
+        assert not json.loads(msg('status'))['panelOpen'], 'Control Centre did not dismiss on an outside click'
+        move(580, 40); time.sleep(.5)
         icons = status_row('media-tray-status-row-panel-return', 3)
         move(*icons[1]); click()
         assert json.loads(msg('status'))['activePanelId'] == 'notification-center', 'Unread button missed its panel'

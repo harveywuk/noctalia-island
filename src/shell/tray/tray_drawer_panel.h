@@ -10,6 +10,9 @@ class ConfigService;
 class TrayService;
 class Flex;
 class TrayWidget;
+namespace tray {
+  struct ResolvedTrayOptions;
+}
 
 class TrayDrawerPanel : public Panel {
 public:
@@ -22,6 +25,10 @@ public:
   [[nodiscard]] float preferredWidth() const override;
   [[nodiscard]] float preferredHeight() const override;
   [[nodiscard]] PanelPlacement panelPlacement() const noexcept override;
+  [[nodiscard]] bool islandHostable() const noexcept override;
+  [[nodiscard]] bool isContextActive(std::string_view context) const override {
+    return context == pendingOpenContext();
+  }
   [[nodiscard]] LayerShellKeyboard keyboardMode() const override { return LayerShellKeyboard::OnDemand; }
   void setAnimationManager(AnimationManager* mgr) noexcept override;
 
@@ -32,6 +39,8 @@ private:
   [[nodiscard]] std::optional<float> currentDrawerItemSize() const;
   [[nodiscard]] float resolvedItemGap() const;
   [[nodiscard]] std::size_t visibleItemCount() const;
+  [[nodiscard]] bool islandOverflow() const noexcept;
+  [[nodiscard]] tray::ResolvedTrayOptions currentOptions() const;
 
   TrayService* m_tray = nullptr;
   ConfigService* m_config = nullptr;

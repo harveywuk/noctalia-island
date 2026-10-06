@@ -15,11 +15,14 @@ namespace {
 
 namespace tray {
 
-  ResolvedTrayOptions resolvedTrayOptions(const ConfigService& config, const TrayWidgetDefinitionContext& context) {
-    const WidgetConfig* widgetConfig = canonicalTrayWidgetConfig(config);
+  ResolvedTrayOptions resolvedTrayOptions(
+      const ConfigService& config, const TrayWidgetDefinitionContext& context, std::string_view widgetName
+  ) {
+    const auto found = config.config().widgets.find(std::string(widgetName));
+    const WidgetConfig* widgetConfig = found != config.config().widgets.end() ? &found->second : nullptr;
 
     ResolvedTrayOptions resolved{
-        .options = trayWidgetDefinition().resolve(widgetConfig, kCanonicalTrayWidgetName, context),
+        .options = trayWidgetDefinition().resolve(widgetConfig, widgetName, context),
     };
     // The drawer distinguishes an omitted item size from the schema default. Keep
     // that single presence check beside the definition-owned resolution.

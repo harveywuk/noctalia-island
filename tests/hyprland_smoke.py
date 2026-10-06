@@ -123,7 +123,7 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-camera-only' in sys.argv:
             from island_camera_smoke import prepare
             prepare(base,cfg,env)
-        if '--island-tray-only' in sys.argv:
+        if '--island-tray-only' in sys.argv or '--island-tray-overflow-only' in sys.argv:
             from island_tray_smoke import prepare
             prepare(base,cfg,env)
         binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia'))
@@ -175,8 +175,11 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             from dock_motion_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
-        if '--island-tray-only' in sys.argv:
-            from island_tray_smoke import run_checks
+        if '--island-tray-only' in sys.argv or '--island-tray-overflow-only' in sys.argv:
+            if '--island-tray-overflow-only' in sys.argv:
+                from island_tray_overflow_smoke import run_checks
+            else:
+                from island_tray_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-camera-only' in sys.argv:

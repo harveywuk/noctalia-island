@@ -725,6 +725,7 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
   const bool useFloatingAnchor = !useCenterScreenLayout
       && request.hasAnchorPosition
       && openNearClickEnabled(m_activePanel, m_activePanelId, m_config);
+  const bool useAnchorBelow = floatingPlacement && useFloatingAnchor && request.anchorBelow;
   const auto detachedShadowBleed =
       shell::panel_surface::bleed(m_activePanel->hasDecoration(), m_config->config().shell.shadow);
   const std::uint32_t detachedSurfaceWidth =
@@ -765,7 +766,12 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
         static_cast<std::int32_t>(panelHeight), outputHeight, screenPadding
     );
 
-    if (useScreenPosition) {
+    if (useAnchorBelow) {
+      standaloneAnchor = LayerShellAnchor::Top | LayerShellAnchor::Left;
+      standaloneMarginLeft = marginLeftFromAnchor;
+      standaloneMarginTop =
+          clampMargin(request.anchorY, static_cast<std::int32_t>(panelHeight), outputHeight, screenPadding);
+    } else if (useScreenPosition) {
       // Pinned to a screen edge/corner, independent of the bar.
       const auto sp = shell::screenPositionAnchor(panelPosition, panelGap);
       standaloneAnchor = sp.anchor;
@@ -849,7 +855,8 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
   // bar's reserved edge so the panel tracks the bar's real on-screen position;
   // subtract the bar's own reservation on the main axis to avoid double-counting.
   // Reproduces the prior absolute placement when nothing else reserves space.
-  const bool useBarRelativeDetached = !useCenterScreenLayout && !useScreenPosition && !useReservedEdgePlacement;
+  const bool useBarRelativeDetached =
+      !useCenterScreenLayout && !useScreenPosition && !useReservedEdgePlacement && !useAnchorBelow;
   if (useBarRelativeDetached) {
     const std::int32_t barReserved =
         barConfig.reserveSpace ? reservedBarEdgeDistance(barConfig, m_config->config().shell.shadow) : 0;
@@ -939,7 +946,7 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
       .height = requestedSurfaceHeight,
       // Floating panels at the center position ignore exclusive zones; filled axes
       // must respect them so the compositor subtracts bars and other clients.
-      .exclusiveZone = useCenterScreenLayout && !fillWidth && !fillHeight ? -1 : 0,
+      .exclusiveZone = (useCenterScreenLayout && !fillWidth && !fillHeight) || useAnchorBelow ? -1 : 0,
       .marginTop = standaloneMarginTop,
       .marginRight = standaloneMarginRight,
       .marginBottom = standaloneMarginBottom,
@@ -993,6 +1000,7 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
     m_attachedContactShadow = false;
     m_attachedRevealProgress = 1.0F;
     m_detachedRevealProgress = 1.0F;
+    m_detachedAnchorBelow = false;
     m_attachedRevealDirection = AttachedRevealDirection::Down;
     m_detachedRevealDirection = AttachedRevealDirection::Down;
     m_keyboardRelaxTimer.stop();
@@ -1252,6 +1260,7 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
     m_attachedContactShadow = false;
     m_attachedRevealProgress = 1.0F;
     m_detachedRevealProgress = 1.0F;
+    m_detachedAnchorBelow = false;
     m_attachedRevealDirection = AttachedRevealDirection::Down;
     m_detachedRevealDirection = AttachedRevealDirection::Down;
     m_keyboardRelaxTimer.stop();
@@ -1281,6 +1290,7 @@ void PanelManager::openPanel(const std::string& requestedId, PanelOpenRequest re
   // This path publishes the compositor blur region before the first scene build.
   // Keep detached panels hidden until buildScene applies the opening reveal.
   m_detachedRevealProgress = 0.0F;
+  m_detachedAnchorBelow = useAnchorBelow;
   m_attachedRevealDirection = AttachedRevealDirection::Down;
   m_detachedRevealDirection = detachedDirection;
   m_attachedPanelGeometry.reset();
@@ -1615,6 +1625,7 @@ void PanelManager::destroyPanel() {
   m_attachedContactShadow = false;
   m_attachedRevealProgress = 1.0F;
   m_detachedRevealProgress = 1.0F;
+  m_detachedAnchorBelow = false;
   m_attachedRevealDirection = AttachedRevealDirection::Down;
   m_detachedRevealDirection = AttachedRevealDirection::Down;
   m_keyboardRelaxTimer.stop();
@@ -2288,6 +2299,34 @@ void PanelManager::applyDetachedReveal(float progress) {
 
   const float surfaceW = m_sceneRoot->width();
   const float surfaceH = m_sceneRoot->height();
+  if (m_detachedAnchorBelow && m_detachedRevealClipNode && m_detachedRevealContentNode) {
+    // A small popover grows from its top edge beneath the Island, keeping its
+    // complete contents together instead of wiping across individual icons.
+    const float scale = 0.94F + 0.06F * progress;
+    const float lift = -4.0F * m_activePanel->contentScale() * (1.0F - m_detachedRevealProgress);
+    const float insetX = static_cast<float>(m_panelInsetX);
+    const float insetY = static_cast<float>(m_panelInsetY);
+    const float bodyWidth = static_cast<float>(m_panelVisualWidth);
+    const float bodyHeight = static_cast<float>(m_panelVisualHeight);
+    const float originX = insetX + bodyWidth * 0.5F;
+    m_detachedRevealClipNode->setPosition(0, 0);
+    m_detachedRevealClipNode->setFrameSize(surfaceW, surfaceH);
+    m_detachedRevealContentNode->setFrameSize(surfaceW, surfaceH);
+    m_detachedRevealContentNode->setTransformOrigin(originX, insetY);
+    m_detachedRevealContentNode->setPosition(0, lift);
+    m_detachedRevealContentNode->setScale(scale);
+    m_detachedRevealContentNode->setOpacity(m_detachedRevealProgress);
+    if (m_contentNode)
+      m_contentNode->setOpacity(1);
+    applyPanelCompositorBlur(
+        static_cast<int>(std::lround(originX + (insetX - originX) * scale)),
+        static_cast<int>(std::lround(insetY + lift)), static_cast<int>(std::lround(bodyWidth * scale)),
+        static_cast<int>(std::lround(bodyHeight * scale)), 0, 0,
+        m_detachedRevealProgress > 0.001F ? static_cast<int>(std::lround(surfaceW)) : 0,
+        static_cast<int>(std::lround(surfaceH))
+    );
+    return;
+  }
   float clipX = 0.0F;
   float clipY = 0.0F;
   float clipW = surfaceW;

@@ -38,6 +38,8 @@ public:
     // Read by TrayDrawerPanel, not by TrayWidget: they live here so the tray widget definition owns their defaults.
     double drawerItemSize = Style::baseGlyphSize;
     bool detachedPanel = false;
+    // Runtime filter for the Island overflow drawer, independent of saved pins.
+    std::optional<std::vector<std::string>> drawerExcludedItems;
   };
 
   TrayWidget(ConfigService& config, TrayService* tray, Options options);
@@ -45,6 +47,10 @@ public:
 
   void setHoverOverlayParent(Node* node) noexcept { m_hoverOverlayParent = node; }
   void setCapsuleCross(float cross) noexcept { m_capsuleCross = cross; }
+  void setInlineItemLimit(std::size_t limit) {
+    if (!m_drawerMode)
+      m_inlineItemLimit = limit;
+  }
   void create() override;
   [[nodiscard]] bool wantsBarHoverHighlight() const noexcept override { return false; }
 
@@ -61,6 +67,7 @@ private:
   [[nodiscard]] std::string resolveIconPath(const TrayItemInfo& item);
   [[nodiscard]] std::string resolveFromTrayThemePath(std::string_view themePath, std::string_view iconName);
   void syncState(Renderer& renderer);
+  void updateInlineItems(float availableWidth);
   void rebuild(Renderer& renderer);
   [[nodiscard]] std::string iconForItem(const TrayItemInfo& item) const;
   [[nodiscard]] bool isPinnedItem(const TrayItemInfo& item) const;
@@ -94,6 +101,10 @@ private:
   bool m_isVertical = false;
   bool m_rebuildPending = true;
   bool m_drawerMode = false;
+  std::optional<std::size_t> m_inlineItemLimit;
+  std::vector<std::string> m_inlineItems;
+  std::optional<std::vector<std::string>> m_drawerExcludedItems;
+  bool m_hasOverflow = false;
   std::function<void()> m_itemActivated;
   std::string m_barPosition;
   bool m_panelGridMode = false;

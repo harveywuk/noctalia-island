@@ -752,6 +752,7 @@ void Application::initPanelManagerAndPanels() {
     m_island.refresh();
   });
   m_panelManager.setPanelOpenedCallback([this]() {
+    m_island.refresh();
     if (m_panelManager.isAttachedOpen()) {
       m_bar.revealAutoHideForAttachedPanel(
           m_panelManager.attachedPanelOutput(), m_panelManager.attachedSourceBarName()
@@ -763,6 +764,7 @@ void Application::initPanelManagerAndPanels() {
     m_bar.reevaluateAutoHide();
     // Widgets that stay visible while their panel is open re-evaluate on the next update.
     m_bar.refresh();
+    m_island.refresh();
   });
   m_panelManager.registerPanel(
       "wallpaper",
@@ -795,7 +797,7 @@ void Application::initNotificationAndOsd() {
     if (m_panelManager.isIslandOpen())
       m_panelManager.closePanel(false);
   };
-  m_island.holdExpanded = [this] { return m_trayMenu.isOpen(); };
+  m_island.holdExpanded = [this] { return m_trayMenu.isOpen() || m_panelManager.isOpenPanel("tray-drawer"); };
   m_island.focusApp = [this](const std::vector<std::string>& binaries) {
     for (const auto& binary : binaries) {
       const auto windows = m_compositorPlatform.windowsForApp(binary, binary);

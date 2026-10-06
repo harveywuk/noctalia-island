@@ -12,6 +12,7 @@
 #include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include "wayland/hyprland/focus_grab_service.h"
 #include "wayland/wayland_connection.h"
 
 #include <algorithm>
@@ -60,14 +61,16 @@ bool PanelManager::openIslandPanel(wl_output* output, std::string_view sourceBar
   });
   m_surface->requestUpdate();
   if (keyboard && m_activePanel->dismissOnOutsideClick()) {
-    activateFocusGrab();
-    if (m_focusGrab) {
-      // Match ordinary panels: initially take keyboard focus, then allow
-      // Hyprland's grab to detect outside clicks once the layer has settled.
+    if (auto* grabs = m_platform->focusGrabService(); grabs && grabs->available()) {
+      // Resizing and raising the borrowed Island can clear a grab created in
+      // the same dispatch. Keep exclusive keyboard focus while it settles,
+      // then commit OnDemand before creating the outside-click grab.
       const auto generation = m_destroyGeneration;
       m_keyboardRelaxTimer.start(std::chrono::milliseconds(100), [this, generation] {
-        if (m_destroyGeneration == generation && m_islandSurface && !m_closing)
-          applyKeyboardRelaxation(LayerShellKeyboard::OnDemand);
+        if (m_destroyGeneration == generation && m_islandSurface && !m_closing) {
+          m_layerSurface->setKeyboardInteractivity(LayerShellKeyboard::OnDemand);
+          activateFocusGrab();
+        }
       });
     }
   }
@@ -223,10 +226,12 @@ void PanelManager::applyIslandReveal(float progress) {
   if (m_islandFlow && m_islandResizing)
     m_islandFlow->setOpacity(0.0F);
   if (glass < 1.0F)
-    m_surface->setBlurRegion(Surface::tessellateRoundedRect(
-        static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)), static_cast<int>(std::lround(m_islandWidth)),
-        static_cast<int>(std::lround(m_islandHeight)), radius
-    ));
+    m_surface->setBlurRegion(
+        Surface::tessellateRoundedRect(
+            static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)),
+            static_cast<int>(std::lround(m_islandWidth)), static_cast<int>(std::lround(m_islandHeight)), radius
+        )
+    );
   const float padding = Style::panelPadding * m_activePanel->contentScale();
   m_contentNode->setPosition((m_islandWidth - static_cast<float>(m_panelVisualWidth)) / 2 + padding, padding);
   if (!m_closing)

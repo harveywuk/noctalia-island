@@ -1,24 +1,54 @@
 #include "shell/tray/tray_drawer_panel.h"
 
 #include "config/config_service.h"
+#include "core/deferred_call.h"
 #include "dbus/tray/tray_service.h"
 #include "i18n/i18n.h"
 #include "shell/bar/widgets/tray_widget.h"
 #include "shell/panel/panel_manager.h"
 #include "shell/tray/tray_identifier.h"
+#include "shell/tray/tray_overflow.h"
 #include "shell/tray/tray_settings.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
 #include "util/string_utils.h"
 
 #include <algorithm>
+#include <nlohmann/json.hpp>
 #include <vector>
 
 TrayDrawerPanel::TrayDrawerPanel(TrayService* tray, ConfigService* config) : m_tray(tray), m_config(config) {}
 
 TrayDrawerPanel::~TrayDrawerPanel() = default;
 
+bool TrayDrawerPanel::islandOverflow() const noexcept {
+  return pendingOpenContext().starts_with(tray::kIslandOverflowContext);
+}
+
+bool TrayDrawerPanel::islandHostable() const noexcept { return !islandOverflow(); }
+
+tray::ResolvedTrayOptions TrayDrawerPanel::currentOptions() const {
+  if (!m_config)
+    return {};
+  if (!islandOverflow())
+    return tray::resolvedTrayOptions(*m_config);
+  const auto data =
+      nlohmann::json::parse(pendingOpenContext().substr(tray::kIslandOverflowContext.size()), nullptr, false);
+  const auto name = data.is_object() && data.contains("widget") && data["widget"].is_string()
+      ? data["widget"].get<std::string>()
+      : std::string(tray::kCanonicalTrayWidgetName);
+  auto resolved = tray::resolvedTrayOptions(*m_config, {}, name);
+  resolved.options.drawerExcludedItems.emplace();
+  if (data.is_object() && data.contains("excluded") && data["excluded"].is_array())
+    for (const auto& id : data["excluded"])
+      if (id.is_string())
+        resolved.options.drawerExcludedItems->push_back(id.get<std::string>());
+  return resolved;
+}
+
 PanelPlacement TrayDrawerPanel::panelPlacement() const noexcept {
+  if (islandOverflow())
+    return PanelPlacement::Floating;
   if (m_config == nullptr) {
     return PanelPlacement::Attached;
   }
@@ -26,9 +56,7 @@ PanelPlacement TrayDrawerPanel::panelPlacement() const noexcept {
                                                                     : PanelPlacement::Attached;
 }
 
-std::optional<float> TrayDrawerPanel::currentDrawerItemSize() const {
-  return m_config != nullptr ? tray::resolvedTrayOptions(*m_config).drawerItemSize : std::nullopt;
-}
+std::optional<float> TrayDrawerPanel::currentDrawerItemSize() const { return currentOptions().drawerItemSize; }
 
 float TrayDrawerPanel::resolvedItemGap() const {
   float gap = Style::spaceXs;
@@ -36,7 +64,7 @@ float TrayDrawerPanel::resolvedItemGap() const {
     return gap;
   }
 
-  const auto resolved = tray::resolvedTrayOptions(*m_config);
+  const auto resolved = currentOptions();
   if (!m_config->config().bars.empty()) {
     gap = static_cast<float>(m_config->config().bars.front().widgetSpacing);
   }
@@ -104,14 +132,10 @@ void TrayDrawerPanel::create() {
     barPosition = barConfig.position;
   }
 
-  auto resolved = tray::resolvedTrayOptions(
-      *m_config,
-      TrayWidgetDefinitionContext{
-          .barPosition = barPosition,
-          .inlineEntryGap = widgetSpacing,
-      }
-  );
+  auto resolved = currentOptions();
   auto options = std::move(resolved.options);
+  options.barPosition = barPosition;
+  options.inlineEntryGap = widgetSpacing;
   options.drawerMode = false;
   options.itemActivated = []() { PanelManager::instance().close(); };
   options.panelGridMode = true;
@@ -171,22 +195,29 @@ void TrayDrawerPanel::doLayout(Renderer& renderer, float width, float height) {
 }
 
 void TrayDrawerPanel::doUpdate(Renderer& renderer) {
+  if (islandOverflow() && visibleItemCount() == 0) {
+    DeferredCall::callLater([context = std::string(pendingOpenContext())] {
+      auto& panels = PanelManager::instance();
+      if (panels.isOpenPanel("tray-drawer") && panels.isActivePanelContext(context))
+        panels.close();
+    });
+    return;
+  }
   if (m_drawerWidget == nullptr || m_drawerWidget->root() == nullptr) {
     return;
   }
   m_drawerWidget->update(renderer);
+  if (islandOverflow())
+    PanelManager::instance().relayoutActivePanelPreferredSize();
 }
 
-std::size_t TrayDrawerPanel::currentDrawerColumns() const {
-  return m_config != nullptr ? tray::resolvedTrayOptions(*m_config).options.panelGridColumns
-                             : TrayWidget::Options{}.panelGridColumns;
-}
+std::size_t TrayDrawerPanel::currentDrawerColumns() const { return currentOptions().options.panelGridColumns; }
 
 std::size_t TrayDrawerPanel::visibleItemCount() const {
   if (m_tray == nullptr) {
     return 0;
   }
-  const auto options = m_config != nullptr ? tray::resolvedTrayOptions(*m_config).options : TrayWidget::Options{};
+  const auto options = currentOptions().options;
   const auto& hiddenItems = options.hiddenItems;
   const auto& pinnedItems = options.pinnedItems;
   std::vector<std::string> hiddenLower;
@@ -236,7 +267,9 @@ std::size_t TrayDrawerPanel::visibleItemCount() const {
         std::ranges::any_of(hiddenLower, [&](const std::string& token) { return tokenMatches(token, item); });
     const bool pinned =
         std::ranges::any_of(pinnedLower, [&](const std::string& token) { return tray::tokenMatchesItem(token, item); });
-    if (!hidden && !pinned) {
+    const bool excluded =
+        options.drawerExcludedItems ? std::ranges::contains(*options.drawerExcludedItems, item.id) : pinned;
+    if (!hidden && !excluded) {
       ++visible;
     }
   }

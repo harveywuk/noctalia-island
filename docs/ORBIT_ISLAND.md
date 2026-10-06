@@ -351,6 +351,16 @@ notification icons; other hover widgets remain in the idle view. Tray activation
 and app menus work in both views. The tray respects `hover_show_tray` and takes no
 space when there are no tray items.
 
+The media row shows up to three tray apps, giving pinned apps priority and keeping
+surviving apps in the same order. Extra apps open behind a small chevron in the
+existing tray drawer below the Island. The media controls and privacy indicators
+stay visible while the drawer is open. Hidden/passive app preferences still apply,
+and explicitly enabling the tray's `drawer` option retains its pinned-only layout.
+The overflow drawer grows and fades from its top edge on the Island's spring timing.
+Its compact symbols have padded click targets and visible hover, press and keyboard
+focus feedback. Turning off shell animations makes the drawer appear and dismiss
+immediately.
+
 ```toml
 [island]
 hover_show_clock = false

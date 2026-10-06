@@ -1623,6 +1623,8 @@ void Application::initEarlySessionBusAndTray() {
     m_bar.refresh();
     m_island.refresh();
     m_trayMenu.onTrayChanged();
+    if (m_panelManager.isOpenPanel("tray-drawer"))
+      m_panelManager.refresh();
     m_keyboardLayoutOsd.onTrayChanged(
         *m_trayService, m_configService.config(), m_configService.config().osd.kinds.keyboardLayout
     );

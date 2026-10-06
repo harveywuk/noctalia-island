@@ -3,8 +3,10 @@
 #include "config/config_types.h"
 #include "shell/bar/widget_action_dispatcher.h"
 #include "shell/bar/widget_factory.h"
+#include "shell/bar/widgets/tray_widget.h"
 #include "shell/island/island_widget_layout.h"
 #include "shell/panel/panel_manager.h"
+#include "shell/tray/tray_overflow.h"
 
 #include <algorithm>
 #include <string>
@@ -40,6 +42,9 @@ IslandWidgetHost::IslandWidgetHost(
       auto widget = factory.create(name, output, options.contentScale, "top", barName, 8 * scale, options.enableScroll);
       if (!widget)
         continue;
+      if (trayOnlyMode)
+        if (auto* tray = dynamic_cast<TrayWidget*>(widget.get()))
+          tray->setInlineItemLimit(3);
       widget->setConfigName(name);
       // The Cupertino Island is black in both themes; unstyled widgets draw white on it.
       const bool cupertino = island.appearance == IslandAppearance::Cupertino;
@@ -58,11 +63,22 @@ IslandWidgetHost::IslandWidgetHost(
       });
       widget->setRedrawCallback(redraw);
       widget->setFrameTickRequestCallback(m_frame);
-      widget->setPanelToggleCallback([output, barName](
-                                         std::string_view panel, std::string_view context, std::optional<float>,
-                                         std::optional<float>, Widget::PanelActivation activation
+      widget->setPanelToggleCallback([this, output, barName](
+                                         std::string_view panel, std::string_view context, std::optional<float> ax,
+                                         std::optional<float> ay, Widget::PanelActivation activation
                                      ) {
         PanelOpenRequest request{.output = output, .context = context, .sourceBarName = barName};
+        if (panel == "tray-drawer" && context.starts_with(tray::kIslandOverflowContext) && ax && ay) {
+          // The standalone Island has no corresponding configured bar.
+          if (barName == "__legacy_island")
+            request.sourceBarName = {};
+          float hostX = 0, hostY = 0;
+          Node::absolutePosition(this, hostX, hostY);
+          request.anchorX = *ax;
+          request.anchorY = std::max(*ay, hostY + height() + 24 * m_scale);
+          request.hasAnchorPosition = true;
+          request.anchorBelow = true;
+        }
         if (activation == Widget::PanelActivation::Open)
           PanelManager::instance().openPanel(std::string(panel), request);
         else
