@@ -108,6 +108,7 @@ namespace settings {
               .glyph = std::string(sectionGlyph(section)),
               .glyphSize = kIconTileGlyphSize * scale,
               .color = fixedColorSpec(rgbHex(0xFFFFFF)),
+              .configure = [](Glyph& glyph) { glyph.setEmphasized(true); },
           })
       );
     }

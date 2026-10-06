@@ -13,11 +13,10 @@ class Glyph;
 class ProgressBar;
 class Box;
 
-// Event-driven cards backed by the shell's existing power and activity services.
+// Event-driven Screen Time card backed by the shell's activity service.
 class DesktopStatusCardWidget final : public DesktopWidget {
 public:
-  enum class Kind { Batteries, ScreenTime };
-  DesktopStatusCardWidget(Kind kind, DesktopWidgetRuntimeServices services, desktop_cards::Size size);
+  DesktopStatusCardWidget(DesktopWidgetRuntimeServices services, desktop_cards::Size size);
   void create() override;
 
 private:
@@ -39,7 +38,6 @@ private:
   void doUpdate(Renderer& renderer) override;
   void onFontFamilyChanged(const std::string& family, Renderer& renderer) override;
   bool refresh();
-  Kind m_kind;
   DesktopWidgetRuntimeServices m_services;
   desktop_cards::Size m_size;
   std::string m_value;

@@ -121,6 +121,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             close(); msg('settings-open', 'appearance'); time.sleep(.9); click_text('Theme')
             click_row_control('Choose a palette')
             shot(mode+'-community-preset')
+            command(keyboard, 1)
+            time.sleep(.3)
+            click_row_control('Choose a palette')
+            shot(mode+'-community-preset-reopened')
             # The trigger above was located from its row's label; choose the sole
             # offline catalog entry through the real picker keyboard path.
             # Several palettes are bundled, so filter to macOS first (m, a, c, o, s).

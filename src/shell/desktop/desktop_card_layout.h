@@ -8,7 +8,8 @@
 namespace desktop_cards {
 
   inline bool supportsSizePresets(std::string_view type) {
-    return type == "weather"
+    return type == "stack"
+        || type == "weather"
         || type == "calendar"
         || type == "clock"
         || type == "media_player"

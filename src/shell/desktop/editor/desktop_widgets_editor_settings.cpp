@@ -5,7 +5,9 @@
 #include "render/render_context.h"
 #include "render/scene/input_area.h"
 #include "shell/desktop/desktop_card_layout.h"
+#include "shell/desktop/desktop_widget_factory.h"
 #include "shell/desktop/desktop_widget_settings_registry.h"
+#include "shell/desktop/desktop_widget_setup.h"
 #include "shell/desktop/editor/desktop_widgets_editor.h"
 #include "shell/lockscreen/lockscreen_login_box.h"
 #include "shell/settings/color_spec_picker.h"
@@ -597,13 +599,13 @@ namespace {
             options.extensions = extensions;
           }
           applyPathDialogStartValue(options, inputPtr->value(), kind);
+          const auto target = editor->settingEditTarget();
           (void)FileDialog::open(
-              std::move(options), [editor, key, inputPtr](std::optional<std::filesystem::path> result) {
-                if (!result.has_value()) {
+              std::move(options), [editor, key, target](std::optional<std::filesystem::path> result) {
+                if (!result.has_value() || target != editor->settingEditTarget()) {
                   return;
                 }
-                inputPtr->setValue(result->string());
-                editor->applySettingChange(key, result->string());
+                editor->applySettingChange(key, result->string(), true);
               }
           );
         },
@@ -726,6 +728,17 @@ namespace {
       case settings::WidgetControlKind::Bool: {
         const auto* defVal = std::get_if<bool>(&spec.schema.defaultValue);
         content.addChild(makeToggleRow(label, spec.schema.key, defVal != nullptr ? *defVal : false, s, editor));
+        if (spec.schema.key == "smart_rotate") {
+          content.addChild(
+              ui::label({
+                  .text = i18n::tr("desktop-widgets.editor.settings.smart-rotate-description"),
+                  .fontSize = Style::fontSizeCaption,
+                  .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+                  .maxWidth = kInspectorWidth - 2 * Style::spaceLg,
+                  .maxLines = 3,
+              })
+          );
+        }
         break;
       }
 
@@ -899,156 +912,177 @@ namespace {
 
 } // namespace
 
-void DesktopWidgetsEditor::applySettingChange(const std::string& key, WidgetSettingValue value) {
-  deferEditorMutation([this, key, value = std::move(value)]() {
-    auto* state = findWidgetState(m_selectedWidgetId);
-    if (state == nullptr) {
-      return;
-    }
+void DesktopWidgetsEditor::applySettingChange(const std::string& key, WidgetSettingValue value, bool rebuild) {
+  const auto target = settingEditTarget();
+  deferEditorMutation(
+      [this, key, value = std::move(value), rebuild, target]() {
+        if (target != settingEditTarget())
+          return;
+        if (m_setupDraft) {
+          m_setupDraft->settings[key] = value;
+          m_setupError.clear();
+          if (rebuild
+              || std::holds_alternative<std::vector<std::string>>(value)
+              || std::holds_alternative<WidgetSettingStringMap>(value)
+              || settingChangeAffectsInspectorVisibility(m_setupDraft->type, key))
+            requestLayout();
+          return;
+        }
+        auto* state = findWidgetState(m_selectedWidgetId);
+        if (state == nullptr) {
+          return;
+        }
 
-    const bool collectionValue = std::holds_alternative<std::vector<std::string>>(value)
-        || std::holds_alternative<WidgetSettingStringMap>(value);
-    const bool rebuildInspector =
-        settingChangeAffectsInspectorVisibility(state->type, key) || key == "background" || collectionValue;
-    state->settings[key] = value;
-    if (key == "card_size" && desktop_cards::supportsSizePresets(state->type)) {
-      // Choosing a preset restores its footprint after a free resize.
-      state->boxWidth = 0.0F;
-      state->boxHeight = 0.0F;
-    }
+        const bool collectionValue = std::holds_alternative<std::vector<std::string>>(value)
+            || std::holds_alternative<WidgetSettingStringMap>(value);
+        const bool rebuildInspector = rebuild
+            || settingChangeAffectsInspectorVisibility(state->type, key)
+            || key == "background"
+            || collectionValue;
+        state->settings[key] = value;
+        if (key == "card_size" && desktop_cards::supportsSizePresets(state->type)) {
+          // Choosing a preset restores its footprint after a free resize.
+          state->boxWidth = 0.0F;
+          state->boxHeight = 0.0F;
+        }
 
-    if (lockscreen_login_box::isLoginBoxWidget(*state)
-        && (key == lockscreen_login_box::kLayoutKey
-            || key == lockscreen_login_box::kShowSessionButtonsKey
-            || key == lockscreen_login_box::kShowMediaKey
-            || key == lockscreen_login_box::kShowWeatherKey)) {
-      float screenWidth = 1920.0F;
-      if (OverlaySurface* layoutSurface = findSurfaceForWidget(m_selectedWidgetId);
-          layoutSurface != nullptr && layoutSurface->surface != nullptr) {
-        screenWidth = static_cast<float>(layoutSurface->surface->width());
-      }
-      const lockscreen_login_box::LoginBoxStyle style = lockscreen_login_box::resolveStyle(state->settings);
-      const bool showInfo = lockscreen_login_box::styleShowsInfoExtras(style);
-      if (key == lockscreen_login_box::kLayoutKey) {
-        lockscreen_login_box::defaultPanelSize(
-            screenWidth, state->boxWidth, state->boxHeight, style.layout, style.showSessionButtons, showInfo
-        );
-      } else {
-        state->boxHeight = lockscreen_login_box::defaultPanelHeight(style.layout, style.showSessionButtons, showInfo);
-        lockscreen_login_box::clampPanelSize(
-            screenWidth, state->boxWidth, state->boxHeight, style.layout, style.showSessionButtons, showInfo
-        );
-      }
-    }
+        if (lockscreen_login_box::isLoginBoxWidget(*state)
+            && (key == lockscreen_login_box::kLayoutKey
+                || key == lockscreen_login_box::kShowSessionButtonsKey
+                || key == lockscreen_login_box::kShowMediaKey
+                || key == lockscreen_login_box::kShowWeatherKey)) {
+          float screenWidth = 1920.0F;
+          if (OverlaySurface* layoutSurface = findSurfaceForWidget(m_selectedWidgetId);
+              layoutSurface != nullptr && layoutSurface->surface != nullptr) {
+            screenWidth = static_cast<float>(layoutSurface->surface->width());
+          }
+          const lockscreen_login_box::LoginBoxStyle style = lockscreen_login_box::resolveStyle(state->settings);
+          const bool showInfo = lockscreen_login_box::styleShowsInfoExtras(style);
+          if (key == lockscreen_login_box::kLayoutKey) {
+            lockscreen_login_box::defaultPanelSize(
+                screenWidth, state->boxWidth, state->boxHeight, style.layout, style.showSessionButtons, showInfo
+            );
+          } else {
+            state->boxHeight =
+                lockscreen_login_box::defaultPanelHeight(style.layout, style.showSessionButtons, showInfo);
+            lockscreen_login_box::clampPanelSize(
+                screenWidth, state->boxWidth, state->boxHeight, style.layout, style.showSessionButtons, showInfo
+            );
+          }
+        }
 
-    OverlaySurface* surface = findSurfaceForWidget(m_selectedWidgetId);
-    if (surface == nullptr) {
-      return;
-    }
-    auto viewIt = surface->views.find(m_selectedWidgetId);
-    if (viewIt == surface->views.end()) {
-      return;
-    }
+        OverlaySurface* surface = findSurfaceForWidget(m_selectedWidgetId);
+        if (surface == nullptr) {
+          return;
+        }
+        auto viewIt = surface->views.find(m_selectedWidgetId);
+        if (viewIt == surface->views.end()) {
+          return;
+        }
 
-    auto& view = viewIt->second;
-    if (view.transformNode == nullptr) {
-      return;
-    }
-    if (surface->surface == nullptr || m_renderContext == nullptr) {
-      return;
-    }
-    m_renderContext->makeCurrent(surface->surface->renderTarget());
-    Renderer& renderer = surface->surface->renderTarget().renderer();
+        auto& view = viewIt->second;
+        if (view.transformNode == nullptr) {
+          return;
+        }
+        if (surface->surface == nullptr || m_renderContext == nullptr) {
+          return;
+        }
+        m_renderContext->makeCurrent(surface->surface->renderTarget());
+        Renderer& renderer = surface->surface->renderTarget().renderer();
 
-    const auto keepPresetOnOutput = [&]() {
-      if (key == "card_size") {
-        // A wider preset near a screen edge should remain reachable on this output.
-        const float width = static_cast<float>(surface->surface->width());
-        const float height = static_cast<float>(surface->surface->height());
-        state->cx = view.intrinsicWidth >= width
-            ? width * 0.5F
-            : std::clamp(state->cx, view.intrinsicWidth * 0.5F, width - view.intrinsicWidth * 0.5F);
-        state->cy = view.intrinsicHeight >= height
-            ? height * 0.5F
-            : std::clamp(state->cy, view.intrinsicHeight * 0.5F, height - view.intrinsicHeight * 0.5F);
-      }
-    };
+        const auto keepPresetOnOutput = [&]() {
+          if (key == "card_size") {
+            // A wider preset near a screen edge should remain reachable on this output.
+            const float width = static_cast<float>(surface->surface->width());
+            const float height = static_cast<float>(surface->surface->height());
+            state->cx = view.intrinsicWidth >= width
+                ? width * 0.5F
+                : std::clamp(state->cx, view.intrinsicWidth * 0.5F, width - view.intrinsicWidth * 0.5F);
+            state->cy = view.intrinsicHeight >= height
+                ? height * 0.5F
+                : std::clamp(state->cy, view.intrinsicHeight * 0.5F, height - view.intrinsicHeight * 0.5F);
+          }
+        };
 
-    if (view.widget != nullptr && view.widget->applySetting(key, value, state->settings, renderer)) {
-      applyViewState(view, *state, true);
-      keepPresetOnOutput();
-      applyViewState(view, *state, false);
-      updateSelectionVisuals(*surface);
-      if (rebuildInspector) {
-        requestLayout();
-      } else if (surface->surface != nullptr) {
-        surface->surface->requestLayout();
-        surface->surface->requestRedraw();
-      }
-      return;
-    }
+        if (view.widget != nullptr && view.widget->applySetting(key, value, state->settings, renderer)) {
+          applyViewState(view, *state, true);
+          keepPresetOnOutput();
+          applyViewState(view, *state, false);
+          updateSelectionVisuals(*surface);
+          if (rebuildInspector) {
+            requestLayout();
+          } else if (surface->surface != nullptr) {
+            surface->surface->requestLayout();
+            surface->surface->requestRedraw();
+          }
+          return;
+        }
 
-    auto newWidget = m_factory->create(state->type, state->settings, widgetContentScale());
-    if (newWidget == nullptr) {
-      return;
-    }
+        auto newWidget =
+            m_factory->create(state->type, state->settings, widgetContentScale(), &m_snapshot.widgets, state->id);
+        if (newWidget == nullptr) {
+          return;
+        }
 
-    if (view.widget != nullptr) {
-      const auto& children = view.transformNode->children();
-      for (const auto& child : children) {
-        view.transformNode->removeChild(child.get());
-        break;
-      }
-    }
+        if (view.widget != nullptr) {
+          const auto& children = view.transformNode->children();
+          for (const auto& child : children) {
+            view.transformNode->removeChild(child.get());
+            break;
+          }
+        }
 
-    newWidget->create();
-    newWidget->setEditorPreview(true);
-    newWidget->setAnimationManager(&surface->animations);
-    auto* surfacePtr = surface;
-    newWidget->setUpdateCallback([surfacePtr]() {
-      if (surfacePtr->surface != nullptr) {
-        surfacePtr->surface->requestUpdateOnly();
-      }
-    });
-    newWidget->setLayoutCallback([surfacePtr]() {
-      if (surfacePtr->surface != nullptr) {
-        surfacePtr->surface->requestUpdate();
-      }
-    });
-    newWidget->setRedrawCallback([surfacePtr]() {
-      if (surfacePtr->surface != nullptr) {
-        surfacePtr->surface->requestRedraw();
-      }
-    });
-    newWidget->setFrameTickRequestCallback([surfacePtr]() {
-      if (surfacePtr->surface != nullptr) {
-        surfacePtr->surface->requestFrameTick();
-      }
-    });
-    newWidget->setBox(state->boxWidth, state->boxHeight);
-    newWidget->update(renderer);
-    newWidget->layout(renderer);
+        newWidget->create();
+        newWidget->setEditorPreview(true);
+        newWidget->setAnimationManager(&surface->animations);
+        auto* surfacePtr = surface;
+        newWidget->setUpdateCallback([surfacePtr]() {
+          if (surfacePtr->surface != nullptr) {
+            surfacePtr->surface->requestUpdateOnly();
+          }
+        });
+        newWidget->setLayoutCallback([surfacePtr]() {
+          if (surfacePtr->surface != nullptr) {
+            surfacePtr->surface->requestUpdate();
+          }
+        });
+        newWidget->setRedrawCallback([surfacePtr]() {
+          if (surfacePtr->surface != nullptr) {
+            surfacePtr->surface->requestRedraw();
+          }
+        });
+        newWidget->setFrameTickRequestCallback([surfacePtr]() {
+          if (surfacePtr->surface != nullptr) {
+            surfacePtr->surface->requestFrameTick();
+          }
+        });
+        newWidget->setBox(state->boxWidth, state->boxHeight);
+        newWidget->update(renderer);
+        newWidget->layout(renderer);
 
-    view.intrinsicWidth = std::max(1.0F, newWidget->intrinsicWidth());
-    view.intrinsicHeight = std::max(1.0F, newWidget->intrinsicHeight());
-    auto widgetRoot = newWidget->releaseRoot();
-    widgetRoot->setHitTestVisible(false);
-    widgetRoot->setExcludeSubtreeFromTabOrder(true);
-    view.transformNode->addChild(std::move(widgetRoot));
-    view.widget = std::move(newWidget);
+        view.intrinsicWidth = std::max(1.0F, newWidget->intrinsicWidth());
+        view.intrinsicHeight = std::max(1.0F, newWidget->intrinsicHeight());
+        auto widgetRoot = newWidget->releaseRoot();
+        widgetRoot->setHitTestVisible(false);
+        widgetRoot->setExcludeSubtreeFromTabOrder(true);
+        view.transformNode->addChild(std::move(widgetRoot));
+        view.widget = std::move(newWidget);
 
-    keepPresetOnOutput();
-    applyViewState(view, *state, false);
-    if ((state->type == "audio_visualizer" || state->type == "fancy_audio_visualizer") && surface->surface != nullptr) {
-      surface->surface->requestFrameTick();
-    }
-    updateSelectionVisuals(*surface);
-    if (rebuildInspector) {
-      requestLayout();
-    } else if (surface->surface != nullptr) {
-      surface->surface->requestRedraw();
-    }
-  });
+        keepPresetOnOutput();
+        applyViewState(view, *state, false);
+        if ((state->type == "audio_visualizer" || state->type == "fancy_audio_visualizer")
+            && surface->surface != nullptr) {
+          surface->surface->requestFrameTick();
+        }
+        updateSelectionVisuals(*surface);
+        if (rebuildInspector) {
+          requestLayout();
+        } else if (surface->surface != nullptr) {
+          surface->surface->requestRedraw();
+        }
+      },
+      target + ":" + key
+  );
 }
 
 void DesktopWidgetsEditor::resetSelectedWidgetSettings() {
@@ -1111,7 +1145,136 @@ void DesktopWidgetsEditor::buildInspector(
   content->setGap(Style::spaceXs);
   content->setPadding(Style::spaceSm, Style::spaceMd);
 
-  const auto typeSpecs = desktop_settings::desktopWidgetSettingSpecs(selectedState.type);
+  auto typeSpecs = desktop_settings::desktopWidgetSettingSpecs(selectedState.type);
+  if (selectedState.type == "batteries") {
+    std::erase_if(typeSpecs, [](const auto& spec) { return spec.schema.key == "hidden_devices"; });
+    std::vector<std::string> hidden;
+    if (const auto it = selectedState.settings.find("hidden_devices"); it != selectedState.settings.end())
+      if (const auto* value = std::get_if<std::vector<std::string>>(&it->second))
+        hidden = *value;
+    content->addChild(
+        ui::label(
+            {.text = i18n::tr("desktop-widgets.batteries.devices-on-card"),
+             .fontSize = Style::fontSizeBody,
+             .fontWeight = FontWeight::Medium,
+             .maxLines = 2}
+        )
+    );
+    content->addChild(
+        ui::label(
+            {.text = i18n::tr("desktop-widgets.batteries.devices-hint"),
+             .fontSize = Style::fontSizeCaption,
+             .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+             .maxLines = 3}
+        )
+    );
+    const auto devices = m_factory->batteryDevices();
+    for (const auto& device : devices) {
+      content->addChild(makeRow(
+          device.name,
+          ui::toggle(
+              {.checked = std::ranges::find(hidden, device.id) == hidden.end(),
+               .onChange = [this, hidden, id = device.id](bool checked) mutable {
+                 std::erase(hidden, id);
+                 if (!checked)
+                   hidden.push_back(id);
+                 applySettingChange("hidden_devices", hidden);
+               }}
+          )
+      ));
+    }
+    if (devices.empty())
+      content->addChild(
+          ui::label(
+              {.text = i18n::tr("desktop-widgets.cards.no-batteries"),
+               .fontSize = Style::fontSizeCaption,
+               .maxLines = 3}
+          )
+      );
+    if (!hidden.empty())
+      content->addChild(
+          ui::button(
+              {.text = i18n::tr("desktop-widgets.batteries.show-all"),
+               .variant = ButtonVariant::Ghost,
+               .onClick = [this]() { applySettingChange("hidden_devices", std::vector<std::string>{}); }}
+          )
+      );
+  }
+  if (desktop_setup::guided(selectedState.type)) {
+    content->addChild(
+        ui::button(
+            {.text = i18n::tr("desktop-widgets.setup.configure"),
+             .glyph = "settings",
+             .variant = ButtonVariant::Secondary,
+             .onClick = [this, id = selectedState.id]() { deferEditorMutation([this, id]() { configureWidget(id); }); }}
+        )
+    );
+  }
+  if (m_selectedWidgetIds.size() >= 2
+      && m_selectedWidgetIds.size() <= desktop_stacks::maxMembers
+      && std::ranges::all_of(m_snapshot.widgets, [&](const auto& state) {
+           return !isWidgetSelected(state.id)
+               || (state.type != "stack"
+                   && desktop_cards::supportsSizePresets(state.type)
+                   && effectiveOutputName(state) == effectiveOutputName(selectedState));
+         })) {
+    content->addChild(
+        ui::button({.text = i18n::tr("desktop-widgets.stack.create"), .glyph = "stack", .onClick = [this]() {
+                      deferEditorMutation([this]() { stackSelection(); });
+                    }})
+    );
+  }
+  if (selectedState.type == "stack") {
+    std::erase_if(typeSpecs, [](const auto& spec) { return spec.schema.key == "members"; });
+    content->addChild(
+        ui::label(
+            {.text = i18n::tr("desktop-widgets.stack.drag-hint"),
+             .fontSize = Style::fontSizeCaption,
+             .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+             .maxLines = 3}
+        )
+    );
+    for (const auto& card : desktop_stacks::cards(m_snapshot.widgets, selectedState.id)) {
+      auto row = ui::row({.align = FlexAlign::Center, .gap = Style::spaceSm, .fillWidth = true});
+      auto grip = ui::inputArea(
+          {.cursorShape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRAB,
+           .tooltip = i18n::tr("desktop-widgets.stack.drag-hint"),
+           .frameWidth = 30.0F,
+           .frameHeight = 32.0F,
+           .onPress = [this, stack = selectedState.id, id = card.id,
+                       output = surface.outputName](const InputArea::PointerData& data) {
+             if (data.button == BTN_LEFT && data.pressed)
+               startStackMemberDrag(stack, id, output);
+           }}
+      );
+      grip->addChild(
+          ui::glyph(
+              {.glyph = "grip-vertical",
+               .glyphSize = 18.0F,
+               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+               .configure = [](Glyph& glyph) {
+                 glyph.setPosition(6, 7);
+                 glyph.setHitTestVisible(false);
+               }}
+          )
+      );
+      row->addChild(std::move(grip));
+      row->addChild(
+          ui::button(
+              {.text = i18n::tr(
+                   "desktop-widgets.stack.edit-card", "name", desktop_settings::desktopWidgetTypeLabel(card.type)
+               ),
+               .variant = ButtonVariant::Ghost,
+               .onClick = [this, id = card.id]() { deferEditorMutation([this, id]() { configureWidget(id); }); }}
+          )
+      );
+      surface.stackMemberRows.emplace_back(card.id, row.get());
+      content->addChild(std::move(row));
+    }
+    content->addChild(ui::button({.text = i18n::tr("desktop-widgets.stack.unstack"), .onClick = [this]() {
+                                    deferEditorMutation([this]() { unstackSelection(); });
+                                  }}));
+  }
   const auto backgroundSpecs = desktop_settings::commonDesktopWidgetSettingSpecs(selectedState.type);
   addSettingsSection(
       *content, typeSpecs, selectedState.settings, this, "desktop-widgets.editor.settings.widget-section", false
@@ -1211,4 +1374,337 @@ void DesktopWidgetsEditor::buildInspector(
   }
   clampInspectorPosition(surface, panelPtr->width(), panelPtr->height());
   panelPtr->setPosition(surface.inspectorX, surface.inspectorY);
+}
+
+void DesktopWidgetsEditor::startSetup(const std::string& output, const std::string& type, const std::string& size) {
+  m_setupPosition.reset();
+  m_setupStackTarget.clear();
+  ++m_setupRevision;
+  m_setupDraft = DesktopWidgetState{};
+  m_setupDraft->type = type;
+  m_setupDraft->outputName = output;
+  m_setupDraft->settings = desktop_settings::newDesktopWidgetSettings(type, size);
+  m_setupWidgetId.clear();
+  m_setupOutputName = output;
+  m_setupError.clear();
+  m_setupScroll = {};
+  requestLayout();
+}
+
+void DesktopWidgetsEditor::editWidget(const std::string& id) {
+  const auto* state = findWidgetState(id);
+  if (!m_open || !state)
+    return;
+  if (desktop_setup::guided(state->type)) {
+    configureWidget(id);
+    return;
+  }
+  setSingleSelection(id);
+  m_inspectorOpen = true;
+  requestLayout();
+}
+
+void DesktopWidgetsEditor::configureWidget(const std::string& id) {
+  m_setupPosition.reset();
+  m_setupStackTarget.clear();
+  const auto* state = findWidgetState(id);
+  if (!m_open || !state)
+    return;
+  ++m_setupRevision;
+  m_setupDraft = *state;
+  m_setupWidgetId = id;
+  m_setupOutputName = effectiveOutputName(*state);
+  const auto membership = desktop_stacks::resolve(m_snapshot.widgets);
+  auto selected = id;
+  for (const auto& [owner, members] : membership) {
+    if (std::ranges::find(members, id) != members.end()) {
+      selected = owner;
+      if (const auto* stack = findWidgetState(owner))
+        m_setupOutputName = effectiveOutputName(*stack);
+      break;
+    }
+  }
+  setSingleSelection(selected);
+  m_galleryOutputName.clear();
+  m_inspectorOpen = false;
+  m_setupError.clear();
+  m_setupScroll = {};
+  requestLayout();
+}
+
+void DesktopWidgetsEditor::closeSetup() {
+  m_setupPosition.reset();
+  m_setupStackTarget.clear();
+  for (auto& surface : m_surfaces)
+    surface->inputDispatcher.setFocus(nullptr);
+  ++m_setupRevision;
+  m_setupDraft.reset();
+  m_setupWidgetId.clear();
+  m_setupOutputName.clear();
+  m_setupError.clear();
+  requestLayout();
+}
+
+void DesktopWidgetsEditor::saveSetup(bool skip) {
+  if (!m_setupDraft)
+    return;
+  m_setupError = skip ? std::string() : desktop_setup::validate(*m_setupDraft);
+  if (m_setupError.empty() && m_setupDraft->type == "stack") {
+    auto widgets = m_snapshot.widgets;
+    auto draft = *m_setupDraft;
+    draft.id = m_setupWidgetId.empty() ? nextWidgetId() : m_setupWidgetId;
+    auto it = std::ranges::find(widgets, draft.id, &DesktopWidgetState::id);
+    if (it != widgets.end())
+      *it = draft;
+    else
+      widgets.push_back(draft);
+    if (desktop_stacks::cards(widgets, draft.id).size() != desktop_stacks::members(draft).size())
+      m_setupError = "desktop-widgets.setup.stack-count";
+  }
+  if (!m_setupError.empty()) {
+    requestLayout();
+    return;
+  }
+  if (m_setupWidgetId.empty()) {
+    addWidget(
+        m_setupOutputName, m_setupDraft->type, getStr(m_setupDraft->settings, "card_size", "medium"), m_setupPosition
+    );
+    if (auto* state = findWidgetState(m_selectedWidgetId))
+      state->settings = m_setupDraft->settings;
+    if (!m_setupStackTarget.empty()) {
+      const auto stack =
+          desktop_stacks::join(m_snapshot.widgets, m_selectedWidgetId, m_setupStackTarget, nextWidgetId());
+      if (!stack.empty())
+        setSingleSelection(stack);
+    }
+  } else if (auto* state = findWidgetState(m_setupWidgetId)) {
+    const auto previousSize = getStr(state->settings, "card_size");
+    state->settings = m_setupDraft->settings;
+    if (getStr(state->settings, "card_size") != previousSize)
+      state->boxWidth = state->boxHeight = 0;
+  }
+  closeSetup();
+  closeGallery();
+}
+
+void DesktopWidgetsEditor::stackSelection() {
+  if (m_selectedWidgetIds.size() < 2 || m_selectedWidgetIds.size() > desktop_stacks::maxMembers)
+    return;
+  const auto* anchor = findWidgetState(m_selectedWidgetId);
+  if (!anchor)
+    return;
+  const auto output = effectiveOutputName(*anchor);
+  std::vector<std::string> members;
+  for (const auto& state : m_snapshot.widgets) {
+    if (!isWidgetSelected(state.id))
+      continue;
+    if (state.type == "stack"
+        || !desktop_cards::supportsSizePresets(state.type)
+        || effectiveOutputName(state) != output)
+      return;
+    members.push_back(state.id);
+  }
+  auto stack = *anchor;
+  stack.id = nextWidgetId();
+  stack.type = "stack";
+  stack.settings = desktop_settings::newDesktopWidgetSettings("stack", getStr(anchor->settings, "card_size", "medium"));
+  if (getStr(stack.settings, "card_size") == "classic")
+    stack.settings["card_size"] = std::string("medium");
+  stack.settings["members"] = members;
+  stack.boxWidth = stack.boxHeight = 0;
+  stack.rotationRad = 0;
+  stack.flipX = stack.flipY = false;
+  m_snapshot.widgets.push_back(std::move(stack));
+  setSingleSelection(m_snapshot.widgets.back().id);
+  requestLayout();
+}
+
+void DesktopWidgetsEditor::unstackSelection() {
+  const auto* state = findWidgetState(m_selectedWidgetId);
+  if (!state || state->type != "stack")
+    return;
+  const auto cards = desktop_stacks::cards(m_snapshot.widgets, state->id);
+  const auto id = state->id;
+  std::erase_if(m_snapshot.widgets, [&](const auto& item) { return item.id == id; });
+  clearSelection();
+  for (const auto& card : cards)
+    m_selectedWidgetIds.insert(card.id);
+  if (!cards.empty())
+    m_selectedWidgetId = cards.front().id;
+  requestLayout();
+}
+
+void DesktopWidgetsEditor::buildSetup(OverlaySurface& surface, Node& root) {
+  if (!m_setupDraft)
+    return;
+  auto& renderer = surface.surface->renderTarget().renderer();
+  for (const auto& child : root.children())
+    child->setExcludeSubtreeFromTabOrder(true);
+  const float width = std::min(600.0F, root.width() - 32.0F);
+  const float height = std::min(620.0F, root.height() - 32.0F);
+  const float inset = 20.0F;
+  auto dismiss = [this]() { deferEditorMutation([this]() { closeSetup(); }); };
+  auto overlay = ui::inputArea(
+      {.frameWidth = root.width(),
+       .frameHeight = root.height(),
+       .zIndex = 310,
+       .onClick = [dismiss](const InputArea::PointerData&) { dismiss(); }}
+  );
+  overlay->addChild(
+      ui::box(
+          {.fill = colorSpecFromRole(ColorRole::Shadow, .3F),
+           .width = root.width(),
+           .height = root.height(),
+           .configure = [](Box& box) { box.setHitTestVisible(false); }}
+      )
+  );
+  auto panel = ui::inputArea({.frameWidth = width, .frameHeight = height, .clipChildren = true});
+  panel->setPosition(std::round((root.width() - width) * .5F), std::round((root.height() - height) * .5F));
+  panel->addChild(ui::box({.width = width, .height = height, .configure = [](Box& box) {
+                             box.setDialogStyle();
+                             box.setHitTestVisible(false);
+                           }}));
+  auto place = [&](std::unique_ptr<Node> node, float x, float y) {
+    node->layout(renderer);
+    node->setPosition(Style::rtl() ? width - x - node->width() : x, y);
+    panel->addChild(std::move(node));
+  };
+  place(
+      ui::label(
+          {.text = i18n::tr(
+               "desktop-widgets.setup.title", "name", desktop_settings::desktopWidgetTypeLabel(m_setupDraft->type)
+           ),
+           .fontSize = Style::fontSizeTitle,
+           .fontWeight = FontWeight::Bold,
+           .maxWidth = width - 2 * inset}
+      ),
+      inset, inset
+  );
+  place(
+      ui::label(
+          {.text =
+               i18n::tr(m_setupDraft->type == "stack" ? "desktop-widgets.stack.hint" : "desktop-widgets.setup.hint"),
+           .fontSize = Style::fontSizeCaption,
+           .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+           .maxWidth = width - 2 * inset,
+           .maxLines = 3}
+      ),
+      inset, 52.0F
+  );
+  auto scroll = ui::scrollView({.state = &m_setupScroll, .width = width - 2 * inset, .height = height - 196.0F});
+  auto* content = scroll->content();
+  content->setGap(Style::spaceMd);
+  if (m_setupDraft->type == "stack") {
+    const auto membership = desktop_stacks::resolve(m_snapshot.widgets);
+    auto members = desktop_stacks::members(*m_setupDraft);
+    std::vector<DesktopWidgetState> choices;
+    for (const auto& id : members)
+      if (auto* state = findWidgetState(id))
+        choices.push_back(*state);
+    for (const auto& state : m_snapshot.widgets) {
+      if (state.type == "stack"
+          || !desktop_cards::supportsSizePresets(state.type)
+          || effectiveOutputName(state) != m_setupOutputName
+          || std::ranges::find(members, state.id) != members.end())
+        continue;
+      if (desktop_stacks::contains(membership, state.id))
+        continue;
+      choices.push_back(state);
+    }
+    if (choices.empty())
+      content->addChild(ui::label({.text = i18n::tr("desktop-widgets.stack.empty"), .maxLines = 4}));
+    for (const auto& card : choices) {
+      const auto found = std::ranges::find(members, card.id);
+      const bool included = found != members.end();
+      const auto index = static_cast<std::size_t>(found - members.begin());
+      auto row = ui::row({.align = FlexAlign::Center, .gap = Style::spaceSm, .fillWidth = true});
+      row->addChild(
+          ui::checkbox(
+              {.checked = included,
+               .enabled = included || members.size() < desktop_stacks::maxMembers,
+               .onChange = [this, id = card.id](bool enabled) {
+                 deferEditorMutation([this, id, enabled]() {
+                   if (!m_setupDraft)
+                     return;
+                   auto selected = desktop_stacks::members(*m_setupDraft);
+                   if (enabled && selected.size() < desktop_stacks::maxMembers)
+                     selected.push_back(id);
+                   else
+                     std::erase(selected, id);
+                   m_setupDraft->settings["members"] = selected;
+                   m_setupError.clear();
+                   requestLayout();
+                 });
+               }}
+          )
+      );
+      auto name = desktop_settings::desktopWidgetTypeLabel(card.type);
+      const auto source = getStr(card.settings, "list_name", getStr(card.settings, "timezone"));
+      if (!source.empty())
+        name += " · " + source;
+      row->addChild(ui::label({.text = name, .maxLines = 1, .flexGrow = 1.0F}));
+      if (included)
+        for (const int direction : {-1, 1}) {
+          row->addChild(
+              ui::button(
+                  {.glyph = direction < 0 ? "chevron-up" : "chevron-down",
+                   .enabled = direction < 0 ? index > 0 : index + 1 < members.size(),
+                   .variant = ButtonVariant::Ghost,
+                   .onClick = [this, index, direction]() {
+                     deferEditorMutation([this, index, direction]() {
+                       if (!m_setupDraft)
+                         return;
+                       auto selected = desktop_stacks::members(*m_setupDraft);
+                       const auto to = direction < 0 ? index - 1 : index + 1;
+                       if (index < selected.size() && to < selected.size())
+                         std::swap(selected[index], selected[to]);
+                       m_setupDraft->settings["members"] = selected;
+                       requestLayout();
+                     });
+                   }}
+              )
+          );
+        }
+      content->addChild(std::move(row));
+    }
+  } else {
+    auto specs = desktop_settings::desktopWidgetSettingSpecs(m_setupDraft->type);
+    std::erase_if(specs, [](const auto& spec) {
+      return spec.schema.key == "card_size" || spec.schema.key == "font_family";
+    });
+    addSpecSettings(*content, specs, m_setupDraft->settings, this);
+  }
+  place(std::move(scroll), inset, 98.0F);
+  place(
+      ui::label(
+          {.text = m_setupError.empty() ? std::string() : i18n::tr(m_setupError),
+           .fontSize = Style::fontSizeCaption,
+           .color = colorSpecFromRole(ColorRole::Error),
+           .maxWidth = width - 2 * inset,
+           .maxLines = 2}
+      ),
+      inset, height - 88.0F
+  );
+  place(ui::button({.text = i18n::tr("desktop-widgets.setup.cancel"), .onClick = dismiss}), inset, height - 52.0F);
+  if (m_setupWidgetId.empty() && m_setupDraft->type != "stack") {
+    place(
+        ui::button(
+            {.text = i18n::tr("desktop-widgets.setup.skip"),
+             .variant = ButtonVariant::Ghost,
+             .onClick = [this]() { deferEditorMutation([this]() { saveSetup(true); }); }}
+        ),
+        130.0F, height - 52.0F
+    );
+  }
+  auto save = ui::button(
+      {.text = i18n::tr(m_setupWidgetId.empty() ? "desktop-widgets.editor.gallery.add" : "desktop-widgets.setup.save"),
+       .variant = ButtonVariant::Primary,
+       .onClick = [this]() { deferEditorMutation([this]() { saveSetup(); }); }}
+  );
+  save->layout(renderer);
+  const float saveX = width - inset - save->width();
+  place(std::move(save), saveX, height - 52.0F);
+  overlay->addChild(std::move(panel));
+  overlay->layout(renderer);
+  root.addChild(std::move(overlay));
 }

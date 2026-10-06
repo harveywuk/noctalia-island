@@ -1,6 +1,7 @@
 #include "shell/control_center/tabs/bluetooth_tab.h"
 
 #include "core/ui_phase.h"
+#include "dbus/bluetooth/bluetooth_glyphs.h"
 #include "i18n/i18n.h"
 #include "render/core/renderer.h"
 #include "shell/panel/panel_manager.h"
@@ -25,38 +26,6 @@ namespace {
 
   // Bounds an explicit Rescan: BlueZ discovery is stopped again when this window elapses.
   constexpr auto kDiscoveryTimeout = std::chrono::seconds(10);
-
-  const char* glyphFor(BluetoothDeviceKind kind) {
-    switch (kind) {
-    case BluetoothDeviceKind::Headset:
-      return "bluetooth-device-headset";
-    case BluetoothDeviceKind::Headphones:
-      return "bluetooth-device-headphones";
-    case BluetoothDeviceKind::Earbuds:
-      return "bluetooth-device-earbuds";
-    case BluetoothDeviceKind::Speaker:
-      return "bluetooth-device-speaker";
-    case BluetoothDeviceKind::Microphone:
-      return "bluetooth-device-microphone";
-    case BluetoothDeviceKind::Mouse:
-      return "bluetooth-device-mouse";
-    case BluetoothDeviceKind::Keyboard:
-      return "bluetooth-device-keyboard";
-    case BluetoothDeviceKind::Phone:
-      return "bluetooth-device-phone";
-    case BluetoothDeviceKind::Computer:
-      return "device-laptop";
-    case BluetoothDeviceKind::Gamepad:
-      return "bluetooth-device-gamepad";
-    case BluetoothDeviceKind::Watch:
-      return "bluetooth-device-watch";
-    case BluetoothDeviceKind::Tv:
-      return "bluetooth-device-tv";
-    case BluetoothDeviceKind::Unknown:
-    default:
-      return "bluetooth-device-generic";
-    }
-  }
 
   enum class DeviceBucket : std::uint8_t {
     Connected,
@@ -152,7 +121,7 @@ public:
          .padding = Style::spaceSm * scale,
          .minHeight = kRowMinHeight * scale},
         ui::glyph({
-            .glyph = glyphFor(m_device.kind),
+            .glyph = bluetoothDeviceGlyphName(m_device.kind),
             .glyphSize = Style::fontSizeBody * scale,
             .color = colorSpecFromRole(ColorRole::OnSurface),
         }),
@@ -788,9 +757,11 @@ void BluetoothTab::rebuildDeviceList(Renderer& renderer) {
   }
 
   if (m_service == nullptr) {
-    m_list->addChild(control_center::makeEmptyState(
-        "bluetooth-off", i18n::tr("control-center.bluetooth.unavailable"), "", scale, panelCardOpacity()
-    ));
+    m_list->addChild(
+        control_center::makeEmptyState(
+            "bluetooth-off", i18n::tr("control-center.bluetooth.unavailable"), "", scale, panelCardOpacity()
+        )
+    );
     m_list->layout(renderer);
     return;
   }
@@ -897,19 +868,24 @@ void BluetoothTab::rebuildDeviceList(Renderer& renderer) {
   }
 
   if (!s.powered) {
-    m_list->addChild(control_center::makeEmptyState(
-        "bluetooth-off",
-        s.rfkillSoftBlocked ? i18n::tr("control-center.bluetooth.rfkill-blocked") : i18n::tr("control-center.bluetooth.off"),
-        "", scale, panelCardOpacity()
-    ));
+    m_list->addChild(
+        control_center::makeEmptyState(
+            "bluetooth-off",
+            s.rfkillSoftBlocked ? i18n::tr("control-center.bluetooth.rfkill-blocked")
+                                : i18n::tr("control-center.bluetooth.off"),
+            "", scale, panelCardOpacity()
+        )
+    );
     m_list->layout(renderer);
     return;
   }
 
   if (devices.empty()) {
-    m_list->addChild(control_center::makeEmptyState(
-        "bluetooth", i18n::tr("control-center.bluetooth.no-devices"), "", scale, panelCardOpacity()
-    ));
+    m_list->addChild(
+        control_center::makeEmptyState(
+            "bluetooth", i18n::tr("control-center.bluetooth.no-devices"), "", scale, panelCardOpacity()
+        )
+    );
     m_list->layout(renderer);
     return;
   }

@@ -258,7 +258,7 @@ namespace {
   // Focus modes, Do Not Disturb among them, are indigo.
   constexpr Color kAppleIndigo = rgba(0.369F, 0.361F, 0.902F);
   // View changes crossfade the capsule's content.
-  constexpr float kViewFadeOutMs = 150.0F;
+  constexpr float kViewFadeOutMs = Motion::contentMs;
   // The incoming content fades in over half the expand spring's response, by which time the
   // capsule has covered about 95% of its travel.
   constexpr float kViewFadeInMs = Motion::islandExpand.responseMs / 2;
@@ -1150,6 +1150,22 @@ void Island::dismissNotification() {
   refresh();
 }
 
+void Island::hideNotificationPreviews() {
+  for (auto& inst : m_instances)
+    if (inst->keyboardNotification)
+      releaseKeyboard(*inst);
+  if (m_notification && m_notification->timeout > 0)
+    m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
+  for (const auto& queued : m_urgentNotifications)
+    if (queued.timeout > 0)
+      m_notifications->resumeExpiry(queued.id, queued.timeout);
+  m_notification.reset();
+  m_urgentNotifications.clear();
+  m_notificationDeadline.reset();
+  m_notificationPreviewTimer.stop();
+  refresh();
+}
+
 void Island::geometry(Instance& inst) {
   if (!inst.root)
     return;
@@ -1330,7 +1346,8 @@ void Island::prepare(Instance& inst) {
       : std::span<const DownloadProgress>(downloads);
   // Cupertino focuses an expanded activity on that activity alone, like Apple's Dynamic
   // Island; batteries, unread history and hover widgets stay in the idle (calendar) view.
-  // Privacy indicators always show.
+  // The media card also keeps a compact tray row below its playback controls.
+  // Temporary OSDs keep their own content; capture resumes in the following view.
   const bool showExtras = !gCupertino || view == island::View::Calendar;
   const auto batteryList =
       !recording && (compactView || expandedView) ? batteries(cfg, inst.output) : std::vector<island::Battery>{};
@@ -1350,6 +1367,9 @@ void Island::prepare(Instance& inst) {
           || view == island::View::TimerActivity);
   constexpr float badgeWidth = 24.0F;
   auto privacyList = privacy();
+  const bool capturing = !privacyList.empty();
+  if (!island::showsStatusIcons(view))
+    privacyList.clear();
   // Outside the expanded Island capture indicators share one slot, cycling every few seconds;
   // in compact views the unread-notifications bell joins that slot rather than taking its own.
   bool slotBell = false;
@@ -1475,7 +1495,7 @@ void Island::prepare(Instance& inst) {
       );
   if (expandedView && cfg.hoverShowUnread && m_notifications)
     signature += "|history:" + std::to_string(m_notifications->changeSerial());
-  if (expandedView && inst.hoverWidgets) {
+  if (expandedView && inst.hoverWidgets && inst.hoverWidgets->trayOnlyMode() == !showExtras) {
     m_renderContext->makeCurrent(inst.surface->renderTarget());
     const float oldHeight = inst.hoverWidgets->height();
     inst.hoverWidgets->updateWidgets(renderer, inst.hoverWidgets->width());
@@ -1534,7 +1554,7 @@ void Island::prepare(Instance& inst) {
       view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical;
   const auto updateCaptureGlow = [&] {
     if (inst.captureGlow)
-      inst.captureGlow->update(!privacyList.empty() || recording || criticalShown, islandRole(ColorRole::Error));
+      inst.captureGlow->update(capturing || recording || criticalShown, islandRole(ColorRole::Error));
   };
   updateCaptureGlow();
   // One bubble: its activity, the download jobs it stands for, and whether it is the lane split.
@@ -1827,7 +1847,7 @@ void Island::prepare(Instance& inst) {
   const bool showMediaStatus = view == island::View::Activity && !showUnread && !showBattery && privacyList.empty();
   const bool showVisualizer = showMediaStatus && playing;
   std::unique_ptr<Node> retainedWidgets;
-  if (expandedView && inst.hoverWidgets)
+  if (expandedView && inst.hoverWidgets && inst.hoverWidgets->trayOnlyMode() == !showExtras)
     retainedWidgets = inst.hoverWidgets->parent()->removeChild(inst.hoverWidgets);
   inst.hoverWidgets = nullptr;
   std::unique_ptr<Node> retainedVisualizer;
@@ -2113,9 +2133,9 @@ void Island::prepare(Instance& inst) {
     );
     if (timerView && !showBattery && privacyList.empty() && !timers.front().event) {
       glyph(
-          timers.front().running        ? "player-pause"
+          timers.front().running        ? "media-pause"
               : timers.front().finished ? "check"
-                                        : "player-play",
+                                        : "media-play",
           w - (showUnread ? 80 : 46), (cfg.height - 18) / 2, 18, muted
       );
     } else if (
@@ -2356,7 +2376,7 @@ void Island::prepare(Instance& inst) {
     const ColorRole role = charging ? ColorRole::Secondary : ColorRole::Primary;
     constexpr float badgeSize = 34.0F;
     const float badgeX = 16.0F;
-    const std::string icon = charging ? "bolt" : on ? "moon" : "moon-off";
+    const std::string icon = charging ? "bolt-filled" : on ? "focus-on" : "focus-off";
     if (gCupertino) {
       // Big Sur's Do Not Disturb tile: a solid round toggle, the name, and the state under it.
       auto disc = std::make_unique<Box>();
@@ -2822,7 +2842,7 @@ void Island::prepare(Instance& inst) {
         const float x = w - 22 - controlsWidth + 10;
         const bool toggleAvailable = !timer.finished && timer.remaining > 0;
         auto* toggle = control(
-            x, h + 8, 32, 32, "", timer.running ? "player-pause" : "player-play",
+            x, h + 8, 32, 32, "", timer.running ? "media-pause" : "media-play",
             i18n::tr(timer.running ? "island.timer.pause" : "island.timer.resume"), 16, toggleAvailable,
             [this, timer] { timerCommand(timer, timer.toggleCommand()); }
         );
@@ -2870,7 +2890,7 @@ void Island::prepare(Instance& inst) {
   // the hover view's unread section is turned off.
   const bool rowBell = expandedView && showUnread && cfg.hoverShowUnread && !showExtras;
   if (!privacyList.empty() || rowBell) {
-    // Capture indicators are clickable icons in every view: compact, beside notifications and OSDs,
+    // Capture indicators are clickable icons in compact views and beside notifications,
     // and as a centred row in the expanded Island. Hovering names the capturing app.
     const float rowWidth = static_cast<float>(privacyList.size() + (rowBell ? 1 : 0)) * 24 + 8;
     const float x = compactView
@@ -2884,7 +2904,7 @@ void Island::prepare(Instance& inst) {
         continue;
       }
       auto* icon = control(
-          x + static_cast<float>(i) * 24, y, 24, 24, "", slotBell ? "bell" : activity.icon(),
+          x + static_cast<float>(i) * 24, y, 24, 24, "", slotBell ? "notification-unread" : activity.icon(),
           slotBell ? i18n::tr("notifications.unread-history")
                    : i18n::tr(activity.labelKey()) + ": " + activity.appNames(),
           16, true,
@@ -2929,7 +2949,7 @@ void Island::prepare(Instance& inst) {
       icon->setCustomPalette(std::move(iconPalette));
       if (compactView) {
         // When the slot moves on, the outgoing icon rises and fades as the next rises into place.
-        const std::string slotIcon = slotBell ? "bell" : activity.icon();
+        const std::string slotIcon = slotBell ? "notification-unread" : activity.icon();
         if (!inst.slotIcon.empty() && inst.slotIcon != slotIcon) {
           auto ghost = std::make_unique<Glyph>();
           ghost->setGlyph(inst.slotIcon);
@@ -2975,7 +2995,7 @@ void Island::prepare(Instance& inst) {
     if (rowBell) {
       const float bellX = x + static_cast<float>(privacyList.size()) * 24;
       auto* bell = control(
-          bellX, y, 24, 24, "", "bell", i18n::trp("notifications.unread-count", unreadCount), 16, true,
+          bellX, y, 24, 24, "", "notification-unread", i18n::trp("notifications.unread-count", unreadCount), 16, true,
           [panel] { panel("notifications"); }, 10, 0
       );
       // As with the capture icons, the click goes through the Island's own action handling.
@@ -3123,7 +3143,7 @@ void Island::prepare(Instance& inst) {
     // Cupertino: a leading bell badge and left-aligned rows, matching the battery and timer rows.
     const float rowX = gCupertino ? 58 : 22;
     if (gCupertino)
-      leadingBadge("bell", 22, h + 2, 28, kAppleRed, ColorRole::Error);
+      leadingBadge("notification-unread", 22, h + 2, 28, kAppleRed, ColorRole::Error);
     auto* header = control(
         rowX, h + 4, w - rowX - 22, 24, i18n::trp("notifications.unread-count", unreadCount), "",
         i18n::tr("notifications.unread-history"), 0, true, [panel] { panel("notifications"); }
@@ -3158,7 +3178,7 @@ void Island::prepare(Instance& inst) {
     const float badgeX = view == island::View::Activity ? w - 44 : w - badgeWidth - 10;
     const float badgeY = (cfg.height - 24) / 2;
     auto* badge = control(
-        badgeX, badgeY, badgeWidth, 24, "", "bell", i18n::tr("notifications.unread-history"), 22, true,
+        badgeX, badgeY, badgeWidth, 24, "", "notification-unread", i18n::tr("notifications.unread-history"), 22, true,
         [panel] { panel("notifications"); }, 10, 0
     );
     badge->setRadius(Style::scaledRadius(12, s));
@@ -3196,7 +3216,7 @@ void Island::prepare(Instance& inst) {
     h += 42;
   }
   if (expandedView
-      && showExtras
+      && (showExtras || view == island::View::Media)
       && m_widgetFactory
       && (cfg.hoverShowTray
           || !cfg.hoverWidgets.empty()
@@ -3217,7 +3237,7 @@ void Island::prepare(Instance& inst) {
             if (!inst.panelHosted)
               inst.surface->requestFrameTick();
           },
-          cfg, inst.barConfig.name
+          cfg, inst.barConfig.name, !showExtras
       );
     }
     inst.hoverWidgets = static_cast<IslandWidgetHost*>(retainedWidgets.get());
@@ -3319,6 +3339,7 @@ void Island::crossfadeOut(Instance& inst, std::unique_ptr<Node> previous) {
   if (inst.outgoing != nullptr)
     (void)inst.background->removeChild(inst.outgoing);
   previous->setHitTestVisible(false);
+  previous->setExcludeSubtreeFromTabOrder(true);
   // Behind the incoming content, which is added after it.
   inst.outgoing = inst.background->addChild(std::move(previous));
   Node* outgoing = inst.outgoing;
@@ -3787,7 +3808,7 @@ island::Size Island::panelReturnSize() const {
   const auto batteryList = batteries(cfg, output);
   const bool unread =
       m_notifications && std::ranges::any_of(m_notifications->history(), [](const auto& item) { return !item.seen; });
-  const auto privacyList = privacy();
+  const auto privacyList = island::showsStatusIcons(view) ? privacy() : std::vector<island::PrivacyActivity>{};
   // The unread bell shares the privacy slot when both are active.
   size.width = island::batteryWidth(
       size.width, view, !batteryList.empty() && batteryList.front().compact(), unread && privacyList.empty()
@@ -3798,7 +3819,7 @@ island::Size Island::panelReturnSize() const {
         || view == island::View::DownloadActivity
         || view == island::View::TimerActivity)
       size.width += 2 * (24.0F + 8.0F); // One indicator slot; see PrivacyRotation.
-    else if (view == island::View::Osd || view == island::View::Notification)
+    else if (view == island::View::Notification)
       size.height += 32;
   }
   return size;

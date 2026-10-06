@@ -16,6 +16,7 @@ public:
 
   bool setGlyph(std::string_view name);
   bool setCodepoint(char32_t codepoint);
+  void setEmphasized(bool emphasized);
   void setGlyphSize(float size);
   void setColor(const ColorSpec& color);
   // Explicit fixed color.
@@ -35,8 +36,14 @@ private:
   void doArrange(Renderer& renderer, const LayoutRect& rect) override;
   void applyPalette();
   LayoutSize measureWithConstraints(Renderer& renderer, const LayoutConstraints& constraints);
+  bool applyCodepoint();
 
   GlyphNode* m_glyphNode = nullptr;
+  char32_t m_baseCodepoint = 0;
+  bool m_emphasized = false;
+  float m_opticalScale = 1.0F;
+  float m_opticalX = 0.0F;
+  float m_opticalY = 0.0F;
   float m_baselineOffset = 0.0F;
   float m_logicalFontSize = 0.0F;
   ColorSpec m_color = colorSpecFromRole(ColorRole::OnSurface);

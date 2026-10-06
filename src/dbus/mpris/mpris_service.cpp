@@ -2308,6 +2308,22 @@ bool MprisService::isBlacklisted(const MprisPlayerInfo& player) const {
   return false;
 }
 
+bool MprisService::raise(const std::string& busName) {
+  const auto player = m_players.find(busName);
+  const auto proxy = m_playerProxies.find(busName);
+  if (player == m_players.end() || !player->second.canRaise || proxy == m_playerProxies.end())
+    return false;
+  try {
+    proxy->second->callMethodAsync("Raise")
+        .onInterface(kMprisRootInterface)
+        .uponReplyInvoke(makeAsyncReplyHandler("raise", busName));
+    return true;
+  } catch (const sdbus::Error& error) {
+    kLog.warn("raise dispatch failed name={} err={}", busName, error.what());
+    return false;
+  }
+}
+
 bool MprisService::callPlayerMethod(const std::string& busName, const char* methodName) {
   const auto it = m_playerProxies.find(busName);
   if (it == m_playerProxies.end()) {
@@ -2785,5 +2801,6 @@ MprisPlayerInfo MprisService::readPlayerInfoFromProperties(
       .canGoNext = get_bool_from_props(playerProps, "CanGoNext"),
       .canGoPrevious = get_bool_from_props(playerProps, "CanGoPrevious"),
       .canSeek = get_bool_from_props(playerProps, "CanSeek"),
+      .canRaise = get_bool_from_props(rootProps, "CanRaise"),
   };
 }

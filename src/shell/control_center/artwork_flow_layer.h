@@ -38,6 +38,8 @@ namespace control_center {
     [[nodiscard]] visuals::ArtworkFlow::Accent accent() const noexcept { return m_flow.accent(); }
     // Animates while `animate` and motion is enabled; otherwise holds the current frame.
     void setAnimating(bool animate);
+    // Hosts with their own surface frame ticks advance directly instead of starting the timer.
+    void advance(Renderer& renderer, float deltaMs);
     // Frees the texture; call when the panel closes.
     void release();
 
@@ -51,6 +53,7 @@ namespace control_center {
     std::vector<std::uint8_t> m_frame;
     TextureHandle m_texture{};
     float m_seconds = 0.0F;
+    float m_pendingMs = 0.0F;
     std::chrono::steady_clock::time_point m_lastTick;
     Timer m_timer;
     WithRenderer m_withRenderer;

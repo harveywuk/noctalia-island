@@ -84,6 +84,17 @@ void DesktopCalendarWidget::create() {
   );
   root->addChild(std::move(summary));
 
+  if (canShowDetails()) {
+    for (auto* label : {m_weekdayLabel, m_dayLabel, m_dateMonthLabel}) {
+      label->setOnClick([this](const InputArea::PointerData&) {
+        requestDetails(
+            {.kind = DesktopWidgetDetailsRequest::Kind::Calendar, .date = calendar_view::stateForOffset(0).current}
+        );
+      });
+      label->setTooltip(i18n::tr("desktop-widgets.details.calendar"));
+    }
+  }
+
   auto calendarArea = std::make_unique<InputArea>();
   m_calendarArea = calendarArea.get();
   calendarArea->setOnAxis([this](const InputArea::PointerData& data) {
@@ -477,6 +488,7 @@ void DesktopCalendarWidget::rebuildCalendar() {
             m_monthOffset += monthShift;
             m_dirty = true;
             requestLayout();
+            requestDetails({.kind = DesktopWidgetDetailsRequest::Kind::Calendar, .date = date});
           },
       .onDateRightClicked =
           [](calendar_view::Date) { (void)desktop_entry_launch::launchDefaultForMimeType("text/calendar"); },

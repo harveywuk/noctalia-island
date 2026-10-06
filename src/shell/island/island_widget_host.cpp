@@ -13,9 +13,9 @@
 IslandWidgetHost::IslandWidgetHost(
     WidgetFactory& factory, const Config& config, wl_output* output, float scale, AnimationManager* animations,
     const noctalia::bar::WidgetActionDispatcher* dispatcher, std::function<void()> update, std::function<void()> redraw,
-    std::function<void()> frame, const IslandConfig& island, const std::string& barName
+    std::function<void()> frame, const IslandConfig& island, const std::string& barName, bool trayOnlyMode
 )
-    : m_scale(scale), m_frame(std::move(frame)) {
+    : m_scale(scale), m_trayOnlyMode(trayOnlyMode), m_frame(std::move(frame)) {
   // Each widget's cell clips it (below), with a margin for hover highlights.
   BarConfig bar;
   bar.name = barName;
@@ -32,6 +32,8 @@ IslandWidgetHost::IslandWidgetHost(
       const auto found = config.widgets.find(name);
       const WidgetConfig* wc = found == config.widgets.end() ? nullptr : &found->second;
       const std::string type = wc && !wc->type.empty() ? wc->type : name;
+      if (trayOnlyMode && type != "tray")
+        continue;
       const auto options = resolveCommonWidgetOptions(bar, wc, type, scale);
       if (!options.enabled)
         continue;
@@ -73,7 +75,7 @@ IslandWidgetHost::IslandWidgetHost(
         cell->addChild(std::move(root));
         addChild(std::move(cell));
         m_widgets.push_back(std::move(widget));
-        m_groups.push_back(group);
+        m_groups.push_back(trayOnlyMode ? 1 : group);
         m_onlyTray = m_onlyTray && type == "tray";
       }
     }

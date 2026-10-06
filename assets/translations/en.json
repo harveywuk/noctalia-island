@@ -642,6 +642,30 @@
     }
   },
   "desktop-widgets": {
+    "batteries": {
+      "unknown": "?",
+      "unavailable": "Charge unavailable",
+      "health": "Battery health: {percent}%",
+      "devices-on-card": "Devices on card",
+      "devices-hint": "Show up to four devices. New devices appear automatically; all devices remain available in details.",
+      "none-selected": "No devices selected",
+      "show-all": "Show all devices"
+    },
+    "details": {
+      "batteries": "Battery Details",
+      "weather": "Weather Details",
+      "calendar": "Day Agenda",
+      "close": "Close Details",
+      "previous-day": "Previous day",
+      "next-day": "Next day"
+    },
+    "quick-actions": {
+      "duplicate": "Duplicate Widget",
+      "remove": "Remove Widget",
+      "edit-stack": "Edit Stack",
+      "edit": "Edit Widgets",
+      "open-player": "Open Player"
+    },
     "clock": {
       "local-time": "Local Time"
     },
@@ -664,7 +688,24 @@
         "close": "Close Gallery",
         "add": "Add Widget",
         "choose-image": "Choose an image when you add this widget.",
-        "customize-hint": "Move, resize, and customize your widget after adding it."
+        "customize-hint": "Move, resize, and customize your widget after adding it.",
+        "search": "Search widgets…",
+        "all": "All Widgets",
+        "favorites": "Favorites",
+        "productivity": "Productivity",
+        "media": "Media",
+        "system": "System",
+        "home": "Home",
+        "information": "Information",
+        "appearance": "Appearance",
+        "plugins": "Plugins",
+        "favorite": "Add to favorites",
+        "unfavorite": "Remove from favorites",
+        "no-favorites": "Star a widget to find it here quickly.",
+        "no-results": "No widgets match your search and category.",
+        "clear-filters": "Clear Filters",
+        "drag-hint": "Drag the preview onto your desktop or a card to stack it. Press Escape to cancel.",
+        "save-failed": "Could not save favorites. Try again."
       },
       "dialogs": {
         "select-sticker-image": "Select Sticker Image"
@@ -680,6 +721,7 @@
         "bands": "Bands",
         "bar-width": "Bar Width",
         "bloom-intensity": "Bloom",
+        "hidden-devices": "Hidden Devices",
         "card-size": "Card Size",
         "card-size-classic": "Classic",
         "card-size-small": "Small",
@@ -813,7 +855,13 @@
         "stock-token-description": "A file containing your Alpha Vantage API key. Quotes show their latest trading date.",
         "symbols": "Symbols",
         "symbols-description": "Up to three Alpha Vantage symbols. The default six-hour interval limits provider requests.",
-        "journal-file-description": "Optional Markdown journal file. Leave blank to use the shell’s local Journal.md file."
+        "journal-file-description": "Optional Markdown journal file. Leave blank to use the shell’s local Journal.md file.",
+        "members": "Cards",
+        "auto-rotate": "Automatic Rotation",
+        "smart-rotate": "Smart Rotate",
+        "smart-rotate-description": "Show upcoming events, active playback, and morning weather. Choosing a card pauses rotation for five minutes.",
+        "rotation-seconds": "Rotate Every (seconds)",
+        "rotation-seconds-description": "Pause while hovering or interacting. Pin a card to keep it visible."
       },
       "state": {
         "grid": "Grid"
@@ -848,7 +896,34 @@
         "stocks": "Stocks",
         "home": "Home",
         "find-my": "Devices & People",
-        "video-library": "TV & Videos"
+        "video-library": "TV & Videos",
+        "stack": "Widget Stack"
+      },
+      "history": {
+        "undo": "Undo",
+        "redo": "Redo",
+        "undo-shortcut": "Undo (Ctrl+Z)",
+        "redo-shortcut": "Redo (Ctrl+Shift+Z or Ctrl+Y)"
+      },
+      "layouts": {
+        "title": "Saved Layouts",
+        "close": "Close Layouts",
+        "hint": "Applying a layout replaces its scope. Undo returns to your previous arrangement.",
+        "empty": "No saved layouts yet. Save your current arrangement below.",
+        "desktop": "Whole Desktop",
+        "monitor": "This Monitor",
+        "name": "Layout name, e.g. Work or Focus",
+        "save": "Save Layout",
+        "apply": "Apply",
+        "apply-desktop": "Replace widgets across all monitors",
+        "apply-monitor": "Replace widgets on this monitor",
+        "update": "Update this saved layout with your current arrangement",
+        "delete": "Delete saved layout",
+        "invalid-name": "Enter a name of up to 80 characters.",
+        "duplicate-name": "That name already exists. Use Update or choose another name.",
+        "unreadable": "Saved layouts could not be read. Existing data has been kept.",
+        "save-failed": "Could not save this layout. Your existing layouts have been kept.",
+        "limit": "All 32 layout slots are in use. Update or delete an existing layout."
       }
     },
     "media": {
@@ -899,6 +974,37 @@
       "action-failed": "The action failed. Check your connection.",
       "journal-empty": "Use the edit button to start a dated journal entry.",
       "journal-writing": "Write an entry to save it."
+    },
+    "setup": {
+      "start": "Set Up Widget",
+      "title": "Set Up {name}",
+      "configure": "Configure",
+      "save": "Save Changes",
+      "cancel": "Cancel",
+      "skip": "Set Up Later",
+      "hint": "Choose what this widget shows. Your changes are saved when you finish.",
+      "invalid-photo": "Choose a readable image or album folder.",
+      "invalid-folder": "Choose a readable folder.",
+      "invalid-url": "Enter a complete http:// or https:// address.",
+      "invalid-token": "Choose a readable file containing your access token or API key.",
+      "empty-items": "Add at least one item using the plus button. Names and values cannot be empty.",
+      "invalid-contact": "Use mailto: for email addresses or tel: for phone numbers.",
+      "invalid-location": "Choose person.* or device_tracker.* entities from Home Assistant.",
+      "too-many-symbols": "Choose up to three stock symbols.",
+      "stack-count": "Choose between two and eight available cards."
+    },
+    "stack": {
+      "create": "Stack Selected Widgets",
+      "unstack": "Unstack Widgets",
+      "edit-card": "Configure {name}",
+      "hint": "Choose two to eight existing cards. Use the arrows to change their order. Scroll over a stack to switch cards.",
+      "empty": "Add some cards to your desktop, then choose which ones belong in this stack.",
+      "pin": "Pin this card",
+      "unpin": "Unpin and resume rotation",
+      "drag-hint": "Drag a handle to reorder cards, or drag it onto the desktop to remove it from the stack.",
+      "drop-create": "Release to create a stack",
+      "drop-add": "Release to add to stack",
+      "drop-remove": "Release to place {name} on the desktop"
     }
   },
   "dock": {
@@ -1573,6 +1679,9 @@
     "waiting": "Waiting for lock confirmation…"
   },
   "notifications": {
+    "close-history": "Close notification history",
+    "expand-group": "Show {count} notification",
+    "expand-group-plural": "Show {count} notifications",
     "unread-history": "Unread notifications — open history",
     "unread-count": "{count} unread notification",
     "unread-count-plural": "{count} unread notifications",

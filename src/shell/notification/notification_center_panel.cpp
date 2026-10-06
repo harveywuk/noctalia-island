@@ -1,5 +1,7 @@
 #include "shell/notification/notification_center_panel.h"
 
+#include "i18n/i18n.h"
+#include "shell/panel/panel_manager.h"
 #include "ui/builders.h"
 #include "ui/style.h"
 
@@ -20,6 +22,22 @@ float NotificationCenterPanel::preferredWidth() const { return scaled(kColumnWid
 // Only used if the compositor never assigns the full-height size.
 float NotificationCenterPanel::preferredHeight() const { return scaled(kFallbackHeight); }
 
+float NotificationCenterPanel::islandWidth(float availableWidth) const {
+  return std::min(scaled(440.0F), availableWidth);
+}
+
+float NotificationCenterPanel::islandHeight(float availableHeight) const {
+  const float chrome = scaled(2 * (Style::panelPadding + Style::spaceSm))
+      + (m_header ? m_header->height() + m_root->gap() : scaled(Style::controlHeightSm));
+  return std::min(chrome + m_history.fittedHeight(), std::min(scaled(600.0F), availableHeight * 0.85F));
+}
+
+InputArea* NotificationCenterPanel::initialFocusArea() const { return m_close ? m_close->inputArea() : nullptr; }
+
+void NotificationCenterPanel::scrollFocusedInputIntoView(InputArea* area) {
+  m_history.scrollFocusedInputIntoView(area);
+}
+
 void NotificationCenterPanel::create() {
   const float scale = contentScale();
   m_history.setContentScale(scale);
@@ -35,9 +53,39 @@ void NotificationCenterPanel::create() {
   auto header = ui::row({
       .out = &m_header,
       .align = FlexAlign::Center,
-      .justify = FlexJustify::End,
+      .gap = Style::spaceSm * scale,
   });
+  const bool hosted = PanelManager::instance().isIslandOpen();
+  if (!hosted) {
+    // Standalone cards have no sheet, so the toolbar needs its own readable surface.
+    header->setCardStyle(scale, panelCardOpacity());
+    header->setPadding(Style::spaceSm * scale);
+  }
+  header->addChild(
+      ui::label({
+          .text = i18n::tr("control-center.tabs.notifications"),
+          .fontSize = Style::fontSizeTitle * scale,
+          .fontWeight = FontWeight::SemiBold,
+          .maxLines = 1,
+          .flexGrow = 1.0F,
+      })
+  );
   header->addChild(m_history.createHeaderActions());
+  header->addChild(
+      ui::button({
+          .out = &m_close,
+          .glyph = hosted ? "chevron-up" : "x",
+          .glyphSize = Style::fontSizeBody * scale,
+          .variant = ButtonVariant::Ghost,
+          .tooltip = i18n::tr("notifications.close-history"),
+          .minWidth = Style::controlHeightSm * scale,
+          .minHeight = Style::controlHeightSm * scale,
+          .padding = 0,
+          .radius = Style::controlHeightSm * scale * 0.5F,
+          .onClick = [] { PanelManager::instance().close(); },
+      })
+  );
+  m_close->inputArea()->setTabFocusKey("notification-history-close");
   root->addChild(std::move(header));
 
   auto body = m_history.create();
@@ -59,6 +107,7 @@ void NotificationCenterPanel::onClose() {
   m_root = nullptr;
   m_header = nullptr;
   m_body = nullptr;
+  m_close = nullptr;
 }
 
 void NotificationCenterPanel::doLayout(Renderer& renderer, float width, float height) {

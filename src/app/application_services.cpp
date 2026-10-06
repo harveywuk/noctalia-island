@@ -195,7 +195,7 @@ void Application::scheduleNotificationShellRefresh() {
     m_notificationShellRefreshScheduled = false;
     m_bar.refresh();
     m_island.refresh();
-    if (m_panelManager.isOpenPanel("control-center")) {
+    if (m_panelManager.isOpenPanel("control-center") || m_panelManager.isOpenPanel("notification-center")) {
       m_panelManager.refresh();
     }
   });

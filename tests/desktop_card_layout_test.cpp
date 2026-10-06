@@ -1,12 +1,17 @@
 #include "config/config_service.h"
+#include "core/files/file_watcher.h"
 #include "net/http_client.h"
+#include "render/animation/animation_manager.h"
+#include "render/animation/motion_service.h"
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
+#include "shell/desktop/widgets/desktop_batteries_widget.h"
 #include "shell/desktop/widgets/desktop_calendar_widget.h"
 #include "shell/desktop/widgets/desktop_clock_widget.h"
 #include "shell/desktop/widgets/desktop_collection_widget.h"
 #include "shell/desktop/widgets/desktop_media_player_widget.h"
 #include "shell/desktop/widgets/desktop_photos_widget.h"
+#include "shell/desktop/widgets/desktop_stack_widget.h"
 #include "shell/desktop/widgets/desktop_status_card_widget.h"
 #include "shell/desktop/widgets/desktop_weather_widget.h"
 #include "system/weather_service.h"
@@ -16,6 +21,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <print>
 #include <string_view>
 #include <vector>
@@ -153,12 +159,25 @@ int main() {
     checkWidget(analog, renderer, width, height);
     DesktopMediaPlayerWidget media(nullptr, nullptr, {.cardSize = size});
     checkWidget(media, renderer, width, height);
-    for (auto kind : {DesktopStatusCardWidget::Kind::Batteries, DesktopStatusCardWidget::Kind::ScreenTime}) {
-      DesktopStatusCardWidget status(kind, {}, size);
-      checkWidget(status, renderer, width, height);
-    }
+    DesktopBatteriesWidget batteries({}, size, {});
+    checkWidget(batteries, renderer, width, height);
+    DesktopStatusCardWidget screenTime({}, size);
+    checkWidget(screenTime, renderer, width, height);
     DesktopPhotosWidget photos({}, {}, 5, size);
     checkWidget(photos, renderer, width, height);
+    const std::vector<DesktopWidgetState> stackedCards{
+        {.id = "clock", .type = "clock"}, {.id = "tips", .type = "tips"}
+    };
+    const std::string stackSize = size == desktop_cards::Size::Small ? "small"
+        : size == desktop_cards::Size::Large                         ? "large"
+                                                                     : "medium";
+    DesktopStackWidget stack("fixture", stackedCards, {{"card_size", stackSize}}, {});
+    checkWidget(stack, renderer, width, height);
+    stack.showPage(1);
+    stack.layout(renderer);
+    expect(stack.page() == 1, "stack switches to the requested member");
+    stack.showPage(99);
+    expect(stack.page() == 1, "invalid stack page is ignored");
     const std::string cardSize = size == desktop_cards::Size::Small ? "small"
         : size == desktop_cards::Size::Large                        ? "large"
                                                                     : "medium";
@@ -180,6 +199,83 @@ int main() {
       checkWidget(populated, renderer, width, height);
     }
   }
+  {
+    AnimationManager animations;
+    DesktopStackWidget rotating(
+        "rotating", {{.id = "first", .type = "tips"}, {.id = "second", .type = "tips"}},
+        {{"card_size", std::string("small")}, {"auto_rotate", true}}, {}
+    );
+    rotating.setAnimationManager(&animations);
+    rotating.create();
+    rotating.layout(renderer);
+    expect(rotating.wantsSecondTicks(), "automatic rotation uses the existing second tick");
+    rotating.setPinned(true);
+    expect(rotating.pinned() && !rotating.wantsSecondTicks(), "pinning holds the page and stops rotation ticks");
+    rotating.showPage(1);
+    rotating.layout(renderer);
+    expect(
+        !rotating.pinned() && rotating.page() == 1 && animations.hasActive(),
+        "manual navigation unpins and fades the incoming page"
+    );
+    MotionService::instance().setEnabled(false);
+    rotating.showPage(0);
+    rotating.layout(renderer);
+    expect(rotating.root()->children().front()->opacity() == 1.0F, "reduced motion shows the new page fully opaque");
+    rotating.setEditorPreview(true);
+    expect(!rotating.wantsSecondTicks(), "editor previews never rotate");
+    MotionService::instance().setEnabled(true);
+  }
+  {
+    DesktopStackWidget smart(
+        "smart", {{.id = "clock", .type = "clock"}, {.id = "calendar", .type = "calendar"}}, {{"smart_rotate", true}},
+        {}
+    );
+    smart.create();
+    smart.update(renderer);
+    smart.layout(renderer);
+    expect(smart.wantsSecondTicks(), "Smart Rotate observes context even with timed rotation disabled");
+    smart.setPinned(true);
+    expect(!smart.wantsSecondTicks(), "pinned stack does not poll for smart suggestions");
+    smart.setPinned(false);
+    expect(smart.wantsSecondTicks(), "unpin resumes smart context checks");
+    smart.setEditorPreview(true);
+    expect(!smart.wantsSecondTicks(), "Smart Rotate stays idle in editor previews");
+    DesktopStackWidget unrelated(
+        "unrelated", {{.id = "clock", .type = "clock"}, {.id = "tips", .type = "tips"}}, {{"smart_rotate", true}}, {}
+    );
+    unrelated.create();
+    expect(!unrelated.wantsSecondTicks(), "stacks without eligible cards do not poll for context");
+  }
+  {
+    const auto path = std::filesystem::path(fixturePath) / "watched-note.md";
+    std::ofstream(path) << "Initial note\n";
+    FileWatcher watcher;
+    DesktopWidgetRuntimeServices services;
+    services.scriptDeps.fileWatcher = &watcher;
+    DesktopCollectionWidget notes("notes", {{"file_path", path.string()}}, services);
+    notes.create();
+    notes.layout(renderer);
+    int updates = 0;
+    notes.setUpdateCallback([&] { ++updates; });
+    std::ofstream saving(path, std::ios::trunc);
+    watcher.dispatch();
+    expect(updates == 0, "truncating an open note does not refresh its card");
+    saving << "Updated note\n";
+    saving.flush();
+    watcher.dispatch();
+    expect(updates == 0, "an unfinished note write does not consume its refresh notification");
+    saving.close();
+    watcher.dispatch();
+    expect(updates == 1, "closing the saved note triggers a refresh");
+    notes.update(renderer);
+    notes.layout(renderer);
+    const auto containsText = [](const auto& self, const Node& node) -> bool {
+      if (const auto* label = dynamic_cast<const Label*>(&node); label && label->text() == "Updated note")
+        return true;
+      return std::ranges::any_of(node.children(), [&](const auto& child) { return self(self, *child); });
+    };
+    expect(containsText(containsText, *notes.root()), "the card displays the completed note save");
+  }
   DesktopWeatherWidget classic(nullptr, {});
   classic.create();
   classic.layout(renderer);
@@ -199,6 +295,29 @@ int main() {
   // A partially populated provider response must settle after one layout, even when the
   // chosen card has space for six days. No HTTP polling or user configuration is needed.
   ConfigService config;
+  {
+    expect(config.setStateString("desktop_stacks", "pages", R"({"partial":"clock"})"), "fixture page saved");
+    expect(config.setStateString("desktop_stacks", "pins", R"({"partial":"clock"})"), "fixture pin saved");
+    DesktopWidgetRuntimeServices services;
+    services.scriptDeps.configService = &config;
+    DesktopStackWidget partial(
+        "partial",
+        {{.id = "missing", .type = "media_player"},
+         {.id = "calendar", .type = "calendar"},
+         {.id = "clock", .type = "clock"}},
+        {{"smart_rotate", true}}, services
+    );
+    partial.create();
+    partial.update(renderer);
+    partial.layout(renderer);
+    expect(partial.page() == 1 && partial.pinned(), "unavailable services do not shift the pinned member identity");
+    partial.showPage(0);
+    expect(
+        config.stateString("desktop_stacks", "pages") == R"({"partial":"calendar"})",
+        "navigation persists the actual rendered member when a source is unavailable"
+    );
+    expect(!partial.pinned(), "manual navigation clears the pin after source filtering");
+  }
   HttpClient http;
   WeatherService service(config, http);
   service.setLocation(WeatherCoordinates{51.5, -0.12}, "Fixture", "test");

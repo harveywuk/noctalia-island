@@ -47,6 +47,7 @@ struct MprisPlayerInfo {
   bool canGoNext{false};
   bool canGoPrevious{false};
   bool canSeek{false};
+  bool canRaise{false};
 
   bool operator==(const MprisPlayerInfo&) const = default;
 };
@@ -75,6 +76,7 @@ public:
   bool stop(const std::string& busName);
   bool next(const std::string& busName);
   bool previous(const std::string& busName);
+  bool raise(const std::string& busName);
   bool playPauseActive();
   bool playActive();
   bool pauseActive();

@@ -1,8 +1,10 @@
 #pragma once
 
 #include "config/config_types.h"
+#include "shell/desktop/desktop_widget_actions.h"
 #include "shell/desktop/desktop_widget_layout.h"
 #include "shell/desktop/desktop_widget_services.h"
+#include "shell/desktop/editor/desktop_widgets_history.h"
 #include "shell/desktop/wallpaper_mask.h"
 #include "ui/dialogs/layer_popup_host.h"
 
@@ -73,9 +75,11 @@ public:
   [[nodiscard]] std::optional<LayerPopupParentContext> fallbackPopupParentContext() const;
   bool onPointerEvent(const PointerEvent& event);
   void onKeyboardEvent(const KeyboardEvent& event);
+  bool onDetailsKeyboardEvent(const KeyboardEvent& event);
 
 private:
   void loadSnapshotFromConfig();
+  void quickAction(const std::string& id, desktop_widgets::QuickAction action);
   void saveSnapshotToConfig();
   void applyVisibility();
   void handleConfigReload();
@@ -90,6 +94,7 @@ private:
   RenderContext* m_renderContext = nullptr;
 
   DesktopWidgetsSnapshot m_snapshot;
+  DesktopWidgetsHistory m_history;
   desktop_widgets::PlacementMapper m_placementMapper;
   OutputWallpaperMaskMap m_wallpaperMasks;
   bool m_initialized = false;

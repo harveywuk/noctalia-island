@@ -4,6 +4,7 @@
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
 #include "net/http_client.h"
+#include "render/animation/motion_service.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
 #include "time/time_format.h"
@@ -33,12 +34,36 @@ namespace {
 
 DesktopMediaPlayerWidget::DesktopMediaPlayerWidget(MprisService* mpris, HttpClient* httpClient, Options options)
     : m_cardSize(options.cardSize), m_mpris(mpris), m_httpClient(httpClient), m_vertical(options.vertical),
-      m_color(options.color), m_shadow(options.shadow), m_hideWhenNoMedia(options.hideWhenNoMedia) {}
+      m_color(options.color), m_shadow(options.shadow), m_hideWhenNoMedia(options.hideWhenNoMedia) {
+  m_flow.setHost(
+      [this](const auto& render) {
+        if (!m_renderer)
+          return false;
+        render(*m_renderer);
+        return true;
+      },
+      [this]() { requestRedraw(); }
+  );
+}
 
-DesktopMediaPlayerWidget::~DesktopMediaPlayerWidget() { m_aliveGuard.reset(); }
+DesktopMediaPlayerWidget::~DesktopMediaPlayerWidget() {
+  m_aliveGuard.reset();
+  m_flow.release();
+}
 
 void DesktopMediaPlayerWidget::create() {
   auto rootNode = ui::node({});
+  auto backdrop = ui::image({.out = &m_backdrop, .fit = ImageFit::Stretch, .visible = false});
+  backdrop->setHitTestVisible(false);
+  backdrop->setParticipatesInLayout(false);
+  const auto shade = [](float alpha) { return rgba(0, 0, 0, alpha); };
+  backdrop->setScrim({
+      .direction = GradientDirection::Vertical,
+      .stops = {{{0.0F, shade(.12F)}, {.35F, shade(0)}, {.65F, shade(.15F)}, {1.0F, shade(.35F)}}},
+      .enabled = true,
+  });
+  m_flow.attach(m_backdrop);
+  rootNode->addChild(std::move(backdrop));
 
   rootNode->addChild(
       ui::box(
@@ -148,10 +173,7 @@ bool DesktopMediaPlayerWidget::applySetting(
   if (key == "color") {
     if (const auto* v = std::get_if<std::string>(&value)) {
       m_color = colorSpecFromConfigString(*v, key);
-      if (m_title != nullptr)
-        m_title->setColor(m_color);
-      if (m_artist != nullptr)
-        m_artist->setColor(m_color);
+      applyArtworkPalette();
       return true;
     }
     return false;
@@ -337,9 +359,12 @@ void DesktopMediaPlayerWidget::doUpdate(Renderer& renderer) {
   }
   sync(renderer);
   updateProgress();
+  if (needsFrameTick())
+    requestFrameTick();
 }
 
 void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
+  m_renderer = &renderer;
   if (m_title == nullptr || m_artist == nullptr || m_playPause == nullptr)
     return;
 
@@ -418,23 +443,85 @@ void DesktopMediaPlayerWidget::sync(Renderer& renderer) {
           m_httpClient, m_pendingArtDownloads, m_lastArtUrl, [this] { requestUpdate(); }, m_aliveGuard
       );
       if (!artPath.empty()) {
-        if (!m_artwork->setSourceFile(renderer, artPath, targetPx, true, true))
+        if (!m_artwork->setSourceFile(renderer, artPath, targetPx, true, true)) {
           m_artwork->clear(renderer);
+          m_flow.clear();
+        } else if (usesCardLayout()) {
+          m_flow.load(renderer, artPath);
+        }
       } else {
         m_artwork->clear(renderer);
+        m_flow.clear();
       }
     } else if (!m_lastArtUrl.empty() && !m_artwork->hasImage()) {
       const std::string artPath = cachedArtworkPath(m_lastArtUrl);
-      if (!artPath.empty() && m_artwork->setSourceFile(renderer, artPath, targetPx, true, true))
+      if (!artPath.empty() && m_artwork->setSourceFile(renderer, artPath, targetPx, true, true)) {
+        if (usesCardLayout())
+          m_flow.load(renderer, artPath);
         requestRedraw();
+      }
     }
   }
 
   m_musicGlyph->setVisible(usesCardLayout() && (m_artwork == nullptr || !m_artwork->hasImage()));
+  applyArtworkPalette();
+  if (needsFrameTick())
+    requestFrameTick();
   if ((firstSync || titleChanged || artistChanged || canGoPreviousChanged || canGoNextChanged) && !isLayingOut()) {
     requestLayout();
   } else {
     requestRedraw();
+  }
+}
+
+void DesktopMediaPlayerWidget::applyArtworkPalette() {
+  if (!m_title)
+    return;
+  const bool overlay = usesCardLayout() && m_flow.hasArtwork();
+  const auto white = [](float alpha) { return fixedColorSpec(rgba(1, 1, 1, alpha)); };
+  m_title->setColor(overlay ? white(1) : m_color);
+  m_artist->setColor(overlay ? white(.75F) : m_color);
+  for (auto* label : {m_sourceLabel, m_elapsed, m_duration})
+    label->setColor(overlay ? white(.8F) : colorSpecFromRole(ColorRole::OnSurfaceVariant));
+  for (auto* button : {m_prev, m_playPause, m_next}) {
+    if (!overlay) {
+      button->clearCustomPalette();
+      continue;
+    }
+    const float base = button == m_playPause ? .22F : 0.0F;
+    const auto state = [&](float background, float foreground) {
+      return Button::ButtonStateColors{.bg = white(background), .border = white(0), .label = white(foreground)};
+    };
+    button->setCustomPalette({
+        .normal = state(base, .95F),
+        .hover = state(base + .12F, 1),
+        .pressed = state(base + .2F, 1),
+        .disabled = state(base * .5F, .4F),
+        .selected = std::nullopt,
+    });
+  }
+  const auto accent = m_flow.accent();
+  m_progress->setFill(
+      overlay ? fixedColorSpec(rgba(accent.r, accent.g, accent.b, .95F)) : colorSpecFromRole(ColorRole::Primary)
+  );
+  m_progress->setTrack(overlay ? white(.28F) : colorSpecFromRole(ColorRole::SurfaceVariant));
+}
+
+bool DesktopMediaPlayerWidget::needsFrameTick() const {
+  return usesCardLayout()
+      && m_visible
+      && !m_editorPreview
+      && m_flow.hasArtwork()
+      && m_lastPlaybackStatus == "Playing"
+      && MotionService::instance().enabled()
+      && !visuals::ArtworkFlow::frozen();
+}
+
+void DesktopMediaPlayerWidget::onFrameTick(float deltaMs, Renderer& renderer) {
+  m_renderer = &renderer;
+  if (needsFrameTick()) {
+    m_flow.advance(renderer, deltaMs);
+    requestFrameTick();
   }
 }
 
@@ -514,6 +601,10 @@ void DesktopMediaPlayerWidget::layoutCard(Renderer& renderer) {
   const auto card =
       desktop_cards::resolve(m_cardSize, contentScale(), boxInnerWidth(), boxInnerHeight(), backgroundPadding());
   const float scale = card.scale;
+  const float padding = backgroundPadding();
+  m_backdrop->setPosition(-padding, -padding);
+  m_backdrop->setSize(card.width + 2 * padding, card.height + 2 * padding);
+  m_backdrop->setRadius(hasBackground() ? backgroundRadius() : Style::scaledRadiusLg(scale));
   const bool large = card.size == desktop_cards::Size::Large;
   const bool medium = card.size == desktop_cards::Size::Medium;
   const float artSize =

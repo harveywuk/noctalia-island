@@ -40,4 +40,5 @@ private:
   Button* m_previous = nullptr;
   Button* m_next = nullptr;
   Button* m_open = nullptr;
+  Button* m_configure = nullptr;
 };

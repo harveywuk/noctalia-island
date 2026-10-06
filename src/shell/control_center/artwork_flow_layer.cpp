@@ -7,6 +7,10 @@
 #include "shell/panel/panel_manager.h"
 #include "ui/controls/image.h"
 
+#include <algorithm>
+#include <filesystem>
+#include <optional>
+
 namespace control_center {
 
   namespace {
@@ -14,6 +18,30 @@ namespace control_center {
     constexpr auto kFrameInterval = std::chrono::milliseconds(33);
     // Decoded this small, the artwork is a palette of colour regions rather than detail.
     constexpr int kSourceSize = 32;
+
+    std::expected<LoadedImageFile, std::string> loadArtwork(const std::string& path) {
+      // Several desktop cards and panel previews often use the same cover. Keep
+      // its tiny colour sample across rebuilds instead of decoding the full file
+      // each time. Only the most recent cover is retained (about 4 KiB).
+      struct CachedArtwork {
+        std::string path;
+        std::filesystem::file_time_type modified;
+        std::uintmax_t size;
+        LoadedImageFile image;
+      };
+      static std::optional<CachedArtwork> cached;
+      std::error_code error;
+      const auto modified = std::filesystem::last_write_time(path, error);
+      const bool timestampValid = !error;
+      const auto size = std::filesystem::file_size(path, error);
+      const bool cacheable = timestampValid && !error;
+      if (cacheable && cached && cached->path == path && cached->modified == modified && cached->size == size)
+        return cached->image;
+      auto image = loadImageFile(path, kSourceSize, true);
+      if (image && cacheable)
+        cached = CachedArtwork{path, modified, size, *image};
+      return image;
+    }
   } // namespace
 
   ArtworkFlowLayer::~ArtworkFlowLayer() { m_timer.stop(); }
@@ -41,7 +69,7 @@ namespace control_center {
   }
 
   bool ArtworkFlowLayer::load(Renderer& renderer, const std::string& path) {
-    auto art = loadImageFile(path, kSourceSize, true);
+    auto art = loadArtwork(path);
     if (!art || !m_flow.setArtwork(art->rgba, art->width, art->height)) {
       clear();
       return false;
@@ -52,9 +80,21 @@ namespace control_center {
 
   void ArtworkFlowLayer::clear() {
     m_flow.clear();
+    m_pendingMs = 0.0F;
     m_timer.stop();
     if (m_image != nullptr)
       m_image->setVisible(false);
+  }
+
+  void ArtworkFlowLayer::advance(Renderer& renderer, float deltaMs) {
+    if (!m_flow.hasArtwork() || !MotionService::instance().enabled() || visuals::ArtworkFlow::frozen())
+      return;
+    m_pendingMs += std::clamp(deltaMs, 0.0F, 100.0F);
+    if (m_pendingMs < static_cast<float>(kFrameInterval.count()))
+      return;
+    m_seconds += m_pendingMs / 1000.0F;
+    m_pendingMs = 0.0F;
+    upload(renderer);
   }
 
   void ArtworkFlowLayer::setAnimating(bool animate) {
@@ -76,10 +116,7 @@ namespace control_center {
 
   void ArtworkFlowLayer::release() {
     m_timer.stop();
-    if (m_texture.id != 0
-        && !withRenderer([this](Renderer& renderer) {
-             renderer.textureManager().unload(m_texture);
-           }))
+    if (m_texture.id != 0 && !withRenderer([this](Renderer& renderer) { renderer.textureManager().unload(m_texture); }))
       m_texture = {};
     m_flow.clear();
     m_image = nullptr;

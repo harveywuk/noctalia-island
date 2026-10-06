@@ -345,6 +345,11 @@ hover content available while that activity runs.
 These options only affect the hover view. Compact activity indicators, incoming
 notifications, volume OSD and capture indicators keep working.
 
+The expanded media view also shows the system tray beneath its playback controls.
+In Cupertino appearance this is a compact, centered tray row; other hover widgets
+remain in the idle view. Tray activation and app menus work in both views. The row
+respects `hover_show_tray` and stays hidden when there are no tray items.
+
 ```toml
 [island]
 hover_show_clock = false

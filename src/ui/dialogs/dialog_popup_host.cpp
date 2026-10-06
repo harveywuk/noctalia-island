@@ -8,6 +8,7 @@
 #include "render/scene/node.h"
 #include "render/scene/rect_node.h"
 #include "ui/builders.h"
+#include "ui/node_motion.h"
 #include "ui/popup_chrome.h"
 #include "ui/popup_parent.h"
 #include "ui/style.h"
@@ -425,6 +426,7 @@ void DialogPopupHost::prepareFrame(bool needsUpdate, bool needsLayout) {
 }
 
 void DialogPopupHost::buildScene(std::uint32_t width, std::uint32_t height) {
+  const bool firstReveal = m_sceneRoot == nullptr;
   (void)width;
   (void)height;
   m_sceneRoot = ui::node({});
@@ -464,6 +466,8 @@ void DialogPopupHost::buildScene(std::uint32_t width, std::uint32_t height) {
   }
 
   layoutScene(static_cast<float>(width), static_cast<float>(height));
+  if (firstReveal)
+    Motion::revealNode(*m_sceneRoot);
   syncPointerStateFromCurrentPosition();
 
   DeferredCall::callLater([this]() {

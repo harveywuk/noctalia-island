@@ -454,6 +454,10 @@ namespace calendar_view {
         } else {
           const std::time_t raw = std::chrono::system_clock::to_time_t(event.start);
           timeText = formatLocalUnixTime(static_cast<std::int64_t>(raw), options.timeFormat);
+          if (options.showDetails && event.end > event.start) {
+            const auto endRaw = std::chrono::system_clock::to_time_t(event.end);
+            timeText += " - " + formatLocalUnixTime(static_cast<std::int64_t>(endRaw), options.timeFormat);
+          }
         }
 
         auto time = ui::label({
@@ -489,6 +493,22 @@ namespace calendar_view {
             }),
             std::move(timeLine)
         );
+
+        if (options.showDetails) {
+          for (const auto& text : {event.location, event.calendarName}) {
+            if (!text.empty())
+              details->addChild(
+                  ui::label({
+                      .text = text,
+                      .fontSize = Style::fontSizeCaption * options.scale,
+                      .fontFamily = options.fontFamily,
+                      .color = colorSpecFromRole(ColorRole::OnSurfaceVariant, eventAlpha),
+                      .maxWidth = textMaxWidth,
+                      .maxLines = 3,
+                  })
+              );
+          }
+        }
 
         Flex* eventRow = nullptr;
         auto eventRowNode = ui::row(

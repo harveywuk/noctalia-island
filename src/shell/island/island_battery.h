@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dbus/bluetooth/bluetooth_service.h"
+#include "dbus/bluetooth/bluetooth_glyphs.h"
 #include "dbus/upower/upower_service.h"
 #include "i18n/i18n.h"
 #include "shell/island/island_preview_target.h"
@@ -115,7 +115,10 @@ namespace island {
            system                      ? i18n::tr("power.battery.tooltip.device")
                : !device.model.empty() ? device.model
                                        : i18n::tr("power.battery.tooltip.unknown-device"),
-           system ? "battery-4" : batteryDeviceGlyphName(device.type), state.percentage, state.state,
+           system         ? "device-computer"
+               : wireless ? bluetoothDeviceGlyphName(bt->kind)
+                          : batteryDeviceGlyphName(device.type),
+           state.percentage, state.state,
            state.state == BatteryState::Charging          ? state.timeToFull
                : state.state == BatteryState::Discharging ? state.timeToEmpty
                                                           : 0,
@@ -143,8 +146,8 @@ namespace island {
       identity.model = device.alias;
       const int threshold = bluetoothBatteryThreshold(config, identity);
       result.push_back(
-          {device.path, device.alias, "bluetooth", static_cast<double>(device.batteryPercent), BatteryState::Unknown, 0,
-           false, threshold > 0 && device.batteryPercent <= threshold, true,
+          {device.path, device.alias, bluetoothDeviceGlyphName(device.kind), static_cast<double>(device.batteryPercent),
+           BatteryState::Unknown, 0, false, threshold > 0 && device.batteryPercent <= threshold, true,
            connections && connections->recent(device.path, now, previewSeconds, previewMonitor, output)}
       );
     }

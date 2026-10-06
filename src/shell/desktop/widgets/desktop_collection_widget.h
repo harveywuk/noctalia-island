@@ -51,6 +51,7 @@ private:
   Button* m_previous = nullptr;
   Button* m_next = nullptr;
   Button* m_open = nullptr;
+  Button* m_configure = nullptr;
   std::array<Row, 8> m_rows{};
   bool m_saveError = false;
   std::unique_ptr<DesktopRemoteSource> m_remote;

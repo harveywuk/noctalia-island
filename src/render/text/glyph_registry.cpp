@@ -28,27 +28,62 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     {"add", "plus"},
     {"more-vertical", "dots-vertical"},
     {"person", "user"},
-    {"info", "file-description"},
+    {"info", "info-circle"},
     {"unpin", "pinned-off"},
     {"image", "photo"},
     {"capslock", "keyboard"},
     {"numlock", "keyboard"},
     {"scrolllock", "keyboard"},
-    {"plugin", "plug-connected"},
+    {"plugin", "puzzle"},
     {"official-plugin", "shield-filled"},
     {"package", "box"},
 
+    // Shared shell symbols. Native names and explicit codepoints remain accepted.
+    {"apps", "layout-grid"},
+    {"edit", "pencil"},
+    {"control-center", "adjustments-horizontal"},
+    {"focus-on", "moon-filled"},
+    {"focus-off", "moon"},
+    {"notification-unread", "bell-filled"},
+    {"privacy-microphone", "microphone-filled"},
+    {"privacy-camera", "camera-filled"},
+    {"privacy-screen", "screen-share"},
+    {"screen-time", "hourglass"},
+    {"device-computer", "device-laptop"},
+    {"device-tablet-battery", "device-tablet-filled"},
+    {"bluetooth-device-computer", "device-laptop"},
+    {"device-ups", "server"},
+    {"battery-1", "battery-1-filled"},
+    {"battery-2", "battery-2-filled"},
+    {"battery-3", "battery-3-filled"},
+    {"battery-4", "battery-4-filled"},
+    {"widget-photos", "photo"},
+    {"widget-notes", "note"},
+    {"widget-journal", "book"},
+    {"widget-reminders", "list-check"},
+    {"widget-shortcuts", "stack-2"},
+    {"widget-contacts", "address-book"},
+    {"widget-reading-list", "bookmarks"},
+    {"widget-tips", "bulb"},
+    {"widget-news", "news"},
+    {"widget-podcasts", "broadcast"},
+    {"widget-stocks", "chart-line"},
+    {"widget-home", "home"},
+    {"widget-find-my", "radar"},
+    {"widget-videos", "movie"},
+    {"widget-stack", "stack-2"},
+
     // Toast / warnings
-    {"toast-notice", "circle-check"},
-    {"toast-warning", "alert-circle"},
-    {"toast-error", "circle-x"},
-    {"warning", "exclamation-circle"},
+    {"toast-notice", "circle-check-filled"},
+    {"toast-warning", "alert-circle-filled"},
+    {"toast-error", "circle-x-filled"},
+    {"warning", "alert-triangle-filled"},
 
     // Media
     {"media-pause", "player-pause-filled"},
     {"media-play", "player-play-filled"},
-    {"media-prev", "player-skip-back-filled"},
-    {"media-next", "player-skip-forward-filled"},
+    {"media-prev", "player-track-prev-filled"},
+    {"media-next", "player-track-next-filled"},
     {"shuffle", "arrows-shuffle"},
     {"stop", "player-stop-filled"},
     {"microphone-mute", "microphone-off"},
@@ -57,7 +92,7 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     {"volume-high", "volume"},
     {"volume-low", "volume-2"},
     {"volume-mute", "volume-off"},
-    {"volume-x", "volume-3"},
+    {"volume-x", "volume-off"},
     {"volume-zero", "volume-3"},
 
     // Network speed
@@ -74,17 +109,17 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     {"busy", "hourglass-empty"},
 
     // Power
-    {"performance", "gauge"},
+    {"performance", "gauge-filled"},
     {"balanced", "scale"},
     {"powersaver", "leaf"},
     {"shutdown", "power"},
     {"reboot", "refresh"},
-    {"suspend", "moon"},
+    {"suspend", "moon-filled"},
     {"hibernate", "zzz"},
 
     // Night light / dark mode
     // A setting sun (evening warmth), so Night Light never shares Do Not Disturb's moon.
-    {"nightlight-on", "sunset"},
+    {"nightlight-on", "sunset-filled"},
     {"nightlight-off", "sunset"},
     {"nightlight-forced", "sunset-filled"},
     {"theme-mode", "contrast-filled"},
@@ -94,8 +129,8 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     {"caffeine-off", "mug"},
 
     // Brightness / Display
-    {"brightness-low", "brightness-down-filled"},
-    {"brightness-high", "brightness-up-filled"},
+    {"brightness-low", "brightness-down"},
+    {"brightness-high", "sun-filled"},
 
     // Wallpaper / color
     {"wallpaper-selector", "library-photo"},
@@ -107,30 +142,30 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     // Bluetooth devices
     {"bluetooth-device-generic", "bluetooth"},
     {"bluetooth-device-gamepad", "device-gamepad-2"},
-    {"bluetooth-device-microphone", "microphone"},
+    {"bluetooth-device-microphone", "microphone-filled"},
     {"bluetooth-device-headset", "headset"},
     {"bluetooth-device-earbuds", "device-airpods"},
-    {"bluetooth-device-headphones", "headphones"},
-    {"bluetooth-device-mouse", "mouse-2"},
-    {"bluetooth-device-keyboard", "bluetooth"},
-    {"bluetooth-device-phone", "device-mobile"},
-    {"bluetooth-device-watch", "device-watch"},
-    {"bluetooth-device-speaker", "device-speaker"},
-    {"bluetooth-device-tv", "device-tv"},
+    {"bluetooth-device-headphones", "headphones-filled"},
+    {"bluetooth-device-mouse", "mouse-filled"},
+    {"bluetooth-device-keyboard", "keyboard-filled"},
+    {"bluetooth-device-phone", "device-mobile-filled"},
+    {"bluetooth-device-watch", "device-watch-filled"},
+    {"bluetooth-device-speaker", "device-speaker-filled"},
+    {"bluetooth-device-tv", "device-tv-filled"},
 
     // Weather
-    {"weather-sun", "sun"},
-    {"weather-moon", "moon"},
+    {"weather-sun", "sun-filled"},
+    {"weather-moon", "moon-filled"},
     {"weather-moon-stars", "moon-stars"},
-    {"weather-cloud", "cloud"},
+    {"weather-cloud", "cloud-filled"},
     {"weather-cloud-off", "cloud-off"},
     {"weather-cloud-haze", "cloud-fog"},
     {"weather-cloud-lightning", "cloud-bolt"},
     {"weather-cloud-rain", "cloud-rain"},
     {"weather-cloud-snow", "cloud-snow"},
     {"weather-cloud-sun", "cloud-sun"},
-    {"weather-sunrise", "sunrise"},
-    {"weather-sunset", "sunset"},
+    {"weather-sunrise", "sunrise-filled"},
+    {"weather-sunset", "sunset-filled"},
 };
   // clang-format on
 
@@ -266,6 +301,46 @@ char32_t GlyphRegistry::lookup(std::string_view name) {
 
   kLog.warn("missing glyph: {}", name);
   return kMissingGlyph;
+}
+
+char32_t GlyphRegistry::emphasized(char32_t codepoint) {
+  static const auto variants = [] {
+    std::unordered_map<char32_t, char32_t> result;
+    const auto& icons = tablerIcons();
+    for (const auto& [name, cp] : icons)
+      if (const auto it = icons.find(name + "-filled"); it != icons.end())
+        result.emplace(cp, it->second);
+    return result;
+  }();
+  const auto it = variants.find(codepoint);
+  return it == variants.end() ? codepoint : it->second;
+}
+
+GlyphRegistry::OpticalAdjustment GlyphRegistry::opticalAdjustment(char32_t codepoint) {
+  // Dense silhouettes need slightly more breathing room at menu-bar sizes.
+  // Play triangles sit a little forward of their mathematical bounding-box center.
+  static const auto adjustments = [] {
+    std::unordered_map<char32_t, OpticalAdjustment> result;
+    const auto add = [&](std::string_view name, OpticalAdjustment adjustment) {
+      const auto& icons = tablerIcons();
+      if (const auto it = icons.find(std::string(name)); it != icons.end())
+        result.emplace(it->second, adjustment);
+    };
+    for (const auto name :
+         {"home-filled", "settings-filled", "headphones-filled", "device-speaker-filled", "device-mobile-filled",
+          "device-tablet-filled", "device-tv-filled", "keyboard-filled", "mouse-filled", "camera-filled",
+          "microphone-filled", "bell-filled", "moon-filled", "sun-filled", "lock-filled", "clipboard-filled",
+          "hourglass-filled"})
+      add(name, {.scale = .94F});
+    add("player-play-filled", {.scale = .92F, .x = .035F});
+    add("player-pause-filled", {.scale = .90F});
+    add("player-stop-filled", {.scale = .88F});
+    add("player-track-next-filled", {.scale = .94F, .x = .02F});
+    add("player-track-prev-filled", {.scale = .94F, .x = -.02F});
+    return result;
+  }();
+  const auto it = adjustments.find(codepoint);
+  return it == adjustments.end() ? OpticalAdjustment{} : it->second;
 }
 
 const std::unordered_map<std::string, GlyphRegistry::TablerGlyphMetadata>& GlyphRegistry::tablerGlyphMetadata() {

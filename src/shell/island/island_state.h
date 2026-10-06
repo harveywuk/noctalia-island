@@ -17,6 +17,9 @@ namespace island {
   };
   enum class Activity { None, Media, Downloads, Timers };
 
+  // Temporary level/toggle feedback owns the capsule until its timeout expires.
+  constexpr bool showsStatusIcons(View view) { return view != View::Osd; }
+
   struct Activities {
     bool media = false, downloads = false, timers = false;
     constexpr int count() const { return int(media) + int(downloads) + int(timers); }

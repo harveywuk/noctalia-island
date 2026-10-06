@@ -15,7 +15,10 @@
 #include "shell/panel/panel_manager.h"
 #include "time/time_format.h"
 #include "ui/builders.h"
+#include "ui/controls/scroll_view.h"
+#include "ui/node_motion.h"
 #include "ui/palette.h"
+#include "ui/scroll_into_view.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
 
@@ -51,7 +54,7 @@ namespace {
     return std::min(iconSize * 0.5F, Style::scaledRadius(baseRadius, localScale));
   }
   constexpr float kNotificationActionButtonSize = Style::controlHeightSm;
-  // Top-right slot: the time stamp at rest, the close button while hovered (macOS).
+  // Keep dismissal visible alongside the time, including for keyboard users.
   constexpr float kHistoryTimeWidth = 56.0F;
 
   std::string historyActionLabel(std::string_view actionKey, std::string_view actionLabel) {
@@ -199,7 +202,6 @@ namespace {
         / 15;
   }
 
-
   float measuredTextHeight(
       Renderer& renderer, std::string_view text, float fontSize, FontWeight fontWeight, float maxWidth, int maxLines
   ) {
@@ -237,7 +239,7 @@ namespace {
 
   NotificationCardMetrics measureNotificationCard(
       Renderer& renderer, const NotificationHistoryEntry& entry, float scale, float width, bool expandedRequested,
-      bool showHistoryActions
+      bool showHistoryActions, std::size_t stackSize = 1
   ) {
     NotificationCardMetrics metrics;
     const float cardWidth = std::max(0.0F, width);
@@ -266,12 +268,16 @@ namespace {
     const float iconColumn = iconPx + Style::spaceSm * scale;
     const float actionButtonSize = kNotificationActionButtonSize * scale;
     const float actionButtonsGap = Style::spaceXs * scale;
-    const float headerActionsWidth = std::max(kHistoryTimeWidth * scale, actionButtonSize)
-        + (metrics.canExpand ? (actionButtonsGap + actionButtonSize) : 0.0F);
+    const float headerActionsWidth = kHistoryTimeWidth * scale
+        + actionButtonSize
+        + actionButtonsGap
+        + (metrics.canExpand || stackSize > 1 ? (actionButtonsGap + actionButtonSize) : 0.0F);
     const float leftClusterWidth = metrics.cardTextWidth - headerActionsWidth;
     metrics.metaTextWidth = std::max(0.0F, leftClusterWidth - iconColumn);
 
     metrics.metaLine = notificationDisplayAppName(entry.notification);
+    if (stackSize > 1)
+      metrics.metaLine += " (" + std::to_string(stackSize) + ")";
     metrics.timeText = relativeMetaLine(entry.notification);
 
     const float metaHeight = measuredTextHeight(
@@ -418,12 +424,12 @@ namespace {
 
     void bind(
         Renderer& renderer, const NotificationHistoryEntry& entry, float width, bool expanded, bool showHistoryActions,
-        bool hovered, IconResolver& iconResolver, std::function<void(uint32_t)> onToggleExpanded,
+        std::size_t stackSize, IconResolver& iconResolver, std::function<void(uint32_t)> onToggleExpanded,
         std::function<void(uint32_t, bool)> onRemove, const std::function<void(uint32_t, const std::string&)>& onAction,
-        std::function<void(uint32_t, bool)> onDismissHover
+        std::function<void()> onExpandStack
     ) {
       const NotificationCardMetrics metrics =
-          measureNotificationCard(renderer, entry, m_scale, width, expanded, showHistoryActions);
+          measureNotificationCard(renderer, entry, m_scale, width, expanded, showHistoryActions, stackSize);
       setMinWidth(width);
       setSize(width, metrics.height);
 
@@ -438,19 +444,29 @@ namespace {
       m_meta->measure(renderer);
 
       m_time->setText(metrics.timeText);
-      m_time->setVisible(!hovered);
+      m_time->setVisible(true);
       m_time->measure(renderer);
-      m_dismiss->setVisible(hovered);
-      // The list drops its hover when the pointer moves onto this button; the owner keeps the
-      // button shown while it is under the pointer.
-      m_dismiss->setOnEnter([onDismissHover, id = entry.notification.id]() { onDismissHover(id, true); });
-      m_dismiss->setOnLeave([onDismissHover, id = entry.notification.id]() { onDismissHover(id, false); });
+      m_dismiss->setVisible(true);
+      m_dismiss->setTooltip(
+          stackSize > 1 ? i18n::tr("control-center.notifications.clear-group", "app", metrics.metaLine)
+                        : i18n::tr("notifications.dismiss")
+      );
+      m_dismiss->inputArea()->setTabFocusKey("notification-dismiss-" + std::to_string(entry.notification.id));
 
-      m_expand->setVisible(metrics.canExpand);
-      m_expand->setEnabled(metrics.canExpand);
-      m_expand->setGlyph(metrics.expanded ? "chevron-up" : "chevron-down");
-      m_expand->setOnClick([onToggleExpanded = std::move(onToggleExpanded), id = entry.notification.id]() {
-        onToggleExpanded(id);
+      m_expand->setVisible(stackSize > 1 || metrics.canExpand);
+      m_expand->setEnabled(stackSize > 1 || metrics.canExpand);
+      m_expand->setGlyph(stackSize == 1 && metrics.expanded ? "chevron-up" : "chevron-down");
+      m_expand->setTooltip(
+          stackSize > 1 ? i18n::trp("notifications.expand-group", stackSize)
+                        : i18n::tr(metrics.expanded ? "notifications.collapse" : "notifications.expand")
+      );
+      m_expand->inputArea()->setTabFocusKey("notification-expand-" + std::to_string(entry.notification.id));
+      m_expand->setOnClick([onToggleExpanded = std::move(onToggleExpanded), onExpandStack = std::move(onExpandStack),
+                            stackSize, id = entry.notification.id]() {
+        if (stackSize > 1)
+          onExpandStack();
+        else
+          onToggleExpanded(id);
       });
 
       m_dismiss->setOnClick([onRemove = std::move(onRemove), id = entry.notification.id, active = entry.active]() {
@@ -493,6 +509,9 @@ namespace {
           button->setOnClick([onAction, id = entry.notification.id, key = std::string(actionKey)]() {
             onAction(id, key);
           });
+          button->inputArea()->setTabFocusKey(
+              "notification-action-" + std::to_string(entry.notification.id) + "-" + actionKey
+          );
           buttons.push_back(std::move(button));
         }
 
@@ -620,9 +639,8 @@ namespace {
       for (auto*& plate : m_plates) {
         plate = static_cast<Box*>(addChild(ui::box({.visible = false})));
       }
-      m_card = static_cast<NotificationHistoryRow*>(
-          addChild(std::make_unique<NotificationHistoryRow>(scale, fillOpacity))
-      );
+      m_card =
+          static_cast<NotificationHistoryRow*>(addChild(std::make_unique<NotificationHistoryRow>(scale, fillOpacity)));
 
       m_header = static_cast<Flex*>(addChild(
           ui::row(
@@ -752,16 +770,13 @@ public:
     std::uint64_t revision = revisionForEntry(entry, expanded, m_owner.m_lastRelativeTimeSlot);
     revision ^= static_cast<std::uint64_t>(Style::cornerRadiusScale() * 10000.0F) * 0xC2B2AE3D27D4EB4FULL;
     revision ^= static_cast<std::uint64_t>(item->collapsedStack ? item->groupSize : 0) * 0x94D049BB133111EBULL;
-    if (m_owner.m_dismissHoverId == entry.notification.id) {
-      revision ^= 0x2545F4914F6CDD1DULL;
-    }
     if (item->kind == NotificationsTab::HistoryItem::Kind::GroupHeader) {
       revision ^= std::hash<std::string>{}(item->groupKey) ^ 0xBF58476D1CE4E5B9ULL;
     }
     return revision;
   }
 
-  // Cards track hover for their close button. A click fans a collapsed stack out, as on macOS,
+  // A click fans a collapsed stack out, as on macOS,
   // and opens a lone card's app when it still offers a default action.
   [[nodiscard]] bool itemInteractive(std::size_t index) const override {
     const auto* item = itemAt(index);
@@ -793,9 +808,12 @@ public:
     }
     const auto& entry = *item->entry;
     const bool expanded = m_owner.m_expandedIds.contains(entry.notification.id);
-    const bool showHistoryActions =
-        m_owner.m_notifications != nullptr && m_owner.m_notifications->hasPendingDBusClose(entry.notification.id);
-    return measureNotificationCard(renderer, entry, m_scale, width, expanded, showHistoryActions).height
+    const bool showHistoryActions = m_owner.m_notifications != nullptr
+        && (entry.active || m_owner.m_notifications->hasPendingDBusClose(entry.notification.id));
+    return measureNotificationCard(
+               renderer, entry, m_scale, width, expanded, showHistoryActions, item->collapsedStack ? item->groupSize : 1
+           )
+               .height
         + (item->collapsedStack ? stackPlatesHeight(item->groupSize, m_scale) : 0.0F);
   }
 
@@ -803,7 +821,7 @@ public:
     return std::make_unique<NotificationHistoryItem>(m_scale, m_fillOpacity);
   }
 
-  void bindItem(Renderer& renderer, Node& node, std::size_t index, float width, bool hovered) override {
+  void bindItem(Renderer& renderer, Node& node, std::size_t index, float width, bool /*hovered*/) override {
     const auto* item = itemAt(index);
     auto* slot = dynamic_cast<NotificationHistoryItem*>(&node);
     if (item == nullptr || slot == nullptr) {
@@ -811,16 +829,15 @@ public:
     }
     if (item->kind == NotificationsTab::HistoryItem::Kind::GroupHeader) {
       slot->showHeader(
-          renderer, item->groupKey, width,
-          [this, key = item->groupKey]() { m_owner.setGroupExpanded(key, false); },
+          renderer, item->groupKey, width, [this, key = item->groupKey]() { m_owner.setGroupExpanded(key, false); },
           [this, key = item->groupKey]() { m_owner.clearGroup(key); }
       );
       return;
     }
 
     const auto& entry = *item->entry;
-    const bool showHistoryActions =
-        m_owner.m_notifications != nullptr && m_owner.m_notifications->hasPendingDBusClose(entry.notification.id);
+    const bool showHistoryActions = m_owner.m_notifications != nullptr
+        && (entry.active || m_owner.m_notifications->hasPendingDBusClose(entry.notification.id));
     // A collapsed stack's dismiss clears the whole stack, as its close button does on macOS.
     std::function<void(uint32_t, bool)> onRemove;
     if (item->collapsedStack) {
@@ -830,10 +847,10 @@ public:
     }
     slot->card().bind(
         renderer, entry, width, m_owner.m_expandedIds.contains(entry.notification.id), showHistoryActions,
-        hovered || m_owner.m_dismissHoverId == entry.notification.id,
-        m_owner.m_iconResolver, [this](uint32_t id) { m_owner.toggleNotificationExpanded(id); }, std::move(onRemove),
+        item->collapsedStack ? item->groupSize : 1, m_owner.m_iconResolver,
+        [this](uint32_t id) { m_owner.toggleNotificationExpanded(id); }, std::move(onRemove),
         [this](uint32_t id, const std::string& key) { m_owner.invokeNotificationAction(id, key); },
-        [this](uint32_t id, bool inside) { m_owner.setDismissHover(id, inside); }
+        [this, key = item->groupKey] { m_owner.setGroupExpanded(key, true); }
     );
     slot->showCard(item->collapsedStack ? item->groupSize : 1, width);
   }
@@ -855,6 +872,21 @@ NotificationsTab::NotificationsTab(NotificationManager* notifications, Composito
     : m_notifications(notifications), m_platform(platform) {}
 
 NotificationsTab::~NotificationsTab() = default;
+
+float NotificationsTab::fittedHeight() const {
+  if (m_list && m_list->visible())
+    return m_list->scrollView().content()->height();
+  return m_emptyCard ? m_emptyCard->height() : scaled(100.0F);
+}
+
+void NotificationsTab::scrollFocusedInputIntoView(InputArea* area) {
+  if (!area || !m_list)
+    return;
+  if (auto* scroll = findEnclosingScrollView(area)) {
+    scrollNodeIntoScrollView(*scroll, nullptr, *area, scaled(Style::spaceXs));
+    PanelManager::instance().requestLayout();
+  }
+}
 
 std::unique_ptr<Flex> NotificationsTab::create() {
   const float scale = contentScale();
@@ -912,7 +944,7 @@ std::unique_ptr<Flex> NotificationsTab::create() {
 }
 
 std::unique_ptr<Flex> NotificationsTab::createHeaderActions() {
-  // Notification Centre has no toolbar on macOS; the one control kept is a quiet "Clear All".
+  // A quiet capsule alongside the history title and return control.
   const float scale = contentScale();
   return ui::row(
       {
@@ -967,7 +999,6 @@ void NotificationsTab::onClose() {
   m_expandedGroups.clear();
   m_lastSerial = 0;
   m_lastRelativeTimeSlot = -1;
-  m_dismissHoverId = 0;
 }
 
 void NotificationsTab::clearAllNotifications() {
@@ -1010,15 +1041,6 @@ void NotificationsTab::removeNotificationEntry(uint32_t id, bool wasActive) {
   PanelManager::instance().refresh();
 }
 
-void NotificationsTab::setDismissHover(uint32_t id, bool inside) {
-  if (inside) {
-    m_dismissHoverId = id;
-  } else if (m_dismissHoverId == id) {
-    m_dismissHoverId = 0;
-  }
-  PanelManager::instance().requestLayout();
-}
-
 void NotificationsTab::setGroupExpanded(const std::string& groupKey, bool expanded) {
   if (expanded) {
     m_expandedGroups.insert(groupKey);
@@ -1028,6 +1050,10 @@ void NotificationsTab::setGroupExpanded(const std::string& groupKey, bool expand
   rebuildItems();
   if (m_list != nullptr) {
     m_list->notifyDataChanged();
+    if (auto* animations = m_list->animationManager())
+      animations->cancelForOwner(m_list);
+    m_list->setOpacity(MotionService::instance().enabled() ? 0.65F : 1.0F);
+    Motion::fadeNode(*m_list, 1.0F, Motion::contentMs);
   }
   PanelManager::instance().refresh();
 }
@@ -1076,13 +1102,18 @@ void NotificationsTab::toggleNotificationExpanded(uint32_t id) {
 }
 
 void NotificationsTab::invokeNotificationAction(uint32_t id, const std::string& actionKey) {
-  if (m_notifications == nullptr || actionKey.empty() || !m_notifications->hasPendingDBusClose(id)) {
+  if (m_notifications == nullptr || actionKey.empty()) {
     return;
   }
   const std::string activationToken =
       m_platform != nullptr ? m_platform->requestActivationToken(m_platform->lastPointerSurface()) : std::string{};
   if (!m_notifications->invokeAction(id, actionKey, activationToken, true)) {
     kLog.warn("notification history: failed to invoke action '{}' for #{}", actionKey, id);
+    return;
+  }
+
+  if (PanelManager::instance().isOpenPanel("notification-center")) {
+    PanelManager::instance().close();
     return;
   }
 
@@ -1159,8 +1190,7 @@ void NotificationsTab::rebuildItems() {
       continue;
     }
     m_items.push_back(
-        {.kind = HistoryItem::Kind::GroupHeader, .entry = members.front(), .groupKey = key,
-         .groupSize = members.size()}
+        {.kind = HistoryItem::Kind::GroupHeader, .entry = members.front(), .groupKey = key, .groupSize = members.size()}
     );
     for (const auto* member : members) {
       m_items.push_back({.entry = member, .groupKey = key, .groupSize = members.size()});

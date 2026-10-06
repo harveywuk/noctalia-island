@@ -10,6 +10,7 @@
 #include "render/scene/node.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/motion.h"
+#include "ui/node_motion.h"
 #include "ui/popup_chrome.h"
 #include "ui/style.h"
 #include "wayland/layer_surface.h"
@@ -150,11 +151,7 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
     self->m_sceneRoot = std::make_unique<Node>();
     self->m_sceneRoot->setAnimationManager(&self->m_animations);
     if (firstReveal) {
-      auto* root = self->m_sceneRoot.get();
-      root->setOpacity(0);
-      self->m_animations.animate(
-          0, 1, Motion::feedbackMs, Motion::reveal, [root](float value) { root->setOpacity(value); }, {}, root
-      );
+      Motion::revealNode(*self->m_sceneRoot);
     }
     self->m_sceneRoot->setSize(fw, fh);
     if (Style::popupShadowsEnabled()) {
@@ -240,6 +237,8 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
 }
 
 void ContextMenuPopup::close() {
+  ++m_generation;
+  m_dismissing = false;
   const bool wasOpen = m_surface != nullptr;
   if (s_openMenu == this) {
     s_openMenu = nullptr;
@@ -279,12 +278,25 @@ void ContextMenuPopup::deferActivation(ContextMenuControlEntry entry) {
   });
 }
 
-void ContextMenuPopup::deferClose() {
+void ContextMenuPopup::deferClose(bool animated) {
+  if (animated && m_sceneRoot && !m_dismissing && MotionService::instance().enabled()) {
+    m_dismissing = true;
+    m_inputDispatcher.cancelPointerCapture();
+    m_inputDispatcher.setFocus(nullptr);
+    m_sceneRoot->setHitTestVisible(false);
+    m_animations.cancelForOwner(m_sceneRoot.get());
+    Motion::fadeNode(*m_sceneRoot, 0, Motion::dismissMs, [this, generation = m_generation]() {
+      if (generation == m_generation)
+        deferClose();
+    });
+    m_surface->requestRedraw();
+    return;
+  }
   auto* self = this;
   const std::weak_ptr<bool> alive = m_alive;
-  DeferredCall::callLater([self, alive]() {
+  DeferredCall::callLater([self, alive, generation = m_generation]() {
     const auto token = alive.lock();
-    if (token != nullptr && *token) {
+    if (token != nullptr && *token && self->m_generation == generation) {
       self->close();
     }
   });
@@ -310,6 +322,8 @@ bool ContextMenuPopup::onPointerEvent(const PointerEvent& event) {
   if (!isOpen()) {
     return false;
   }
+  if (m_dismissing)
+    return true;
 
   const bool captured = m_inputDispatcher.pointerCaptured();
   const bool onPopup = (event.surface != nullptr && event.surface == m_wlSurface);
@@ -401,7 +415,7 @@ bool ContextMenuPopup::onPointerEvent(const PointerEvent& event) {
 }
 
 void ContextMenuPopup::onKeyboardEvent(const KeyboardEvent& event) {
-  if (!isOpen() || !event.pressed || event.preedit) {
+  if (!isOpen() || m_dismissing || !event.pressed || event.preedit) {
     return;
   }
 
@@ -409,7 +423,7 @@ void ContextMenuPopup::onKeyboardEvent(const KeyboardEvent& event) {
   const std::uint32_t modifiers = event.modifiers;
 
   if (KeybindMatcher::matches(KeybindAction::Cancel, sym, modifiers)) {
-    deferClose();
+    deferClose(true);
     return;
   }
 

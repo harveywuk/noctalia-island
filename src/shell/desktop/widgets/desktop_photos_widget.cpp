@@ -43,6 +43,14 @@ void DesktopPhotosWidget::create() {
                                if (!m_loaded.empty())
                                  (void)process::runAsync(std::vector<std::string>{"xdg-open", m_loaded});
                              }}));
+  node->addChild(
+      ui::button(
+          {.out = &m_configure,
+           .text = i18n::tr("desktop-widgets.setup.configure"),
+           .variant = ButtonVariant::Secondary,
+           .onClick = [this]() { requestConfigure(); }}
+      )
+  );
   setRoot(std::move(node));
 }
 
@@ -147,6 +155,15 @@ void DesktopPhotosWidget::doLayout(Renderer& renderer) {
     button->updateInputArea();
     ++i;
   }
+  for (auto* button : {m_previous, m_open, m_next})
+    button->setVisible(m_image->hasImage());
+  m_caption->setVisible(m_image->hasImage());
+  m_configure->setVisible(!m_image->hasImage());
+  m_configure->setEnabled(canConfigure());
+  m_configure->setFontSize(Style::fontSizeCaption * scale);
+  m_configure->layout(renderer);
+  m_configure->setPosition(Style::rtl() ? card.width - m_configure->width() : 0, card.height - m_configure->height());
+  m_configure->updateInputArea();
   m_previous->setEnabled(m_files.size() > 1);
   m_next->setEnabled(m_files.size() > 1);
   m_open->setEnabled(m_image->hasImage());

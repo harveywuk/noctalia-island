@@ -6,6 +6,7 @@
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
 #include "notification/notification_manager.h"
+#include "render/animation/motion_service.h"
 #include "render/core/renderer.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
@@ -19,6 +20,7 @@
 #include "ui/builders.h"
 #include "ui/controls/roving_list_nav.h"
 #include "ui/controls/scroll_view.h"
+#include "ui/motion.h"
 #include "ui/scroll_into_view.h"
 #include "ui/split_pane_focus.h"
 
@@ -60,8 +62,7 @@ ControlCenterPanel::ControlCenterPanel(const ControlCenterServices& services) {
   m_dependencies = services.dependencies;
   m_tabs[tabIndex(TabId::Home)] = std::make_unique<HomeTab>(services);
   m_tabs[tabIndex(TabId::Media)] = std::make_unique<MediaTab>(
-      services.mpris, services.httpClient, services.config, wayland,
-      PanelManager::instance().renderContext()
+      services.mpris, services.httpClient, services.config, wayland, PanelManager::instance().renderContext()
   );
   m_tabs[tabIndex(TabId::Audio)] = std::make_unique<AudioTab>(
       services.audio, services.easyEffects, services.mpris, services.config, wayland,
@@ -109,7 +110,10 @@ float ControlCenterPanel::fittedHeight() const {
   return std::max(
       scaled(180),
       std::ceil(
-          std::ceil(body) + kTabViewportClipInset + navigation + m_rootLayout->gap()
+          std::ceil(body)
+          + kTabViewportClipInset
+          + navigation
+          + m_rootLayout->gap()
           + 2 * Style::panelPadding * contentScale()
       )
   );
@@ -698,12 +702,14 @@ void ControlCenterPanel::applyTabContainerVisibility(TabId activeTab) {
     const bool tabEnabled = isTabShown(meta.id);
     if (m_tabContainers[idx] != nullptr) {
       m_tabContainers[idx]->setVisible(tabEnabled && meta.id == activeTab);
+      m_tabContainers[idx]->setHitTestVisible(meta.id == activeTab);
+      m_tabContainers[idx]->setExcludeSubtreeFromTabOrder(meta.id != activeTab);
     }
   }
 }
 
 void ControlCenterPanel::layoutTabContainers(float bodyWidth, float bodyHeight) {
-  const float travel = bodyHeight > 0.0F ? bodyHeight : 0.0F;
+  const float travel = std::min(std::max(bodyHeight, 0.0F), 12.0F * m_contentScale);
   const float contentHeight = tabContentHeight(bodyHeight);
   for (std::size_t i = 0; i < kTabCount; ++i) {
     auto* container = m_tabContainers[i];
@@ -722,10 +728,10 @@ void ControlCenterPanel::layoutTabContainers(float bodyWidth, float bodyHeight) 
       const auto direction = static_cast<float>(m_tabTransitionDirection);
       if (tabId == m_tabTransitionOutgoing) {
         offsetY = -direction * travel * m_tabTransitionProgress;
-        opacity = 1.0F - 0.3F * m_tabTransitionProgress;
+        opacity = 1.0F - m_tabTransitionProgress;
       } else if (tabId == m_activeTab) {
         offsetY = direction * travel * (1.0F - m_tabTransitionProgress);
-        opacity = 0.7F + 0.3F * m_tabTransitionProgress;
+        opacity = m_tabTransitionProgress;
       }
     }
 
@@ -772,7 +778,7 @@ void ControlCenterPanel::applyTabTransitionLayout() {
 }
 
 void ControlCenterPanel::startTabTransition(TabId from, TabId to) {
-  if (m_animations == nullptr || m_tabBodies == nullptr) {
+  if (m_animations == nullptr || m_tabBodies == nullptr || !MotionService::instance().enabled()) {
     applyTabContainerVisibility(to);
     resetTabContainerTransforms();
     return;
@@ -793,6 +799,8 @@ void ControlCenterPanel::startTabTransition(TabId from, TabId to) {
     }
     const bool show = meta.id == from || meta.id == to;
     m_tabContainers[idx]->setVisible(show);
+    m_tabContainers[idx]->setHitTestVisible(meta.id == to);
+    m_tabContainers[idx]->setExcludeSubtreeFromTabOrder(meta.id != to);
   }
 
   applyTabTransitionLayout();
@@ -801,7 +809,7 @@ void ControlCenterPanel::startTabTransition(TabId from, TabId to) {
   PanelManager::instance().requestFrameTick();
 
   m_tabTransitionAnimId = m_animations->animate(
-      0.0F, 1.0F, static_cast<float>(Style::animNormal), Easing::EaseOutCubic,
+      0.0F, 1.0F, Motion::contentMs, Motion::reveal,
       [this](float progress) {
         m_tabTransitionProgress = progress;
         applyTabTransitionLayout();

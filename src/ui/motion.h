@@ -11,6 +11,8 @@
 namespace Motion {
 
   inline constexpr float feedbackMs = 120;
+  inline constexpr float pressMs = 70;
+  inline constexpr float contentMs = 180;
   inline constexpr float revealMs = 240;
   inline constexpr float dismissMs = 180;
   inline constexpr float resizeMs = 280;
@@ -33,6 +35,8 @@ namespace Motion {
   // Panels and their popovers open and close on the Island's springs, so the shell moves as one.
   inline constexpr Spring panelOpen = islandExpand;
   inline constexpr Spring panelClose = islandCollapse;
+  inline constexpr Spring sheetOpen{.responseMs = 300, .damping = 1.0F};
+  inline constexpr Spring widgetLift{.responseMs = 280, .damping = 0.9F};
   // A closing surface is destroyed when its spring ends, so it may stop once 1% of the travel is
   // left instead of waiting out the last fraction of a pixel.
   inline constexpr float closeTolerance = 0.01F;

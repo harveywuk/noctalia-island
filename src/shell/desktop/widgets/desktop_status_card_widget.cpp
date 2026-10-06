@@ -1,7 +1,5 @@
 #include "shell/desktop/widgets/desktop_status_card_widget.h"
 
-#include "dbus/bluetooth/bluetooth_service.h"
-#include "dbus/upower/upower_service.h"
 #include "i18n/i18n.h"
 #include "system/screen_time_service.h"
 #include "ui/builders.h"
@@ -17,10 +15,8 @@ namespace {
   }
 } // namespace
 
-DesktopStatusCardWidget::DesktopStatusCardWidget(
-    Kind kind, DesktopWidgetRuntimeServices services, desktop_cards::Size size
-)
-    : m_kind(kind), m_services(services), m_size(size) {}
+DesktopStatusCardWidget::DesktopStatusCardWidget(DesktopWidgetRuntimeServices services, desktop_cards::Size size)
+    : m_services(services), m_size(size) {}
 
 void DesktopStatusCardWidget::create() {
   auto node = ui::node({});
@@ -36,13 +32,7 @@ void DesktopStatusCardWidget::create() {
   node->addChild(
       ui::label({.out = &m_detailLabel, .color = colorSpecFromRole(ColorRole::OnSurfaceVariant), .maxLines = 2})
   );
-  node->addChild(
-      ui::glyph(
-          {.out = &m_symbol,
-           .glyph = m_kind == Kind::Batteries ? "battery-4" : "clock",
-           .color = colorSpecFromRole(ColorRole::Primary)}
-      )
-  );
+  node->addChild(ui::glyph({.out = &m_symbol, .glyph = "clock", .color = colorSpecFromRole(ColorRole::Primary)}));
   for (auto& row : m_rows) {
     node->addChild(ui::label({.out = &row.title, .maxLines = 1}));
     node->addChild(
@@ -62,40 +52,7 @@ bool DesktopStatusCardWidget::refresh() {
   std::string value;
   std::string detail;
   std::array<float, 24> history{};
-  if (m_kind == Kind::Batteries) {
-    if (m_services.upower != nullptr) {
-      auto devices = m_services.upower->batteryDevices();
-      std::stable_sort(devices.begin(), devices.end(), [](const auto& a, const auto& b) {
-        return a.isLaptopBattery() > b.isLaptopBattery();
-      });
-      for (const auto& device : devices) {
-        if (!device.isPresent || !std::isfinite(device.state.percentage))
-          continue;
-        const float percentage = std::clamp(static_cast<float>(device.state.percentage), 0.0F, 100.0F);
-        items.push_back(
-            {device.isLaptopBattery() ? i18n::tr("desktop-widgets.cards.this-device") : device.model,
-             std::format("{:.0f}%", percentage),
-             device.isLaptopBattery() ? "device-laptop" : batteryDeviceGlyphName(device.type), percentage / 100.0F}
-        );
-        if (items.back().title.empty())
-          items.back().title = i18n::tr("desktop-widgets.cards.battery");
-        if (items.size() == 1 && device.state.state == BatteryState::Charging)
-          detail = i18n::tr("desktop-widgets.cards.charging");
-      }
-    }
-    if (m_services.bluetooth != nullptr) {
-      for (const auto& device : m_services.bluetooth->devices()) {
-        if (!device.connected || !device.hasBattery || device.batteryFromUPower)
-          continue;
-        items.push_back(
-            {device.alias, std::format("{}%", device.batteryPercent), "bluetooth", device.batteryPercent / 100.0F}
-        );
-      }
-    }
-    value = items.empty() ? "" : items.front().detail;
-    if (detail.empty())
-      detail = items.empty() ? i18n::tr("desktop-widgets.cards.no-batteries") : items.front().title;
-  } else if (m_services.screenTime != nullptr && m_services.screenTime->enabled()) {
+  if (m_services.screenTime != nullptr && m_services.screenTime->enabled()) {
     const auto snapshot = m_services.screenTime->snapshot(1);
     value = durationText(snapshot.total);
     detail = i18n::tr("desktop-widgets.cards.today");
@@ -135,7 +92,6 @@ void DesktopStatusCardWidget::doLayout(Renderer& renderer) {
       desktop_cards::resolve(m_size, contentScale(), boxInnerWidth(), boxInnerHeight(), backgroundPadding());
   const bool small = card.size == desktop_cards::Size::Small;
   const bool large = card.size == desktop_cards::Size::Large;
-  const bool activity = m_kind == Kind::ScreenTime;
   const float scale = card.scale;
   auto place = [&](Node* node, float x, float y) {
     node->setPosition(Style::rtl() ? card.width - x - node->width() : x, y);
@@ -148,11 +104,7 @@ void DesktopStatusCardWidget::doLayout(Renderer& renderer) {
     node->measure(renderer);
     place(node, x, y);
   };
-  label(
-      m_heading,
-      i18n::tr(activity ? "desktop-widgets.editor.types.screen-time" : "desktop-widgets.editor.types.batteries"), 0, 0,
-      card.width, Style::fontSizeCaption
-  );
+  label(m_heading, i18n::tr("desktop-widgets.editor.types.screen-time"), 0, 0, card.width, Style::fontSizeCaption);
   const float heroWidth = small || large ? card.width : card.width * 0.43F;
   label(m_valueLabel, m_value, 0, 34 * scale, heroWidth, small ? 42 : 48);
   label(m_detailLabel, m_detail, 0, m_value.empty() ? 85 * scale : 96 * scale, heroWidth, Style::fontSizeCaption);
@@ -162,7 +114,7 @@ void DesktopStatusCardWidget::doLayout(Renderer& renderer) {
   place(m_symbol, 0, 36 * scale);
   const std::size_t count = small ? 0 : std::min(m_rows.size(), m_items.size());
   const float rowsX = large ? 0 : card.width * 0.48F;
-  const float rowsY = large ? (activity ? 205.0F : 145.0F) * scale : 30 * scale;
+  const float rowsY = large ? 205.0F * scale : 30 * scale;
   const float rowHeight = 39 * scale;
   const float rowsWidth = card.width - rowsX;
   for (std::size_t i = 0; i < m_rows.size(); ++i) {
@@ -191,7 +143,7 @@ void DesktopStatusCardWidget::doLayout(Renderer& renderer) {
   const float chartWidth = !small && !large ? heroWidth : card.width;
   for (std::size_t i = 0; i < m_bars.size(); ++i) {
     auto* bar = m_bars[i];
-    bar->setVisible(activity && !m_value.empty());
+    bar->setVisible(!m_value.empty());
     const float height = std::max(2.0F * scale, m_history[i] * 32 * scale);
     bar->setSize(std::max(1.0F, chartWidth / 24 - 2 * scale), height);
     place(bar, static_cast<float>(i) * chartWidth / 24, chartY + 32 * scale - height);

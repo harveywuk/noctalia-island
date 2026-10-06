@@ -35,6 +35,7 @@ public:
 private:
   struct WidgetInstance {
     DesktopWidgetState state;
+    std::vector<DesktopWidgetState> stackCards;
     LockSurface* surface = nullptr;
     AnimationManager animations;
     Node* transformNode = nullptr;

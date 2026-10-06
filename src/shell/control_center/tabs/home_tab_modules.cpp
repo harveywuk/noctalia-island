@@ -8,6 +8,7 @@
 #include "cursor-shape-v1-client-protocol.h"
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
+#include "pipewire/audio_glyphs.h"
 #include "pipewire/pipewire_service.h"
 #include "render/scene/input_area.h"
 #include "scripting/plugin_registry.h"
@@ -65,10 +66,7 @@ namespace {
   }
 
   std::string volumeGlyph(const AudioNode* sink) {
-    if (sink == nullptr || sink->muted || sink->volume <= 0.001F) {
-      return "volume-3";
-    }
-    return sink->volume < 0.5F ? "volume-2" : "volume";
+    return audioVolumeGlyph(sink ? sink->volume : 0, !sink || sink->muted, false);
   }
 
 } // namespace
@@ -328,8 +326,8 @@ std::unique_ptr<Flex> HomeTab::makeShortcutModule(float scale) {
 
 std::unique_ptr<Flex> HomeTab::makeSliderModule(
     float scale, const std::string& title, const std::string& detailTab, const std::string& detailTooltip,
-    Slider** slider, Glyph** glyph, std::function<void(double)> onChange,
-    std::function<void()> onDragEnd, std::unique_ptr<Node> trailing
+    Slider** slider, Glyph** glyph, std::function<void(double)> onChange, std::function<void()> onDragEnd,
+    std::unique_ptr<Node> trailing
 ) {
   auto module = ui::column({
       .align = FlexAlign::Stretch,
@@ -473,7 +471,7 @@ std::unique_ptr<Flex> HomeTab::makeNowPlayingModule(float scale) {
       {.out = &m_mediaControls, .align = FlexAlign::Center, .gap = Style::spaceXs * scale},
       ui::button({
           .out = &m_mediaPlayButton,
-          .glyph = "player-play-filled",
+          .glyph = "media-play",
           .glyphSize = Style::fontSizeTitle * 1.2F * scale,
           .variant = ButtonVariant::Ghost,
           .tooltip = i18n::tr("control-center.media.play"),
@@ -490,7 +488,7 @@ std::unique_ptr<Flex> HomeTab::makeNowPlayingModule(float scale) {
       }),
       ui::button({
           .out = &m_mediaNextButton,
-          .glyph = "player-skip-forward-filled",
+          .glyph = "media-next",
           .glyphSize = Style::fontSizeTitle * 1.2F * scale,
           .variant = ButtonVariant::Ghost,
           .tooltip = i18n::tr("control-center.media.next"),
@@ -546,7 +544,7 @@ std::unique_ptr<Flex> HomeTab::createModules() {
     );
     m_displayModule = module.get();
     if (m_displayGlyph != nullptr) {
-      m_displayGlyph->setGlyph("sun");
+      m_displayGlyph->setGlyph("brightness-high");
     }
     column->addChild(std::move(module));
   }
@@ -765,7 +763,7 @@ void HomeTab::syncModules() {
   if (m_mediaPlayButton != nullptr) {
     const auto player = m_mpris != nullptr ? m_mpris->activePlayer() : std::nullopt;
     const bool playing = player.has_value() && player->playbackStatus == "Playing";
-    m_mediaPlayButton->setGlyph(playing ? "player-pause-filled" : "player-play-filled");
+    m_mediaPlayButton->setGlyph(playing ? "media-pause" : "media-play");
     m_mediaPlayButton->setTooltip(i18n::tr(playing ? "control-center.media.pause" : "control-center.media.play"));
     m_mediaPlayButton->setEnabled(player.has_value() && (playing ? player->canPause : player->canPlay));
     if (m_mediaNextButton != nullptr) {

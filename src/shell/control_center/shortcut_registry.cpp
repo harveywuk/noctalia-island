@@ -10,6 +10,7 @@
 #include "i18n/i18n.h"
 #include "idle/idle_inhibitor.h"
 #include "notification/notification_manager.h"
+#include "pipewire/audio_glyphs.h"
 #include "pipewire/pipewire_service.h"
 #include "scripting/plugin_manifest.h"
 #include "scripting/plugin_registry.h"
@@ -204,8 +205,8 @@ namespace {
     std::string_view id() const override { return "notification"; }
     std::string defaultLabel() const override { return i18n::tr("control-center.shortcuts.notification"); }
     // Focus's crescent, as macOS draws Do Not Disturb.
-    std::string_view iconOn() const override { return "moon"; }
-    std::string_view iconOff() const override { return "moon"; }
+    std::string_view iconOn() const override { return "focus-on"; }
+    std::string_view iconOff() const override { return "focus-off"; }
     bool isToggle() const override { return true; }
     bool active() const override { return m_svc != nullptr && m_svc->doNotDisturb(); }
     std::string statusText() const override {
@@ -319,8 +320,12 @@ namespace {
     explicit AudioShortcut(PipeWireService* svc) : m_svc(svc) {}
     std::string_view id() const override { return "audio"; }
     std::string defaultLabel() const override { return i18n::tr("control-center.shortcuts.audio"); }
-    std::string_view iconOn() const override { return "volume-x"; }
+    std::string_view iconOn() const override { return "volume-mute"; }
     std::string_view iconOff() const override { return "volume-high"; }
+    std::string displayIcon() const override {
+      const auto* sink = m_svc ? m_svc->defaultSink() : nullptr;
+      return audioVolumeGlyph(sink ? sink->volume : 0, !sink || sink->muted, false);
+    }
     bool isToggle() const override { return true; }
     bool active() const override {
       if (m_svc == nullptr) {

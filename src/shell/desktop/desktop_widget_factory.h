@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shell/desktop/desktop_battery_model.h"
 #include "shell/desktop/desktop_widget.h"
 #include "shell/desktop/desktop_widget_services.h"
 
@@ -21,8 +22,12 @@ public:
 
   [[nodiscard]] std::unique_ptr<DesktopWidget> create(
       const std::string& type, const std::unordered_map<std::string, WidgetSettingValue>& settings,
-      float contentScale = 1.0F
+      float contentScale = 1.0F, const std::vector<DesktopWidgetState>* states = nullptr, const std::string& id = {}
   ) const;
+
+  [[nodiscard]] std::vector<desktop_batteries::Device> batteryDevices() const {
+    return desktop_batteries::collect(m_services);
+  }
 
 private:
   CalendarService* m_calendar = nullptr;

@@ -18,19 +18,30 @@ Glyph::Glyph() {
   m_paletteConn = paletteChanged().connect([this] { applyPalette(); });
 }
 
-bool Glyph::setGlyph(std::string_view name) {
-  char32_t cp = GlyphRegistry::lookup(name);
-  if (cp == 0 || cp == m_glyphNode->codepoint())
-    return false;
-  m_glyphNode->setCodepoint(cp);
-  m_measureCached = false;
-  return true;
-}
+bool Glyph::setGlyph(std::string_view name) { return setCodepoint(GlyphRegistry::lookup(name)); }
 
 bool Glyph::setCodepoint(char32_t codepoint) {
+  m_baseCodepoint = codepoint;
+  return applyCodepoint();
+}
+
+void Glyph::setEmphasized(bool emphasized) {
+  if (m_emphasized == emphasized)
+    return;
+  m_emphasized = emphasized;
+  applyCodepoint();
+}
+
+bool Glyph::applyCodepoint() {
+  const auto codepoint = m_emphasized ? GlyphRegistry::emphasized(m_baseCodepoint) : m_baseCodepoint;
   if (codepoint == m_glyphNode->codepoint())
     return false;
+  const auto optical = GlyphRegistry::opticalAdjustment(codepoint);
+  m_opticalScale = optical.scale;
+  m_opticalX = optical.x;
+  m_opticalY = optical.y;
   m_glyphNode->setCodepoint(codepoint);
+  m_glyphNode->setFontSize(m_logicalFontSize * m_opticalScale);
   m_measureCached = false;
   return true;
 }
@@ -40,7 +51,7 @@ void Glyph::setGlyphSize(float size) {
     return;
   }
   m_logicalFontSize = size;
-  m_glyphNode->setFontSize(size);
+  m_glyphNode->setFontSize(size * m_opticalScale);
   m_measureCached = false;
 }
 
@@ -124,7 +135,9 @@ LayoutSize Glyph::measureWithConstraints(Renderer& renderer, const LayoutConstra
   const float glyphCenterX = (metrics.left + metrics.right) * 0.5F;
   const float glyphInkCenter = (metrics.top + metrics.bottom) * 0.5F; // relative to baseline
   m_baselineOffset = height() * 0.5F - glyphInkCenter;
-  m_glyphNode->setPosition(width() * 0.5F - glyphCenterX, m_baselineOffset);
+  m_glyphNode->setPosition(
+      width() * 0.5F - glyphCenterX + m_opticalX * m_logicalFontSize, m_baselineOffset + m_opticalY * m_logicalFontSize
+  );
 
   m_cachedCodepoint = m_glyphNode->codepoint();
   m_cachedFontSize = m_glyphNode->fontSize();

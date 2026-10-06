@@ -17,6 +17,7 @@ struct NotificationHistoryEntry;
 class Button;
 class VirtualListView;
 class Label;
+class InputArea;
 class NotificationHistoryAdapter;
 
 class NotificationsTab : public Tab {
@@ -27,6 +28,8 @@ public:
   std::unique_ptr<Flex> create() override;
   std::unique_ptr<Flex> createHeaderActions() override;
   void onClose() override;
+  [[nodiscard]] float fittedHeight() const;
+  void scrollFocusedInputIntoView(InputArea* area);
 
 private:
   // One row of the history list. Notifications from the same app share a group: a lone one is a
@@ -48,7 +51,6 @@ private:
   void clearAllNotifications();
   void removeNotificationEntry(uint32_t id, bool wasActive);
   void toggleNotificationExpanded(uint32_t id);
-  void setDismissHover(uint32_t id, bool inside);
   void setGroupExpanded(const std::string& groupKey, bool expanded);
   void clearGroup(const std::string& groupKey);
   void rebuildItems();
@@ -74,5 +76,4 @@ private:
   std::uint64_t m_lastSerial = 0;
   /// Wall-clock coarse slot so relative times (e.g. "2 min ago") refresh without churning every frame.
   std::int64_t m_lastRelativeTimeSlot = -1;
-  uint32_t m_dismissHoverId = 0; // card whose close button is under the pointer
 };

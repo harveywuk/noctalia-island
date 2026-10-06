@@ -1,8 +1,10 @@
 #include "shell/desktop/desktop_widgets_controller.h"
 
 #include "config/config_service.h"
+#include "core/deferred_call.h"
 #include "core/log.h"
 #include "ipc/ipc_service.h"
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget_layout.h"
 #include "shell/desktop/desktop_widgets_host.h"
 #include "shell/desktop/editor/desktop_widgets_editor.h"
@@ -100,13 +102,25 @@ void DesktopWidgetsController::initialize(const DesktopWidgetsControllerServices
   m_editor = std::make_unique<DesktopWidgetsEditor>(DesktopWidgetsEditorProfile::desktop());
   m_editor->initialize(services.widgets);
   m_editor->setExitRequestedCallback([this]() { exitEdit(); });
+  m_host->setConfigureRequestedCallback([this](const std::string& id) {
+    DeferredCall::callLater([this, id]() {
+      enterEdit();
+      m_editor->configureWidget(id);
+    });
+  });
+  m_host->setQuickActionCallback([this](const std::string& id, desktop_widgets::QuickAction action) {
+    quickAction(id, action);
+  });
+  m_host->setHistoryAvailability([this]() { return std::pair{m_history.canUndo(), m_history.canRedo()}; });
   loadSnapshotFromConfig();
   const bool placementChanged = m_placementMapper.remapForOutputChange(*m_wayland, m_snapshot.widgets);
+  m_history.reset(m_snapshot);
   m_initialized = true;
   if (m_config != nullptr) {
     m_lastEnabled = m_config->config().desktopWidgets.enabled;
   }
   if (placementChanged) {
+    m_history.reset(m_snapshot);
     saveSnapshotToConfig();
   }
   applyVisibility();
@@ -263,6 +277,7 @@ void DesktopWidgetsController::onOutputChange() {
   normalizeSnapshot();
   placementChanged |= m_placementMapper.remapForOutputChange(*m_wayland, m_snapshot.widgets);
   if (placementChanged) {
+    m_history.reset(m_snapshot);
     saveSnapshotToConfig();
   }
   pruneWallpaperMasks();
@@ -333,7 +348,7 @@ void DesktopWidgetsController::enterEdit() {
   // Open the editor before tearing down host widgets so the PipeWire spectrum
   // listener hand-off does not briefly drop to zero listeners (which resets the
   // stream and leaves a new editor instance with empty spectrum values).
-  m_editor->open(m_snapshot);
+  m_editor->open(m_snapshot, &m_history);
   m_host->hide();
 }
 
@@ -345,6 +360,8 @@ void DesktopWidgetsController::exitEdit() {
   m_snapshot = m_editor->snapshot();
   normalizeSnapshot();
   m_placementMapper.rebaseForCurrentOutputs(*m_wayland, m_snapshot.widgets);
+  m_history = m_editor->history();
+  m_history.replaceCurrent(m_snapshot);
   m_host->show(m_snapshot);
   (void)m_editor->close();
   saveSnapshotToConfig();
@@ -418,6 +435,10 @@ void DesktopWidgetsController::onKeyboardEvent(const KeyboardEvent& event) {
   m_editor->onKeyboardEvent(event);
 }
 
+bool DesktopWidgetsController::onDetailsKeyboardEvent(const KeyboardEvent& event) {
+  return !isEditing() && m_host && m_host->onKeyboardEvent(event);
+}
+
 void DesktopWidgetsController::loadSnapshotFromConfig() {
   if (m_config == nullptr) {
     m_snapshot = DesktopWidgetsSnapshot{};
@@ -425,6 +446,62 @@ void DesktopWidgetsController::loadSnapshotFromConfig() {
   }
   m_snapshot = m_config->config().desktopWidgets;
   normalizeSnapshot();
+}
+
+void DesktopWidgetsController::quickAction(const std::string& id, desktop_widgets::QuickAction action) {
+  using desktop_widgets::QuickAction;
+  if (!m_initialized || isEditing())
+    return;
+  if (action == QuickAction::Configure || action == QuickAction::Edit) {
+    enterEdit();
+    if (action == QuickAction::Configure)
+      m_editor->editWidget(id);
+    return;
+  }
+  if (action == QuickAction::Undo || action == QuickAction::Redo) {
+    const auto* restored = action == QuickAction::Undo ? m_history.undo() : m_history.redo();
+    if (!restored)
+      return;
+    m_snapshot = *restored;
+  } else {
+    const auto previous = m_snapshot;
+    if (!desktop_widgets::applyQuickAction(m_snapshot, id, action))
+      return;
+    normalizeSnapshot();
+    for (auto& widget : m_snapshot.widgets) {
+      if (action == QuickAction::SmartRotate)
+        continue;
+      const auto old = std::ranges::find(previous.widgets, widget.id, &DesktopWidgetState::id);
+      if (old != previous.widgets.end() && *old == widget)
+        continue;
+      if (!desktop_cards::supportsSizePresets(widget.type))
+        continue;
+      const auto setting = widget.settings.find("card_size");
+      const auto* size = setting == widget.settings.end() ? nullptr : std::get_if<std::string>(&setting->second);
+      if (!size || *size == "classic")
+        continue;
+      const float scale =
+          desktop_widgets::widgetContentScale(m_config ? m_config->config().accessibility.uiScale : 1.0F);
+      const float width = widget.boxWidth > 0
+          ? widget.boxWidth
+          : (*size == "small" ? desktop_cards::kSmallExtent : desktop_cards::kLargeExtent) * scale;
+      const float height = widget.boxHeight > 0
+          ? widget.boxHeight
+          : (*size == "large" ? desktop_cards::kLargeExtent : desktop_cards::kSmallExtent) * scale;
+      if (const auto* output = desktop_widgets::resolveStateOutput(*m_wayland, widget)) {
+        const auto clamped = clampWidgetCenterToOutput(
+            widget.cx, widget.cy, width, height, 1.0F, widget.rotationRad, desktop_widgets::outputLogicalWidth(*output),
+            desktop_widgets::outputLogicalHeight(*output)
+        );
+        widget.cx = clamped.cx;
+        widget.cy = clamped.cy;
+      }
+    }
+    m_placementMapper.rebaseForCurrentOutputs(*m_wayland, m_snapshot.widgets);
+    m_history.record(m_snapshot);
+  }
+  saveSnapshotToConfig();
+  applyVisibility();
 }
 
 void DesktopWidgetsController::saveSnapshotToConfig() {
@@ -444,6 +521,7 @@ void DesktopWidgetsController::applyVisibility() {
   if (!runtimeWantsVisible()) {
     if (isEditing() && m_editor != nullptr) {
       m_snapshot = m_editor->close();
+      m_history = m_editor->history();
       saveSnapshotToConfig();
     }
     m_host->hide();
@@ -477,6 +555,9 @@ void DesktopWidgetsController::handleConfigReload() {
   const bool calendarChanged = m_config != nullptr && m_config->lastChange().calendar;
   if (!isEditing()) {
     loadSnapshotFromConfig();
+    if (!m_history.matches(m_snapshot)) {
+      m_history.reset(m_snapshot);
+    }
     if (m_host != nullptr) {
       m_host->rebuild(m_snapshot);
       if (calendarChanged) {

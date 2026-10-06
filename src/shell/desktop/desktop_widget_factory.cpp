@@ -4,7 +4,9 @@
 #include "core/log.h"
 #include "scripting/plugin_registry.h"
 #include "scripting/plugin_runtime_context.h"
+#include "shell/desktop/desktop_widget_setup.h"
 #include "shell/desktop/widgets/desktop_audio_visualizer_widget.h"
+#include "shell/desktop/widgets/desktop_batteries_widget.h"
 #include "shell/desktop/widgets/desktop_button_widget.h"
 #include "shell/desktop/widgets/desktop_calendar_widget.h"
 #include "shell/desktop/widgets/desktop_clock_widget.h"
@@ -14,6 +16,7 @@
 #include "shell/desktop/widgets/desktop_login_box_widget.h"
 #include "shell/desktop/widgets/desktop_media_player_widget.h"
 #include "shell/desktop/widgets/desktop_photos_widget.h"
+#include "shell/desktop/widgets/desktop_stack_widget.h"
 #include "shell/desktop/widgets/desktop_status_card_widget.h"
 #include "shell/desktop/widgets/desktop_sticker_widget.h"
 #include "shell/desktop/widgets/desktop_sysmon_widget.h"
@@ -191,8 +194,17 @@ DesktopWidgetFactory::DesktopWidgetFactory(DesktopWidgetRuntimeServices services
       m_sysmon(services.sysmon), m_scriptDeps(services.scriptDeps), m_services(services) {}
 
 std::unique_ptr<DesktopWidget> DesktopWidgetFactory::create(
-    const std::string& type, const std::unordered_map<std::string, WidgetSettingValue>& settings, float contentScale
+    const std::string& type, const std::unordered_map<std::string, WidgetSettingValue>& settings, float contentScale,
+    const std::vector<DesktopWidgetState>* states, const std::string& id
 ) const {
+  if (type == "stack") {
+    auto widget = std::make_unique<DesktopStackWidget>(
+        id, states ? desktop_stacks::cards(*states, id) : std::vector<DesktopWidgetState>{}, settings, m_services
+    );
+    applyCommonSettings(*widget, settings);
+    widget->setContentScale(contentScale);
+    return widget;
+  }
   if (type == "notes"
       || type == "reminders"
       || type == "shortcuts"
@@ -221,9 +233,20 @@ std::unique_ptr<DesktopWidget> DesktopWidgetFactory::create(
     widget->setContentScale(contentScale);
     return widget;
   }
-  if (type == "batteries" || type == "screen_time") {
+  if (type == "batteries") {
+    std::vector<std::string> hidden;
+    if (const auto it = settings.find("hidden_devices"); it != settings.end())
+      if (const auto* value = std::get_if<std::vector<std::string>>(&it->second))
+        hidden = *value;
+    auto widget = std::make_unique<DesktopBatteriesWidget>(
+        m_services, desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "medium")), std::move(hidden)
+    );
+    applyCommonSettings(*widget, settings);
+    widget->setContentScale(contentScale);
+    return widget;
+  }
+  if (type == "screen_time") {
     auto widget = std::make_unique<DesktopStatusCardWidget>(
-        type == "batteries" ? DesktopStatusCardWidget::Kind::Batteries : DesktopStatusCardWidget::Kind::ScreenTime,
         m_services, desktop_cards::sizeFromSetting(getStringSetting(settings, "card_size", "medium"))
     );
     applyCommonSettings(*widget, settings);

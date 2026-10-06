@@ -36,6 +36,7 @@
 #include "ui/builders.h"
 #include "ui/controls/select_dropdown_popup.h"
 #include "ui/material.h"
+#include "ui/node_motion.h"
 #include "ui/palette.h"
 #include "ui/scroll_into_view.h"
 #include "ui/style.h"
@@ -2274,6 +2275,11 @@ void SettingsWindow::buildScene(std::uint32_t width, std::uint32_t height) {
   phaseProfileWatch.reset();
   m_mainContainer = static_cast<Flex*>(m_sceneRoot->addChild(std::move(main)));
   m_modalHost.attach(*m_sceneRoot, m_mainContainer, renderer, w, h);
+  if (m_contentContainer && !m_presentedSection.empty() && m_presentedSection != m_selectedSection) {
+    m_contentContainer->setOpacity(0);
+    Motion::fadeNode(*m_contentContainer, 1, Motion::contentMs);
+  }
+  m_presentedSection = m_selectedSection;
 
   m_inputDispatcher.setTextInputContext(m_surface->wlSurface(), m_wayland->textInputService());
   m_inputDispatcher.setCursorShapeCallback([this](std::uint32_t serial, std::uint32_t shape) {

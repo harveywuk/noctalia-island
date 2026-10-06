@@ -1538,7 +1538,9 @@ void Surface::queueRenderIfNeeded() {
   const bool animating = m_animationManager != nullptr && m_animationManager->hasActive();
   if (m_redrawRequested || invalidated) {
     queueRender();
-  } else if (animating) {
+  } else if (animating || m_frameTickPending) {
+    // A frame-driven visual may throttle its uploads below the output refresh
+    // rate. Honour its next tick even when this frame changed no pixels.
     continueAnimationFrameLoop();
   }
 }

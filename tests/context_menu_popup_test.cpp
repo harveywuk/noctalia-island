@@ -15,6 +15,7 @@ public:
   }
 
   static void dismiss(ContextMenuPopup& popup) { popup.deferClose(); }
+  static std::uint64_t generation(const ContextMenuPopup& popup) { return popup.m_generation; }
 };
 
 namespace {
@@ -61,6 +62,15 @@ int main() {
     drainDeferredCalls();
   }
   TEST_CHECK(activations == 1);
+
+  {
+    ContextMenuPopup popup(wayland, renderContext);
+    ContextMenuPopupTestAccess::dismiss(popup);
+    popup.close();
+    const auto generation = ContextMenuPopupTestAccess::generation(popup);
+    drainDeferredCalls();
+    TEST_CHECK(ContextMenuPopupTestAccess::generation(popup) == generation);
+  }
 
   // Plugin unregistration destroys its panel-owned popup immediately. A queued
   // activation must then become a no-op instead of dereferencing the destroyed

@@ -18,8 +18,10 @@
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
 #include "render/scene/wallpaper_node.h"
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget_layout.h"
 #include "shell/desktop/desktop_widget_settings_registry.h"
+#include "shell/desktop/desktop_widget_setup.h"
 #include "shell/desktop/editor/desktop_widget_placement.h"
 #include "shell/desktop/widgets/desktop_login_box_widget.h"
 #include "shell/lockscreen/lockscreen_login_box.h"
@@ -28,6 +30,7 @@
 #include "ui/builders.h"
 #include "ui/controls/select_dropdown_popup.h"
 #include "ui/dialogs/file_dialog.h"
+#include "ui/node_motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/layer_surface.h"
@@ -188,13 +191,25 @@ void DesktopWidgetsEditor::setExitRequestedCallback(std::function<void()> callba
   m_exitRequestedCallback = std::move(callback);
 }
 
-void DesktopWidgetsEditor::open(const DesktopWidgetsEditorSnapshot& snapshot) {
+void DesktopWidgetsEditor::open(const DesktopWidgetsEditorSnapshot& snapshot, const DesktopWidgetsHistory* history) {
   m_snapshot = snapshot;
   if (m_profile.showLockscreenLoginPreview && m_wayland != nullptr) {
     lockscreen_login_box::ensureWidgets(m_snapshot.widgets, *m_wayland);
   }
+  if (history && history->matches(m_snapshot))
+    m_history = *history;
+  else
+    m_history.reset(m_snapshot);
+  m_history.breakGroup();
+  m_layoutOutput.clear();
+  loadLayouts();
   m_open = true;
   m_galleryOutputName.clear();
+  m_galleryClosing = false;
+  m_galleryRevealPending = false;
+  ++m_setupRevision;
+  m_setupDraft.reset();
+  m_setupOutputName.clear();
   clearSelection();
   m_widgetClipboard.clear();
   m_pasteCount = 0;
@@ -214,7 +229,9 @@ void DesktopWidgetsEditor::open(const DesktopWidgetsEditorSnapshot& snapshot) {
 }
 
 DesktopWidgetsEditorSnapshot DesktopWidgetsEditor::close() {
-  if (m_drag.mode != DragMode::None) {
+  if (m_drag.mode == DragMode::Gallery) {
+    cancelGalleryDrag();
+  } else if (m_drag.mode != DragMode::None) {
     finishDrag();
   }
   for (auto& surface : m_surfaces) {
@@ -523,6 +540,8 @@ void DesktopWidgetsEditor::prepareFrame(OverlaySurface& surface, bool needsUpdat
   if (surface.sceneRoot == nullptr || surface.sceneRebuildRequested) {
     rebuildScene(surface);
     surface.sceneRebuildRequested = false;
+    if (m_drag.mode == DragMode::Gallery && m_drag.moved)
+      updateGalleryDrag();
   }
 
   if (needsUpdate) {
@@ -557,6 +576,8 @@ void DesktopWidgetsEditor::prepareFrame(OverlaySurface& surface, bool needsUpdat
       view.intrinsicWidth = w;
       view.intrinsicHeight = h;
       view.transformNode->setFrameSize(w, h);
+      if (view.liftNode)
+        view.liftNode->setFrameSize(w, h);
       if (const DesktopWidgetState* state = findWidgetState(id); state != nullptr) {
         view.transformNode->setPosition(state->cx - w * 0.5F, state->cy - h * 0.5F);
       }
@@ -581,11 +602,25 @@ void DesktopWidgetsEditor::prepareFrame(OverlaySurface& surface, bool needsUpdat
 }
 
 void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
+  if (m_galleryClosing)
+    closeGallery();
   Renderer& renderer = surface.surface->renderTarget().renderer();
+  // Keep the actual input alive: a results refresh must retain caret position,
+  // selection, text undo and IME state while the rest of the gallery is rebuilt.
+  std::unique_ptr<Node> gallerySearch;
+  if (m_galleryOutputName == surface.outputName && surface.gallerySearch && surface.gallerySearch->parent())
+    gallerySearch = surface.gallerySearch->parent()->removeChild(surface.gallerySearch);
+  surface.gallerySearch = nullptr;
+  surface.galleryOverlay = nullptr;
   surface.views.clear();
   surface.galleryPreview.reset();
+  surface.galleryDragWidget.reset();
+  surface.galleryDragNode = nullptr;
   surface.snapGuideX = nullptr;
   surface.snapGuideY = nullptr;
+  surface.stackDropPreview = nullptr;
+  surface.stackDropLabel = nullptr;
+  surface.stackMemberRows.clear();
   surface.secondarySelections.clear();
   surface.selectionFrameTransform = nullptr;
   surface.selectionBorder = nullptr;
@@ -742,12 +777,17 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
   guideY->setHitTestVisible(false);
   root->addChild(std::move(guideY));
 
+  const auto membership = desktop_stacks::resolve(m_snapshot.widgets);
   for (const auto& widgetState : m_snapshot.widgets) {
+    if (desktop_stacks::contains(membership, widgetState.id))
+      continue;
     if (effectiveOutputName(widgetState) != surface.outputName || m_factory == nullptr) {
       continue;
     }
 
-    auto widget = m_factory->create(widgetState.type, widgetState.settings, widgetContentScale());
+    auto widget = m_factory->create(
+        widgetState.type, widgetState.settings, widgetContentScale(), &m_snapshot.widgets, widgetState.id
+    );
     if (widget == nullptr) {
       continue;
     }
@@ -831,7 +871,10 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
     auto widgetRoot = widget->releaseRoot();
     widgetRoot->setHitTestVisible(false);
     widgetRoot->setExcludeSubtreeFromTabOrder(true);
-    view.transformNode->addChild(std::move(widgetRoot));
+    auto lift = ui::node({.width = view.intrinsicWidth, .height = view.intrinsicHeight});
+    view.liftNode = lift.get();
+    lift->addChild(std::move(widgetRoot));
+    view.transformNode->addChild(std::move(lift));
 
     root->addChild(std::move(bodyArea));
     view.widget = std::move(widget);
@@ -1095,11 +1138,7 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
                       .variant = ButtonVariant::Primary,
                       .onClick =
                           [this, outputName = surface.outputName]() {
-                            deferEditorMutation([this, outputName]() {
-                              m_galleryOutputName = outputName;
-                              m_inspectorOpen = false;
-                              requestLayout();
-                            });
+                            deferEditorMutation([this, outputName]() { openGallery(outputName); });
                           },
                   }),
                   ui::button({
@@ -1245,6 +1284,7 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
   }
   clampToolbarPosition(surface, toolbarPtr->width(), toolbarPtr->height());
   toolbarPtr->setPosition(surface.toolbarX, surface.toolbarY);
+  buildHistoryToolbar(surface, *root);
 
   if (hasSelectedWidget && m_inspectorOpen) {
     buildInspector(surface, *root, *selectedWidgetIt);
@@ -1256,14 +1296,23 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
     }
   }
 
-  if (m_galleryOutputName == surface.outputName) {
-    buildGallery(surface, *root);
+  buildStackDropPreview(surface, *root);
+  if (!m_layoutOutput.empty() && m_layoutOutput == surface.outputName) {
+    buildLayouts(surface, *root);
+  } else if (m_setupDraft && m_setupOutputName == surface.outputName) {
+    buildSetup(surface, *root);
+  } else if (m_galleryOutputName == surface.outputName) {
+    buildGallery(surface, *root, std::move(gallerySearch));
   }
 
   surface.sceneRoot = std::move(root);
   surface.surface->setSceneRoot(surface.sceneRoot.get());
   surface.inputDispatcher.setTextInputContext(surface.surface->wlSurface(), m_wayland->textInputService());
   surface.inputDispatcher.setSceneRoot(surface.sceneRoot.get());
+  if (surface.gallerySearch && m_galleryFocusSearch) {
+    surface.inputDispatcher.setFocus(surface.gallerySearch->inputArea());
+    m_galleryFocusSearch = false;
+  }
 }
 
 void DesktopWidgetsEditor::updateSelectionVisuals(OverlaySurface& surface) {
@@ -1470,7 +1519,8 @@ void DesktopWidgetsEditor::applyScaleDragPreview(const DesktopWidgetState& state
 }
 
 void DesktopWidgetsEditor::addWidget(
-    const std::string& outputName, const std::string& type, const std::string& cardSize
+    const std::string& outputName, const std::string& type, const std::string& cardSize,
+    std::optional<std::pair<float, float>> position
 ) {
   if (!m_open || m_wayland == nullptr) {
     return;
@@ -1498,7 +1548,19 @@ void DesktopWidgetsEditor::addWidget(
   widget.rotationRad = 0.0F;
   widget.settings = desktop_settings::newDesktopWidgetSettings(type, cardSize);
 
-  if (auto* surface = findSurface(outputName); surface != nullptr && surface->galleryPreview != nullptr) {
+  if (auto* surface = findSurface(outputName); !position
+      && surface != nullptr
+      && (surface->galleryPreview != nullptr || desktop_cards::supportsSizePresets(widget.type))) {
+    // Guided setup replaces the gallery scene, so its preview is no longer available.
+    // Card presets have a known footprint and do not need a live source to measure it.
+    const auto preset = desktop_cards::sizeFromSetting(cardSize);
+    const float scale = widgetContentScale();
+    const float width = surface->galleryPreview
+        ? surface->galleryPreview->intrinsicWidth()
+        : (preset == desktop_cards::Size::Small ? desktop_cards::kSmallExtent : desktop_cards::kLargeExtent) * scale;
+    const float height = surface->galleryPreview
+        ? surface->galleryPreview->intrinsicHeight()
+        : (preset == desktop_cards::Size::Large ? desktop_cards::kLargeExtent : desktop_cards::kSmallExtent) * scale;
     std::vector<desktop_placement::Rect> occupied;
     for (const auto& [id, view] : surface->views) {
       const auto* other = findWidgetState(id);
@@ -1512,48 +1574,46 @@ void DesktopWidgetsEditor::addWidget(
     if (surface->toolbar != nullptr) {
       occupied.push_back({surface->toolbarX, surface->toolbarY, surface->toolbar->width(), surface->toolbar->height()});
     }
+    if (surface->historyToolbar != nullptr) {
+      const auto* controls = surface->historyToolbar;
+      occupied.push_back({controls->x(), controls->y(), controls->width(), controls->height()});
+    }
     const auto [x, y] = desktop_placement::findSpace(
-        surface->galleryPreview->intrinsicWidth(), surface->galleryPreview->intrinsicHeight(), occupied, centerX * 2.0F,
-        centerY * 2.0F, Style::spaceLg * widgetContentScale(), static_cast<float>(std::max(1, m_snapshot.grid.cellSize))
+        width, height, occupied, centerX * 2.0F, centerY * 2.0F, Style::spaceLg * scale,
+        static_cast<float>(std::max(1, m_snapshot.grid.cellSize))
     );
     widget.cx = x;
     widget.cy = y;
   }
+  if (position) {
+    widget.cx = position->first;
+    widget.cy = position->second;
+  }
 
   if (widget.type == "sticker") {
     widget.settings.emplace("opacity", 1.0);
-    auto widgetId = widget.id;
-    m_snapshot.widgets.push_back(std::move(widget));
-
+    const auto revision = m_setupRevision;
     FileDialogOptions options;
     options.mode = FileDialogMode::Open;
     options.title = i18n::tr("desktop-widgets.editor.dialogs.select-sticker-image");
     options.extensions = DirectoryScanner::imageExtensionFilter(true);
-    if (!FileDialog::open(std::move(options), [this, widgetId](std::optional<std::filesystem::path> result) {
-          deferEditorMutation([this, widgetId, result = std::move(result)]() {
-            auto* state = findWidgetState(widgetId);
-            if (state == nullptr) {
+    // Keep the draft outside the snapshot until an image is accepted. Canceling
+    // the picker should not add a pair of placeholder/remove history entries.
+    (void)FileDialog::open(
+        std::move(options), [this, widget = std::move(widget), revision](std::optional<std::filesystem::path> result) {
+          if (!result || !m_open || revision != m_setupRevision)
+            return;
+          deferEditorMutation([this, widget, result = std::move(result)]() mutable {
+            if (!findSurface(widget.outputName))
               return;
-            }
-            if (result) {
-              state->settings["image_path"] = result->string();
-            } else {
-              std::erase_if(m_snapshot.widgets, [&](const auto& w) { return w.id == widgetId; });
-              m_selectedWidgetIds.erase(widgetId);
-              if (m_selectedWidgetId == widgetId) {
-                m_selectedWidgetId = m_selectedWidgetIds.empty() ? "" : *m_selectedWidgetIds.begin();
-              }
-            }
+            widget.id = nextWidgetId();
+            widget.settings["image_path"] = result->string();
+            m_snapshot.widgets.push_back(std::move(widget));
+            setSingleSelection(m_snapshot.widgets.back().id);
             requestLayout();
           });
-        })) {
-      std::erase_if(m_snapshot.widgets, [&](const auto& w) { return w.id == widgetId; });
-      requestLayout();
-      return;
-    }
-
-    setSingleSelection(m_snapshot.widgets.back().id);
-    requestLayout();
+        }
+    );
     return;
   }
 
@@ -1681,6 +1741,10 @@ std::vector<DesktopWidgetState> DesktopWidgetsEditor::selectedWidgetTemplates() 
       continue;
     }
     templates.push_back(widget);
+    if (widget.type == "stack") {
+      const auto cards = desktop_stacks::cards(m_snapshot.widgets, widget.id);
+      templates.insert(templates.end(), cards.begin(), cards.end());
+    }
   }
   return templates;
 }
@@ -1695,6 +1759,7 @@ std::vector<std::string> DesktopWidgetsEditor::insertWidgetCopies(
 
   std::vector<std::string> insertedIds;
   insertedIds.reserve(templates.size());
+  std::unordered_map<std::string, std::string> copiedIds;
   for (const DesktopWidgetState& templateState : templates) {
     if (lockscreen_login_box::isLoginBoxWidget(templateState)) {
       continue;
@@ -1702,6 +1767,7 @@ std::vector<std::string> DesktopWidgetsEditor::insertWidgetCopies(
 
     DesktopWidgetState copy = templateState;
     copy.id = nextWidgetId();
+    copiedIds[templateState.id] = copy.id;
     if (!targetOutputName.empty()) {
       copy.outputName = targetOutputName;
     }
@@ -1720,12 +1786,25 @@ std::vector<std::string> DesktopWidgetsEditor::insertWidgetCopies(
     return insertedIds;
   }
 
+  for (const auto& id : insertedIds) {
+    auto* copy = findWidgetState(id);
+    if (!copy || copy->type != "stack")
+      continue;
+    auto members = desktop_stacks::members(*copy);
+    for (auto& member : members)
+      if (copiedIds.contains(member))
+        member = copiedIds.at(member);
+    copy->settings["members"] = members;
+  }
+  const auto membership = desktop_stacks::resolve(m_snapshot.widgets);
   if (selectInserted) {
     clearSelection();
     for (const std::string& id : insertedIds) {
-      m_selectedWidgetIds.insert(id);
+      if (!desktop_stacks::contains(membership, id)) {
+        m_selectedWidgetIds.insert(id);
+        m_selectedWidgetId = id;
+      }
     }
-    m_selectedWidgetId = insertedIds.back();
   }
 
   requestLayout();
@@ -1827,10 +1906,13 @@ void DesktopWidgetsEditor::clampInspectorPosition(
 
 // buildInspector and applySettingChange are in desktop_widgets_editor_settings.cpp
 
-void DesktopWidgetsEditor::deferEditorMutation(std::function<void()> action) {
-  DeferredCall::callLater([this, action = std::move(action)]() mutable {
-    if (m_open) {
+void DesktopWidgetsEditor::deferEditorMutation(std::function<void()> action, std::string historyGroup) {
+  const auto revision = m_setupRevision;
+  DeferredCall::callLater([this, action = std::move(action), historyGroup = std::move(historyGroup),
+                           revision]() mutable {
+    if (m_open && revision == m_setupRevision) {
       action();
+      recordHistory(historyGroup);
     }
   });
 }
@@ -1978,6 +2060,7 @@ void DesktopWidgetsEditor::startDrag(
     return;
   }
 
+  m_drag = {};
   m_drag.mode = mode;
   m_drag.widgetId = widgetId;
   m_drag.startSceneX = m_currentEventSceneX;
@@ -2003,6 +2086,15 @@ void DesktopWidgetsEditor::startDrag(
     m_drag.groupInitialStates.clear();
   }
 
+  if (mode == DragMode::Move) {
+    for (auto& surface : m_surfaces)
+      for (auto& [id, item] : surface->views)
+        if (item.liftNode && (id == widgetId || m_drag.groupInitialStates.contains(id))) {
+          Motion::liftNode(*item.liftNode, true);
+          surface->surface->requestRedraw();
+        }
+  }
+
   if (mode == DragMode::Scale && view->widget != nullptr && m_renderContext != nullptr) {
     if (OverlaySurface* surface = findSurfaceForWidget(widgetId); surface != nullptr && surface->surface != nullptr) {
       m_renderContext->makeCurrent(surface->surface->renderTarget());
@@ -2017,6 +2109,10 @@ void DesktopWidgetsEditor::updateDrag() {
   if (m_drag.mode == DragMode::None) {
     return;
   }
+  if (m_drag.mode == DragMode::StackMember) {
+    updateStackMemberDrag();
+    return;
+  }
 
   if (m_drag.mode == DragMode::ToolbarMove) {
     OverlaySurface* surface = findSurface(m_drag.surfaceOutputName);
@@ -2028,6 +2124,7 @@ void DesktopWidgetsEditor::updateDrag() {
     surface->toolbarY = m_drag.initialToolbarY + (m_currentEventSceneY - m_drag.startSceneY);
     clampToolbarPosition(*surface, surface->toolbar->width(), surface->toolbar->height());
     surface->toolbar->setPosition(surface->toolbarX, surface->toolbarY);
+    positionHistoryToolbar(*surface);
     surface->surface->requestRedraw();
     return;
   }
@@ -2116,11 +2213,13 @@ void DesktopWidgetsEditor::updateDrag() {
   if (m_drag.mode == DragMode::Move) {
     state->cx = dragSceneX + m_drag.movePointerOffsetX;
     state->cy = dragSceneY + m_drag.movePointerOffsetY;
+    if (dragSurface != nullptr)
+      updateStackTarget(*dragSurface, dragSceneX, dragSceneY);
     if (!m_drag.surfaceOutputName.empty()) {
       outputAssignmentChanged = outputAssignmentChanged || (state->outputName != m_drag.surfaceOutputName);
       state->outputName = m_drag.surfaceOutputName;
     }
-    if (shouldSnap()) {
+    if (shouldSnap() && m_drag.stackTargetId.empty()) {
       const WidgetTransformBounds bounds = computeWidgetTransformBounds(
           state->cx, state->cy, m_drag.intrinsicWidth, m_drag.intrinsicHeight, 1.0F, state->rotationRad
       );
@@ -2349,7 +2448,16 @@ void DesktopWidgetsEditor::hideSnapGuides() {
 }
 
 void DesktopWidgetsEditor::finishDrag() {
+  for (auto& surface : m_surfaces)
+    for (auto& [id, view] : surface->views)
+      if (view.liftNode)
+        Motion::liftNode(*view.liftNode, false);
   hideSnapGuides();
+  hideStackDropPreviews();
+  if (m_drag.mode == DragMode::StackMember || !m_drag.stackTargetId.empty()) {
+    finishStackDrop();
+    return;
+  }
   const DragMode mode = m_drag.mode;
   const std::string widgetId = m_drag.widgetId;
   const bool rebuildOnFinish = m_drag.rebuildOnFinish;
@@ -2402,6 +2510,8 @@ void DesktopWidgetsEditor::finishDrag() {
 }
 
 bool DesktopWidgetsEditor::onPointerEvent(const PointerEvent& event) {
+  if (m_galleryClosing)
+    return true;
   if (!m_open) {
     return false;
   }
@@ -2434,6 +2544,19 @@ bool DesktopWidgetsEditor::onPointerEvent(const PointerEvent& event) {
   m_currentEventSceneX = static_cast<float>(event.sx);
   m_currentEventSceneY = static_cast<float>(event.sy);
 
+  // The draft is independent of scene input capture and never enters history
+  // before release. This also avoids activating a preview's playback controls.
+  if (m_drag.mode == DragMode::Gallery) {
+    if (event.type == PointerEvent::Type::Motion || event.type == PointerEvent::Type::Enter)
+      updateGalleryDrag();
+    if (event.type == PointerEvent::Type::Button && !event.pressed && event.button == BTN_LEFT) {
+      for (auto& overlay : m_surfaces)
+        overlay->inputDispatcher.cancelPointerCapture();
+      finishGalleryDrag();
+    }
+    return true;
+  }
+
   switch (event.type) {
   case PointerEvent::Type::Enter:
     surface->pointerInside = true;
@@ -2453,6 +2576,8 @@ bool DesktopWidgetsEditor::onPointerEvent(const PointerEvent& event) {
     }
     break;
   case PointerEvent::Type::Button:
+    if (event.pressed)
+      m_history.breakGroup();
     surface->inputDispatcher.pointerButton(
         static_cast<float>(event.sx), static_cast<float>(event.sy), event.button, event.pressed, event.serial,
         event.time, event.touch
@@ -2460,6 +2585,10 @@ bool DesktopWidgetsEditor::onPointerEvent(const PointerEvent& event) {
     if (!event.pressed && m_drag.mode != DragMode::None && event.button == BTN_LEFT) {
       finishDrag();
     }
+    // A whole drag, including a stack drop, is one edit. Deferred controls
+    // record their own mutations after input dispatch has finished.
+    if (!event.pressed)
+      recordHistory();
     break;
   case PointerEvent::Type::Axis:
     surface->inputDispatcher.pointerAxis(
@@ -2481,6 +2610,8 @@ bool DesktopWidgetsEditor::onPointerEvent(const PointerEvent& event) {
 }
 
 void DesktopWidgetsEditor::onKeyboardEvent(const KeyboardEvent& event) {
+  if (m_galleryClosing)
+    return;
   if (!m_open) {
     return;
   }
@@ -2532,11 +2663,31 @@ void DesktopWidgetsEditor::onKeyboardEvent(const KeyboardEvent& event) {
     }
   }
 
-  if (!m_galleryOutputName.empty()
+  if ((m_drag.mode == DragMode::Move
+       || m_drag.mode == DragMode::Scale
+       || m_drag.mode == DragMode::Rotate
+       || m_drag.mode == DragMode::StackMember
+       || m_drag.mode == DragMode::Gallery)
       && event.pressed
       && !event.preedit
       && KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
-    closeGallery();
+    if (m_drag.mode == DragMode::Gallery)
+      cancelGalleryDrag();
+    else
+      cancelStackDrag();
+    return;
+  }
+
+  if ((m_setupDraft || !m_galleryOutputName.empty() || !m_layoutOutput.empty())
+      && event.pressed
+      && !event.preedit
+      && KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
+    if (!m_layoutOutput.empty())
+      closeLayouts();
+    else if (m_setupDraft)
+      closeSetup();
+    else
+      closeGallery(true);
     return;
   }
 
@@ -2553,7 +2704,14 @@ void DesktopWidgetsEditor::onKeyboardEvent(const KeyboardEvent& event) {
     return;
   }
 
-  if (!m_galleryOutputName.empty()) {
+  if (m_setupDraft || !m_galleryOutputName.empty() || !m_layoutOutput.empty() || m_drag.mode != DragMode::None) {
+    return;
+  }
+
+  if ((focused == nullptr || focused->textInputClient() == nullptr)
+      && (event.modifiers & KeyMod::Ctrl) != 0
+      && (event.sym == XKB_KEY_z || event.sym == XKB_KEY_Z || event.sym == XKB_KEY_y || event.sym == XKB_KEY_Y)) {
+    travelHistory((event.modifiers & KeyMod::Shift) != 0 || event.sym == XKB_KEY_y || event.sym == XKB_KEY_Y);
     return;
   }
 
@@ -2572,7 +2730,9 @@ void DesktopWidgetsEditor::onKeyboardEvent(const KeyboardEvent& event) {
   }
 
   if (KeySymbol::isBackspaceOrDelete(event.sym)) {
+    m_history.breakGroup();
     removeSelectedWidget();
+    recordHistory();
     return;
   }
 
@@ -2588,7 +2748,9 @@ void DesktopWidgetsEditor::onKeyboardEvent(const KeyboardEvent& event) {
         || event.sym == XKB_KEY_V
         || event.utf32 == static_cast<std::uint32_t>('v')
         || event.utf32 == static_cast<std::uint32_t>('V')) {
+      m_history.breakGroup();
       pasteWidgets();
+      recordHistory();
       return;
     }
   }
@@ -2597,8 +2759,10 @@ void DesktopWidgetsEditor::onKeyboardEvent(const KeyboardEvent& event) {
       || event.sym == XKB_KEY_G
       || event.utf32 == static_cast<std::uint32_t>('g')
       || event.utf32 == static_cast<std::uint32_t>('G')) {
+    m_history.breakGroup();
     m_snapshot.grid.visible = !m_snapshot.grid.visible;
     requestLayout();
+    recordHistory();
   }
 }
 
@@ -2606,9 +2770,19 @@ void DesktopWidgetsEditor::onOutputChange() {
   if (!m_open) {
     return;
   }
+  if (m_drag.mode == DragMode::Gallery)
+    cancelGalleryDrag();
+  else if (m_drag.mode != DragMode::None)
+    cancelStackDrag();
   syncSurfaces();
+  if (!m_layoutOutput.empty() && findSurface(m_layoutOutput) == nullptr)
+    closeLayouts();
+  if (m_setupDraft && findSurface(m_setupOutputName) == nullptr)
+    closeSetup();
   if (!m_galleryOutputName.empty() && findSurface(m_galleryOutputName) == nullptr) {
     m_galleryOutputName.clear();
+    m_galleryClosing = false;
+    m_galleryRevealPending = false;
   }
   requestLayout();
 }

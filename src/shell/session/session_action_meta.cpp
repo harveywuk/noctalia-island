@@ -51,7 +51,7 @@ namespace session_action {
 
   const char* defaultGlyph(std::string_view action) {
     if (action == "lock") {
-      return "lock";
+      return "lock-filled";
     }
     if (action == "logout") {
       return "logout";

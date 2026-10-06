@@ -55,6 +55,25 @@ play_sound      = true
 - `history_retention_hours = 0` (default) keeps notification history entries forever. Set to a positive integer (1–8760) to automatically remove entries older than that many hours from control-center history. Active on-screen toasts are never removed. Configure in **Settings → Notifications → History**.
 - `max_visible = 0` (default) fills all available vertical screen space with notification toasts. Set to a positive integer (1–20) to limit how many toasts are visible at once; excess toasts are queued off-screen and promoted when slots free up. Configure in **Settings → Notifications → Toasts**.
 
+## Island history
+
+With the Dynamic Island enabled, its unread bell and notification stack open history inside the
+Island. Notifications are grouped by app, with a count on each collapsed stack. Click the card or
+its chevron to expand the group, and use **Show Less** to fold it back up. Long history scrolls
+within the Island instead of growing to fill the screen.
+
+Dismiss an individual card with its close button, clear an app's whole stack with its group close
+button, or choose **Clear All**. Available notification actions remain usable from history. Taking
+an action, pressing Escape, clicking outside, or using the header's return control collapses the
+Island back to the clock or current activity. Opening history marks existing notifications as read
+and consumes their previews, so they do not replay when you close it.
+
+The controls support keyboard focus and follow the shell's animation and reduced-motion settings.
+When the Island is disabled, history continues to use the floating notification column.
+
+Temporary volume, microphone, brightness, and toggle OSDs show only their own controls. Unread and
+privacy icons resume when the OSD finishes; an active capture still retains its surrounding glow.
+
 ## Filtering
 
 Notifications can be filtered before toasts and sounds. External Freedesktop notifications can also be kept out of control-center history. Internal shell/plugin toasts use the same toast/sound filters, but they are not written to history (the save-history flag does not apply to them), except calendar reminders, which honor `save_history` like external notifications.

@@ -77,6 +77,7 @@ namespace desktop_settings {
         {.type = "reading_list", .labelKey = "desktop-widgets.editor.types.reading-list"},
         {.type = "journal", .labelKey = "desktop-widgets.editor.types.journal"},
         {.type = "tips", .labelKey = "desktop-widgets.editor.types.tips"},
+        {.type = "stack", .labelKey = "desktop-widgets.editor.types.stack"},
         {.type = "photos", .labelKey = "desktop-widgets.editor.types.photos"},
         {.type = "news", .labelKey = "desktop-widgets.editor.types.news"},
         {.type = "podcasts", .labelKey = "desktop-widgets.editor.types.podcasts"},
@@ -316,6 +317,18 @@ namespace desktop_settings {
       }
       add(std::move(size));
     }
+    if (type == "stack") {
+      add(baseSpec("members", WidgetControlKind::StringList, std::vector<std::string>()));
+      add(boolSpec("auto_rotate", false));
+      auto interval = intSpec("rotation_seconds", 30, 5, 3600, 1);
+      interval.descriptionKey = "desktop-widgets.editor.settings.rotation-seconds-description";
+      add(std::move(interval));
+      auto smart = boolSpec("smart_rotate", false);
+      smart.descriptionKey = "desktop-widgets.editor.settings.smart-rotate-description";
+      add(std::move(smart));
+    }
+    if (type == "batteries")
+      add(baseSpec("hidden_devices", WidgetControlKind::StringList, std::vector<std::string>()));
     if (type == "photos") {
       add(baseSpec("image_path", WidgetControlKind::File, std::string()));
       add(baseSpec("folder_path", WidgetControlKind::Folder, std::string()));

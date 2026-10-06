@@ -2,6 +2,7 @@
 
 #include "config/config_types.h"
 #include "render/scene/node.h"
+#include "shell/desktop/desktop_widget_details_request.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 
@@ -45,6 +46,12 @@ public:
   std::unique_ptr<Node> releaseRoot();
 
   void setAnimationManager(AnimationManager* manager) noexcept { m_animations = manager; }
+  void setConfigureCallback(std::function<void(const std::string&)> callback) {
+    m_configureCallback = std::move(callback);
+  }
+  void setDetailsCallback(std::function<void(DesktopWidgetDetailsRequest)> callback) {
+    m_detailsCallback = std::move(callback);
+  }
   // Content updates must only mutate existing scene nodes. They are handled
   // in-place by the desktop widget hosts and must not assume a relayout or
   // scene rebuild.
@@ -79,6 +86,7 @@ public:
   void setFontFamily(const std::string& family) { m_fontFamily = family; }
   // Desktop widget editor keeps widgets visible for layout even when runtime idle-hide applies.
   virtual void setEditorPreview(bool enabled) noexcept { (void)enabled; }
+  virtual void setInteractionActive(bool active) { (void)active; }
   void setBackgroundStyle(const ColorSpec& color, float radius, float padding);
 
   [[nodiscard]] bool hasBackground() const noexcept { return m_bgEnabled; }
@@ -95,6 +103,16 @@ public:
   );
 
 protected:
+  void requestDetails(DesktopWidgetDetailsRequest request) {
+    if (m_detailsCallback)
+      m_detailsCallback(request);
+  }
+  [[nodiscard]] bool canShowDetails() const { return static_cast<bool>(m_detailsCallback); }
+  void requestConfigure(const std::string& id = {}) {
+    if (m_configureCallback)
+      m_configureCallback(id);
+  }
+  [[nodiscard]] bool canConfigure() const { return static_cast<bool>(m_configureCallback); }
   void setRoot(std::unique_ptr<Node> root);
 
   void requestUpdate() {
@@ -176,6 +194,8 @@ protected:
   Node* m_contentRoot = nullptr;
   Node* m_outerRootPtr = nullptr;
   Box* m_bgBox = nullptr;
+  std::function<void(const std::string&)> m_configureCallback;
+  std::function<void(DesktopWidgetDetailsRequest)> m_detailsCallback;
   UpdateCallback m_updateCallback;
   LayoutCallback m_layoutCallback;
   RedrawCallback m_redrawCallback;

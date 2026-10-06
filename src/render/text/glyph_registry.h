@@ -19,6 +19,16 @@ namespace GlyphRegistry {
   [[nodiscard]] bool contains(std::string_view name);
   [[nodiscard]] char32_t lookup(std::string_view name);
 
+  // Filled counterparts are opt-in for selected navigation and active controls.
+  // Icons without a counterpart keep their original shape.
+  [[nodiscard]] char32_t emphasized(char32_t codepoint);
+  struct OpticalAdjustment {
+    float scale = 1.0F;
+    float x = 0.0F;
+    float y = 0.0F;
+  };
+  [[nodiscard]] OpticalAdjustment opticalAdjustment(char32_t codepoint);
+
   // Full Tabler icon catalog with structured metadata.
   [[nodiscard]] const std::unordered_map<std::string, TablerGlyphMetadata>& tablerGlyphMetadata();
   // Full Tabler icon catalog (loaded from assets/fonts/tabler.json on first registry use).

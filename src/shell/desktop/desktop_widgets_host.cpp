@@ -2,13 +2,19 @@
 
 #include "config/config_service.h"
 #include "core/log.h"
+#include "dbus/mpris/mpris_service.h"
+#include "i18n/i18n.h"
 #include "render/core/shared_texture_cache.h"
 #include "render/render_context.h"
 #include "render/render_target.h"
 #include "render/scene/node.h"
 #include "scripting/plugin_registry.h"
+#include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget_layout.h"
+#include "shell/desktop/desktop_widget_settings_registry.h"
+#include "shell/desktop/desktop_widget_setup.h"
 #include "shell/desktop/widget_transform.h"
+#include "shell/desktop/widgets/desktop_stack_widget.h"
 #include "shell/wallpaper/wallpaper_geometry.h"
 #include "time/time_format.h"
 #include "ui/builders.h"
@@ -17,8 +23,10 @@
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
+#include <linux/input-event-codes.h>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace {
 
@@ -46,14 +54,27 @@ namespace {
 
 } // namespace
 
-DesktopWidgetsHost::~DesktopWidgetsHost() { releaseWallpaperMasks(); }
+DesktopWidgetsHost::~DesktopWidgetsHost() {
+  m_details.reset();
+  m_quickMenu.reset();
+  releaseWallpaperMasks();
+}
 
 void DesktopWidgetsHost::initialize(const DesktopWidgetServices& services) {
   m_wayland = &services.wayland;
   m_config = services.config;
   m_renderContext = services.renderContext;
   m_textureCache = services.textureCache;
+  m_mpris = services.runtime.mpris;
   m_factory = std::make_unique<DesktopWidgetFactory>(services.runtime);
+  m_details = std::make_unique<DesktopWidgetDetailsPopup>(services);
+  m_details->setOnDismissed([this]() {
+    const auto id = std::exchange(m_detailsWidgetId, {});
+    if (auto* instance = findInstance(id)) {
+      instance->widget->setInteractionActive(instance->pointerInside);
+      updateBlending(*instance);
+    }
+  });
 }
 
 void DesktopWidgetsHost::releaseWallpaperMasks() {
@@ -109,11 +130,18 @@ void DesktopWidgetsHost::show(const DesktopWidgetsSnapshot& snapshot) {
 }
 
 void DesktopWidgetsHost::hide() {
+  if (m_details)
+    m_details->close();
+  m_pendingDetails.reset();
+  if (m_quickMenu)
+    m_quickMenu->close();
   m_visible = false;
   m_instances.clear();
 }
 
 void DesktopWidgetsHost::rebuild(const DesktopWidgetsSnapshot& snapshot) {
+  if (m_quickMenu)
+    m_quickMenu->close();
   m_snapshot = snapshot;
   if (!m_visible) {
     return;
@@ -148,6 +176,8 @@ void DesktopWidgetsHost::onSecondTick() {
   }
 
   const bool minuteBoundary = formatLocalTime("{:%S}") == "00";
+  if (minuteBoundary && m_details)
+    m_details->requestUpdate();
   for (auto& instance : m_instances) {
     if (instance->surface == nullptr || instance->widget == nullptr) {
       continue;
@@ -161,6 +191,8 @@ void DesktopWidgetsHost::onSecondTick() {
 }
 
 void DesktopWidgetsHost::requestUpdate() {
+  if (m_details)
+    m_details->requestUpdate();
   for (auto& instance : m_instances) {
     if (instance->surface != nullptr) {
       instance->surface->requestUpdateOnly();
@@ -169,6 +201,8 @@ void DesktopWidgetsHost::requestUpdate() {
 }
 
 void DesktopWidgetsHost::requestLayout() {
+  if (m_details)
+    m_details->requestUpdate();
   for (auto& instance : m_instances) {
     if (instance->surface != nullptr) {
       instance->surface->requestLayout();
@@ -187,7 +221,12 @@ void DesktopWidgetsHost::setWindowFocused(bool focused) {
 void DesktopWidgetsHost::updateBlending(DesktopWidgetInstance& instance, bool animate) {
   if (instance.surface == nullptr)
     return;
-  const float target = m_windowFocused && !m_snapshot.alwaysFullColor && !instance.pointerInside ? 0.18F : 1.0F;
+  const float target = m_windowFocused
+          && !m_snapshot.alwaysFullColor
+          && !instance.pointerInside
+          && m_detailsWidgetId != instance.state.id
+      ? 0.18F
+      : 1.0F;
   if (animate && instance.blendTarget == target)
     return;
   instance.blendTarget = target;
@@ -207,6 +246,8 @@ void DesktopWidgetsHost::updateBlending(DesktopWidgetInstance& instance, bool an
 }
 
 void DesktopWidgetsHost::requestRedraw() {
+  if (m_details)
+    m_details->requestUpdate();
   for (auto& instance : m_instances) {
     if (instance->surface != nullptr) {
       instance->surface->requestRedraw();
@@ -224,17 +265,23 @@ DesktopWidgetsHost::DesktopWidgetInstance* DesktopWidgetsHost::findInstance(cons
 }
 
 void DesktopWidgetsHost::syncInstances() {
+  if (m_details)
+    m_details->close();
+  m_pendingDetails.reset();
+  if (m_quickMenu)
+    m_quickMenu->close();
   if (!m_visible || m_wayland == nullptr || m_renderContext == nullptr || m_factory == nullptr) {
     return;
   }
 
-  std::erase_if(m_instances, [this](const auto& instance) {
+  const auto membership = desktop_stacks::resolve(m_snapshot.widgets);
+  std::erase_if(m_instances, [this, &membership](const auto& instance) {
     const DesktopWidgetState* state = findStateById(m_snapshot, instance->state.id);
-    return state == nullptr || !state->enabled;
+    return state == nullptr || !state->enabled || desktop_stacks::contains(membership, state->id);
   });
 
   for (const auto& state : m_snapshot.widgets) {
-    if (!state.enabled) {
+    if (!state.enabled || desktop_stacks::contains(membership, state.id)) {
       continue;
     }
 
@@ -254,7 +301,8 @@ void DesktopWidgetsHost::syncInstances() {
     const std::string effectiveOutputName = desktop_widgets::outputKey(*output);
     const bool widgetDefinitionChanged = existing->state.type != state.type
         || existing->state.settings != state.settings
-        || existing->effectiveOutputName != effectiveOutputName;
+        || existing->effectiveOutputName != effectiveOutputName
+        || (state.type == "stack" && existing->stackCards != desktop_stacks::cards(m_snapshot.widgets, state.id));
 
     if (widgetDefinitionChanged) {
       std::erase_if(m_instances, [&state](const auto& instance) { return instance->state.id == state.id; });
@@ -278,11 +326,20 @@ void DesktopWidgetsHost::createInstance(const DesktopWidgetState& state, const W
   }
 
   const float baseUiScale = m_config != nullptr ? m_config->config().accessibility.uiScale : 1.0F;
-  auto widget = m_factory->create(state.type, state.settings, desktop_widgets::widgetContentScale(baseUiScale));
+  auto widget = m_factory->create(
+      state.type, state.settings, desktop_widgets::widgetContentScale(baseUiScale), &m_snapshot.widgets, state.id
+  );
   if (widget == nullptr) {
     return;
   }
 
+  widget->setConfigureCallback([this, id = state.id](const std::string& member) {
+    if (m_configureRequested)
+      m_configureRequested(member.empty() ? id : member);
+  });
+  widget->setDetailsCallback([this, id = state.id](DesktopWidgetDetailsRequest request) {
+    m_pendingDetails = std::pair{id, request};
+  });
   widget->create();
   widget->setBox(state.boxWidth, state.boxHeight);
   ScaledRenderer measureRenderer(*m_renderContext, output.configuredScale());
@@ -319,6 +376,8 @@ void DesktopWidgetsHost::createInstance(const DesktopWidgetState& state, const W
 
   auto instance = std::make_unique<DesktopWidgetInstance>();
   instance->state = clampedState;
+  if (state.type == "stack")
+    instance->stackCards = desktop_stacks::cards(m_snapshot.widgets, state.id);
   instance->effectiveOutputName = desktop_widgets::outputKey(output);
   instance->output = output.output;
   instance->widget = std::move(widget);
@@ -533,7 +592,117 @@ void DesktopWidgetsHost::prepareFrame(DesktopWidgetInstance& instance, bool need
   }
 }
 
+void DesktopWidgetsHost::openQuickMenu(DesktopWidgetInstance& instance, const PointerEvent& event) {
+  if (m_details)
+    m_details->close();
+  using desktop_widgets::QuickAction;
+  if (!m_wayland || !m_renderContext || !m_quickAction)
+    return;
+  if (!m_quickMenu)
+    m_quickMenu = std::make_unique<ContextMenuPopup>(*m_wayland, *m_renderContext);
+  m_quickMenu->close();
+  const auto id = instance.state.id;
+  const auto& state = instance.state;
+  auto* stack = dynamic_cast<DesktopStackWidget*>(instance.widget.get());
+  std::vector<ContextMenuControlEntry> entries;
+  auto add = [&](QuickAction action, const std::string& label, bool enabled = true) -> ContextMenuControlEntry& {
+    entries.push_back({.id = static_cast<int>(action), .label = label, .enabled = enabled});
+    return entries.back();
+  };
+  auto separator = [&]() { entries.push_back({.label = {}, .separator = true}); };
+  entries.push_back({.label = desktop_settings::desktopWidgetTypeLabel(state.type), .enabled = false, .header = true});
+  if (desktop_cards::supportsSizePresets(state.type)) {
+    std::string size;
+    if (auto it = state.settings.find("card_size"); it != state.settings.end())
+      if (auto* value = std::get_if<std::string>(&it->second))
+        size = *value;
+    for (const auto& [action, name] :
+         {std::pair{QuickAction::Small, "small"}, {QuickAction::Medium, "medium"}, {QuickAction::Large, "large"}}) {
+      auto& entry = add(action, i18n::tr(std::string("desktop-widgets.editor.settings.card-size-") + name));
+      entry.radio = true;
+      entry.toggleState = size == name && state.boxWidth <= 0 && state.boxHeight <= 0 ? 1 : 0;
+    }
+    separator();
+  }
+  bool media = state.type == "media_player";
+  if (stack) {
+    media = stack->activeCardType() == "media_player";
+    auto& pin =
+        add(QuickAction::Pin, i18n::tr(stack->pinned() ? "desktop-widgets.stack.unpin" : "desktop-widgets.stack.pin"));
+    pin.checkmark = true;
+    pin.toggleState = stack->pinned() ? 1 : 0;
+    const auto smart = state.settings.find("smart_rotate");
+    const auto* enabled = smart == state.settings.end() ? nullptr : std::get_if<bool>(&smart->second);
+    auto& entry = add(QuickAction::SmartRotate, i18n::tr("desktop-widgets.editor.settings.smart-rotate"));
+    entry.checkmark = true;
+    entry.toggleState = enabled && *enabled ? 1 : 0;
+  }
+  const auto player = media && m_mpris ? m_mpris->activePlayer() : std::nullopt;
+  if (media)
+    add(QuickAction::OpenPlayer, i18n::tr("desktop-widgets.quick-actions.open-player"), player && player->canRaise);
+  add(QuickAction::Configure,
+      i18n::tr(stack ? "desktop-widgets.quick-actions.edit-stack" : "desktop-widgets.setup.configure"));
+  add(QuickAction::Duplicate, i18n::tr("desktop-widgets.quick-actions.duplicate"));
+  add(QuickAction::Remove, i18n::tr("desktop-widgets.quick-actions.remove"));
+  separator();
+  const auto history = m_historyAvailability ? m_historyAvailability() : std::pair{false, false};
+  add(QuickAction::Undo, i18n::tr("desktop-widgets.editor.history.undo"), history.first);
+  add(QuickAction::Redo, i18n::tr("desktop-widgets.editor.history.redo"), history.second);
+  add(QuickAction::Edit, i18n::tr("desktop-widgets.quick-actions.edit"));
+  m_menuWidgetId = id;
+  instance.inputDispatcher.cancelPointerCapture();
+  instance.inputDispatcher.pointerLeave();
+  instance.widget->setInteractionActive(true);
+  m_quickMenu->setOnDismissed([this]() {
+    const auto dismissedId = std::exchange(m_menuWidgetId, {});
+    if (auto* target = findInstance(dismissedId))
+      target->widget->setInteractionActive(target->pointerInside);
+  });
+  m_quickMenu->setOnActivate([this, id, player](const ContextMenuControlEntry& entry) {
+    const auto action = static_cast<QuickAction>(entry.id);
+    if (action == QuickAction::OpenPlayer) {
+      if (player && m_mpris)
+        (void)m_mpris->raise(player->busName);
+    } else if (action == QuickAction::Pin) {
+      if (auto* target = findInstance(id))
+        if (auto* targetStack = dynamic_cast<DesktopStackWidget*>(target->widget.get()))
+          targetStack->setPinned(!targetStack->pinned());
+    } else if (m_quickAction) {
+      m_quickAction(id, action);
+    }
+  });
+  if (m_config)
+    m_quickMenu->setShadowConfig(m_config->config().shell.shadow);
+  const float scale = m_config ? m_config->config().accessibility.uiScale : 1.0F;
+  m_quickMenu->open({
+      .entries = std::move(entries),
+      .minMenuWidth = 210 * scale,
+      .maxMenuWidth = Style::menuAutoMaxWidth * scale,
+      .contentScale = scale,
+      .anchor = {.x = static_cast<int>(event.sx), .y = static_cast<int>(event.sy)},
+      .parent =
+          {.layerSurface = instance.surface->layerSurface(),
+           .output = instance.output,
+           .wlSurface = instance.surface->wlSurface()},
+      .inputSerial = event.serial,
+  });
+  if (!m_quickMenu->isOpen()) {
+    m_menuWidgetId.clear();
+    instance.widget->setInteractionActive(instance.pointerInside);
+  }
+}
+
 bool DesktopWidgetsHost::onPointerEvent(const PointerEvent& event) {
+  if (m_details && m_details->onPointerEvent(event))
+    return true;
+  if (m_quickMenu && m_quickMenu->isOpen()) {
+    if (m_quickMenu->onPointerEvent(event))
+      return true;
+    if (event.type == PointerEvent::Type::Button && event.pressed) {
+      m_quickMenu->close();
+      return true;
+    }
+  }
   if (!m_visible || m_instances.empty())
     return false;
 
@@ -554,11 +723,13 @@ bool DesktopWidgetsHost::onPointerEvent(const PointerEvent& event) {
   switch (event.type) {
   case PointerEvent::Type::Enter:
     target->pointerInside = true;
+    target->widget->setInteractionActive(true);
     updateBlending(*target);
     target->inputDispatcher.pointerEnter(static_cast<float>(event.sx), static_cast<float>(event.sy), event.serial);
     break;
   case PointerEvent::Type::Leave:
     target->pointerInside = false;
+    target->widget->setInteractionActive(m_menuWidgetId == target->state.id || m_detailsWidgetId == target->state.id);
     updateBlending(*target);
     target->inputDispatcher.pointerLeave();
     break;
@@ -566,6 +737,11 @@ bool DesktopWidgetsHost::onPointerEvent(const PointerEvent& event) {
     target->inputDispatcher.pointerMotion(static_cast<float>(event.sx), static_cast<float>(event.sy), event.serial);
     break;
   case PointerEvent::Type::Button:
+    if (event.button == BTN_RIGHT) {
+      if (event.pressed)
+        openQuickMenu(*target, event);
+      return true;
+    }
     target->inputDispatcher.pointerButton(
         static_cast<float>(event.sx), static_cast<float>(event.sy), event.button, event.pressed, event.serial,
         event.time, event.touch
@@ -587,5 +763,47 @@ bool DesktopWidgetsHost::onPointerEvent(const PointerEvent& event) {
     }
   }
 
+  if (m_pendingDetails) {
+    const auto [id, request] = *std::exchange(m_pendingDetails, std::nullopt);
+    if (auto* instance = findInstance(id))
+      openDetails(*instance, request, event.serial);
+  }
   return true;
+}
+
+void DesktopWidgetsHost::openDetails(
+    DesktopWidgetInstance& instance, DesktopWidgetDetailsRequest request, std::uint32_t serial
+) {
+  if (!m_details || !instance.surface)
+    return;
+  const auto id = instance.state.id;
+  if (m_quickMenu)
+    m_quickMenu->close();
+  m_details->close();
+  m_detailsWidgetId = instance.state.id;
+  instance.inputDispatcher.cancelPointerCapture();
+  instance.inputDispatcher.pointerLeave();
+  instance.widget->setInteractionActive(true);
+  updateBlending(instance);
+  m_details->open(
+      request,
+      {.layerSurface = instance.surface->layerSurface(),
+       .output = instance.output,
+       .wlSurface = instance.surface->wlSurface()},
+      {.width = static_cast<int>(instance.surface->width()), .height = static_cast<int>(instance.surface->height())},
+      serial
+  );
+  if (!m_details->isOpen()) {
+    m_detailsWidgetId.clear();
+    // Popup initialization dispatches Wayland events; a layout/output change may
+    // have replaced the instance while the compositor configured the popup.
+    if (auto* current = findInstance(id)) {
+      current->widget->setInteractionActive(current->pointerInside);
+      updateBlending(*current);
+    }
+  }
+}
+
+bool DesktopWidgetsHost::onKeyboardEvent(const KeyboardEvent& event) {
+  return m_details && m_details->onKeyboardEvent(event);
 }

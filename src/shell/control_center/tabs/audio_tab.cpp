@@ -5,6 +5,7 @@
 #include "core/ui_phase.h"
 #include "dbus/mpris/mpris_service.h"
 #include "i18n/i18n.h"
+#include "pipewire/audio_glyphs.h"
 #include "pipewire/pipewire_service.h"
 #include "render/core/renderer.h"
 #include "render/scene/input_area.h"
@@ -1268,7 +1269,7 @@ namespace {
       m_muted = node.muted;
       if (m_muteButton != nullptr) {
         m_muteButton->setEnabled(nodeEnabled);
-        m_muteButton->setGlyph(m_muted ? "volume-mute" : "volume-high");
+        m_muteButton->setGlyph(audioVolumeGlyph(node.volume, m_muted, false));
         m_muteButton->setVariant(m_muted ? ButtonVariant::Destructive : ButtonVariant::Default);
       }
 
@@ -2048,7 +2049,7 @@ void AudioTab::doUpdate(Renderer& renderer) {
   if (m_outputDeviceVolume.muteButton != nullptr) {
     const bool outputMuted = sink != nullptr && sink->muted;
     m_outputDeviceVolume.muteButton->setEnabled(sink != nullptr);
-    m_outputDeviceVolume.muteButton->setGlyph(outputMuted ? "volume-mute" : "volume-high");
+    m_outputDeviceVolume.muteButton->setGlyph(audioVolumeGlyph(displayedSinkVolume, outputMuted, false));
     m_outputDeviceVolume.muteButton->setVariant(outputMuted ? ButtonVariant::Destructive : ButtonVariant::Default);
   }
 
@@ -2068,7 +2069,7 @@ void AudioTab::doUpdate(Renderer& renderer) {
   if (m_inputDeviceVolume.muteButton != nullptr) {
     const bool inputMuted = source != nullptr && source->muted;
     m_inputDeviceVolume.muteButton->setEnabled(source != nullptr);
-    m_inputDeviceVolume.muteButton->setGlyph(inputMuted ? "microphone-mute" : "microphone");
+    m_inputDeviceVolume.muteButton->setGlyph(audioVolumeGlyph(displayedSourceVolume, inputMuted, true));
     m_inputDeviceVolume.muteButton->setVariant(inputMuted ? ButtonVariant::Destructive : ButtonVariant::Default);
   }
 }

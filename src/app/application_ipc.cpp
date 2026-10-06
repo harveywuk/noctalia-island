@@ -225,7 +225,7 @@ void Application::initIpc() {
     for (const uint32_t id : activeIds) {
       (void)m_notificationManager.close(id, CloseReason::Dismissed);
     }
-    if (m_panelManager.isOpenPanel("control-center")) {
+    if (m_panelManager.isOpenPanel("control-center") || m_panelManager.isOpenPanel("notification-center")) {
       m_panelManager.refresh();
     }
     return "ok\n";
@@ -242,7 +242,7 @@ void Application::initIpc() {
         if (!m_notificationManager.invokeAction(notification.id, "default", true)) {
           return "error: invokeAction failed\n";
         }
-        if (m_panelManager.isOpenPanel("control-center")) {
+        if (m_panelManager.isOpenPanel("control-center") || m_panelManager.isOpenPanel("notification-center")) {
           m_panelManager.refresh();
         }
         return "ok\n";
@@ -253,7 +253,7 @@ void Application::initIpc() {
 
   m_ipcService.bind(noctalia::cli::msg::notificationClearHistory, [this](const std::string&) -> std::string {
     m_notificationManager.clearHistory();
-    if (m_panelManager.isOpenPanel("control-center")) {
+    if (m_panelManager.isOpenPanel("control-center") || m_panelManager.isOpenPanel("notification-center")) {
       m_panelManager.refresh();
     }
     return "ok\n";

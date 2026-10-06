@@ -1,5 +1,6 @@
 #include "shell/desktop/widgets/desktop_weather_widget.h"
 
+#include "cursor-shape-v1-client-protocol.h"
 #include "i18n/i18n.h"
 #include "render/core/renderer.h"
 #include "render/scene/node.h"
@@ -75,7 +76,15 @@ DesktopWeatherWidget::DesktopWeatherWidget(const WeatherService* weather, Option
       m_cardSize(options.cardSize) {}
 
 void DesktopWeatherWidget::create() {
-  auto rootNode = ui::node({});
+  auto rootNode = ui::inputArea({});
+  rootNode->setHitTestVisible(canShowDetails());
+  if (canShowDetails()) {
+    rootNode->setOnClick([this](const InputArea::PointerData&) {
+      requestDetails({.kind = DesktopWidgetDetailsRequest::Kind::Weather});
+    });
+    rootNode->setCursorShape(WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER);
+    rootNode->setTooltip(i18n::tr("desktop-widgets.details.weather"));
+  }
   rootNode->setClipChildren(true);
 
   rootNode->addChild(

@@ -133,17 +133,17 @@ private:
   static constexpr std::size_t kTabCount = static_cast<std::size_t>(TabId::Count);
   static constexpr std::array<TabMeta, kTabCount> kTabs{{
       {TabId::Home, "home", "control-center.tabs.home", "home"},
-      {TabId::Media, "media", "control-center.tabs.media", "disc"},
-      {TabId::Audio, "audio", "control-center.tabs.audio", "volume"},
+      {TabId::Media, "media", "control-center.tabs.media", "music"},
+      {TabId::Audio, "audio", "control-center.tabs.audio", "volume-high"},
       {TabId::Monitor, "monitor", "control-center.tabs.monitor", "device-desktop"},
-      {TabId::System, "system", "control-center.tabs.system", "activity-heartbeat"},
-      {TabId::Power, "power", "control-center.tabs.power", "battery-charging-2"},
+      {TabId::System, "system", "control-center.tabs.system", "activity"},
+      {TabId::Power, "power", "control-center.tabs.power", "battery-4"},
       {TabId::Network, "network", "control-center.tabs.network", "wifi"},
       {TabId::Bluetooth, "bluetooth", "control-center.tabs.bluetooth", "bluetooth"},
       {TabId::Weather, "weather", "control-center.tabs.weather", "weather-cloud-sun"},
       {TabId::Calendar, "calendar", "control-center.tabs.calendar", "calendar-event"},
       {TabId::Notifications, "notifications", "control-center.tabs.notifications", "bell"},
-      {TabId::ScreenTime, "screen-time", "control-center.tabs.screen-time", "hourglass"},
+      {TabId::ScreenTime, "screen-time", "control-center.tabs.screen-time", "screen-time"},
   }};
 
   void selectTab(TabId tab, bool animated = false);

@@ -97,12 +97,14 @@ private:
   wl_surface* m_wlSurface = nullptr;
   wl_surface* m_pointerParentSurface = nullptr;
   bool m_pointerInside = false;
+  bool m_dismissing = false;
+  std::uint64_t m_generation = 0;
 
   void restoreParentKeyboardInteractivity();
   void ensureHighlightedVisible();
   void requestVisualUpdate();
   void deferActivation(ContextMenuControlEntry entry);
-  void deferClose();
+  void deferClose(bool animated = false);
 
   std::function<void(const ContextMenuControlEntry&)> m_onActivate;
   std::function<void()> m_onDismissed;

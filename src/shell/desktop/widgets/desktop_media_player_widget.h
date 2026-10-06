@@ -1,5 +1,6 @@
 #pragma once
 
+#include "shell/control_center/artwork_flow_layer.h"
 #include "shell/desktop/desktop_card_layout.h"
 #include "shell/desktop/desktop_widget.h"
 #include "ui/palette.h"
@@ -32,6 +33,8 @@ public:
 
   void create() override;
   [[nodiscard]] bool wantsSecondTicks() const override;
+  [[nodiscard]] bool needsFrameTick() const override;
+  void onFrameTick(float deltaMs, Renderer& renderer) override;
   void setEditorPreview(bool enabled) noexcept override;
   bool applySetting(
       const std::string& key, const WidgetSettingValue& value,
@@ -50,6 +53,8 @@ private:
   void layoutButtons(Renderer& renderer, float scale);
   void sync(Renderer& renderer);
   void applyShadow();
+  void applyArtworkPalette();
+  void doRebindRenderer(Renderer& renderer) override { m_renderer = &renderer; }
   [[nodiscard]] bool hasActiveMedia() const;
   [[nodiscard]] bool shouldBeVisible() const;
   bool applyVisibility();
@@ -77,6 +82,9 @@ private:
   bool m_visibilityInitialized = false;
 
   Image* m_artwork = nullptr;
+  Image* m_backdrop = nullptr;
+  control_center::ArtworkFlowLayer m_flow;
+  Renderer* m_renderer = nullptr;
   Label* m_title = nullptr;
   Label* m_artist = nullptr;
   Flex* m_controls = nullptr;

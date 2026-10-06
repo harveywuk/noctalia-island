@@ -9,6 +9,10 @@
 #include <cassert>
 
 int main() {
+  assert(!island::showsStatusIcons(island::View::Osd));
+  assert(island::showsStatusIcons(island::View::Rest));
+  assert(island::showsStatusIcons(island::View::Media));
+  assert(island::showsStatusIcons(island::View::Notification));
   using namespace std::chrono_literals;
   island::MediaActivity media;
   const auto start = island::MediaActivity::TimePoint{};

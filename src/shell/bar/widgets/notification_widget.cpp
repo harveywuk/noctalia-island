@@ -65,7 +65,7 @@ void NotificationWidget::doLayout(Renderer& renderer, float /*containerWidth*/, 
   }
 
   m_glyph->setGlyphSize(Style::baseGlyphSize * m_contentScale);
-  m_glyph->setGlyph(m_dndEnabled ? "bell-off" : "bell");
+  m_glyph->setGlyph(m_dndEnabled ? "focus-on" : m_hasNotifications ? "notification-unread" : "bell");
   m_glyph->setColor(widgetIconColorOr(colorSpecFromRole(ColorRole::OnSurface)));
   m_glyph->measure(renderer);
   m_glyph->setPosition(0.0F, 0.0F);
@@ -101,7 +101,7 @@ void NotificationWidget::refreshIndicatorState() {
   m_hasNotifications = hasNotifications;
   m_dndEnabled = dndEnabled;
   if (m_glyph != nullptr) {
-    m_glyph->setGlyph(m_dndEnabled ? "bell-off" : "bell");
+    m_glyph->setGlyph(m_dndEnabled ? "focus-on" : m_hasNotifications ? "notification-unread" : "bell");
     m_glyph->setColor(widgetIconColorOr(colorSpecFromRole(ColorRole::OnSurface)));
   }
   if (m_dot != nullptr) {

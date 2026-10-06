@@ -6,7 +6,7 @@ path='/org/mpris/MediaPlayer2'
 root='org.mpris.MediaPlayer2'
 player=root+'.Player'
 props={
- root:{'Identity':GLib.Variant('s','Island Test Player'),'DesktopEntry':GLib.Variant('s','test'), 'CanQuit':GLib.Variant('b',False),'CanRaise':GLib.Variant('b',False),'HasTrackList':GLib.Variant('b',False),'SupportedUriSchemes':GLib.Variant('as',[]),'SupportedMimeTypes':GLib.Variant('as',[])},
+ root:{'Identity':GLib.Variant('s','Island Test Player'),'DesktopEntry':GLib.Variant('s','test'), 'CanQuit':GLib.Variant('b',False),'CanRaise':GLib.Variant('b',os.environ.get('ISLAND_TEST_CAN_RAISE') == '1'),'HasTrackList':GLib.Variant('b',False),'SupportedUriSchemes':GLib.Variant('as',[]),'SupportedMimeTypes':GLib.Variant('as',[])},
  player:{'PlaybackStatus':GLib.Variant('s','Playing'),'LoopStatus':GLib.Variant('s','None'),'Rate':GLib.Variant('d',1),'Shuffle':GLib.Variant('b',False),'Volume':GLib.Variant('d',.7),'Position':GLib.Variant('x',74000000),'MinimumRate':GLib.Variant('d',1),'MaximumRate':GLib.Variant('d',1),**{k:GLib.Variant('b',True) for k in ['CanControl','CanPlay','CanPause','CanGoNext','CanGoPrevious','CanSeek']}}
 }
 def metadata(title):
@@ -18,6 +18,7 @@ xml='<node>'
 for interface,values in props.items():
  xml+=f'<interface name="{interface}">'
  for key,value in values.items():xml+=f'<property name="{key}" type="{value.get_type_string()}" access="read"/>'
+ if interface==root:xml+='<method name="Raise"/>'
  if interface==player:
   for method in ['PlayPause','Play','Pause','Stop','Next','Previous']:xml+=f'<method name="{method}"/>'
   xml+='<method name="Seek"><arg type="x" direction="in"/></method><method name="SetPosition"><arg type="o" direction="in"/><arg type="x" direction="in"/></method>'

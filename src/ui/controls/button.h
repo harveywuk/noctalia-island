@@ -153,6 +153,9 @@ private:
   Color m_targetBg{};
   Color m_targetBorder{};
   Color m_targetLabel{};
+  Color m_displayBg{};
+  Color m_displayBorder{};
+  Color m_displayLabel{};
   ButtonContentAlign m_contentAlign = ButtonContentAlign::Center;
   float m_surfaceOpacity = 1.0F;
   bool m_enabled = true;
@@ -161,6 +164,7 @@ private:
   bool m_hoverSuppressed = false;
   bool m_hoveredVisual = false;
   bool m_pressedVisual = false;
+  bool m_keyboardPressed = false;
   bool m_visualStateInitialized = false;
   Signal<>::ScopedConnection m_paletteConn;
   Signal<>::ScopedConnection m_buttonBordersConn;

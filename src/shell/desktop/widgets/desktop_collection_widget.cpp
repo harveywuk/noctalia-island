@@ -5,6 +5,7 @@
 #include "i18n/i18n.h"
 #include "launcher/notes_provider.h"
 #include "shell/desktop/desktop_widget_settings_registry.h"
+#include "shell/desktop/desktop_widget_setup.h"
 #include "shell/panel/panel_manager.h"
 #include "ui/builders.h"
 #include "util/file_utils.h"
@@ -99,6 +100,14 @@ void DesktopCollectionWidget::create() {
                                  panels.openPanel("floating-notes", PanelOpenRequest{.context = context});
                                }
                              }}));
+  node->addChild(
+      ui::button(
+          {.out = &m_configure,
+           .text = i18n::tr("desktop-widgets.setup.configure"),
+           .variant = ButtonVariant::Secondary,
+           .onClick = [this]() { requestConfigure(); }}
+      )
+  );
   setRoot(std::move(node));
   if (m_kind == "news" || m_kind == "podcasts" || m_kind == "stocks" || m_kind == "home" || m_kind == "find_my") {
     m_remote =
@@ -106,7 +115,15 @@ void DesktopCollectionWidget::create() {
     m_remote->start();
   }
   if (!m_file.empty() && m_services.scriptDeps.fileWatcher)
-    m_watch = m_services.scriptDeps.fileWatcher->watch(m_file, [this] { requestUpdate(); });
+    m_watch = m_services.scriptDeps.fileWatcher->watch(
+        m_file,
+        [this] {
+          // Read the completed save, not the transient empty file after truncation.
+          m_fileLoaded = false;
+          requestUpdate();
+        },
+        FileWatcher::WatchTrigger::WriteCompleted
+    );
   refresh();
 }
 
@@ -382,6 +399,12 @@ void DesktopCollectionWidget::doLayout(Renderer& renderer) {
   m_open->setVisible(notes);
   m_open->setEnabled(!m_file.empty());
   place(m_open, card.width - m_open->width(), -4 * scale);
+  m_configure->setVisible(m_items.empty() && desktop_setup::guided(m_kind));
+  m_configure->setEnabled(canConfigure());
+  m_configure->setFontSize(Style::fontSizeCaption * scale);
+  m_configure->layout(renderer);
+  place(m_configure, 0, card.height - m_configure->height());
+  m_configure->updateInputArea();
   root()->setSize(card.width, card.height);
 }
 

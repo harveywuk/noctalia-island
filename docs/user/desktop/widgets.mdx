@@ -83,7 +83,10 @@ Weather cards choose their forecast length from the available space; `show_forec
 configured calendar sources. `show_events` controls the agenda in Large and Classic layouts.
 Weather and Calendar cards do not use continuous animation or a second timer. Clock cards tick once a minute
 unless you enable the second hand or use seconds in a digital format. Now Playing updates its timeline once a
-second during playback and stays idle when paused. Cards reuse the shell's MPRIS player selection and capabilities;
+second during playback. Its card background uses the same flowing artwork colours as the shell's media panels,
+with white text and controls over a shaded backdrop. The artwork holds still when paused, in editor previews,
+or with reduced motion; inactive stack pages do not animate. Missing artwork restores the themed background.
+Cards reuse the shell's MPRIS player selection and capabilities;
 controls are disabled when the active player cannot perform an action. A missing cover has a themed placeholder.
 The Now Playing configuration type remains `media_player`; `layout` and text `shadow` apply to its Classic layout.
 
@@ -229,17 +232,168 @@ You can also turn edit mode on from **Settings → Desktop → Toggle Editor**. 
 
 Widget previews are non-interactive in edit mode. Clicking anywhere within a widget selects or moves it instead of activating its buttons or other controls; normal widget interaction resumes after you exit the editor.
 
+### Undo, redo, and saved layouts
+
+Click Weather to open an anchored detail panel with daily and hourly forecasts, wind, humidity,
+sunrise and sunset. Click the date on a Small Calendar, or a day in its month grid, to open that day's
+agenda with event times, locations, calendar names, and available event links. The agenda's arrows
+move to the previous or next day. These panels use the shell's normal styling and scroll on smaller
+screens. Press `Escape`, click outside, or use the close button to dismiss them.
+
+Detail panels also work inside stacks. Rotation pauses while a panel is open, and opening details
+does not change the saved layout. Entering the editor or changing outputs closes the panel.
+
+Right-click a widget on the desktop for **Small**, **Medium**, and **Large** size presets, **Configure**,
+**Duplicate Widget**, or **Remove Widget**. Size presets are offered for card widgets. Configuration opens
+the widget's setup form or inspector. Stack menus also offer pin/unpin, **Smart Rotate**, and **Edit Stack**.
+Now Playing offers **Open Player** when its active player supports showing its window, including when it is
+the selected stack card. The menu pauses stack rotation until dismissed, and supports arrow keys, Enter,
+and Escape. Clicking outside dismisses it without activating the widget underneath.
+
+Quick layout changes save immediately and share **Undo** and **Redo** with the editor. A duplicated stack
+gets independent copies of its members; removing a stack releases its existing cards. If you remove the last
+widget, open the editor from Settings or `desktop-widgets-edit` and use Undo to restore it.
+
+The editor's **Undo** and **Redo** controls work on widget additions, removals, moves, resizing, rotation,
+settings, and stack membership or order. Use **Ctrl+Z** to undo and **Ctrl+Shift+Z** or **Ctrl+Y** to redo.
+A whole drag or accepted setup form is one step. Continuous changes to the same setting are grouped;
+clicking another control starts a new step. Text fields retain their own text undo while focused.
+**Escape** cancels an active move, resize, rotation, or stack drag without adding a history entry.
+Desktop history retains up to 100 edits during the shell session, including across editor opens. It resets
+on restart or an external layout replacement. Lockscreen history resets when its editor closes.
+A new edit after undo discards the redo branch.
+
+Open **Saved Layouts** to save a named arrangement, such as Work, Focus, or Media:
+
+- **Whole Desktop** saves all widgets and their monitor assignments, plus the grid and desktop colour preference.
+  Applying it restores the whole arrangement, including widgets assigned to disconnected monitors.
+- **This Monitor** saves the widgets on the monitor where the panel is open, including all cards owned by its stacks.
+  Applying it replaces the widgets on that monitor and keeps other monitors' widgets and shared settings intact.
+  A monitor preset can also be applied on a different monitor.
+
+Presets preserve positions, custom sizes, rotation and flips, visibility, sources, stack order, and automatic
+rotation settings. Positions adapt to the target monitor's logical resolution. **Apply** is a single undoable
+edit; use the refresh icon to update a saved preset from the current arrangement, or the trash icon to delete it.
+Saving, updating, and deleting presets take effect immediately. Applying one becomes the active configuration
+when you leave the editor, like other widget edits. Runtime data such as media playback, reminder completion,
+and the currently pinned stack page remains separate from presets.
+
+Up to 32 named presets are stored locally in the shell's state store under `desktop_layouts.presets`.
+Unreadable or newer-format data is kept intact and disables preset saving until it can be read.
+Saved layouts are available in the desktop editor; the lockscreen editor also supports undo and redo.
+
 ### Widget gallery
 
 Choose **Add Widgets** in the editor toolbar to browse built-in widgets and installed desktop-widget plugins.
 Select a widget to see its preview. Card widgets offer **Small**, **Medium**, and **Large** buttons so you
-can compare layouts before choosing **Add Widget**. Previews use your current theme and available service data.
+can compare layouts before choosing **Add Widget** or **Set Up Widget** for cards that need a source.
+Previews use your current theme and available service data.
 Stickers open an image picker when added.
 
-The editor places additions in available space on the monitor where you opened the gallery, leaving at least a
+Search by widget name, configuration type, or category. Category filters group cards into Productivity,
+Media, System, Home, Information, Appearance, and Plugins. Search also works within a category or Favorites.
+Use the star beside a widget's name to keep it in **Favorites**. Favorites persist locally across shell restarts;
+unavailable plugins retain their saved preference until they are installed again. **Clear Filters** returns to all widgets.
+
+Drag a size preview onto the desktop to choose its position. The gallery gives way to a placement outline,
+with the editor's usual alignment guides and snapping. Drop over the middle of a compatible card to create a
+stack, or an existing stack to add to it. Hold `Alt` to place without stacking. Full stacks and incompatible
+widgets remain normal placement targets. `Escape`, a drop on the toolbar, or a disconnected monitor cancels
+placement without adding a widget. Source-dependent widgets open setup at the drop destination and keep
+the chosen position or stack; canceling setup leaves the layout unchanged. A completed addition, including
+stack membership, is one Undo step. The **Add Widget** and **Set Up Widget** buttons remain available for keyboard use.
+
+When you use the add button, the editor places the widget in available space on the gallery’s monitor, leaving at least a
 16-pixel gap at the default shell scale. If that monitor is full, the new widget starts in its center so you can
 move it yourself. Existing widgets stay in place. Close the gallery with its close button, a click outside it,
 or `Escape`; the editor remains open.
+
+### Guided setup
+
+Cards that need files, lists, feeds, or service credentials open a setup form before being added. The form uses
+the shell's normal controls, file pickers, palette, and typography. It checks required sources and shows errors
+in the form. Feed URLs and service settings are checked locally; requests begin only after accepting the form.
+
+Choose **Add Widget** to accept the setup, or **Set Up Later** to add an empty card. Empty cards have a
+**Configure** button that opens the same form. Existing cards can also be configured from the inspector.
+**Save Changes** accepts edits; **Cancel**, clicking outside the form, or `Escape` discards them. Finish with
+**Done** in the editor toolbar to save the desktop layout and return to normal widget interaction.
+
+### Widget stacks
+
+Choose **Widget Stack** in the gallery, select a size, and choose **Set Up Widget**. Select between two and
+eight existing cards on that monitor, use the arrows to arrange their order, and choose **Add Widget**.
+You can also select several cards with `Ctrl` + click and choose **Stack Selected Widgets** in the inspector.
+Stacks support the built-in card types above; they cannot contain other stacks or plugin widgets.
+
+In edit mode, drag a card over the center of another card to create a stack, or over an existing stack to add
+it. A highlighted preview confirms the destination before you release. The target card supplies the stack's
+position and frame. Dragging near an edge still uses normal placement and snapping; hold `Alt` to overlap
+cards without stacking them. `Escape` cancels an active drag and restores the original placement.
+
+A stack shows one card at a time in a shared Small, Medium, or Large frame. Scroll over it or click its page
+dots to switch cards. The last selected card is remembered across restarts. Each card keeps its normal controls,
+theme styling, and source settings. The stack follows the same desktop blending preference as individual cards.
+Page changes crossfade using the shell's animation speed; the outgoing card stops accepting input as
+soon as the new card is selected. Reduced motion switches immediately.
+
+Moving a widget gives it a subtle lift while its placement outline stays aligned to the grid. Gallery
+drags carry an inert preview of the actual card, with a separate outline marking the snapped destination.
+The gallery uses a short reveal and dismissal; changing searches or size presets keeps the gallery steady.
+Disabling `shell.animation.enabled` removes these transitions and the animated lift without changing
+dragging, cancellation, snapping, or keyboard navigation.
+
+**Automatic Rotation** is off by default. Enable it in the stack inspector and set **Rotate Every (seconds)**
+between 5 and 3600 seconds (30 by default). Rotation pauses while you hover or interact with a card. Leaving
+the stack or manually changing pages starts a fresh interval. Editor and gallery previews never rotate.
+Use the pin beside the page dots to hold the current card. Pins survive restarts; clicking the pin again
+resumes rotation. Manually selecting another card clears the pin. Rotation advances in member order.
+
+**Smart Rotate** is a separate, opt-in toggle in the same inspector. It uses the shell's existing calendar,
+media, and weather data to prioritise cards already in the stack:
+
+- Calendar takes priority from 15 minutes before a timed event until five minutes after its start, or its end
+  if earlier. All-day and completed events do not take priority.
+- Now Playing takes priority while the shell's active player is playing, unless an event is imminent.
+- Weather appears once per local day between 06:00 and 10:00, when weather data is available and no higher
+  priority applies. Its morning priority lasts 90 seconds and is remembered across restarts.
+
+Smart Rotate holds the relevant card while its priority applies. When there is no relevant card, ordinary
+**Automatic Rotation** resumes if enabled; otherwise the stack stays on its current page. Smart switches are
+at least ten seconds apart. Manually choosing a page pauses both modes for five minutes when Smart Rotate is
+on. Hovering, pressing, keyboard focus, pins, and editor previews prevent automatic changes. Unpinning resumes
+Smart Rotate immediately. If a stack contains several cards of the same relevant type, its first one is used.
+No additional calendar syncs, media commands, or weather requests are made to choose a card.
+
+Select a stack in edit mode to change its size and background. **Configure** changes membership and order;
+**Configure Photos**, **Configure Clock**, and the other member buttons edit an individual card's settings.
+Drag the handles beside those member buttons onto another row to reorder, or onto the desktop to pull a card
+out. A preview shows its drop position, and `Escape` cancels. When only one member remains, the container is
+removed and that card takes the stack's position. Each released card keeps its own size and source settings.
+**Unstack Widgets** restores the cards at their saved individual positions. Removing a stack also releases
+its cards. Duplicating or copying a stack makes independent copies of its members and settings.
+
+Stack membership is stored as widget IDs, so source settings remain in their original named tables:
+
+```toml
+[desktop_widgets.widget.daily_stack]
+type = "stack"
+cx = 400.0
+cy = 240.0
+
+[desktop_widgets.widget.daily_stack.settings]
+card_size = "medium"
+members = ["clock_main", "weather_main"]
+auto_rotate = true
+rotation_seconds = 30
+smart_rotate = false # opt in to calendar, playback, and morning priorities
+```
+
+Both member widgets must be declared normally and included in `widget_order` if that option is set. Members
+are hidden as standalone widgets while they belong to a stack; the stack's enabled flag controls the whole
+group. Original member positions, sizes, and enabled flags are retained for unstacking. A card can belong to
+only one stack. For hand-edited configurations, the first stack in widget order claims it; missing IDs,
+duplicate references, nested stacks, and entries after the eighth accepted member are ignored.
 
 ### Controls
 
@@ -424,7 +578,7 @@ so the desktop widget and control center use the same event formatting.
 Use the arrow buttons or vertical scrolling to change months. Select a day to update the event list; selecting a day
 from the preceding or following month also navigates to that month. Select the date or month heading to return to today.
 
-Right-click a day to launch the application registered for the `text/calendar` MIME type.
+Click a day on the desktop to open its agenda. Right-click opens the widget's quick-action menu.
 
 ---
 
@@ -740,3 +894,21 @@ background     = true
 | `label_min_width` | int | `0` | Gauge mode only. Minimum width for the value label in logical pixels (`0` = auto) |
 
 The stats a `sysmon` widget can show, what each one displays, and where the values come from are listed under [Available stats](/noctalia/services/system-monitor/#available-stats). Desktop widgets support CPU frequency and every other stat except `ram_used` and the four disk stats.
+
+### Batteries cards
+
+Batteries uses iOS-inspired device rings in Noctalia's theme colors. Small cards show a
+large percentage for one device or a two-by-two grid for multiple devices. Medium cards
+show four rings with percentages; large cards include device names and charging status.
+Charging devices have a bolt, and devices at 20% or below use the theme's warning color
+until they start charging. Empty ring slots leave room for newly connected accessories.
+
+Select **Devices on card** in the Batteries inspector to choose which devices appear.
+The card shows up to four devices, with system batteries first. New devices appear
+automatically, and hidden choices survive reconnects. **Show all devices** clears those
+choices, including devices that are currently disconnected.
+
+Click a Batteries card to open **Battery Details** for all available devices. Runtime,
+time to full and battery health appear only when reported by the device. The panel
+updates as readings change and supports scrolling, Escape and outside-click dismissal.
+It also works inside stacks and pauses rotation until dismissed.

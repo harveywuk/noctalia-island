@@ -67,6 +67,8 @@ public:
   bool focusKeyboard();
   bool onKeyboardEvent(const KeyboardEvent&);
   void hideDndSuppressed();
+  // Reading history consumes previews without closing notifications or their actions.
+  void hideNotificationPreviews();
   // Live activities posted by scripts (`noctalia msg island-activity-*`). They join the
   // downloads activity, so they share its compact ring, expanded card and priority.
   // progress: unset keeps it, an empty value shows a spinner, otherwise 0..1. An empty title or

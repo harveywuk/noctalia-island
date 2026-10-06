@@ -7,6 +7,7 @@
 #include "shell/tooltip/tooltip_manager.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
+#include "ui/node_motion.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "wayland/wayland_seat.h"
@@ -79,6 +80,31 @@ namespace settings {
         }
       }
 
+      void reveal() {
+        Motion::revealNode(*m_panel);
+        m_dim->setOpacity(0);
+        Motion::fadeNode(*m_dim, 1, Motion::contentMs);
+      }
+
+      [[nodiscard]] bool closing() const { return m_closing; }
+
+      void restorePresentation() {
+        m_closing = false;
+        setOpacity(1);
+        m_panel->setOpacity(1);
+        m_panel->setScale(1);
+        m_panel->setHitTestVisible(true);
+      }
+
+      void dismiss(std::function<void()> complete) {
+        m_closing = true;
+        m_panel->setHitTestVisible(false);
+        setExcludeSubtreeFromTabOrder(true);
+        if (animationManager())
+          animationManager()->cancelForOwner(m_panel);
+        Motion::fadeNode(*this, 0, Motion::dismissMs, std::move(complete));
+      }
+
     protected:
       void doLayout(Renderer& renderer) override {
         const float fullWidth = std::max(1.0F, width());
@@ -138,6 +164,7 @@ namespace settings {
       Box* m_panel = nullptr;
       Node* m_contentHost = nullptr;
       Node* m_content = nullptr;
+      bool m_closing = false;
     };
 
     class ModalStackNode final : public Node {
@@ -272,6 +299,7 @@ namespace settings {
     }
     const ModalId id = m_impl->nextId++;
     m_impl->stackRoot->addChild(std::move(entry));
+    raw->reveal();
     m_impl->entries.push_back(Impl::Entry{.id = id, .node = raw, .previousFocus = std::move(previousFocus)});
     m_impl->refreshFocusExclusion();
     if (m_impl->input != nullptr) {
@@ -340,7 +368,12 @@ namespace settings {
   void SettingsModalHost::closeAll() {
     while (!m_impl->entries.empty()) {
       const std::size_t previousDepth = m_impl->entries.size();
-      requestCloseTop();
+      // Teardown must notify each presenter synchronously, including a sheet already fading out.
+      const auto close = m_impl->entries.back().node->closeCallback();
+      if (close)
+        close();
+      else
+        pop();
       if (m_impl->entries.size() == previousDepth) {
         pop();
       }
@@ -348,15 +381,39 @@ namespace settings {
   }
 
   void SettingsModalHost::requestCloseTop() {
-    if (m_impl->entries.empty()) {
+    if (m_impl->entries.empty() || m_impl->entries.back().node->closing()) {
       return;
     }
     const auto close = m_impl->entries.back().node->closeCallback();
-    if (close) {
-      close();
-    } else {
-      pop();
+    if (m_impl->input) {
+      m_impl->input->cancelPointerCapture();
+      m_impl->input->setFocus(nullptr);
     }
+    const auto id = m_impl->entries.back().id;
+    m_impl->entries.back().node->dismiss([this, id, close]() {
+      if (!isTop(id)) {
+        const auto retained = std::ranges::find(m_impl->entries, id, &Impl::Entry::id);
+        if (retained != m_impl->entries.end()) {
+          retained->node->restorePresentation();
+          m_impl->refreshFocusExclusion();
+        }
+        return;
+      }
+      if (close)
+        close();
+      else
+        pop();
+      // A sheet may keep itself open or ask for confirmation before discarding a draft.
+      const auto retained = std::ranges::find(m_impl->entries, id, &Impl::Entry::id);
+      if (retained != m_impl->entries.end()) {
+        retained->node->restorePresentation();
+        m_impl->refreshFocusExclusion();
+        if (isTop(id) && m_impl->input) {
+          const auto focus = retained->node->initialFocusCallback();
+          m_impl->input->setFocus(focus ? focus() : nullptr);
+        }
+      }
+    });
   }
 
   bool SettingsModalHost::isOpen() const noexcept { return !m_impl->entries.empty(); }
@@ -395,6 +452,8 @@ namespace settings {
     if (m_impl->entries.empty() || m_impl->input == nullptr) {
       return false;
     }
+    if (m_impl->entries.back().node->closing())
+      return true;
     if (event.pressed && !event.preedit && KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
       requestCloseTop();
       return true;

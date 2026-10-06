@@ -285,7 +285,7 @@ Notes:
 - `screen_time_enabled`: when `true`, Noctalia tracks per-app usage time for the Control Center screen-time view and its shortcut. Disabled by default; no usage is recorded while off.
 - `shared_gl_context`: when `true` (default), all rendering surfaces share a single EGL context group so wallpaper and icon textures are uploaded once in VRAM and reused across monitors. Set to `false` if you see corrupted textures (e.g. vertical stripe artifacts) on older GPUs with buggy cross-context texture sharing. Each surface then creates its own standalone context, which uses more VRAM on multi-monitor setups. Restart required.
 - `disable_mipmaps`: when `true`, Noctalia skips mipmap generation for textures. Startup-only - try it if downscaled application icons or wallpapers look blurry or show GPU mipmap artifacts.
-- `shell.animation.enabled` disables all animated transitions globally. `speed` scales durations globally.
+- `shell.animation.enabled` disables animated transitions globally. `speed` scales durations globally. Control Center, Settings panes and popovers, the widget gallery, stacks, and button feedback share this preference. Turning it off during a transition settles the visual state immediately; keyboard focus and pressed-state colors remain visible.
 - `shell.shadow` defines the shared shadow style for shell surfaces and xdg-popup chrome such as panels, menus, pickers, and select dropdowns. `direction` controls which way the shadow is cast; blur is fixed at 12 px. Components such as panels, bars, and the dock only opt in/out with `shadow = true|false`; popups and dropdowns opt in/out with the global `popup_shadows` toggle above.
 - `shell.panel.transparency_mode` controls the translucent material used by floating panels, popovers, notification toasts, OSDs and the Settings window. `auto` (the default) uses `glass` when the compositor supports `ext-background-effect-v1` blur and `solid` otherwise. `solid` keeps cards opaque and floating panels solid, `soft` makes floating panels lightly translucent and cards subtly translucent, and `glass` makes both visibly translucent while clamping card opacity high enough for readable text. Attached panels keep their own layer surface and use the attached-placement panel styling.
 - `shell.panel.borders` draws an outline on floating panel surfaces. Attached panels stay borderless on the bar edge. Default is `true`; set to `false` for a flatter look. Section cards inside panels are controlled by `[shell].card_borders`.
@@ -789,3 +789,20 @@ invalid when settings change before you apply it; review a fresh preview then.
 
 Startup applications restored from a backup use the next-login behavior described
 above. Startup-only settings take effect after restarting Noctalia.
+
+### Shell symbols
+
+The shell uses a shared symbol vocabulary across Settings, Control Center, the island,
+bar, desktop widgets, launcher and session controls. Rounded Tabler outlines handle
+navigation and actions. Selected panes and controls use filled counterparts where
+available; their layout size stays fixed as their state changes.
+
+Playback uses solid transport symbols with optical centering. Focus uses a crescent,
+Night Light uses a sunset, and unread notifications use a filled bell. Bluetooth and
+UPower devices share device-specific symbols, including keyboards, headphones, speakers,
+phones and game controllers. Audio levels and mute states use the same thresholds across
+the bar, OSD and Control Center.
+
+Symbols inherit the shell palette, accessibility scale and desktop blending. Existing
+glyph names and explicit `U+...` codepoints remain supported. Application icons in the
+dock and launcher continue to come from the configured GTK icon theme.

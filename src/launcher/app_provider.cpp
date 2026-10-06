@@ -99,7 +99,7 @@ namespace {
   // Categories keys. Display labels are resolved from i18n via appCategoryLabel().
   constexpr std::array<AppCategoryDef, 9> kAppCategories = {{
       {"internet", "world", "Network"},
-      {"multimedia", "player-play", "AudioVideo;Audio;Video"},
+      {"multimedia", "media-play", "AudioVideo;Audio;Video"},
       {"development", "code", "Development"},
       {"games", "device-gamepad-2", "Game"},
       {"graphics", "photo", "Graphics"},

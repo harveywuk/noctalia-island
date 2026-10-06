@@ -92,14 +92,34 @@ const char* batteryGlyphName(double percentage, BatteryState state) {
 const char* batteryDeviceGlyphName(UPowerDeviceType type) {
   switch (type) {
   case UPowerDeviceType::Mouse:
-    return "mouse-2";
+    return "bluetooth-device-mouse";
   case UPowerDeviceType::Keyboard:
-    return "keyboard";
+    return "bluetooth-device-keyboard";
   case UPowerDeviceType::Phone:
   case UPowerDeviceType::Pda:
-    return "device-mobile";
+    return "bluetooth-device-phone";
+  case UPowerDeviceType::Headset:
+    return "bluetooth-device-headset";
+  case UPowerDeviceType::Headphones:
+    return "bluetooth-device-headphones";
+  case UPowerDeviceType::Speakers:
+    return "bluetooth-device-speaker";
+  case UPowerDeviceType::GamingInput:
+    return "bluetooth-device-gamepad";
+  case UPowerDeviceType::Wearable:
+    return "bluetooth-device-watch";
+  case UPowerDeviceType::Tablet:
+    return "device-tablet-battery";
+  case UPowerDeviceType::Computer:
+    return "device-computer";
+  case UPowerDeviceType::Ups:
+    return "device-ups";
+  case UPowerDeviceType::Monitor:
+    return "device-desktop";
+  case UPowerDeviceType::Camera:
+    return "camera";
   default:
-    return "bluetooth";
+    return "bluetooth-device-generic";
   }
 }
 

@@ -37,7 +37,8 @@ namespace {
 
 } // namespace
 
-WeatherTab::WeatherTab(WeatherService* weather, ConfigService* config) : m_weather(weather), m_config(config) {
+WeatherTab::WeatherTab(const WeatherService* weather, ConfigService* config, bool compact)
+    : m_weather(weather), m_compact(compact), m_config(config) {
   m_forecastRows.fill(nullptr);
   m_forecastSeparators.fill(nullptr);
   m_forecastIconSlots.fill(nullptr);
@@ -254,6 +255,7 @@ std::unique_ptr<Flex> WeatherTab::create() {
   addDetailRow("temperature", i18n::tr("control-center.weather.details.temp-min"), m_tempMinLabel);
   addDetailRow("temperature-sun", i18n::tr("control-center.weather.details.temp-max"), m_tempMaxLabel);
   addDetailRow("wind", i18n::tr("control-center.weather.details.wind"), m_windLabel);
+  addDetailRow("droplet", i18n::tr("control-center.weather.hourly.tooltip.humidity"), m_humidityLabel);
   addDetailRow("weather-sunrise", i18n::tr("control-center.weather.details.sunrise"), m_sunriseLabel);
   addDetailRow("weather-sunset", i18n::tr("control-center.weather.details.sunset"), m_sunsetLabel);
   addDetailRow("mountain", i18n::tr("control-center.weather.details.elevation"), m_elevationLabel);
@@ -386,6 +388,14 @@ std::unique_ptr<Flex> WeatherTab::create() {
 
   forecastColumn->addChild(std::move(forecastRowsContainer));
   tab->addChild(std::move(forecastColumn));
+  if (m_compact) {
+    tab->setDirection(FlexDirection::Vertical);
+    m_leftColumn->setFlexGrow(0);
+    m_leftColumn->setMinHeight(510 * scale);
+    m_forecastColumn->setFillHeight(false);
+    m_forecastColumn->setFlexGrow(0);
+    m_forecastColumn->setMinHeight(420 * scale);
+  }
   return tab;
 }
 
@@ -433,7 +443,7 @@ void WeatherTab::beginForecastSlideOut(ForecastView nextView) {
   AnimationManager* animations = m_forecastColumn != nullptr ? m_forecastColumn->animationManager() : nullptr;
   if (animations == nullptr || m_forecastRowsContainer == nullptr) {
     m_forecastView = nextView;
-    PanelManager::instance().refresh();
+    refresh();
     return;
   }
 
@@ -442,18 +452,20 @@ void WeatherTab::beginForecastSlideOut(ForecastView nextView) {
   m_forecastSlideDirection = nextView == ForecastView::Hourly ? 1 : -1;
   m_pendingForecastView = nextView;
 
-  PanelManager::instance().requestFrameTick();
+  if (!m_refresh)
+    PanelManager::instance().requestFrameTick();
   m_forecastSlideAnimId = animations->animate(
       0.0F, 1.0F, static_cast<float>(Style::animFast), Easing::EaseOutCubic,
       [this](float progress) {
         applyForecastSlide(progress, false);
-        PanelManager::instance().requestRedraw();
+        if (!m_refresh)
+          PanelManager::instance().requestRedraw();
       },
       [this]() {
         m_forecastSlideAnimId = 0;
         m_forecastView = m_pendingForecastView;
         m_startForecastSlideIn = true;
-        PanelManager::instance().refresh();
+        refresh();
       },
       m_forecastColumn
   );
@@ -466,12 +478,14 @@ void WeatherTab::beginForecastSlideIn() {
   }
 
   applyForecastSlide(0.0F, true);
-  PanelManager::instance().requestFrameTick();
+  if (!m_refresh)
+    PanelManager::instance().requestFrameTick();
   m_forecastSlideAnimId = animations->animate(
       0.0F, 1.0F, static_cast<float>(Style::animFast), Easing::EaseOutCubic,
       [this](float progress) {
         applyForecastSlide(progress, true);
-        PanelManager::instance().requestRedraw();
+        if (!m_refresh)
+          PanelManager::instance().requestRedraw();
       },
       [this]() {
         m_forecastSlideAnimId = 0;
@@ -568,7 +582,7 @@ void WeatherTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeig
         m_forecastViewPicker != nullptr && m_forecastViewPicker->visible() ? m_forecastViewPicker->height() : 0.0F;
     const float separatorsTotal = separatorThickness * static_cast<float>(visibleSeparators);
     const float gapsTotal = m_forecastColumn->gap() * static_cast<float>(visibleForecastDays + visibleSeparators);
-    const float rowHeight = PanelManager::instance().isIslandOpen()
+    const float rowHeight = !m_refresh && PanelManager::instance().isIslandOpen()
         ? Style::controlHeightLg * scale
         : std::max(
               Style::controlHeightLg * scale,
@@ -665,6 +679,13 @@ void WeatherTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeig
 
 void WeatherTab::doUpdate(Renderer& renderer) { sync(renderer); }
 
+void WeatherTab::refresh() {
+  if (m_refresh)
+    m_refresh();
+  else
+    PanelManager::instance().refresh();
+}
+
 void WeatherTab::setForecastVisibleRowCount(std::size_t count) {
   const std::size_t visibleCount = std::min(count, kForecastRowCount);
   for (std::size_t i = 0; i < kForecastRowCount; ++i) {
@@ -696,6 +717,7 @@ void WeatherTab::showLocationPrompt(bool show) {
 }
 
 void WeatherTab::onClose() {
+  cancelForecastSlide();
   m_rootLayout = nullptr;
   m_leftColumn = nullptr;
   m_currentCard = nullptr;
@@ -706,6 +728,7 @@ void WeatherTab::onClose() {
   m_locationPromptGlyph = nullptr;
   m_locationPromptBody = nullptr;
   m_forecastColumn = nullptr;
+  m_forecastRowsContainer = nullptr;
   m_forecastViewPicker = nullptr;
   m_statusLabel = nullptr;
   m_currentGlyph = nullptr;
@@ -714,6 +737,7 @@ void WeatherTab::onClose() {
   m_currentDescLabel = nullptr;
   m_updatedLabel = nullptr;
   m_windLabel = nullptr;
+  m_humidityLabel = nullptr;
   m_sunriseLabel = nullptr;
   m_sunsetLabel = nullptr;
   m_tempMaxLabel = nullptr;
@@ -746,6 +770,13 @@ void WeatherTab::sync(Renderer& renderer) {
   }
 
   showLocationPrompt(false);
+  if (m_humidityLabel != nullptr) {
+    m_humidityLabel->setText(
+        m_weather != nullptr && m_weather->enabled() && m_weather->hasData()
+            ? std::format("{}%", m_weather->snapshot().current.relativeHumidityPercent)
+            : "--"
+    );
+  }
 
   const bool showLocation = m_config == nullptr || m_config->config().shell.showLocation;
   if (m_updatedLabel != nullptr) {

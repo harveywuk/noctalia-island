@@ -71,9 +71,8 @@ namespace {
           .hover = makeState(
               colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
           ),
-          .pressed = makeState(
-              colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)
-          ),
+          .pressed =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
           .disabled = makeState(
               colorSpecFromRole(ColorRole::Primary, kDisabledAlpha), clearColorSpec(),
               colorSpecFromRole(ColorRole::OnPrimary)
@@ -109,12 +108,10 @@ namespace {
     case ButtonVariant::Destructive:
       return Button::ButtonPalette{
           .borderWidth = 0.0F,
-          .normal = makeState(
-              colorSpecFromRole(ColorRole::Error), clearColorSpec(), colorSpecFromRole(ColorRole::OnError)
-          ),
-          .hover = makeState(
-              colorSpecFromRole(ColorRole::Error), clearColorSpec(), colorSpecFromRole(ColorRole::OnError)
-          ),
+          .normal =
+              makeState(colorSpecFromRole(ColorRole::Error), clearColorSpec(), colorSpecFromRole(ColorRole::OnError)),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Error), clearColorSpec(), colorSpecFromRole(ColorRole::OnError)),
           .pressed = makeState(
               colorSpecFromRole(ColorRole::Error, Style::filledButtonPressedAlpha), clearColorSpec(),
               colorSpecFromRole(ColorRole::OnError)
@@ -228,6 +225,7 @@ Button::Button() {
       m_onPress(data.localX, data.localY, data.pressed);
     }
   });
+  area->setOnCancel([this]() { applyVisualState(); });
   area->setOnMotion([this](const InputArea::PointerData& data) {
     if (m_onMotion) {
       m_onMotion();
@@ -258,6 +256,7 @@ Button::Button() {
     }
   });
   area->setOnFocusLoss([this]() {
+    m_keyboardPressed = false;
     applyVisualState();
     if (m_onFocusChange) {
       m_onFocusChange(false);
@@ -268,7 +267,15 @@ Button::Button() {
       return;
     }
     if (KeybindMatcher::matches(KeybindAction::Validate, key.sym, key.modifiers)) {
+      m_keyboardPressed = true;
+      applyVisualState();
       m_onClick();
+    }
+  });
+  area->setOnKeyUp([this](const InputArea::KeyData&) {
+    if (m_keyboardPressed) {
+      m_keyboardPressed = false;
+      applyVisualState();
     }
   });
   area->setEnabled(false);
@@ -312,6 +319,7 @@ void Button::setText(std::string_view text) {
 void Button::setGlyph(std::string_view name) {
   ensureGlyph();
   m_glyph->setGlyph(name);
+  m_glyph->setEmphasized(m_selected || m_variant == ButtonVariant::TabActive);
 }
 
 void Button::setFontSize(float size) {
@@ -513,6 +521,8 @@ void Button::setEnabled(bool enabled) {
     return;
   }
   m_enabled = enabled;
+  if (!enabled)
+    m_keyboardPressed = false;
   refreshInputAreaEnabled();
   applyVisualState();
 }
@@ -522,6 +532,8 @@ void Button::setSelected(bool selected) {
     return;
   }
   m_selected = selected;
+  if (m_glyph)
+    m_glyph->setEmphasized(selected || m_variant == ButtonVariant::TabActive);
   applyVisualState();
   markPaintDirty();
 }
@@ -533,6 +545,8 @@ void Button::setVariant(ButtonVariant variant) {
     return;
   }
   m_variant = variant;
+  if (m_glyph)
+    m_glyph->setEmphasized(m_selected || variant == ButtonVariant::TabActive);
   m_customPalette.reset();
   applyVariant();
 }
@@ -638,6 +652,9 @@ void Button::ensureGlyph() {
 }
 
 void Button::applyColors(const Color& bg, const Color& border, const Color& label) {
+  m_displayBg = bg;
+  m_displayBorder = border;
+  m_displayLabel = label;
   setFill(bg);
   setBorder(border, effectiveBorderWidth());
   if (m_label != nullptr) {
@@ -682,7 +699,7 @@ void Button::resolveVisualStateColors(Color& targetBg, Color& targetBorder, Colo
   if (isInputFocused && !keyboardNavFocus) {
     isHovered = true;
   }
-  bool isPressed = m_enabled && (m_pressedVisual || pressed());
+  bool isPressed = m_enabled && (m_pressedVisual || m_keyboardPressed || pressed());
   bool isSelected = m_enabled && m_selected;
 
   if (!m_enabled) {
@@ -744,9 +761,9 @@ void Button::applyVisualState() {
   }
 
   // Snapshot current display colors as the animation start point
-  m_fromBg = m_targetBg;
-  m_fromBorder = m_targetBorder;
-  m_fromLabel = m_targetLabel;
+  m_fromBg = m_displayBg;
+  m_fromBorder = m_displayBorder;
+  m_fromLabel = m_displayLabel;
   m_targetBg = targetBg;
   m_targetBorder = targetBorder;
   m_targetLabel = targetLabel;
@@ -756,14 +773,16 @@ void Button::applyVisualState() {
   }
 
   m_animId = animationManager()->animate(
-      0.0F, 1.0F, Motion::feedbackMs, Motion::reveal,
+      0.0F, 1.0F,
+      m_enabled && (m_pressedVisual || m_keyboardPressed || pressed()) ? Motion::pressMs : Motion::feedbackMs,
+      Motion::reveal,
       [this](float t) {
         applyColors(
             lerpColor(m_fromBg, m_targetBg, t), lerpColor(m_fromBorder, m_targetBorder, t),
             lerpColor(m_fromLabel, m_targetLabel, t)
         );
       },
-      [this]() { m_animId = 0; }
+      [this]() { m_animId = 0; }, this
   );
   markPaintDirty();
 }

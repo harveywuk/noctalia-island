@@ -80,6 +80,7 @@ namespace calendar_view {
     std::string fontFamily;
     EventListState* state = nullptr;
     std::function<void()> requestRedraw;
+    bool showDetails = false;
   };
 
   [[nodiscard]] State stateForOffset(int monthOffset);

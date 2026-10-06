@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 
 class EffectNode;
 class Flex;
@@ -20,11 +21,13 @@ struct WeatherSnapshot;
 
 class WeatherTab : public Tab {
 public:
-  WeatherTab(WeatherService* weather, ConfigService* config);
+  WeatherTab(const WeatherService* weather, ConfigService* config, bool compact = false);
 
   std::unique_ptr<Flex> create() override;
   void onClose() override;
   void onFrameTick(float deltaMs) override;
+  [[nodiscard]] bool hasActiveEffect() const noexcept { return m_activeEffect != EffectType::None; }
+  void setRefreshCallback(std::function<void()> callback) { m_refresh = std::move(callback); }
 
 private:
   enum class ForecastView : std::uint8_t {
@@ -35,6 +38,7 @@ private:
   void doLayout(Renderer& renderer, float contentWidth, float bodyHeight) override;
   void doUpdate(Renderer& renderer) override;
   void sync(Renderer& renderer);
+  void refresh();
   void beginForecastSlideOut(ForecastView nextView);
   void beginForecastSlideIn();
   void applyForecastSlide(float progress, bool slidingIn);
@@ -51,7 +55,9 @@ private:
 
   static constexpr std::size_t kForecastRowCount = 7;
 
-  WeatherService* m_weather = nullptr;
+  const WeatherService* m_weather = nullptr;
+  bool m_compact = false;
+  std::function<void()> m_refresh;
   ConfigService* m_config = nullptr;
   Flex* m_rootLayout = nullptr;
   Flex* m_leftColumn = nullptr;
@@ -72,6 +78,7 @@ private:
   Label* m_currentDescLabel = nullptr;
   Label* m_updatedLabel = nullptr;
   Label* m_windLabel = nullptr;
+  Label* m_humidityLabel = nullptr;
   Label* m_sunriseLabel = nullptr;
   Label* m_sunsetLabel = nullptr;
   Label* m_tempMaxLabel = nullptr;

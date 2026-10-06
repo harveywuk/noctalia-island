@@ -1,5 +1,7 @@
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
+#include "render/scene/glyph_node.h"
+#include "render/text/glyph_registry.h"
 #include "ui/controls/button.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/label.h"
@@ -84,6 +86,30 @@ int main() {
   button.setSize(32.0F, 32.0F);
   button.layout(renderer);
 
+  const auto codepoint = [](const Button& control) {
+    return static_cast<const GlyphNode*>(control.glyph()->children().front().get())->codepoint();
+  };
+  button.setVariant(ButtonVariant::TabActive);
+  button.layout(renderer);
+  if (codepoint(button) != GlyphRegistry::lookup("home-filled")) {
+    std::println(stderr, "active navigation did not use its filled symbol");
+    return 1;
+  }
+  button.setVariant(ButtonVariant::Tab);
+  button.setSelected(true);
+  button.setGlyph("bell");
+  button.layout(renderer);
+  if (codepoint(button) != GlyphRegistry::lookup("bell-filled")) {
+    std::println(stderr, "changing a selected button's symbol lost emphasis");
+    return 1;
+  }
+  button.setSelected(false);
+  button.setGlyph("home");
+  button.layout(renderer);
+  if (codepoint(button) != GlyphRegistry::lookup("home")) {
+    std::println(stderr, "deselecting a button did not restore its outline");
+    return 1;
+  }
   const Glyph* glyph = button.glyph();
   if (glyph == nullptr) {
     std::println(stderr, "button_layout_test: glyph was not created");
@@ -214,7 +240,9 @@ int main() {
   const float unsetSize = glyphSizeAfterLayout(unset);
   const float largeSize = glyphSizeAfterLayout(large);
   const float labelledSize = glyphSizeAfterLayout(labelled);
-  if (!near(closeSize, 19.0F) || !near(unsetSize, 19.0F) || !near(largeSize, 24.0F)
+  if (!near(closeSize, 19.0F)
+      || !near(unsetSize, 19.0F)
+      || !near(largeSize, 24.0F)
       || !near(labelledSize, Style::fontSizeCaption)) {
     std::println(
         stderr, "button_layout_test: icon floor gave close {} unset {} large {} labelled {}", closeSize, unsetSize,

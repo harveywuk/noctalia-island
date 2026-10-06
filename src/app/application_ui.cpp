@@ -487,6 +487,9 @@ void Application::initInputDispatch() {
     if (ContextMenuPopup::dispatchKeyboardEvent(event)) {
       return;
     }
+    if (m_desktopWidgetsController.onDetailsKeyboardEvent(event)) {
+      return;
+    }
     if (m_trayMenu.onKeyboardEvent(event)) {
       return;
     }
@@ -630,6 +633,7 @@ void Application::initPanelManagerAndPanels() {
     auto notificationCenter = std::make_unique<NotificationCenterPanel>(&m_notificationManager, &m_compositorPlatform);
     notificationCenter->onOpened = [this]() {
       m_notificationToast.hideAllBanners();
+      m_island.hideNotificationPreviews();
       // Opening the history is reading it, as the Control Center tab it replaced did; this clears
       // the Island's unread bell.
       m_notificationManager.markNotificationHistorySeen();
@@ -819,6 +823,17 @@ void Application::initNotificationAndOsd() {
   m_osdOverlay.presentationHandler = [this](const OsdContent& content) { return m_island.showOsd(content); };
   m_osdOverlay.presentationVisible = [this]() { return m_island.osdVisible(); };
   m_notificationToast.presentationHandler = [this](const Notification& n, NotificationEvent event) {
+    // History already presents arriving cards. Do not replay them as banners on return.
+    // Inline replies still use the toast's text editor.
+    if (event != NotificationEvent::Closed
+        && m_panelManager.isOpenPanel("notification-center")
+        && std::ranges::any_of(
+            m_notificationManager.history(), [&n](const auto& entry) { return entry.notification.id == n.id; }
+        )
+        && std::ranges::find(n.actions, "inline-reply") == n.actions.end()) {
+      m_notificationManager.markNotificationHistorySeen();
+      return true;
+    }
     return m_island.onNotification(n, event);
   };
   m_notificationToast.initialize(m_wayland, &m_configService, &m_notificationManager, &m_renderContext, &m_httpClient);

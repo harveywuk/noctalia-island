@@ -21,17 +21,19 @@ public:
   IslandWidgetHost(
       WidgetFactory&, const Config&, wl_output*, float scale, AnimationManager*,
       const noctalia::bar::WidgetActionDispatcher*, std::function<void()> update, std::function<void()> redraw,
-      std::function<void()> frame, const IslandConfig&, const std::string& barName
+      std::function<void()> frame, const IslandConfig&, const std::string& barName, bool trayOnlyMode = false
   );
   ~IslandWidgetHost() override;
   void updateWidgets(Renderer&, float availableWidth);
   void tickWidgets(float deltaMs);
   bool onPointerEvent(const PointerEvent&);
   // True when the system tray is the only widget, so the row needs no card of its own.
-  [[nodiscard]] bool trayOnly() const noexcept { return m_widgets.size() == 1 && m_onlyTray; }
+  [[nodiscard]] bool trayOnly() const noexcept { return m_trayOnlyMode || (m_widgets.size() == 1 && m_onlyTray); }
+  [[nodiscard]] bool trayOnlyMode() const noexcept { return m_trayOnlyMode; }
 
 private:
   float m_scale;
+  bool m_trayOnlyMode;
   bool m_dirty = true;
   std::function<void()> m_frame;
   std::vector<std::unique_ptr<Widget>> m_widgets;

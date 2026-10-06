@@ -6,6 +6,7 @@
 #include "render/scene/node.h"
 #include "scripting/plugin_registry.h"
 #include "shell/desktop/desktop_widget_layout.h"
+#include "shell/desktop/desktop_widget_setup.h"
 #include "shell/lockscreen/lock_screen.h"
 #include "shell/lockscreen/lock_surface.h"
 #include "shell/lockscreen/lockscreen_login_box.h"
@@ -141,9 +142,10 @@ void LockscreenWidgetsHost::syncSurfaces(LockScreen& lockScreen) {
     return;
   }
 
-  std::erase_if(m_instances, [this](std::unique_ptr<WidgetInstance>& instance) {
+  const auto membership = desktop_stacks::resolve(m_snapshot.widgets);
+  std::erase_if(m_instances, [this, &membership](std::unique_ptr<WidgetInstance>& instance) {
     const DesktopWidgetState* state = findStateById(m_snapshot, instance->state.id);
-    if (state == nullptr || !state->enabled) {
+    if (state == nullptr || !state->enabled || desktop_stacks::contains(membership, state->id)) {
       detachFromSurface(*instance);
       return true;
     }
@@ -151,7 +153,9 @@ void LockscreenWidgetsHost::syncSurfaces(LockScreen& lockScreen) {
   });
 
   for (const auto& state : m_snapshot.widgets) {
-    if (!state.enabled || lockscreen_login_box::isLoginBoxWidget(state)) {
+    if (!state.enabled
+        || lockscreen_login_box::isLoginBoxWidget(state)
+        || desktop_stacks::contains(membership, state.id)) {
       continue;
     }
 
@@ -188,7 +192,8 @@ void LockscreenWidgetsHost::syncSurfaces(LockScreen& lockScreen) {
 
     const bool widgetDefinitionChanged = existing->state.type != state.type
         || existing->state.settings != state.settings
-        || existing->surface != surface;
+        || existing->surface != surface
+        || (state.type == "stack" && existing->stackCards != desktop_stacks::cards(m_snapshot.widgets, state.id));
 
     if (widgetDefinitionChanged) {
       detachFromSurface(*existing);
@@ -219,7 +224,9 @@ void LockscreenWidgetsHost::createInstance(
   }
 
   const float baseUiScale = m_config != nullptr ? m_config->config().accessibility.uiScale : 1.0F;
-  auto widget = m_factory->create(state.type, state.settings, desktop_widgets::widgetContentScale(baseUiScale));
+  auto widget = m_factory->create(
+      state.type, state.settings, desktop_widgets::widgetContentScale(baseUiScale), &m_snapshot.widgets, state.id
+  );
   if (widget == nullptr) {
     return;
   }
@@ -242,6 +249,8 @@ void LockscreenWidgetsHost::createInstance(
 
   auto instance = std::make_unique<WidgetInstance>();
   instance->state = clampedState;
+  if (state.type == "stack")
+    instance->stackCards = desktop_stacks::cards(m_snapshot.widgets, state.id);
   instance->surface = &surface;
   instance->widget = std::move(widget);
   instance->intrinsicWidth = intrinsicWidth;

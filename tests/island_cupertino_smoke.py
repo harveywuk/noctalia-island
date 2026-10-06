@@ -88,6 +88,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
     def events(): return (out/'player-actions.log').read_text() if (out/'player-actions.log').exists() else ''
     env['ISLAND_TEST_ART'] = (repo/'assets/noctalia-wallpaper.png').as_uri()
     env['ISLAND_TEST_EVENTS'] = str(out/'player-actions.log')
+    env['ISLAND_TEST_TITLE'] = 'A little closer to home'
     try:
         ctl('dismissnotify'); dispatch('hl.dsp.focus({monitor="TEST-1"})'); leave()
         msg('color-scheme-set', 'community', 'macOS')
@@ -116,7 +117,14 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             capture.terminate(); capture.wait(timeout=5)
 
             leave(); player = start([sys.executable, str(repo/'tests/fixtures/island_player.py')], mode+'-player.log')
-            time.sleep(.8); shot(mode+'-media-compact'); hover(); shot(mode+'-media-expanded')
+            time.sleep(.8); hover()
+            # Capture ending briefly owns the Island with a "Microphone Stopped" OSD.
+            # Wait for the actual media controls before exercising their hit targets.
+            wait(lambda: any((word.get('text') or '').lower() == 'home'
+                             for word in text(mode+'-media-ready')), 'Media controls did not appear')
+            leave(); shot(mode+'-media-compact'); hover()
+            wait(lambda: any((word.get('text') or '').lower() == 'home'
+                             for word in text(mode+'-media-expanded')), 'Media did not expand again after leaving')
             before = events().count('PlayPause')
             click(640, 169)
             assert events().count('PlayPause') == before+1, 'Styled playback button did not activate'

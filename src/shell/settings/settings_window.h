@@ -382,6 +382,7 @@ private:
   std::string m_selectedBarName;
   std::string m_selectedMonitorOverride;
   std::string m_selectedSection;
+  std::string m_presentedSection;
   std::string m_selectedGroup;
   std::string m_reopenAfterWidgetEditorSection;
   std::string m_statusMessage;

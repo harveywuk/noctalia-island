@@ -70,6 +70,7 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         start(['wireplumber'],'wireplumber.log')
         start(['pipewire-pulse'],'pulse.log');wait(lambda:(runtime/'pulse/native').exists(),'Pulse start')
         run(['pactl','load-module','module-null-sink','sink_name=hyprland-test'])
+        wait(lambda:any(sink['name']=='hyprland-test' for sink in json.loads(run(['pactl','--format=json','list','sinks']))), 'Private audio sink did not appear')
         run(['pactl','set-default-sink','hyprland-test'])
         if '--island-routing-only' in sys.argv or '--island-cupertino-only' in sys.argv:
             bluetooth=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_bluetooth.py')],env=env,
@@ -115,6 +116,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             prepare(base,cfg,env)
         if '--island-privacy-only' in sys.argv:
             from island_privacy_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-notifications-only' in sys.argv:
+            from island_notifications_smoke import prepare
             prepare(base,cfg,env)
         if '--island-camera-only' in sys.argv:
             from island_camera_smoke import prepare
@@ -181,6 +185,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--island-privacy-only' in sys.argv:
             from island_privacy_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-notifications-only' in sys.argv:
+            from island_notifications_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--text-fit-only' in sys.argv:
