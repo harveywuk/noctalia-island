@@ -31,6 +31,18 @@ and systemd environment imports. It does not switch the logged-in desktop or
 use the session's audio server. All child processes are stopped on completion.
 Screenshots, recordings, and logs remain under `build-rishot/hyprland-smoke-*`.
 
+For Island animation and idle-work regressions, run
+`python3 tests/hyprland_smoke.py --island-performance-only`. This also requires
+Python Pillow and `pw-play`. It measures complete ten-second intervals with real
+audio on the private sink: playing media with a desktop widget, auto-hidden Islands,
+Control Centre, paused media, and reduced motion. It checks artwork after reload,
+reveal and panel return, plus keyboard transport controls. Hidden and stationary
+states must settle below render and timer-wake limits; CPU usage is recorded for
+comparison, without a machine-dependent pass threshold. Results are saved in
+`island-performance.json` beside the captures. Use `NOCTALIA_TEST_BINARY` to select
+a build, or add `NOCTALIA_TEST_MEASURE_ONLY=1` to record an older build's baseline
+without enforcing the new idle-work and reload-artwork checks.
+
 It checks:
 
 - Island surfaces on two outputs, one at 150% scale and 180-degree rotation.

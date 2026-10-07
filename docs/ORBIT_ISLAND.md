@@ -23,6 +23,9 @@ The Island provides:
   A five-band accent-coloured visualiser replaces the right-hand music glyph.
   It follows the default desktop audio output through the existing PipeWire spectrum
   service and settles when the output is silent.
+  Once an auto-hidden Island is fully concealed, waveform sampling and the artwork
+  animation stop. They resume on reveal. An open panel also suspends the Island's
+  background animation until it returns, and artwork survives configuration reloads.
 - A small accent-coloured unread-notification bell on the clock and media island. The badge
   opens the existing notification history, which marks entries as seen. Hovering
   over the compact badge keeps it in place; it adds no width to the island.
@@ -95,6 +98,14 @@ and OSDs retain priority, and the media panel remains accessible from the downlo
 card. Hidden progress and disconnected apps disappear without assuming that a
 cancelled download succeeded. Count/badge messages alone never create a download.
 
+Confirmed completion shows a green checkmark, a green halo, and **Download finished**
+for five seconds before returning to the current activity. This requires a desktop
+app to report 100% after active progress, or Steam to report an explicit finished
+update. Hiding, cancelling, or disconnecting alone does not signal success. Nearby
+finishes share one notice and restart its five-second lifetime. Reduced motion
+keeps the halo steady. Notifications, OSDs, keyboard controls, and open panels
+retain priority.
+
 For Zen, run `python3 scripts/install-zen-download-progress.py`, then install
 [LauncherEntry Integration](https://addons.mozilla.org/firefox/addon/launcherentry-integration/)
 in Zen. The signed add-on needs downloads and native-messaging permissions. This
@@ -147,6 +158,15 @@ restarts it. An activity nobody updates for an hour is dropped, so a script that
 dies doesn't leave it behind. Script activities share the downloads slot in the
 activity priority setting, and the card's heading reads "In Progress" when one is
 present. Without an icon, a script activity shows a terminal symbol.
+
+To show the same green completion halo with **Transfer finished**, report 100%
+before ending the activity. Ending below 100%, ending a spinner, or expiring an
+abandoned activity simply removes it.
+
+```sh
+noctalia msg island-activity-update backup 100
+noctalia msg island-activity-end backup
+```
 
 ## Quick pills
 

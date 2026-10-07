@@ -1,12 +1,14 @@
 #pragma once
 
+#include "core/timer_manager.h"
+#include "dbus/downloads/launcher_progress.h"
+#include "system/steam_activity.h"
+
 #include <functional>
 #include <map>
+#include <sdbus-c++/sdbus-c++.h>
 #include <string>
 #include <vector>
-#include <sdbus-c++/sdbus-c++.h>
-#include "core/timer_manager.h"
-#include "system/steam_activity.h"
 
 class SessionBus;
 
@@ -27,9 +29,13 @@ public:
   ~DownloadProgressService();
   [[nodiscard]] std::vector<DownloadProgress> active() const;
   std::function<void()> changed;
+  std::function<void()> completed;
 
 private:
-  struct Entry { std::string desktopId; double progress = 0; bool visible = false; };
+  struct Entry {
+    std::string desktopId;
+    LauncherProgress state;
+  };
   SessionBus& m_bus;
   std::map<std::pair<std::string, std::string>, Entry> m_entries;
   sdbus::Slot m_updateSlot;

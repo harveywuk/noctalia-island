@@ -76,18 +76,28 @@ namespace {
       // Quiet passages rest as dots, as Apple's Now Playing waveform does, not a dashed line.
       setRestAsDots(true);
       setValues(std::vector<float>(5, 0.0F));
-      if (m_spectrum) {
-        m_listener = m_spectrum->addChangeListener(5, [this] { m_surface.requestFrameTick(); });
-      }
-      m_surface.requestFrameTick();
+      setActive(true);
     }
 
-    ~IslandAudioVisualizer() override {
-      if (m_spectrum && m_listener)
+    ~IslandAudioVisualizer() override { setActive(false); }
+
+    void setActive(bool active) {
+      if (m_active == active)
+        return;
+      m_active = active;
+      if (active) {
+        if (m_spectrum)
+          m_listener = m_spectrum->addChangeListener(5, [this] { m_surface.requestFrameTick(); });
+        m_surface.requestFrameTick();
+      } else if (m_spectrum && m_listener) {
         m_spectrum->removeChangeListener(m_listener);
+        m_listener = 0;
+      }
     }
 
     void onFrameTick(float deltaMs) {
+      if (!m_active)
+        return;
       if (m_spectrum && m_listener)
         setValues(m_spectrum->values(m_listener));
       const bool changing = !converged();
@@ -102,6 +112,7 @@ namespace {
     PipeWireSpectrum* m_spectrum;
     LayerSurface& m_surface;
     PipeWireSpectrum::ListenerId m_listener = 0;
+    bool m_active = false;
   };
 } // namespace
 
@@ -513,6 +524,7 @@ void Island::initialize(
     try {
       m_downloads = std::make_unique<DownloadProgressService>(*bus);
       m_downloads->changed = [this] { refresh(); };
+      m_downloads->completed = [this] { showCompletion(); };
     } catch (const std::exception& error) {
       Logger("island").warn("download progress unavailable: {}", error.what());
     }
@@ -659,11 +671,27 @@ bool Island::updateScriptActivity(
 }
 
 bool Island::endScriptActivity(const std::string& id) {
-  if (std::erase_if(m_scriptActivities, [&id](const auto& activity) { return activity.id == id; }) == 0)
+  const auto found = std::ranges::find(m_scriptActivities, id, &ScriptActivity::id);
+  if (found == m_scriptActivities.end())
     return false;
+  const bool finished = found->progress && *found->progress >= 1.0;
+  m_scriptActivities.erase(found);
+  if (finished)
+    showCompletion(true);
   expireScriptActivities();
   refresh();
   return true;
+}
+
+void Island::showCompletion(bool transfer) {
+  if (!enabled())
+    return;
+  m_completion = transfer;
+  m_completionTimeout.start(5s, [this] {
+    m_completion.reset();
+    refresh();
+  });
+  refresh();
 }
 
 void Island::timerCommand(const island::Countdown& timer, const std::string& command) {
@@ -694,6 +722,8 @@ void Island::onConfigReload() {
     onOutputChange();
     m_tick.startRepeating(1s, [this] { refresh(); });
   } else {
+    m_completion.reset();
+    m_completionTimeout.stop();
     updateNotificationPreview();
   }
 }
@@ -977,6 +1007,7 @@ void Island::updateVisibility(Instance& inst) {
       || (inst.config.revealOnTrackChange && trackPreview(inst.config, inst.output))
       || m_osd
       || m_notification
+      || m_completion.has_value()
       || ScreenRecorder::instance().active();
   if (inst.wantsVisible == visible)
     return;
@@ -1169,6 +1200,12 @@ void Island::hideNotificationPreviews() {
 void Island::geometry(Instance& inst) {
   if (!inst.root)
     return;
+  // A fully hidden capsule needs neither waveform samples nor artwork frames.
+  // Keep both running during the reveal/dismiss motion, and resume on reveal
+  // even when the retained media card does not need rebuilding.
+  if (inst.visualizer)
+    inst.visualizer->setActive(!inst.panelHosted && inst.visibility > 0.001F);
+  syncFlowTimer();
   const float s = inst.scale;
   // The capsule stays centred, where panels open from and collapse back to; the split bubble
   // hangs off its right end.
@@ -1296,7 +1333,7 @@ void Island::prepare(Instance& inst) {
             m_notification.has_value(), m_osd.has_value() && !inst.keyboardMode, expansionRequested,
             player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
             inst.heldMedia, !downloads.empty(), timerActive, cfg.hoverShowMedia, cfg.hoverShowDownloads, selected,
-            inst.compactActivity.selected()
+            inst.compactActivity.selected(), m_completion.has_value() && !inst.keyboardMode
         );
   const bool compactView = view == island::View::Rest
       || view == island::View::Activity
@@ -1434,6 +1471,9 @@ void Island::prepare(Instance& inst) {
         "{}|{}|{}|{}|{}", static_cast<int>(m_osd->kind), m_osd->value, m_osd->icon, m_osd->progress, m_osd->showProgress
     );
     break;
+  case island::View::Completion:
+    signature += m_completion.value_or(false) ? "transfer" : "download";
+    break;
   case island::View::Media:
     signature += std::format(
         "{}|{}|{}|{}|{}", m_trackSignature, playing, artPath, player ? player->title : "",
@@ -1555,8 +1595,13 @@ void Island::prepare(Instance& inst) {
   const bool criticalShown =
       view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical;
   const auto updateCaptureGlow = [&] {
-    if (inst.captureGlow)
-      inst.captureGlow->update(capturing || recording || criticalShown, islandRole(ColorRole::Error));
+    if (inst.captureGlow) {
+      const bool completed = view == island::View::Completion;
+      inst.captureGlow->update(
+          capturing || recording || criticalShown || completed,
+          completed ? islandFixed(kAppleGreen, 1.0F) : islandRole(ColorRole::Error)
+      );
+    }
   };
   updateCaptureGlow();
   // One bubble: its activity, the download jobs it stands for, and whether it is the lane split.
@@ -1738,26 +1783,6 @@ void Island::prepare(Instance& inst) {
   }
   m_renderContext->makeCurrent(inst.surface->renderTarget());
   inst.signature = signature;
-  // Playing media floods the capsule with its artwork, as Apple Music's player does; OSDs and
-  // notifications shown meanwhile stay on it rather than dropping to the black capsule.
-  if (gCupertino
-      && cfg.mediaGradient
-      && playing
-      && !artPath.empty()
-      && (view == island::View::Media
-          || view == island::View::Activity
-          || view == island::View::Osd
-          || view == island::View::Notification)) {
-    if (artPath != m_flowArt) {
-      m_flowArt = artPath;
-      auto art = loadImageFile(artPath, 32, true);
-      if (!art || !m_flow.setArtwork(art->rgba, art->width, art->height))
-        m_flow.clear();
-    }
-    showFlow(inst, m_flow.hasArtwork());
-  } else {
-    showFlow(inst, false);
-  }
   const float s = inst.scale;
   auto [w, h] = island::size(
       view, cfg.height, cfg.clockSize, cfg.clockSeconds, cfg.calendarLabels != IslandCalendarLabels::Initials,
@@ -1834,6 +1859,27 @@ void Island::prepare(Instance& inst) {
     inst.width = w;
     inst.height = h;
     updateSplit();
+  }
+  // Create the artwork layer before updating it, including after a config reload.
+  // Playing media floods the capsule with its artwork; OSDs and notifications
+  // shown meanwhile stay on it rather than dropping to the black capsule.
+  if (gCupertino
+      && cfg.mediaGradient
+      && playing
+      && !artPath.empty()
+      && (view == island::View::Media
+          || view == island::View::Activity
+          || view == island::View::Osd
+          || view == island::View::Notification)) {
+    if (artPath != m_flowArt) {
+      m_flowArt = artPath;
+      auto art = loadImageFile(artPath, 32, true);
+      if (!art || !m_flow.setArtwork(art->rgba, art->width, art->height))
+        m_flow.clear();
+    }
+    showFlow(inst, m_flow.hasArtwork());
+  } else {
+    showFlow(inst, false);
   }
   // Critical notifications pulse with the capture glow (above) rather than taking an outline.
   inst.background->clearBorder();
@@ -2369,6 +2415,16 @@ void Island::prepare(Instance& inst) {
         m_mpris->setPosition(bus, static_cast<std::int64_t>(static_cast<double>(length) * seekFraction));
       };
     }
+  } else if (view == island::View::Completion) {
+    constexpr float badgeSize = 32;
+    constexpr float textX = 64;
+    const auto green = islandFixed(kAppleGreen, 1.0F);
+    glyph("circle-check-filled", 20, (h - badgeSize) / 2, badgeSize, green);
+    auto* title = label(
+        i18n::tr(m_completion.value_or(false) ? "island.downloads.transfer-finished" : "island.downloads.finished"),
+        textX, 0, w - textX - 20, 15, foreground, false, 1, FontWeight::SemiBold
+    );
+    title->setPosition(title->x(), (h * s - title->height()) / 2);
   } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::Dnd || m_osd->kind == OsdKind::Charging)) {
     // Status pills, as the iPhone announces a Focus or a charger: a tinted symbol and title lead,
     // and the state (On, Off or the charge level) sits at the far end in the same tint.
@@ -3405,8 +3461,7 @@ void Island::showFlow(Instance& inst, bool show) {
   inst.flowShown = show;
   if (!show) {
     inst.flowImage->setVisible(false);
-    if (std::ranges::none_of(m_instances, [](const auto& other) { return other->flowShown; }))
-      m_flowTimer.stop();
+    syncFlowTimer();
     return;
   }
   // The caller has made this surface's context current.
@@ -3429,15 +3484,31 @@ void Island::showFlow(Instance& inst, bool show) {
   inst.flowImage->setExternalTexture(inst.surface->renderTarget().renderer(), inst.flowTexture);
   inst.flowImage->setVisible(true);
   inst.flowImage->markPaintDirty();
-  if (!m_flowTimer.active() && MotionService::instance().enabled() && !visuals::ArtworkFlow::frozen())
+  syncFlowTimer();
+}
+
+bool Island::animatesFlow(const Instance& inst) const {
+  return inst.flowShown && !inst.panelHosted && inst.visibility > 0.001F && inst.flowTexture.id != 0;
+}
+
+void Island::syncFlowTimer() {
+  const bool animate = MotionService::instance().enabled()
+      && !visuals::ArtworkFlow::frozen()
+      && std::ranges::any_of(m_instances, [this](const auto& inst) { return animatesFlow(*inst); });
+  if (!animate)
+    m_flowTimer.stop();
+  else if (!m_flowTimer.active())
     m_flowTimer.startRepeating(std::chrono::milliseconds(33), [this] { tickFlow(); });
 }
 
 void Island::tickFlow() {
+  syncFlowTimer();
+  if (!m_flowTimer.active() || !m_renderContext)
+    return;
   bool any = false;
   for (auto& ptr : m_instances) {
     auto& inst = *ptr;
-    if (!inst.flowShown || inst.panelHosted || inst.flowTexture.id == 0 || !m_renderContext)
+    if (!animatesFlow(inst))
       continue;
     if (!any)
       m_flow.render(std::chrono::duration<float>(std::chrono::steady_clock::now() - m_flowStart).count(), m_flowFrame);
@@ -3450,8 +3521,6 @@ void Island::tickFlow() {
     inst.flowImage->markPaintDirty();
     inst.surface->requestRedraw();
   }
-  if (!any && std::ranges::none_of(m_instances, [](const auto& other) { return other->flowShown; }))
-    m_flowTimer.stop();
 }
 
 void Island::releaseFlow(Instance& inst) {
@@ -3700,6 +3769,7 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   if (inst.keyboardMode)
     releaseKeyboard(inst);
   inst.panelHosted = true;
+  syncFlowTimer();
   // Panels can be as tall as the output; the Island shrinks the surface again once it settles.
   inst.surfaceHeight = static_cast<std::uint32_t>(inst.outputHeight);
   inst.surface->requestSize(inst.surfaceWidth, inst.surfaceHeight);
@@ -3817,7 +3887,7 @@ island::Size Island::panelReturnSize() const {
   );
   const auto view = island::view(
       m_notification.has_value(), m_osd.has_value(), false, mediaActive, false, available.downloads, available.timers,
-      true, true, island::Activity::None, compact
+      true, true, island::Activity::None, compact, m_completion.has_value()
   );
   auto size = island::size(
       view, cfg.height, cfg.clockSize, cfg.clockSeconds, cfg.calendarLabels != IslandCalendarLabels::Initials,

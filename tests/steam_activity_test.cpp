@@ -21,13 +21,18 @@ int main() {
   std::ofstream(root / "steamapps/appmanifest_42.acf") << "\"AppState\" { \"name\" \"Test game\" }";
   const auto external = home / "External Library";
   fs::create_directories(external / "steamapps");
-  std::ofstream(root / "steamapps/libraryfolders.vdf") << "\"libraryfolders\" { \"1\" { \"path\" \"" << external.string() << "\" } }";
+  std::ofstream(root / "steamapps/libraryfolders.vdf")
+      << "\"libraryfolders\" { \"1\" { \"path\" \""
+      << external.string()
+      << "\" } }";
   const auto write = [&](const std::string& state, bool append = true, bool old = false) {
     const auto now = std::time(nullptr) - (old ? 3600 : 0);
-    std::tm tm{}; localtime_r(&now, &tm);
-    char timestamp[32]; std::strftime(timestamp, sizeof(timestamp), "[%Y-%m-%d %H:%M:%S]", &tm);
+    std::tm tm{};
+    localtime_r(&now, &tm);
+    char timestamp[32];
+    std::strftime(timestamp, sizeof(timestamp), "[%Y-%m-%d %H:%M:%S]", &tm);
     std::ofstream file(log, append ? std::ios::app : std::ios::trunc);
-    file << timestamp << " AppID 42 App update changed : " << state << "\n";
+    file << timestamp << " AppID 42 " << (state.starts_with("update ") ? "" : "App update changed : ") << state << "\n";
   };
   SteamActivity activity(home);
   write("Running Update,Downloading,", false, true);
@@ -44,15 +49,38 @@ int main() {
   assert(activity.read()[0].phase == "installing");
   write("Running Update,Stopping,");
   assert(activity.read().empty());
+  assert(!activity.takeCompletion());
   write("Running Update,Preallocating,", false); // Truncation/rotation.
   assert(activity.read()[0].phase == "preparing");
   write("Running Update,Validating,");
   assert(activity.read()[0].phase == "verifying");
   write("None");
   assert(activity.read().empty());
+  assert(!activity.takeCompletion());
+  // Steam can report None before its explicit finished event. Only that event
+  // confirms success; replaying it after shell restart must not announce again.
+  write("update finished : No Error");
+  assert(activity.read().empty());
+  assert(activity.takeCompletion());
+  assert(!activity.takeCompletion());
+  write("update finished : No Error");
+  assert(activity.read().empty() && !activity.takeCompletion());
+  SteamActivity afterFinish(home);
+  assert(afterFinish.read().empty() && !afterFinish.takeCompletion());
+  write("Running Update,Downloading,");
+  assert(!activity.read().empty());
+  write("update canceled : User canceled");
+  assert(activity.read().empty() && !activity.takeCompletion());
+  write("update finished : No Error");
+  assert(activity.read().empty() && !activity.takeCompletion());
+  write("Running Update,Downloading,");
+  assert(!activity.read().empty());
+  write("update finished : Disk write failure");
+  assert(activity.read().empty() && !activity.takeCompletion());
   write("Running Update,Downloading,");
   assert(!activity.read().empty());
   std::ofstream(home / ".steam/steam.pid", std::ios::trunc) << "2147483647";
   assert(activity.read().empty()); // A crashed/exited client leaves no activity.
+  assert(!activity.takeCompletion());
   fs::remove_all(home);
 }

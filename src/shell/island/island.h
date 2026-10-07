@@ -108,6 +108,8 @@ private:
   void showFlow(Instance&, bool show);
   void crossfadeOut(Instance&, std::unique_ptr<Node> previous);
   void fitSurface(Instance&);
+  bool animatesFlow(const Instance&) const;
+  void syncFlowTimer();
   void tickFlow();
   void releaseFlow(Instance&);
   void collapseAfterLeave(Instance&, std::chrono::milliseconds delay);
@@ -120,6 +122,7 @@ private:
   // Desktop downloads followed by script activities.
   std::vector<DownloadProgress> progressActivities() const;
   void expireScriptActivities();
+  void showCompletion(bool transfer = false);
   void timerCommand(const island::Countdown&, const std::string& command);
   WaylandConnection* m_wayland = nullptr;
   ConfigService* m_config = nullptr;
@@ -155,6 +158,9 @@ private:
   std::optional<TimePoint> m_notificationDeadline;
   Timer m_notificationPreviewTimer;
   std::optional<OsdContent> m_osd;
+  // false: a desktop download; true: a script transfer. Coalesces nearby finishes.
+  std::optional<bool> m_completion;
+  Timer m_completionTimeout;
   Timer m_tick;
   // Resolves notification app icons (theme names, desktop entries) for the notification card.
   IconResolver m_iconResolver;

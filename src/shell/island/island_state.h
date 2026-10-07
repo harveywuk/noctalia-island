@@ -9,6 +9,7 @@ namespace island {
     Calendar,
     Media,
     Osd,
+    Completion,
     Notification,
     DownloadActivity,
     Downloads,
@@ -18,7 +19,7 @@ namespace island {
   enum class Activity { None, Media, Downloads, Timers };
 
   // Temporary level/toggle feedback owns the capsule until its timeout expires.
-  constexpr bool showsStatusIcons(View view) { return view != View::Osd; }
+  constexpr bool showsStatusIcons(View view) { return view != View::Osd && view != View::Completion; }
 
   struct Activities {
     bool media = false, downloads = false, timers = false;
@@ -77,6 +78,7 @@ namespace island {
     case View::Media:
       return {324, 190 + std::max(0.0F, artworkSize - 56.0F)};
     case View::Osd:
+    case View::Completion:
       return {300, 64};
     case View::Notification:
       return {420, 170};
@@ -91,12 +93,14 @@ namespace island {
   constexpr View view(
       bool notification, bool osd, bool hovered, bool playing, bool heldMedia, bool downloads = false,
       bool timer = false, bool hoverMedia = true, bool hoverDownloads = true, Activity selected = Activity::None,
-      Activity compact = Activity::None
+      Activity compact = Activity::None, bool completed = false
   ) {
     if (notification)
       return View::Notification;
     if (osd)
       return View::Osd;
+    if (completed)
+      return View::Completion;
     if (!hovered) {
       if (compact == Activity::Media && playing)
         return View::Activity;

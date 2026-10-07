@@ -126,6 +126,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-tray-only' in sys.argv or '--island-tray-overflow-only' in sys.argv:
             from island_tray_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-performance-only' in sys.argv:
+            from island_performance_smoke import prepare
+            prepare(base,cfg,env)
         binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia'))
         if '--performance-only' in sys.argv:
             import shutil
@@ -139,6 +142,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             assert not reply.startswith('error'),reply
             return reply
         wait(lambda:msg('record-status')=='idle','Noctalia IPC')
+        if '--island-performance-only' in sys.argv:
+            from island_performance_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
         if '--island-cupertino-only' in sys.argv:
             from island_cupertino_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,bluetooth,battery)

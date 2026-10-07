@@ -49,6 +49,8 @@
     },
     "downloads": {
       "title": "Downloads",
+      "finished": "Download finished",
+      "transfer-finished": "Transfer finished",
       "in-progress": "In Progress",
       "working": "Working…",
       "downloading": "Downloading",

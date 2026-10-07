@@ -20,12 +20,13 @@ namespace {
   std::string unescape(std::string text) {
     std::string result;
     for (std::size_t i = 0; i < text.size(); ++i) {
-      if (text[i] == '\\' && i + 1 < text.size() && (text[i + 1] == '\\' || text[i + 1] == '"')) ++i;
+      if (text[i] == '\\' && i + 1 < text.size() && (text[i + 1] == '\\' || text[i + 1] == '"'))
+        ++i;
       result += text[i];
     }
     return result;
   }
-}
+} // namespace
 
 SteamActivity::SteamActivity(std::filesystem::path home) : m_home(std::move(home)) {}
 
@@ -35,20 +36,34 @@ std::vector<SteamTransfer> SteamActivity::read() {
   std::ifstream(pidFile) >> pid;
   struct stat pidStat{}, processStat{}, logStat{};
   const auto proc = std::filesystem::path("/proc") / std::to_string(pid);
-  const bool running = pid > 1 && stat(pidFile.c_str(), &pidStat) == 0
-      && stat(proc.c_str(), &processStat) == 0 && processStat.st_uid == getuid()
+  const bool running = pid > 1
+      && stat(pidFile.c_str(), &pidStat) == 0
+      && stat(proc.c_str(), &processStat) == 0
+      && processStat.st_uid == getuid()
       && readFile(proc / "comm", 64) == "steam\n";
   if (!running) {
-    m_phases.clear(); m_pid = 0; m_offset = 0; m_inode = 0; m_pending.clear();
+    m_phases.clear();
+    m_pid = 0;
+    m_offset = 0;
+    m_inode = 0;
+    m_pending.clear();
+    m_observedTransfers.clear();
+    m_completed = false;
     return {};
   }
   auto root = m_home / ".steam/steam";
   auto log = root / "logs/content_log.txt";
-  if (stat(log.c_str(), &logStat) != 0) return {};
+  if (stat(log.c_str(), &logStat) != 0)
+    return {};
   const auto length = static_cast<std::uintmax_t>(logStat.st_size);
-  if (pid != m_pid || m_inode != logStat.st_ino || length < m_offset) {
-    m_phases.clear(); m_pending.clear();
-    m_pid = pid; m_inode = logStat.st_ino;
+  const bool replay = pid != m_pid || m_inode != logStat.st_ino || length < m_offset;
+  if (replay) {
+    m_phases.clear();
+    m_pending.clear();
+    m_observedTransfers.clear();
+    m_completed = false;
+    m_pid = pid;
+    m_inode = logStat.st_ino;
     // A bounded tail also supports attaching while Steam is downloading.
     m_offset = length > 1024 * 1024 ? length - 1024 * 1024 : 0;
   }
@@ -62,40 +77,58 @@ std::vector<SteamTransfer> SteamActivity::read() {
   std::size_t consumed = 0;
   while (true) {
     const auto end = m_pending.find('\n', consumed);
-    if (end == std::string::npos) break;
+    if (end == std::string::npos)
+      break;
     const auto line = m_pending.substr(consumed, end - consumed);
     consumed = end + 1;
-    if (line.size() < 23 || line[0] != '[') continue;
+    if (line.size() < 23 || line[0] != '[')
+      continue;
     const auto app = line.find("AppID ");
-    if (app == std::string::npos) continue;
+    if (app == std::string::npos)
+      continue;
     std::tm tm{};
     tm.tm_isdst = -1;
     std::istringstream timestamp(line.substr(1, 19));
     timestamp >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-    if (timestamp.fail() || std::mktime(&tm) < pidStat.st_mtime - 2) continue;
+    if (timestamp.fail() || std::mktime(&tm) < pidStat.st_mtime - 2)
+      continue;
     const auto start = app + 6;
     const auto last = line.find_first_not_of("0123456789", start);
     const auto id = line.substr(start, last - start);
-    if (id.empty() || id.size() > 10) continue;
+    if (id.empty() || id.size() > 10)
+      continue;
     if (line.find("update canceled") != std::string::npos || line.find("update finished") != std::string::npos) {
+      if (m_observedTransfers.erase(id) && !replay && line.find("update finished : No Error") != std::string::npos)
+        m_completed = true;
       m_phases.erase(id);
       continue;
     }
     const auto changed = line.find("App update changed : ");
-    if (changed == std::string::npos) continue;
+    if (changed == std::string::npos)
+      continue;
     const auto state = line.substr(changed + 21);
-    if (state.find("Stopping") != std::string::npos || state.starts_with("None")) m_phases.erase(id);
+    if (state.find("Stopping") != std::string::npos || state.starts_with("None"))
+      m_phases.erase(id);
     else if (m_phases.contains(id) || m_phases.size() < 32) {
-      if (state.find("Downloading") != std::string::npos) m_phases[id] = "downloading";
-      else if (state.find("Staging") != std::string::npos || state.find("Committing") != std::string::npos) m_phases[id] = "installing";
-      else if (state.find("Verifying") != std::string::npos || state.find("Validating") != std::string::npos) m_phases[id] = "verifying";
-      else if (state.find("Running Update") != std::string::npos) m_phases[id] = "preparing";
-      else m_phases.erase(id);
+      if (state.find("Downloading") != std::string::npos)
+        m_phases[id] = "downloading";
+      else if (state.find("Staging") != std::string::npos || state.find("Committing") != std::string::npos)
+        m_phases[id] = "installing";
+      else if (state.find("Verifying") != std::string::npos || state.find("Validating") != std::string::npos)
+        m_phases[id] = "verifying";
+      else if (state.find("Running Update") != std::string::npos)
+        m_phases[id] = "preparing";
+      else
+        m_phases.erase(id);
     }
+    if (m_phases.contains(id) && m_observedTransfers.size() < 32)
+      m_observedTransfers.insert(id);
   }
   m_pending.erase(0, consumed);
-  if (m_pending.size() > 16384) m_pending.clear();
-  if (m_phases.empty()) return {};
+  if (m_pending.size() > 16384)
+    m_pending.clear();
+  if (m_phases.empty())
+    return {};
   std::vector<std::filesystem::path> libraries{root};
   const auto folders = readFile(root / "steamapps/libraryfolders.vdf");
   static const std::regex pathPattern(R"re("path"\s*"((?:\\.|[^"\\])*)")re");

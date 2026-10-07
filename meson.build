@@ -1228,6 +1228,7 @@ if build_tests
     'camera_device_scanner',
     'island_timer',
     'steam_activity',
+    'download_completion',
     'app_identity',
     'artwork_flow',
     'audio_glyphs',

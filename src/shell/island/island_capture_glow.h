@@ -9,8 +9,8 @@
 #include <cmath>
 
 namespace island {
-  // A slow red pulse just outside the capsule while the microphone, camera or screen is being
-  // captured. It sits outside the progress outline so both can show, and like it ignores input.
+  // A slow pulse outside the capsule: red for capture/critical alerts, green for completed
+  // transfers. It sits outside the progress outline so both can show, and ignores input.
   class CaptureGlow final : public Node {
   public:
     static constexpr float kPeriodMs = 2400.0F;
@@ -71,8 +71,7 @@ namespace island {
       if (!m_active || !animationManager() || !MotionService::instance().enabled())
         return;
       m_animation = animationManager()->animate(
-          0, 1, kPeriodMs, Easing::Linear,
-          [this](float t) { setStrength(0.5F - 0.5F * std::cos(t * 6.2831853F)); },
+          0, 1, kPeriodMs, Easing::Linear, [this](float t) { setStrength(0.5F - 0.5F * std::cos(t * 6.2831853F)); },
           [this] {
             m_animation = 0;
             loop();
