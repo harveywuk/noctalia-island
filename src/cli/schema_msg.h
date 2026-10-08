@@ -562,16 +562,16 @@ namespace noctalia::cli {
     inline constexpr Command notificationClearActive{
         "notification-clear-active", "Dismiss all currently active notifications", {}, {}, {}, {}, {}, false
     };
-    inline constexpr Command islandFocus{
-        "island-focus", "Focus the island for keyboard navigation", {}, {}, {}, {}, {}, false
-    };
+    inline constexpr Command islandFocus{"island-focus", "Focus the island for keyboard navigation", {}, {}, {}, {}, {},
+                                         false};
     inline constexpr Command islandActivityStart{
         "island-activity-start",
         "Show a live activity in the Island for a script or keybind",
         "It shows with a spinner until island-activity-update reports progress. Starting an id that is already "
         "running restarts it. An activity that is not updated or ended for an hour is removed. Instead of the "
         "positional arguments, pass a JSON object such as {\"id\":\"backup\",\"title\":\"Backing up\","
-        "\"icon\":\"cloud-upload\",\"progress\":40}; icon is a Tabler icon name.",
+        "\"icon\":\"cloud-upload\",\"progress\":40}; icon is a Tabler icon name. JSON status may be running, paused, "
+        "or failed.",
         "Example: noctalia msg island-activity-start backup Backing up",
         {},
         kMsgIslandActivityStartPositionals,
@@ -580,8 +580,10 @@ namespace noctalia::cli {
     };
     inline constexpr Command islandActivityUpdate{
         "island-activity-update",
-        "Update a live activity's progress or title",
-        "Also accepts the JSON object form of island-activity-start.",
+        "Update a live activity's progress, title, or status",
+        "Also accepts the JSON object form of island-activity-start. Set status to paused for an amber pause "
+        "indicator, failed for a five-second red notice, or running to resume. Progress alone does not resume an "
+        "activity.",
         "Example: noctalia msg island-activity-update backup 40",
         {},
         kMsgIslandActivityUpdatePositionals,
@@ -710,8 +712,12 @@ namespace noctalia::cli {
         {},
         false
     };
-    inline constexpr Command recordRegion{"record-region", "Select a region and record video with desktop audio", {}, {}, {}, {}, {}, false};
-    inline constexpr Command recordMonitor{"record-monitor", "Pick a monitor and record video with desktop audio", {}, {}, {}, {}, {}, false};
+    inline constexpr Command recordRegion{
+        "record-region", "Select a region and record video with desktop audio", {}, {}, {}, {}, {}, false
+    };
+    inline constexpr Command recordMonitor{
+        "record-monitor", "Pick a monitor and record video with desktop audio", {}, {}, {}, {}, {}, false
+    };
     inline constexpr Command recordStop{"record-stop", "Stop recording and save the video", {}, {}, {}, {}, {}, false};
     inline constexpr Command recordStatus{"record-status", "Show recording status", {}, {}, {}, {}, {}, false};
     inline constexpr Command screenshotRegion{

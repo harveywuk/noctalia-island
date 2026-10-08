@@ -51,6 +51,8 @@
       "title": "Downloads",
       "finished": "Download finished",
       "transfer-finished": "Transfer finished",
+      "failed": "Transfer failed",
+      "paused": "Paused",
       "in-progress": "In Progress",
       "working": "Working…",
       "downloading": "Downloading",
@@ -4717,7 +4719,7 @@
         },
         "outer_progress_ring": {
           "label": "Outer progress ring",
-          "description": "Show timer, download or battery progress around the Island’s edge. Timers take priority, followed by downloads, then battery status."
+          "description": "Show timer or download progress around the Island’s edge, with timers taking priority. Battery connections add a ten-second glow coloured by charge level."
         },
         "hover_widgets": {
           "label": "Left widgets",

@@ -41,6 +41,7 @@ int main() {
   auto state = activity.read();
   assert(state.size() == 1 && state[0].phase == "downloading" && state[0].name == "Steam · Test game");
   assert(activity.read() == state); // An idle log doesn't duplicate the entry.
+  assert(!activity.takeFailure());  // Slow/stalled progress is not a reported error.
   fs::rename(root / "steamapps/appmanifest_42.acf", external / "steamapps/appmanifest_42.acf");
   assert(activity.read() == state); // Resolve names from external libraries too.
   SteamActivity restarted(home);
@@ -50,6 +51,7 @@ int main() {
   write("Running Update,Stopping,");
   assert(activity.read().empty());
   assert(!activity.takeCompletion());
+  assert(!activity.takeFailure());
   write("Running Update,Preallocating,", false); // Truncation/rotation.
   assert(activity.read()[0].phase == "preparing");
   write("Running Update,Validating,");
@@ -71,16 +73,61 @@ int main() {
   assert(!activity.read().empty());
   write("update canceled : User canceled");
   assert(activity.read().empty() && !activity.takeCompletion());
+  assert(!activity.takeFailure());
   write("update finished : No Error");
   assert(activity.read().empty() && !activity.takeCompletion());
   write("Running Update,Downloading,");
   assert(!activity.read().empty());
   write("update finished : Disk write failure");
   assert(activity.read().empty() && !activity.takeCompletion());
+  assert(activity.takeFailure());
+  assert(!activity.takeFailure());
+  write("update finished : Disk write failure");
+  assert(activity.read().empty() && !activity.takeFailure()); // Duplicate errors do not prolong the notice.
+  SteamActivity afterFailure(home);
+  assert(afterFailure.read().empty() && !afterFailure.takeFailure());
+
+  // Steam follows its explicit suspension with Stopping/None. Preserve the
+  // paused row through those messages, but allow explicit resumption.
   write("Running Update,Downloading,");
   assert(!activity.read().empty());
+  write("update canceled : Priority (Suspended)\r"); // Steam's real log uses CRLF.
+  write("Running Update,Stopping,");
+  write("None");
+  state = activity.read();
+  assert(state.size() == 1 && state[0].phase == "paused");
+  assert(!activity.takeCompletion() && !activity.takeFailure());
+  assert(activity.read() == state);
+  SteamActivity afterPause(home);
+  assert(afterPause.read() == state); // Reconstruct a pause without announcing old events.
+  assert(!afterPause.takeCompletion() && !afterPause.takeFailure());
+  write("Running Update,Downloading,");
+  assert(activity.read()[0].phase == "downloading");
+  write("update canceled : Failed updating depot 42 while starting download (No connection to content servers)\r");
+  write("None");
+  assert(activity.read().empty() && activity.takeFailure());
+  assert(!activity.takeCompletion() && !activity.takeFailure());
+
+  write("Running Update,Downloading,");
+  assert(!activity.read().empty());
+  write("update canceled : Unfamiliar reason");
+  assert(activity.read().empty() && !activity.takeFailure() && !activity.takeCompletion());
+  write("update canceled : Disabled (Suspended)");
+  assert(activity.read().empty()); // No phantom pause without observed work.
+  write("update canceled : Failed updating depot 42 (No connection to content servers)");
+  assert(activity.read().empty() && !activity.takeFailure());
+
+  // Log rotation replays state but never old failure notices.
+  write("Running Update,Downloading,", false);
+  write("update finished : Disk read failure");
+  assert(activity.read().empty() && !activity.takeFailure());
+  write("Running Update,Downloading,");
+  assert(!activity.read().empty());
+  write("update canceled : Shader Priority (Suspended)");
+  assert(activity.read()[0].phase == "paused");
   std::ofstream(home / ".steam/steam.pid", std::ios::trunc) << "2147483647";
   assert(activity.read().empty()); // A crashed/exited client leaves no activity.
   assert(!activity.takeCompletion());
+  assert(!activity.takeFailure());
   fs::remove_all(home);
 }

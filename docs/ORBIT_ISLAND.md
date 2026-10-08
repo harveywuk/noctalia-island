@@ -88,8 +88,8 @@ opens the notification history.
 
 Applications publishing `com.canonical.Unity.LauncherEntry.Update` progress appear
 automatically. The compact capsule keeps its clock and adds a circular indicator
-around the download icon. A single reported percentage fills the ring; Steam
-activity and multiple entries use the shell's themed spinner. App names appear
+around the download icon. Reported percentages fill the ring, with equal weight
+for each entry. An unknown total uses the shell's themed spinner. App names appear
 only in the expanded view, keeping the compact activity indicator minimal. Hovering shows
 separate application bars or Steam's current phase. With several entries the
 compact number is the number of active entries, not a combined percentage.
@@ -98,13 +98,45 @@ and OSDs retain priority, and the media panel remains accessible from the downlo
 card. Hidden progress and disconnected apps disappear without assuming that a
 cancelled download succeeded. Count/badge messages alone never create a download.
 
+Running and paused rows are clickable when their source app has a window. Click
+to return to the app, or use `noctalia msg island-focus`, Tab or Shift+Tab to select
+a row, and Enter or Space to open it. A faint row highlight and keyboard outline
+keep the artwork visible. Focus follows the same transfer through percentage
+updates and reordered rows. Removing the selected row or closing its app releases
+keyboard focus. Script activities without an app identity remain informational.
+
 Confirmed completion shows a green checkmark, a green halo, and **Download finished**
 for five seconds before returning to the current activity. This requires a desktop
 app to report 100% after active progress, or Steam to report an explicit finished
 update. Hiding, cancelling, or disconnecting alone does not signal success. Nearby
 finishes share one notice and restart its five-second lifetime. Reduced motion
 keeps the halo steady. Notifications, OSDs, keyboard controls, and open panels
-retain priority.
+retain priority. Activity rotation pauses while the notice is present, preserving
+the current activity's remaining display time. A notice that expires underneath
+an alert or open panel does not replay when that interruption ends.
+When media is playing with the artwork background enabled, that background stays
+visible through success and failure notices, downloads, timers and alerts. The
+glow sits over it; playback and artwork updates do not replace the foreground card.
+
+Hovering a notice shows its source app or script title. When the app still has a
+window, click the notice to return to it. This matches the desktop ID and
+`StartupWMClass`, without launching another process. Script notices without an
+app identity show their title as information only.
+
+Run `noctalia msg island-focus` while an actionable notice is visible, then press
+Enter or Space to return to its app. Escape releases keyboard focus. The normal
+five-second deadline still applies, and expiry or a replacement notice releases
+the keyboard grab. A notice arriving while you are already using keyboard media
+controls leaves those controls in focus.
+
+An explicitly paused transfer shows an amber pause symbol and **Paused**. Its last
+reported percentage stays visible; unknown totals stop spinning. Running jobs
+appear before paused ones. A confirmed failure shows a red cross, red halo and
+**Transfer failed** for five seconds, using the same interruption and reduced-motion
+behavior as completion. Repeated reports of the same failure do not extend it.
+These states require explicit Steam log events or script statuses. The standard
+desktop progress signal provides neither pause nor error status, so a stalled
+percentage or disappearing entry alone never produces either state.
 
 For Zen, run `python3 scripts/install-zen-download-progress.py`, then install
 [LauncherEntry Integration](https://addons.mozilla.org/firefox/addon/launcherentry-integration/)
@@ -124,8 +156,11 @@ protocol is documented in the [Unity Launcher API](https://wiki.ubuntu.com/Unity
 Steam also has a built-in read-only activity reader. Every two seconds it checks
 the running client's content log and resolves game names from its library
 manifests, including external libraries. The island shows preparing, downloading,
-installing and verifying states. Paused/stopped updates and an exited client clear
-the indicator; log entries from earlier client sessions are ignored. This does
+installing and verifying states. An explicit suspension keeps an amber paused row
+until it resumes, is cancelled, completes, or the client exits. Explicit update
+errors produce the failure notice. Other stopped updates clear the indicator;
+log entries from earlier client sessions are ignored and replayed errors do not
+produce new notices. This does
 not modify Steam, install a plugin, or enable remote debugging. Steam's saved
 byte counts are not reliable live percentages, so this reader shows activity
 instead of an estimated percentage. Native desktop progress, if Steam publishes
@@ -146,8 +181,8 @@ noctalia msg island-activity-end backup
 ```
 
 `start` begins with a spinner; `update` takes a percentage from 0 to 100, or `-`
-for a spinner, and an optional new title. Each command also accepts one JSON
-object, which is the only way to pick an icon:
+for a spinner, and an optional new title. Start and update also accept one JSON
+object, which is the way to pick an icon or report a status:
 
 ```sh
 noctalia msg island-activity-start '{"id":"build","title":"Building","icon":"hammer","progress":75}'
@@ -160,12 +195,25 @@ activity priority setting, and the card's heading reads "In Progress" when one i
 present. Without an icon, a script activity shows a terminal symbol.
 
 To show the same green completion halo with **Transfer finished**, report 100%
-before ending the activity. Ending below 100%, ending a spinner, or expiring an
-abandoned activity simply removes it.
+before ending a running activity. Ending below 100%, ending a spinner, ending a
+paused or failed activity, or expiring an abandoned activity simply removes it.
 
 ```sh
 noctalia msg island-activity-update backup 100
 noctalia msg island-activity-end backup
+```
+
+The optional JSON `status` is `running`, `paused`, or `failed`. Omitting it keeps
+the current status, so progress updates alone cannot resume a paused or failed
+job. Failure removes the job from the active list and shows the red notice once.
+The id is retained until ended or expired; setting `running` retries the same job
+with its title and progress intact. Starting the id again resets it completely.
+Status display does not itself pause or retry the underlying process.
+
+```sh
+noctalia msg island-activity-update '{"id":"backup","status":"paused"}'
+noctalia msg island-activity-update '{"id":"backup","status":"running"}'
+noctalia msg island-activity-update '{"id":"backup","status":"failed"}'
 ```
 
 ## Quick pills
@@ -197,6 +245,15 @@ warning threshold; peripheral batteries appear whenever they report a charge.
 The circular fill represents the actual percentage, with a gentle charging pulse
 that respects disabled animations. Low charge uses the theme's error colour.
 The clock stays centred, and notifications and OSDs retain priority.
+
+With the outer progress ring enabled, connecting a Bluetooth battery or wired
+battery device, or plugging in the system charger, adds a soft ten-second glow
+around the Island. It pulses green above 60%, amber from 20% through 60%, and red
+below 20%. The small device indicator remains inside; battery charge no longer
+draws a progress bar around the capsule. Percentage updates do not restart the
+glow. It follows the Bluetooth preview monitor setting, independently of the
+compact preview duration, and stays steady when animations are disabled. Capture
+and critical alerts retain their red glow, and transfer notices take priority.
 
 Hovering adds battery rows beneath the calendar, media or download content, with
 device names, percentages, status and available time estimates. Healthy system
@@ -575,10 +632,10 @@ follows the capsule as it expands and scales. The split bubble does the same: a 
 download beside the capsule rings the bubble’s own rim, with its symbol in the middle.
 Turn the setting off for the small icon ring in the capsule.
 
-Active timers take priority over downloads, followed by the battery indicator.
+Active timers take priority over downloads.
 For multiple downloads, the outline shows their average progress; if any total is
-unknown, a moving segment indicates activity. Charging batteries pulse and low
-batteries use the warning colour. Notifications, OSD cards and recording hide the
+unknown, a moving segment indicates activity. Battery connections use the
+ten-second charge-coloured glow described above. Notifications, OSD cards and recording hide the
 outline. Expanded rows retain their individual progress indicators.
 
 ```toml

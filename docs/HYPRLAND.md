@@ -43,6 +43,33 @@ comparison, without a machine-dependent pass threshold. Results are saved in
 a build, or add `NOCTALIA_TEST_MEASURE_ONLY=1` to record an older build's baseline
 without enforcing the new idle-work and reload-artwork checks.
 
+For transfer feedback and interruption checks, run
+`python3 tests/hyprland_smoke.py --island-completion-only`. It needs Python Pillow
+and Tesseract with English data (the existing `NOCTALIA_TEST_TESSDATA` override
+selects its data directory). The suite captures the green halo and labels, checks
+the five-second lifetime, duplicate and overlapping finishes, return to media or
+remaining downloads, and OSD/notification/panel/keyboard interruptions. It samples
+the spring resize between media, transfers and notices to catch black artwork
+frames. It also checks animated artwork beneath completion and alerts, playback changes while a
+notice remains visible, amber pause/resume, red failure timing and retry, activity
+rotation, reduced motion, and saves light/dark and fractional-scale references.
+Like the other compositor suites, this uses the GPU; run it when the desktop can
+spare that workload. `NOCTALIA_TEST_BINARY` selects the build to test.
+
+For notice actions, run `python3 tests/hyprland_smoke.py --island-transfer-actions-only`.
+It checks app/title tooltips, desktop ID and WM-class matching, click and Enter/Space,
+keyboard release on expiry/replacement, cancelled pointer gestures, closed apps,
+and Steam failure actions using private fixture windows and a private Steam log.
+Running and paused rows also cover Tab/Shift+Tab, focus through progress updates
+and reordered rows, keyboard release on removal, and artwork beneath row feedback.
+It uses the same screenshot/OCR dependencies as the completion suite, plus Kitty.
+
+For battery connection feedback, run
+`python3 tests/hyprland_smoke.py --island-battery-glow-only`. Private BlueZ and UPower
+fixtures check the ten-second halo, charge colour boundaries, percentage updates,
+disconnects, wired devices and charger transitions. GPU captures verify pulsing,
+reduced motion, media artwork, notification priority and fractional scaling.
+
 It checks:
 
 - Island surfaces on two outputs, one at 150% scale and 180-degree rotation.

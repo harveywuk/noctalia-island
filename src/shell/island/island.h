@@ -7,6 +7,7 @@
 #include "shell/island/island_panel_surface.h"
 #include "shell/island/island_privacy.h"
 #include "shell/island/island_state.h"
+#include "shell/island/island_transfer.h"
 #include "shell/osd/osd_overlay.h"
 #include "system/icon_resolver.h"
 #include "ui/visuals/artwork_flow.h"
@@ -72,11 +73,12 @@ public:
   // Live activities posted by scripts (`noctalia msg island-activity-*`). They join the
   // downloads activity, so they share its compact ring, expanded card and priority.
   // progress: unset keeps it, an empty value shows a spinner, otherwise 0..1. An empty title or
-  // icon keeps the current one. Returns false for an unknown id on update or end.
+  // icon keeps the current one. Status changes are explicit, including resuming.
+  // Returns false for an unknown id on update or end.
   bool startScriptActivity(const std::string& id, const std::string& title, const std::string& icon);
   bool updateScriptActivity(
       const std::string& id, std::optional<std::optional<double>> progress, const std::string& title,
-      const std::string& icon
+      const std::string& icon, std::optional<island::TransferStatus> status = std::nullopt
   );
   bool endScriptActivity(const std::string& id);
   [[nodiscard]] bool enabled() const;
@@ -105,7 +107,7 @@ private:
   bool trackPreview(const IslandConfig&, wl_output*) const;
   void releaseKeyboard(Instance&);
   // The flowing artwork gradient behind the capsule while media plays (Cupertino look).
-  void showFlow(Instance&, bool show);
+  void updateFlow(Instance&, const std::string& artwork);
   void crossfadeOut(Instance&, std::unique_ptr<Node> previous);
   void fitSurface(Instance&);
   bool animatesFlow(const Instance&) const;
@@ -119,10 +121,14 @@ private:
   std::vector<island::Battery> batteries(const IslandConfig&, wl_output*) const;
   std::vector<island::PrivacyActivity> privacy() const;
   std::vector<island::Countdown> countdowns() const;
-  // Desktop downloads followed by script activities.
+  // Desktop downloads and script activities, with running jobs before paused ones.
   std::vector<DownloadProgress> progressActivities() const;
   void expireScriptActivities();
-  void showCompletion(bool transfer = false);
+  void showTransferNotice(island::TransferNotice notice, DownloadSource source);
+  bool transferApp(const DownloadSource& source, bool activate = false) const;
+  bool activateTransferSource(Instance& inst, const DownloadSource& source);
+  void activateTransfer(Instance& inst, const std::string& key);
+  void activateTransferNotice(Instance& inst, std::uint64_t serial);
   void timerCommand(const island::Countdown&, const std::string& command);
   WaylandConnection* m_wayland = nullptr;
   ConfigService* m_config = nullptr;
@@ -145,6 +151,7 @@ private:
     std::string title;
     std::string icon;
     std::optional<double> progress;
+    island::TransferStatus status = island::TransferStatus::Running;
     std::chrono::steady_clock::time_point updated;
   };
   // In start order. A script that dies without ending its activity has it expire after an hour.
@@ -158,9 +165,11 @@ private:
   std::optional<TimePoint> m_notificationDeadline;
   Timer m_notificationPreviewTimer;
   std::optional<OsdContent> m_osd;
-  // false: a desktop download; true: a script transfer. Coalesces nearby finishes.
-  std::optional<bool> m_completion;
-  Timer m_completionTimeout;
+  // Brief feedback for an explicitly reported finish or failure.
+  std::optional<island::TransferFeedback> m_transferNotice;
+  std::uint64_t m_transferNoticeSerial = 0;
+  Timer m_transferNoticeTimeout;
+  Timer m_transferActivation;
   Timer m_tick;
   // Resolves notification app icons (theme names, desktop entries) for the notification card.
   IconResolver m_iconResolver;

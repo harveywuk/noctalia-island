@@ -2,6 +2,7 @@
 
 #include "calendar/calendar_service.h"
 #include "capture/screen_recorder.h"
+#include "compositors/compositor_platform.h"
 #include "config/config_service.h"
 #include "core/deferred_call.h"
 #include "core/input/keybind_matcher.h"
@@ -50,6 +51,7 @@
 #include "ui/motion.h"
 #include "ui/palette.h"
 #include "ui/visuals/audio_visualizer.h"
+#include "util/string_utils.h"
 #include "wayland/wayland_connection.h"
 #include "wayland/wayland_seat.h"
 
@@ -147,6 +149,7 @@ struct Island::Instance {
   Image* flowImage = nullptr;
   TextureHandle flowTexture{};
   bool flowShown = false;
+  std::string flowArt;
   Node* content = nullptr;
   // View crossfades: the outgoing content fading out, and the incoming content's fade-in factor.
   Node* outgoing = nullptr;
@@ -208,6 +211,7 @@ struct Island::Instance {
   island::CompactActivity compactActivity;
   Timer activityTimeout;
   std::optional<std::uint32_t> keyboardNotification;
+  std::optional<std::uint64_t> keyboardTransferNotice;
   bool heldMedia = false;
   bool suppressHover = false;
   Timer enter;
@@ -241,7 +245,7 @@ struct Island::Instance {
   };
   std::vector<TimerUi> timerUi;
   struct DownloadUi {
-    std::string desktopId;
+    std::string key;
     Label* percentage;
     ProgressBar* progress;
   };
@@ -406,6 +410,17 @@ namespace {
     }
   }
 
+  void setTransferActionStyle(Button* button) {
+    // An outline on keyboard focus and translucent pointer feedback leave the
+    // artwork and foreground labels visible throughout the interaction.
+    button->setVariant(ButtonVariant::Default);
+    auto actionPalette = Button::defaultPalette(ButtonVariant::Ghost);
+    actionPalette.hover.bg = islandRole(ColorRole::OnSurface, 0.05F);
+    actionPalette.pressed.bg = islandRole(ColorRole::OnSurface, 0.12F);
+    button->setCustomPalette(actionPalette);
+    button->setZIndex(-1);
+  }
+
   // Reuse the shell's native ring and spinner renderers at the same size.
   class DownloadRing final : public Node {
   public:
@@ -524,7 +539,12 @@ void Island::initialize(
     try {
       m_downloads = std::make_unique<DownloadProgressService>(*bus);
       m_downloads->changed = [this] { refresh(); };
-      m_downloads->completed = [this] { showCompletion(); };
+      m_downloads->completed = [this](const DownloadSource& source) {
+        showTransferNotice(island::TransferNotice::DownloadFinished, source);
+      };
+      m_downloads->failed = [this](const DownloadSource& source) {
+        showTransferNotice(island::TransferNotice::Failed, source);
+      };
     } catch (const std::exception& error) {
       Logger("island").warn("download progress unavailable: {}", error.what());
     }
@@ -602,15 +622,20 @@ std::vector<island::Countdown> Island::countdowns() const {
 
 std::vector<DownloadProgress> Island::progressActivities() const {
   auto result = m_downloads ? m_downloads->active() : std::vector<DownloadProgress>{};
-  for (const auto& activity : m_scriptActivities)
+  for (const auto& activity : m_scriptActivities) {
+    if (activity.status == island::TransferStatus::Failed)
+      continue;
     result.push_back({
         .desktopId = "script:" + activity.id,
         .name = activity.title,
         .progress = activity.progress.value_or(0.0),
         .determinate = activity.progress.has_value(),
-        .phase = "working",
+        .phase = activity.status == island::TransferStatus::Paused ? "paused" : "working",
         .icon = activity.icon.empty() ? "terminal-2" : activity.icon,
+        .key = "script:" + activity.id,
     });
+  }
+  std::ranges::stable_partition(result, [](const auto& activity) { return !activity.paused(); });
   return result;
 }
 
@@ -645,6 +670,7 @@ bool Island::startScriptActivity(const std::string& id, const std::string& title
   it->title = title;
   it->icon = icon;
   it->progress.reset();
+  it->status = island::TransferStatus::Running;
   it->updated = std::chrono::steady_clock::now();
   expireScriptActivities();
   refresh();
@@ -653,7 +679,7 @@ bool Island::startScriptActivity(const std::string& id, const std::string& title
 
 bool Island::updateScriptActivity(
     const std::string& id, std::optional<std::optional<double>> progress, const std::string& title,
-    const std::string& icon
+    const std::string& icon, std::optional<island::TransferStatus> status
 ) {
   const auto it = std::ranges::find(m_scriptActivities, id, &ScriptActivity::id);
   if (it == m_scriptActivities.end())
@@ -664,7 +690,12 @@ bool Island::updateScriptActivity(
     it->title = title;
   if (!icon.empty())
     it->icon = icon;
+  const bool failed = status == island::TransferStatus::Failed && it->status != island::TransferStatus::Failed;
+  if (status)
+    it->status = *status;
   it->updated = std::chrono::steady_clock::now();
+  if (failed)
+    showTransferNotice(island::TransferNotice::Failed, {.name = it->title});
   expireScriptActivities();
   refresh();
   return true;
@@ -674,23 +705,97 @@ bool Island::endScriptActivity(const std::string& id) {
   const auto found = std::ranges::find(m_scriptActivities, id, &ScriptActivity::id);
   if (found == m_scriptActivities.end())
     return false;
-  const bool finished = found->progress && *found->progress >= 1.0;
+  const bool finished = found->status == island::TransferStatus::Running && found->progress && *found->progress >= 1.0;
+  const auto title = found->title;
   m_scriptActivities.erase(found);
   if (finished)
-    showCompletion(true);
+    showTransferNotice(island::TransferNotice::TransferFinished, {.name = title});
   expireScriptActivities();
   refresh();
   return true;
 }
 
-void Island::showCompletion(bool transfer) {
+void Island::showTransferNotice(island::TransferNotice notice, DownloadSource source) {
   if (!enabled())
     return;
-  m_completion = transfer;
-  m_completionTimeout.start(5s, [this] {
-    m_completion.reset();
+  m_transferNotice = island::TransferFeedback{notice, std::move(source), ++m_transferNoticeSerial};
+  m_transferNoticeTimeout.start(5s, [this] {
+    m_transferNotice.reset();
     refresh();
   });
+  refresh();
+}
+
+bool Island::transferApp(const DownloadSource& source, bool activate) const {
+  if (!m_platform || source.desktopId.empty())
+    return false;
+  const auto windows =
+      m_platform->windowsForApp(StringUtils::toLower(source.desktopId), StringUtils::toLower(source.wmClass));
+  if (windows.empty())
+    return false;
+  if (activate)
+    m_platform->activateToplevelInfo(windows.front());
+  return true;
+}
+
+bool Island::activateTransferSource(Instance& inst, const DownloadSource& source) {
+  if (!transferApp(source))
+    return false;
+  m_transferActivation.stop();
+  // Release the layer's exclusive keyboard grab before giving focus back.
+  bool releasedKeyboard = false;
+  for (auto& other : m_instances)
+    if (other->keyboardMode) {
+      releasedKeyboard = true;
+      releaseKeyboard(*other);
+    }
+  if (releasedKeyboard) {
+    // A commit acknowledgement can precede the compositor applying the grab
+    // change. Wait for keyboard-leave without blocking input or animation.
+    const auto deadline = std::chrono::steady_clock::now() + 1s;
+    m_transferActivation.startRepeating(16ms, [this, source, deadline] {
+      if (std::ranges::any_of(m_instances, [](const auto& other) {
+            return other->keyboardMode || other->panelHosted;
+          })) {
+        m_transferActivation.stop();
+        return;
+      }
+      const auto focused = m_wayland->lastKeyboardSurface();
+      if (focused && std::ranges::any_of(m_instances, [focused](const auto& other) {
+            return other->surface->wlSurface() == focused;
+          })) {
+        if (std::chrono::steady_clock::now() >= deadline)
+          m_transferActivation.stop();
+        return;
+      }
+      m_transferActivation.stop();
+      (void)transferApp(source, true);
+    });
+  } else if (!transferApp(source, true))
+    return false;
+  inst.hovered = false;
+  inst.suppressHover = inst.inside;
+  inst.enter.stop();
+  TooltipManager::instance().forceDestroy();
+  return true;
+}
+
+void Island::activateTransfer(Instance& inst, const std::string& key) {
+  // A stale gesture must never open a different row after a job disappears.
+  const auto downloads = progressActivities();
+  const auto found = std::ranges::find(downloads, key, &DownloadProgress::key);
+  if (found != downloads.end() && activateTransferSource(inst, found->source))
+    refresh();
+}
+
+void Island::activateTransferNotice(Instance& inst, std::uint64_t serial) {
+  if (!m_transferNotice || m_transferNotice->serial != serial)
+    return;
+  const auto source = m_transferNotice->source;
+  if (!activateTransferSource(inst, source))
+    return;
+  m_transferNotice.reset();
+  m_transferNoticeTimeout.stop();
   refresh();
 }
 
@@ -702,6 +807,7 @@ void Island::timerCommand(const island::Countdown& timer, const std::string& com
 }
 
 void Island::destroySurfaces() {
+  m_transferActivation.stop();
   if (closeHostedPanel)
     closeHostedPanel();
   m_flowTimer.stop();
@@ -722,8 +828,8 @@ void Island::onConfigReload() {
     onOutputChange();
     m_tick.startRepeating(1s, [this] { refresh(); });
   } else {
-    m_completion.reset();
-    m_completionTimeout.stop();
+    m_transferNotice.reset();
+    m_transferNoticeTimeout.stop();
     updateNotificationPreview();
   }
 }
@@ -912,6 +1018,9 @@ void Island::refresh() {
   m_batteryConnections->update(
       m_bluetooth ? m_bluetooth->devices() : std::vector<BluetoothDeviceInfo>{}, now, target.output
   );
+  m_batteryConnections->updatePower(
+      m_upower ? m_upower->batteryDevices() : std::vector<UPowerDeviceInfo>{}, now, target.output
+  );
   m_batteryConnections->reconcileOutputs(outputs, target.output);
   hideDndSuppressed();
   updateNotificationPreview();
@@ -920,7 +1029,8 @@ void Island::refresh() {
   m_mediaActivity.update(track, player ? player->playbackStatus : "", now, target.output);
   m_mediaActivity.reconcileOutputs(outputs, target.output);
   m_trackSignature = track;
-  std::optional<TimePoint> mediaExpiry, batteryExpiry;
+  std::optional<TimePoint> mediaExpiry;
+  auto batteryExpiry = m_batteryConnections->nextExpiry(now, island::BatteryConnections::kGlowSeconds);
   for (const auto& inst : m_instances) {
     const auto& cfg = inst->config;
     if (const auto expiry = m_mediaActivity.nextExpiry(now, cfg.trackPreviewSeconds, cfg.pausedMediaSeconds);
@@ -955,6 +1065,7 @@ void Island::refresh() {
             || !inst->wantsVisible
             || m_notification
             || m_osd
+            || m_transferNotice.has_value()
             || ScreenRecorder::instance().active(),
         now
     );
@@ -1007,7 +1118,7 @@ void Island::updateVisibility(Instance& inst) {
       || (inst.config.revealOnTrackChange && trackPreview(inst.config, inst.output))
       || m_osd
       || m_notification
-      || m_completion.has_value()
+      || m_transferNotice.has_value()
       || ScreenRecorder::instance().active();
   if (inst.wantsVisible == visible)
     return;
@@ -1308,10 +1419,16 @@ void Island::prepare(Instance& inst) {
   const auto timers = countdowns();
   const bool timerActive = !timers.empty() && timers.front().active;
   const bool recording = ScreenRecorder::instance().active();
+  const bool focusedTransfer = m_transferNotice && inst.keyboardTransferNotice == m_transferNotice->serial;
   if (inst.keyboardMode
       && (recording
           || (inst.keyboardNotification && (!m_notification || m_notification->id != inst.keyboardNotification))
-          || (!inst.keyboardNotification && !player && downloads.empty() && !timerActive)))
+          || (inst.keyboardTransferNotice && (!focusedTransfer || !transferApp(m_transferNotice->source)))
+          || (!inst.keyboardNotification
+              && !inst.keyboardTransferNotice
+              && !player
+              && downloads.empty()
+              && !timerActive)))
     releaseKeyboard(inst);
   const bool expansionRequested = inst.hovered || inst.keyboardMode;
   if (player && expansionRequested && (playing || player->playbackStatus == "Paused" || inst.keyboardMode))
@@ -1333,7 +1450,7 @@ void Island::prepare(Instance& inst) {
             m_notification.has_value(), m_osd.has_value() && !inst.keyboardMode, expansionRequested,
             player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
             inst.heldMedia, !downloads.empty(), timerActive, cfg.hoverShowMedia, cfg.hoverShowDownloads, selected,
-            inst.compactActivity.selected(), m_completion.has_value() && !inst.keyboardMode
+            inst.compactActivity.selected(), m_transferNotice.has_value() && (!inst.keyboardMode || focusedTransfer)
         );
   const bool compactView = view == island::View::Rest
       || view == island::View::Activity
@@ -1386,8 +1503,9 @@ void Island::prepare(Instance& inst) {
   // The media card keeps its tray beside the privacy and unread icons below playback controls.
   // Temporary OSDs keep their own content; capture resumes in the following view.
   const bool showExtras = !gCupertino || view == island::View::Calendar;
-  const auto batteryList =
-      !recording && (compactView || expandedView) ? batteries(cfg, inst.output) : std::vector<island::Battery>{};
+  const bool chargingOsd = view == island::View::Osd && m_osd && m_osd->kind == OsdKind::Charging;
+  const auto batteryList = !recording && (compactView || expandedView || chargingOsd) ? batteries(cfg, inst.output)
+                                                                                      : std::vector<island::Battery>{};
   const bool showBattery = compactView && !batteryList.empty() && batteryList.front().compact();
   const auto unreadCount = m_notifications
       ? std::ranges::count_if(m_notifications->history(), [](const auto& entry) { return !entry.seen; })
@@ -1448,6 +1566,15 @@ void Island::prepare(Instance& inst) {
             m_http, m_pendingArtwork, mpris::effectiveArtUrl(*player), [this] { refresh(); }, m_lifetime
         )
       : "";
+  // Playback owns the background independently of whichever activity or alert
+  // owns the foreground. Keep it through completion, downloads and timers too.
+  const std::string flowArt = gCupertino && cfg.mediaGradient && playing ? artPath : "";
+  const bool transferAction = view == island::View::TransferNotice && transferApp(m_transferNotice->source);
+  const auto downloadRows = std::min(downloads.size(), std::size_t{4});
+  std::array<bool, 4> downloadActions{};
+  if (view == island::View::Downloads)
+    for (std::size_t i = 0; i < downloadRows; ++i)
+      downloadActions[i] = transferApp(downloads[i].source);
   std::string actionSignature;
   if (m_notification)
     for (const auto& part : m_notification->actions)
@@ -1471,8 +1598,10 @@ void Island::prepare(Instance& inst) {
         "{}|{}|{}|{}|{}", static_cast<int>(m_osd->kind), m_osd->value, m_osd->icon, m_osd->progress, m_osd->showProgress
     );
     break;
-  case island::View::Completion:
-    signature += m_completion.value_or(false) ? "transfer" : "download";
+  case island::View::TransferNotice:
+    signature += std::format(
+        "|notice:{}:{}:{}", static_cast<int>(m_transferNotice->notice), m_transferNotice->serial, transferAction
+    );
     break;
   case island::View::Media:
     signature += std::format(
@@ -1503,10 +1632,15 @@ void Island::prepare(Instance& inst) {
     signature += laneSplit ? "|lane" : "";
     for (const auto& download : downloads)
       signature += std::format(
-          "|{}|{}|{}|{}|{}|{}", download.desktopId, download.name,
+          "|{}|{}|{}|{}|{}|{}", download.key, download.name,
           view == island::View::Downloads ? 0L : std::lround(download.progress * 100), download.determinate,
           download.phase, download.icon
       );
+    if (view == island::View::Downloads)
+      for (std::size_t i = 0; i < downloadRows; ++i)
+        signature += std::format(
+            "|action:{}:{}:{}", downloadActions[i], downloads[i].source.desktopId, downloads[i].source.wmClass
+        );
     break;
   }
   if (view != island::View::Notification && view != island::View::Osd)
@@ -1555,52 +1689,49 @@ void Island::prepare(Instance& inst) {
       && !outlineTimer
       && (view == island::View::DownloadActivity || view == island::View::Downloads)
       && !downloads.empty();
-  const bool outlineBattery = cfg.outerProgressRing
-      && !recording
-      && !outlineTimer
-      && !outlineDownload
-      && (showBattery || (expandedView && showExtras && cfg.hoverShowBatteries && !batteryList.empty()));
   const auto updateOutline = [&] {
     if (!inst.progressOutline)
       return;
     std::optional<float> fraction;
     ColorSpec fill = islandRole(ColorRole::Primary);
-    bool charging = false;
     if (outlineTimer) {
       fraction = timers.front().fraction();
       fill = islandTint(countdownTint(timers.front()), ColorRole::Primary);
     } else if (outlineDownload) {
-      fill = islandTint(kAppleBlue, ColorRole::Primary);
-      // Each download gets equal weight; one unknown total makes the group indeterminate. When
-      // the jobs split between capsule and bubble, the capsule's edge shows only its own.
-      if (std::ranges::all_of(capsuleDownloads, [](const auto& d) { return d.determinate; })) {
-        float total = 0;
-        for (const auto& d : capsuleDownloads)
-          total += static_cast<float>(d.progress);
-        fraction = total / static_cast<float>(capsuleDownloads.size());
-      }
-    } else if (outlineBattery) {
-      fraction = static_cast<float>(batteryList.front().percentage / 100.0);
-      fill = batteryList.front().low ? islandRole(ColorRole::Error) : islandTint(kAppleGreen, ColorRole::Primary);
-      charging = batteryList.front().charging();
+      fill = downloadsPaused(capsuleDownloads) ? islandFixed(kAppleOrange, 1.0F)
+                                               : islandTint(kAppleBlue, ColorRole::Primary);
+      fraction = downloadFraction(capsuleDownloads);
     }
     inst.progressOutline->update(
-        outlineTimer || outlineDownload || outlineBattery, fraction, fill, charging,
-        islandRole(ColorRole::OnSurface, 0.16F)
+        outlineTimer || outlineDownload, fraction, fill, false, islandRole(ColorRole::OnSurface, 0.16F)
     );
   };
   updateOutline();
   // Capture (microphone, camera, screen) and screen recording pulse red around the Island.
-  // A critical notification pulses around the Island like capture does, so it reads as urgent.
+  // Critical notifications and transfer failures use red; confirmed finishes use green.
   const bool criticalShown =
       view == island::View::Notification && m_notification && m_notification->urgency == Urgency::Critical;
+  const auto* connectionBattery = cfg.outerProgressRing ? island::glowingBattery(batteryList) : nullptr;
   const auto updateCaptureGlow = [&] {
     if (inst.captureGlow) {
-      const bool completed = view == island::View::Completion;
-      inst.captureGlow->update(
-          capturing || recording || criticalShown || completed,
-          completed ? islandFixed(kAppleGreen, 1.0F) : islandRole(ColorRole::Error)
-      );
+      const bool notice = view == island::View::TransferNotice;
+      const auto noticeColor =
+          m_transferNotice && m_transferNotice->notice == island::TransferNotice::Failed ? kAppleRed : kAppleGreen;
+      ColorSpec color = islandRole(ColorRole::Error);
+      if (!capturing && !recording && !criticalShown) {
+        if (notice)
+          color = islandFixed(noticeColor, 1.0F);
+        else if (connectionBattery) {
+          const auto level = island::batteryGlowLevel(connectionBattery->percentage);
+          color = islandFixed(
+              level == island::BatteryGlowLevel::Green       ? kAppleGreen
+                  : level == island::BatteryGlowLevel::Amber ? kAppleOrange
+                                                             : kAppleRed,
+              1.0F
+          );
+        }
+      }
+      inst.captureGlow->update(capturing || recording || criticalShown || notice || connectionBattery, color);
     }
   };
   updateCaptureGlow();
@@ -1615,18 +1746,13 @@ void Island::prepare(Instance& inst) {
     std::optional<float> fraction;
     if (splitActivity == island::Activity::Timers)
       fraction = timers.front().fraction();
-    else if (splitActivity == island::Activity::Downloads && std::ranges::all_of(bubbleDownloads, [](const auto& item) {
-               return item.determinate;
-             })) {
-      float total = 0;
-      for (const auto& item : bubbleDownloads)
-        total += static_cast<float>(item.progress);
-      fraction = total / static_cast<float>(bubbleDownloads.size());
-    }
+    else if (splitActivity == island::Activity::Downloads)
+      fraction = downloadFraction(bubbleDownloads);
+    const bool paused = splitActivity == island::Activity::Downloads && downloadsPaused(bubbleDownloads);
     // A lone job in the bubble shows its own symbol; a group shows the download arrow.
-    const std::string bubbleIcon = bubbleDownloads.size() == 1 && !bubbleDownloads.front().icon.empty()
-        ? bubbleDownloads.front().icon
-        : "download";
+    const std::string bubbleIcon = paused                                      ? "media-pause"
+        : bubbleDownloads.size() == 1 && !bubbleDownloads.front().icon.empty() ? bubbleDownloads.front().icon
+                                                                               : "download";
     if (index == 0) {
       inst.splitLane = laneSplit;
       inst.splitNext = laneSplit ? bubbleDownloads.front().desktopId : "";
@@ -1639,7 +1765,8 @@ void Island::prepare(Instance& inst) {
       else if (splitActivity == island::Activity::Timers)
         bubbleSignature += "|" + timers.front().plugin + "|" + timers.front().icon;
       else
-        bubbleSignature += std::format("|{}|{}|{}", fraction.has_value(), bubbleIcon, laneSplit ? inst.splitNext : "");
+        bubbleSignature +=
+            std::format("|{}|{}|{}|{}", fraction.has_value(), bubbleIcon, laneSplit ? inst.splitNext : "", paused);
       if (bubbleSignature != split.signature) {
         m_renderContext->makeCurrent(inst.surface->renderTarget());
         split.signature = bubbleSignature;
@@ -1680,8 +1807,9 @@ void Island::prepare(Instance& inst) {
           // A progress ring in the activity's colour round the bubble's own rim, the way the
           // capsule's progress traces its edge, with the activity's symbol in the middle.
           const bool timer = splitActivity == island::Activity::Timers;
-          const auto tint =
-              timer ? islandTint(kAppleOrange, ColorRole::Primary) : islandTint(kAppleBlue, ColorRole::Primary);
+          const auto tint = paused ? islandFixed(kAppleOrange, 1.0F)
+              : timer              ? islandTint(kAppleOrange, ColorRole::Primary)
+                                   : islandTint(kAppleBlue, ColorRole::Primary);
           auto ring = std::make_unique<DownloadRing>(d * s, 3.0F * s, fraction, tint);
           auto* ringPtr = ring.get();
           centred(std::move(ring));
@@ -1730,6 +1858,9 @@ void Island::prepare(Instance& inst) {
     updateBubble(1, thirdActivity, std::span<const DownloadProgress>(downloads), false);
   };
   updateSplit();
+  // Playback/artwork changes must also reach retained cards without rebuilding
+  // their buttons, focus or notification contents.
+  updateFlow(inst, flowArt);
   if (signature == inst.signature && inst.root) {
     if ((recording && inst.recordingLabel)
         || !inst.timerUi.empty()
@@ -1757,12 +1888,13 @@ void Island::prepare(Instance& inst) {
       ui.setFraction(timer->fraction());
     }
     for (const auto& ui : inst.downloadUi) {
-      const auto download = std::ranges::find(downloads, ui.desktopId, &DownloadProgress::desktopId);
+      const auto download = std::ranges::find(downloads, ui.key, &DownloadProgress::key);
       if (download == downloads.end())
         continue;
       ui.percentage->setText(std::format("{}%", std::lround(download->progress * 100)));
       ui.percentage->measure(renderer);
-      ui.progress->setProgress(static_cast<float>(download->progress));
+      if (ui.progress)
+        ui.progress->setProgress(static_cast<float>(download->progress));
     }
     // Keep the title's marquee alive while the playback position advances.
     if (view == island::View::Media && player) {
@@ -1860,27 +1992,8 @@ void Island::prepare(Instance& inst) {
     inst.height = h;
     updateSplit();
   }
-  // Create the artwork layer before updating it, including after a config reload.
-  // Playing media floods the capsule with its artwork; OSDs and notifications
-  // shown meanwhile stay on it rather than dropping to the black capsule.
-  if (gCupertino
-      && cfg.mediaGradient
-      && playing
-      && !artPath.empty()
-      && (view == island::View::Media
-          || view == island::View::Activity
-          || view == island::View::Osd
-          || view == island::View::Notification)) {
-    if (artPath != m_flowArt) {
-      m_flowArt = artPath;
-      auto art = loadImageFile(artPath, 32, true);
-      if (!art || !m_flow.setArtwork(art->rgba, art->width, art->height))
-        m_flow.clear();
-    }
-    showFlow(inst, m_flow.hasArtwork());
-  } else {
-    showFlow(inst, false);
-  }
+  // A newly created layer also needs its first frame, including after reload.
+  updateFlow(inst, flowArt);
   // Critical notifications pulse with the capture glow (above) rather than taking an outline.
   inst.background->clearBorder();
   inst.root->setSize(static_cast<float>(inst.surface->width()), static_cast<float>(inst.surface->height()));
@@ -2132,40 +2245,42 @@ void Island::prepare(Instance& inst) {
 
   if (view == island::View::DownloadActivity || view == island::View::TimerActivity) {
     const bool timerView = view == island::View::TimerActivity;
-    const auto fraction = timerView ? std::optional{timers.front().fraction()}
-        : capsuleDownloads.size() == 1 && capsuleDownloads.front().determinate
-        ? std::optional{static_cast<float>(capsuleDownloads.front().progress)}
-        : std::nullopt;
+    const bool paused = !timerView && downloadsPaused(capsuleDownloads);
+    const auto fraction = timerView ? std::optional{timers.front().fraction()} : downloadFraction(capsuleDownloads);
     DownloadRing* ringPtr = nullptr;
     if (!(outlineTimer || outlineDownload)) {
-      auto ring =
-          std::make_unique<DownloadRing>(36 * s, 2.5F * s, fraction, islandTint(kAppleBlue, ColorRole::Primary));
+      auto ring = std::make_unique<DownloadRing>(
+          36 * s, 2.5F * s, fraction,
+          paused ? islandFixed(kAppleOrange, 1.0F) : islandTint(kAppleBlue, ColorRole::Primary)
+      );
       ringPtr = ring.get();
       ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
       canvas->addChild(std::move(ring));
     }
-    const auto downloadIcon = capsuleDownloads.size() == 1 && !capsuleDownloads.front().icon.empty()
-        ? capsuleDownloads.front().icon
-        : "download";
+    const auto downloadIcon = paused                                             ? "media-pause"
+        : capsuleDownloads.size() == 1 && !capsuleDownloads.front().icon.empty() ? capsuleDownloads.front().icon
+                                                                                 : "download";
     // A lone script activity names itself where the clock would be, like a Live Activity.
     const bool scriptTitle = !timerView
         && capsuleDownloads.size() == 1
         && !capsuleDownloads.front().icon.empty()
         && !capsuleDownloads.front().name.empty();
     glyph(
-        timerView ? timers.front().icon : downloadIcon, 23, (cfg.height - 18) / 2, 18, islandRole(ColorRole::Primary)
+        timerView ? timers.front().icon : downloadIcon, 23, (cfg.height - 18) / 2, 18,
+        paused ? islandFixed(kAppleOrange, 1.0F) : islandRole(ColorRole::Primary)
     );
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
     const auto clockText = timerView ? countdownTime(timers.front())
+        : paused                     ? i18n::tr("island.downloads.paused")
         : scriptTitle                ? capsuleDownloads.front().name
                                      : time;
-    const float textSize = scriptTitle ? std::min(cfg.clockSize, 16.0F) : cfg.clockSize;
+    const float textSize = scriptTitle || paused ? std::min(cfg.clockSize, 16.0F) : cfg.clockSize;
     const auto metrics = renderer.measureText(
         clockText, textSize * s, FontWeight::Normal, 0, 1, TextAlign::Start, m_config->config().shell.fontFamily
     );
     const float clockSize =
-        scriptTitle ? textSize : textSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
+        scriptTitle && !paused ? textSize : textSize * std::min(1.0F, available * s / std::max(1.0F, metrics.width));
     auto* clockLabel = label(clockText, inset, 0, available, clockSize, foreground, true);
     if (timerView)
       inst.timerUi.push_back({timers.front().plugin, clockLabel, [ringPtr](float value) {
@@ -2211,23 +2326,44 @@ void Island::prepare(Instance& inst) {
         i18n::tr(onlyDownloads ? "island.downloads.title" : "island.downloads.in-progress"), 56, 17, w - 78,
         Style::fontSizeTitle, foreground, false, 1, FontWeight::SemiBold
     );
-    const auto rows = std::min(downloads.size(), std::size_t{4});
+    const auto rows = downloadRows;
     for (std::size_t i = 0; i < rows; ++i) {
       const float y = 57 + static_cast<float>(i) * 55;
       sectionCard(y - 6, y + 49);
       const auto& download = downloads[i];
-      // Cupertino leads each row with a round blue badge, as Apple lists transfers.
+      // Cupertino leads each row with a round badge; paused transfers use amber.
       const float textX = gCupertino ? 62 : 22;
       if (gCupertino)
-        leadingBadge(download.icon.empty() ? "download" : download.icon, 22, y + 4, 30, kAppleBlue, ColorRole::Primary);
+        leadingBadge(
+            download.paused()           ? "media-pause"
+                : download.icon.empty() ? "download"
+                                        : download.icon,
+            22, y + 4, 30, download.paused() ? kAppleOrange : kAppleBlue, ColorRole::Primary
+        );
       label(download.name, textX, y, w - textX - 88, 13, foreground, false, 1, FontWeight::Normal, true);
-      if (download.determinate) {
+      if (download.paused()) {
+        label(i18n::tr("island.downloads.paused"), textX, y + 24, w - textX - 22, 12, islandFixed(kAppleOrange, 1.0F));
+        if (download.determinate) {
+          auto* percentage =
+              label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
+          inst.downloadUi.push_back({download.key, percentage, nullptr});
+        }
+      } else if (download.determinate) {
         auto* percentage =
             label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
         auto* bar = progress(static_cast<float>(download.progress), textX, y + 26, w - textX - 22, 7);
-        inst.downloadUi.push_back({download.desktopId, percentage, bar});
+        inst.downloadUi.push_back({download.key, percentage, bar});
       } else {
         label(i18n::tr("island.downloads." + download.phase), textX, y + 24, w - textX - 22, 12, muted);
+      }
+      if (downloadActions[i]) {
+        auto* button =
+            control(12, y - 4, w - 24, 49, "", "", download.name, 0, true, [this, &inst, key = download.key] {
+              activateTransfer(inst, key);
+            });
+        button->setRadius(Style::scaledRadiusXl(s));
+        setTransferActionStyle(button);
+        button->inputArea()->setTabFocusKey("download:" + download.key);
       }
     }
     h = 60 + static_cast<float>(rows) * 55;
@@ -2415,16 +2551,39 @@ void Island::prepare(Instance& inst) {
         m_mpris->setPosition(bus, static_cast<std::int64_t>(static_cast<double>(length) * seekFraction));
       };
     }
-  } else if (view == island::View::Completion) {
+  } else if (view == island::View::TransferNotice) {
     constexpr float badgeSize = 32;
     constexpr float textX = 64;
-    const auto green = islandFixed(kAppleGreen, 1.0F);
-    glyph("circle-check-filled", 20, (h - badgeSize) / 2, badgeSize, green);
+    const bool failed = m_transferNotice->notice == island::TransferNotice::Failed;
+    glyph(
+        failed ? "circle-x-filled" : "circle-check-filled", 20, (h - badgeSize) / 2, badgeSize,
+        islandFixed(failed ? kAppleRed : kAppleGreen, 1.0F)
+    );
     auto* title = label(
-        i18n::tr(m_completion.value_or(false) ? "island.downloads.transfer-finished" : "island.downloads.finished"),
+        i18n::tr(
+            failed ? "island.downloads.failed"
+                : m_transferNotice->notice == island::TransferNotice::TransferFinished
+                ? "island.downloads.transfer-finished"
+                : "island.downloads.finished"
+        ),
         textX, 0, w - textX - 20, 15, foreground, false, 1, FontWeight::SemiBold
     );
     title->setPosition(title->x(), (h * s - title->height()) / 2);
+    if (transferAction) {
+      auto* button = control(
+          6, 6, w - 12, h - 12, "", "", m_transferNotice->source.name, 0, true,
+          [this, &inst, serial = m_transferNotice->serial] { activateTransferNotice(inst, serial); }
+      );
+      button->setRadius((h - 12) * s / 2);
+      setTransferActionStyle(button);
+      button->inputArea()->setTabFocusKey("transfer:" + std::to_string(m_transferNotice->serial));
+    } else if (!m_transferNotice->source.name.empty()) {
+      auto area = std::make_unique<InputArea>();
+      area->setSize(w * s, h * s);
+      area->setAcceptedButtons(0);
+      area->setTooltip(m_transferNotice->source.name);
+      canvas->addChild(std::move(area));
+    }
   } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::Dnd || m_osd->kind == OsdKind::Charging)) {
     // Status pills, as the iPhone announces a Focus or a charger: a tinted symbol and title lead,
     // and the state (On, Off or the charge level) sits at the far end in the same tint.
@@ -3125,7 +3284,7 @@ void Island::prepare(Instance& inst) {
     );
   };
   if (showBattery)
-    batteryRing(batteryList.front(), w - 50 - (showUnread ? 36 : 0), (cfg.height - 36) / 2, 36, !outlineBattery);
+    batteryRing(batteryList.front(), w - 50 - (showUnread ? 36 : 0), (cfg.height - 36) / 2, 36);
   if (expandedView && showExtras && cfg.hoverShowBatteries && !batteryList.empty()) {
     const float sectionTop = h;
     const auto rows = std::min(batteryList.size(), std::size_t{4});
@@ -3360,8 +3519,15 @@ void Island::prepare(Instance& inst) {
     inst.activityScroll->setScrollOffset(activityOffset);
   if (inst.keyboardMode) {
     inst.input.restoreTabFocus(keyboardFocus);
-    if (!inst.input.focusedArea())
+    if (!inst.input.focusedArea()) {
+      // Removed rows and closed source windows release the grab rather than
+      // moving Enter/Space onto the next app or a media control.
+      if (keyboardFocus.key && keyboardFocus.key->starts_with("download:")) {
+        releaseKeyboard(inst);
+        return;
+      }
       (void)inst.input.cycleTabFocus(false);
+    }
   }
   if (w != inst.targetWidth || h != inst.targetHeight) {
     inst.animations.cancel(inst.morph);
@@ -3455,16 +3621,23 @@ void Island::crossfadeOut(Instance& inst, std::unique_ptr<Node> previous) {
   });
 }
 
-void Island::showFlow(Instance& inst, bool show) {
-  if (inst.flowImage == nullptr)
+void Island::updateFlow(Instance& inst, const std::string& artwork) {
+  if (inst.flowImage == nullptr || inst.flowArt == artwork)
     return;
-  inst.flowShown = show;
-  if (!show) {
+  inst.flowArt = artwork;
+  if (!artwork.empty() && artwork != m_flowArt) {
+    m_flowArt = artwork;
+    auto art = loadImageFile(artwork, 32, true);
+    if (!art || !m_flow.setArtwork(art->rgba, art->width, art->height))
+      m_flow.clear();
+  }
+  inst.flowShown = !artwork.empty() && m_flow.hasArtwork();
+  if (!inst.flowShown) {
     inst.flowImage->setVisible(false);
     syncFlowTimer();
     return;
   }
-  // The caller has made this surface's context current.
+  m_renderContext->makeCurrent(inst.surface->renderTarget());
   m_flow.render(
       visuals::ArtworkFlow::frozen()
           ? 0.0F
@@ -3479,8 +3652,14 @@ void Island::showFlow(Instance& inst, bool show) {
       || !textures.updateSubImage(
           inst.flowTexture, m_flowFrame.data(), 0, 0, visuals::ArtworkFlow::kWidth, visuals::ArtworkFlow::kHeight,
           TextureDataFormat::Rgba
-      ))
+      )) {
+    // Retry on the next update rather than caching a failed texture upload.
+    inst.flowArt.clear();
+    inst.flowShown = false;
+    inst.flowImage->setVisible(false);
+    syncFlowTimer();
     return;
+  }
   inst.flowImage->setExternalTexture(inst.surface->renderTarget().renderer(), inst.flowTexture);
   inst.flowImage->setVisible(true);
   inst.flowImage->markPaintDirty();
@@ -3530,6 +3709,7 @@ void Island::releaseFlow(Instance& inst) {
   }
   inst.flowTexture = {};
   inst.flowShown = false;
+  inst.flowArt.clear();
 }
 
 void Island::collapseAfterLeave(Instance& inst, std::chrono::milliseconds delay) {
@@ -3550,6 +3730,7 @@ void Island::collapseAfterLeave(Instance& inst, std::chrono::milliseconds delay)
 void Island::releaseKeyboard(Instance& inst) {
   inst.keyboardMode = false;
   inst.keyboardNotification.reset();
+  inst.keyboardTransferNotice.reset();
   inst.hovered = false;
   inst.heldMedia = false;
   inst.suppressHover = inst.inside;
@@ -3569,6 +3750,7 @@ void Island::releaseKeyboard(Instance& inst) {
 bool Island::focusKeyboard() {
   if (!enabled() || m_instances.empty() || ScreenRecorder::instance().active())
     return false;
+  m_transferActivation.stop();
   if (closeHostedPanel)
     closeHostedPanel();
   for (auto& inst : m_instances)
@@ -3580,6 +3762,7 @@ bool Island::focusKeyboard() {
   auto& inst = **(found == m_instances.end() ? m_instances.begin() : found);
   const auto timers = countdowns();
   if (!m_notification
+      && !(m_transferNotice && transferApp(m_transferNotice->source))
       && (!m_mpris || !m_mpris->activePlayer())
       && progressActivities().empty()
       && std::ranges::none_of(timers, [](const auto& timer) { return timer.active; })) {
@@ -3592,6 +3775,9 @@ bool Island::focusKeyboard() {
   m_osdTimeout.stop();
   inst.keyboardMode = true;
   inst.keyboardNotification = m_notification ? std::optional{m_notification->id} : std::nullopt;
+  inst.keyboardTransferNotice = !m_notification && m_transferNotice && transferApp(m_transferNotice->source)
+      ? std::optional{m_transferNotice->serial}
+      : std::nullopt;
   inst.enter.stop();
   inst.leave.stop();
   inst.input.setFocus(nullptr);
@@ -3887,7 +4073,7 @@ island::Size Island::panelReturnSize() const {
   );
   const auto view = island::view(
       m_notification.has_value(), m_osd.has_value(), false, mediaActive, false, available.downloads, available.timers,
-      true, true, island::Activity::None, compact, m_completion.has_value()
+      true, true, island::Activity::None, compact, m_transferNotice.has_value()
   );
   auto size = island::size(
       view, cfg.height, cfg.clockSize, cfg.clockSeconds, cfg.calendarLabels != IslandCalendarLabels::Initials,

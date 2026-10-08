@@ -72,17 +72,20 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         run(['pactl','load-module','module-null-sink','sink_name=hyprland-test'])
         wait(lambda:any(sink['name']=='hyprland-test' for sink in json.loads(run(['pactl','--format=json','list','sinks']))), 'Private audio sink did not appear')
         run(['pactl','set-default-sink','hyprland-test'])
-        if '--island-routing-only' in sys.argv or '--island-cupertino-only' in sys.argv:
+        if any(flag in sys.argv for flag in ('--island-routing-only', '--island-cupertino-only', '--island-battery-glow-only')):
             bluetooth=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_bluetooth.py')],env=env,
                                        stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
             processes.append(bluetooth)
             assert bluetooth.stdout.readline().strip()=='ok'
-        if '--island-cupertino-only' in sys.argv:
+        if '--island-cupertino-only' in sys.argv or '--island-battery-glow-only' in sys.argv:
             battery=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_battery.py')],env=env,
                                      stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
             processes.append(battery)
             assert battery.stdout.readline().strip()=='ok'
-            from island_cupertino_smoke import prepare
+            if '--island-battery-glow-only' in sys.argv:
+                from island_battery_glow_smoke import prepare
+            else:
+                from island_cupertino_smoke import prepare
             prepare(base,cfg,env)
         if '--startup-only' in sys.argv:
             from startup_apps_smoke import prepare
@@ -129,6 +132,12 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-performance-only' in sys.argv:
             from island_performance_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-completion-only' in sys.argv:
+            from island_completion_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-transfer-actions-only' in sys.argv:
+            from island_transfer_actions_smoke import prepare
+            prepare(base,cfg,env)
         binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia'))
         if '--performance-only' in sys.argv:
             import shutil
@@ -142,8 +151,20 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             assert not reply.startswith('error'),reply
             return reply
         wait(lambda:msg('record-status')=='idle','Noctalia IPC')
+        if '--island-battery-glow-only' in sys.argv:
+            from island_battery_glow_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,bluetooth,battery)
+            raise SystemExit(0)
         if '--island-performance-only' in sys.argv:
             from island_performance_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-completion-only' in sys.argv:
+            from island_completion_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-transfer-actions-only' in sys.argv:
+            from island_transfer_actions_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-cupertino-only' in sys.argv:

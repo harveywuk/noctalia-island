@@ -9,8 +9,9 @@
 #include <cmath>
 
 namespace island {
-  // A slow pulse outside the capsule: red for capture/critical alerts, green for completed
-  // transfers. It sits outside the progress outline so both can show, and ignores input.
+  // A slow pulse outside the capsule: red for capture, critical alerts and failed transfers;
+  // green for completed transfers, or charge colour for a newly connected battery.
+  // It sits outside the progress outline and ignores input.
   class CaptureGlow final : public Node {
   public:
     static constexpr float kPeriodMs = 2400.0F;

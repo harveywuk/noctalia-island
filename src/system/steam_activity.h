@@ -20,12 +20,14 @@ public:
   explicit SteamActivity(std::filesystem::path home);
   std::vector<SteamTransfer> read();
   bool takeCompletion() { return std::exchange(m_completed, false); }
+  bool takeFailure() { return std::exchange(m_failed, false); }
 
 private:
   std::filesystem::path m_home;
   std::map<std::string, std::string> m_phases;
   std::unordered_set<std::string> m_observedTransfers;
   bool m_completed = false;
+  bool m_failed = false;
   std::uintmax_t m_offset = 0;
   std::uintmax_t m_inode = 0;
   int m_pid = 0;

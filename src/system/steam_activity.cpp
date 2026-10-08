@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <regex>
 #include <sstream>
+#include <string_view>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -25,6 +26,25 @@ namespace {
       result += text[i];
     }
     return result;
+  }
+
+  bool failedUpdate(std::string_view reason) {
+    // These are explicit error reports, never an inference from stopped progress.
+    // Scheduling, user cancellation and unfamiliar reasons remain neutral.
+    if (reason.starts_with("Failed "))
+      return true;
+    constexpr std::string_view errors[]{
+        "Disk write failure",
+        "Disk read failure",
+        "Missing file privileges",
+        "Not enough disk space",
+        "No connection to content servers",
+        "Content servers unreachable",
+        "Corrupt update files"
+    };
+    return std::ranges::any_of(errors, [reason](auto error) {
+      return reason == error || reason.ends_with(std::string("(") + std::string(error) + ")");
+    });
   }
 } // namespace
 
@@ -49,6 +69,7 @@ std::vector<SteamTransfer> SteamActivity::read() {
     m_pending.clear();
     m_observedTransfers.clear();
     m_completed = false;
+    m_failed = false;
     return {};
   }
   auto root = m_home / ".steam/steam";
@@ -62,6 +83,7 @@ std::vector<SteamTransfer> SteamActivity::read() {
     m_pending.clear();
     m_observedTransfers.clear();
     m_completed = false;
+    m_failed = false;
     m_pid = pid;
     m_inode = logStat.st_ino;
     // A bounded tail also supports attaching while Steam is downloading.
@@ -79,7 +101,9 @@ std::vector<SteamTransfer> SteamActivity::read() {
     const auto end = m_pending.find('\n', consumed);
     if (end == std::string::npos)
       break;
-    const auto line = m_pending.substr(consumed, end - consumed);
+    auto line = m_pending.substr(consumed, end - consumed);
+    if (line.ends_with('\r'))
+      line.pop_back();
     consumed = end + 1;
     if (line.size() < 23 || line[0] != '[')
       continue;
@@ -97,19 +121,37 @@ std::vector<SteamTransfer> SteamActivity::read() {
     const auto id = line.substr(start, last - start);
     if (id.empty() || id.size() > 10)
       continue;
-    if (line.find("update canceled") != std::string::npos || line.find("update finished") != std::string::npos) {
-      if (m_observedTransfers.erase(id) && !replay && line.find("update finished : No Error") != std::string::npos)
-        m_completed = true;
-      m_phases.erase(id);
+    const auto canceled = line.find("update canceled : ");
+    const auto finished = line.find("update finished : ");
+    if (canceled != std::string::npos || finished != std::string::npos) {
+      const auto marker = canceled != std::string::npos ? canceled : finished;
+      const auto reason = std::string_view(line).substr(marker + 18);
+      const bool observed = m_observedTransfers.contains(id);
+      if (canceled != std::string::npos && observed && reason.ends_with("(Suspended)")) {
+        if (m_phases.contains(id) || m_phases.size() < 32)
+          m_phases[id] = "paused";
+      } else {
+        if (observed && !replay) {
+          if (finished != std::string::npos && reason.starts_with("No Error"))
+            m_completed = true;
+          else if (failedUpdate(reason))
+            m_failed = true;
+        }
+        m_observedTransfers.erase(id);
+        m_phases.erase(id);
+      }
       continue;
     }
     const auto changed = line.find("App update changed : ");
     if (changed == std::string::npos)
       continue;
     const auto state = line.substr(changed + 21);
-    if (state.find("Stopping") != std::string::npos || state.starts_with("None"))
-      m_phases.erase(id);
-    else if (m_phases.contains(id) || m_phases.size() < 32) {
+    if (state.find("Stopping") != std::string::npos || state.starts_with("None")) {
+      // Steam follows a suspension with None. Keep the explicitly paused row
+      // until it resumes, is cancelled, completes, or the client exits.
+      if (!m_phases.contains(id) || m_phases.at(id) != "paused")
+        m_phases.erase(id);
+    } else if (m_phases.contains(id) || m_phases.size() < 32) {
       if (state.find("Downloading") != std::string::npos)
         m_phases[id] = "downloading";
       else if (state.find("Staging") != std::string::npos || state.find("Committing") != std::string::npos)

@@ -18,6 +18,7 @@ namespace island {
   class BatteryConnections {
   public:
     using Clock = std::chrono::steady_clock;
+    static constexpr int kGlowSeconds = 10;
     void update(
         const std::vector<BluetoothDeviceInfo>& devices, Clock::time_point now, std::string_view focusedOutput = {}
     ) {
@@ -30,23 +31,68 @@ namespace island {
         if (device.connected)
           m_connected.try_emplace(device.path, Connection{now, PreviewTarget{std::string(focusedOutput)}});
     }
+    void updatePower(
+        const std::vector<UPowerDeviceInfo>& devices, Clock::time_point now, std::string_view focusedOutput = {}
+    ) {
+      std::erase_if(m_power, [&](const auto& entry) {
+        return std::ranges::none_of(devices, [&](const auto& device) {
+          return device.isPresent && device.path == entry.first;
+        });
+      });
+      for (const auto& device : devices) {
+        if (!device.isPresent)
+          continue;
+        const auto plugged = batteryStatePlugged(device.state.state);
+        auto [entry, added] = m_power.try_emplace(device.path);
+        auto& connection = entry->second;
+        const bool system = device.isLaptopBattery() || device.type == UPowerDeviceType::Ups;
+        if ((added && !system) || (plugged.value_or(false) && !connection.plugged))
+          connection.preview = Connection{now, PreviewTarget{std::string(focusedOutput)}};
+        else if (plugged == false && connection.plugged)
+          connection.preview.reset();
+        // A temporarily unknown state must not manufacture another charger connection.
+        if (plugged)
+          connection.plugged = *plugged;
+      }
+    }
     void reconcileOutputs(const std::vector<std::string>& available, std::string_view focused) {
       for (auto& [path, connection] : m_connected)
         connection.target.reconcile(available, focused);
+      for (auto& [path, connection] : m_power)
+        if (connection.preview)
+          connection.preview->target.reconcile(available, focused);
+    }
+    std::optional<Clock::time_point> started(
+        const std::string& path, Clock::time_point now, int seconds, std::string_view setting, std::string_view output
+    ) const {
+      const Connection* connection = nullptr;
+      if (const auto found = m_connected.find(path); found != m_connected.end())
+        connection = &found->second;
+      else if (const auto power = m_power.find(path); power != m_power.end() && power->second.preview)
+        connection = &*power->second.preview;
+      if (connection
+          && now < connection->started + std::chrono::seconds(seconds)
+          && connection->target.matches(setting, output))
+        return connection->started;
+      return std::nullopt;
     }
     bool recent(
         const std::string& path, Clock::time_point now, int seconds = 5, std::string_view setting = "all",
         std::string_view output = {}
     ) const {
-      const auto found = m_connected.find(path);
-      return found != m_connected.end()
-          && now < found->second.started + std::chrono::seconds(seconds)
-          && found->second.target.matches(setting, output);
+      return started(path, now, seconds, setting, output).has_value();
     }
     std::optional<Clock::time_point> nextExpiry(Clock::time_point now, int seconds = 5) const {
       std::optional<Clock::time_point> next;
       for (const auto& [path, connected] : m_connected) {
         const auto deadline = connected.started + std::chrono::seconds(seconds);
+        if (deadline > now && (!next || deadline < *next))
+          next = deadline;
+      }
+      for (const auto& [path, connected] : m_power) {
+        if (!connected.preview)
+          continue;
+        const auto deadline = connected.preview->started + std::chrono::seconds(seconds);
         if (deadline > now && (!next || deadline < *next))
           next = deadline;
       }
@@ -59,6 +105,11 @@ namespace island {
       PreviewTarget target;
     };
     std::unordered_map<std::string, Connection> m_connected;
+    struct PowerConnection {
+      std::optional<Connection> preview;
+      bool plugged = false;
+    };
+    std::unordered_map<std::string, PowerConnection> m_power;
   };
 
   struct Battery {
@@ -68,9 +119,25 @@ namespace island {
     std::int64_t seconds = 0;
     bool system = false, low = false;
     bool bluetooth = false, recentlyConnected = false;
+    std::optional<BatteryConnections::Clock::time_point> glowStarted;
     bool charging() const { return state == BatteryState::Charging; }
     bool compact() const { return bluetooth ? low || recentlyConnected : charging() || low || !system; }
   };
+
+  enum class BatteryGlowLevel { Red, Amber, Green };
+  inline BatteryGlowLevel batteryGlowLevel(double percentage) {
+    return percentage > 60 ? BatteryGlowLevel::Green
+        : percentage >= 20 ? BatteryGlowLevel::Amber
+                           : BatteryGlowLevel::Red;
+  }
+
+  inline const Battery* glowingBattery(const std::vector<Battery>& batteries) {
+    const Battery* latest = nullptr;
+    for (const auto& battery : batteries)
+      if (battery.glowStarted && (!latest || battery.glowStarted > latest->glowStarted))
+        latest = &battery;
+    return latest;
+  }
 
   inline std::string batteryAddress(std::string address) {
     std::ranges::transform(address, address.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -127,7 +194,12 @@ namespace island {
                && state.percentage <= threshold
                && (wireless || !batteryStatePlugged(state.state).value_or(false)),
            wireless,
-           wireless && connections && connections->recent(bt->path, now, previewSeconds, previewMonitor, output)}
+           wireless && connections && connections->recent(bt->path, now, previewSeconds, previewMonitor, output),
+           connections
+               ? connections->started(
+                     wireless ? bt->path : device.path, now, BatteryConnections::kGlowSeconds, previewMonitor, output
+                 )
+               : std::nullopt}
       );
     }
     for (const auto& device : bluetooth) {
@@ -148,7 +220,10 @@ namespace island {
       result.push_back(
           {device.path, device.alias, bluetoothDeviceGlyphName(device.kind), static_cast<double>(device.batteryPercent),
            BatteryState::Unknown, 0, false, threshold > 0 && device.batteryPercent <= threshold, true,
-           connections && connections->recent(device.path, now, previewSeconds, previewMonitor, output)}
+           connections && connections->recent(device.path, now, previewSeconds, previewMonitor, output),
+           connections
+               ? connections->started(device.path, now, BatteryConnections::kGlowSeconds, previewMonitor, output)
+               : std::nullopt}
       );
     }
     std::ranges::sort(result, [](const Battery& a, const Battery& b) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/timer_manager.h"
+#include "dbus/downloads/download_progress.h"
 #include "dbus/downloads/launcher_progress.h"
 #include "system/steam_activity.h"
 
@@ -12,16 +13,6 @@
 
 class SessionBus;
 
-struct DownloadProgress {
-  std::string desktopId;
-  std::string name;
-  double progress = 0;
-  bool determinate = true;
-  std::string phase;
-  // Symbol for the row and compact ring; empty means the download arrow. Scripts set their own.
-  std::string icon;
-};
-
 // Desktop applications publish partial LauncherEntry updates, not individual files.
 class DownloadProgressService {
 public:
@@ -29,7 +20,8 @@ public:
   ~DownloadProgressService();
   [[nodiscard]] std::vector<DownloadProgress> active() const;
   std::function<void()> changed;
-  std::function<void()> completed;
+  std::function<void(const DownloadSource&)> completed;
+  std::function<void(const DownloadSource&)> failed;
 
 private:
   struct Entry {

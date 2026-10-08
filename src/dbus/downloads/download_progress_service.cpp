@@ -12,8 +12,12 @@ DownloadProgressService::DownloadProgressService(SessionBus& bus) : m_bus(bus), 
   m_steamPoll.startRepeating(std::chrono::seconds(2), [this] {
     auto transfers = m_steam.read();
     const bool finished = m_steam.takeCompletion();
+    const bool failure = m_steam.takeFailure();
     if (finished && completed)
-      completed();
+      completed(downloadSource("steam.desktop", desktopEntries()));
+    // An error wins when several transfers finish in the same poll.
+    if (failure && failed)
+      failed(downloadSource("steam.desktop", desktopEntries()));
     if (transfers == m_steamTransfers)
       return;
     m_steamTransfers = std::move(transfers);
@@ -52,7 +56,7 @@ DownloadProgressService::DownloadProgressService(SessionBus& bus) : m_bus(bus), 
           const bool finished = previous.completedBy(entry.state);
           m_entries[key] = std::move(entry);
           if (finished && completed)
-            completed();
+            completed(downloadSource(id, desktopEntries()));
           if (changed)
             changed();
         } catch (const sdbus::Error&) {
@@ -96,17 +100,24 @@ std::vector<DownloadProgress> DownloadProgressService::active() const {
   for (const auto& [key, entry] : m_entries) {
     if (!entry.state.active())
       continue;
-    auto name = entry.desktopId.substr(0, entry.desktopId.size() - 8);
-    const auto& apps = desktopEntries();
-    const auto found = std::ranges::find_if(apps, [&](const auto& app) {
-      return app.id == entry.desktopId || app.id + ".desktop" == entry.desktopId;
+    const auto source = downloadSource(entry.desktopId, desktopEntries());
+    result.push_back({
+        .desktopId = entry.desktopId,
+        .name = source.name,
+        .progress = entry.state.progress,
+        .key = "launcher:" + key.first + ":" + entry.desktopId,
+        .source = source,
     });
-    if (found != apps.end())
-      name = found->name;
-    result.push_back({entry.desktopId, name, entry.state.progress});
   }
   if (std::ranges::none_of(result, [](const auto& entry) { return entry.desktopId == "steam.desktop"; }))
     for (const auto& transfer : m_steamTransfers)
-      result.push_back({"steam.desktop", transfer.name, 0, false, transfer.phase});
+      result.push_back({
+          .desktopId = "steam.desktop",
+          .name = transfer.name,
+          .determinate = false,
+          .phase = transfer.phase,
+          .key = "steam:" + transfer.appId,
+          .source = downloadSource("steam.desktop", desktopEntries()),
+      });
   return result;
 }

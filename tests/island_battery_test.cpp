@@ -132,5 +132,78 @@ int main() {
   TEST_CHECK(both.front().id == mouse.path && both.front().low); // Low charge takes priority.
   connections.update({}, start + 22s);
   TEST_CHECK(!connections.nextExpiry(start + 22s));
+
+  // The halo lasts ten seconds independently of the compact Bluetooth preview.
+  mouse.batteryPercent = 75;
+  connections.update({mouse}, start, "DP-1");
+  auto glow = [&](auto now, std::string_view output = "DP-1") {
+    return island::batterySnapshot({}, {mouse}, config, nullptr, &connections, now, 5, "focused", output);
+  };
+  TEST_CHECK(glow(start + 6s).front().glowStarted == start);
+  TEST_CHECK(!glow(start + 6s).front().compact());
+  TEST_CHECK(!glow(start + 6s, "DP-2").front().glowStarted);
+  mouse.batteryPercent = 60;
+  connections.update({mouse}, start + 9s, "DP-2");
+  TEST_CHECK(glow(start + 9999ms).front().glowStarted == start);
+  TEST_CHECK(!glow(start + 10s).front().glowStarted);
+  TEST_CHECK(!connections.nextExpiry(start + 10s, island::BatteryConnections::kGlowSeconds));
+  for (double percentage : {0., 19., 19.99})
+    TEST_CHECK(island::batteryGlowLevel(percentage) == island::BatteryGlowLevel::Red);
+  for (double percentage : {20., 42., 60.})
+    TEST_CHECK(island::batteryGlowLevel(percentage) == island::BatteryGlowLevel::Amber);
+  for (double percentage : {60.01, 61., 100.})
+    TEST_CHECK(island::batteryGlowLevel(percentage) == island::BatteryGlowLevel::Green);
+
+  // Use the latest connection even when an older low battery sorts first.
+  connections.update({mouse, second}, start + 8s, "DP-2");
+  mouse.batteryPercent = 3;
+  both = island::batterySnapshot({}, {mouse, second}, config, nullptr, &connections, start + 9s);
+  TEST_CHECK(both.front().id == mouse.path);
+  TEST_CHECK(island::glowingBattery(both)->id == second.path);
+  TEST_CHECK(!island::glowingBattery({}));
+
+  // Charger transitions trigger once, survive unknown readings, and end on unplug.
+  island::BatteryConnections wired;
+  laptop.state.state = BatteryState::Discharging;
+  wired.updatePower({laptop}, start, "DP-1");
+  TEST_CHECK(!wired.recent(laptop.path, start));
+  laptop.state.state = BatteryState::Charging;
+  wired.updatePower({laptop}, start + 1s, "DP-1");
+  TEST_CHECK(wired.started(laptop.path, start + 2s, 10, "focused", "DP-1") == start + 1s);
+  TEST_CHECK(!wired.recent(laptop.path, start + 2s, 10, "focused", "DP-2"));
+  laptop.state.state = BatteryState::Unknown;
+  wired.updatePower({laptop}, start + 2s, "DP-2");
+  laptop.state.state = BatteryState::FullyCharged;
+  wired.updatePower({laptop}, start + 3s, "DP-2");
+  wired.reconcileOutputs({"DP-2"}, "DP-2");
+  TEST_CHECK(wired.started(laptop.path, start + 10s, 10, "focused", "DP-2") == start + 1s);
+  TEST_CHECK(!wired.recent(laptop.path, start + 11s, 10));
+  laptop.state.state = BatteryState::Discharging;
+  wired.updatePower({laptop}, start + 12s);
+  laptop.state.state = BatteryState::PendingCharge;
+  wired.updatePower({laptop}, start + 13s);
+  TEST_CHECK(wired.nextExpiry(start + 13s, 10) == start + 23s);
+  laptop.state.state = BatteryState::Discharging;
+  wired.updatePower({laptop}, start + 14s);
+  TEST_CHECK(!wired.recent(laptop.path, start + 14s, 10));
+
+  // Peripheral arrival/removal and late battery data use the original event age.
+  device.state.percentage = std::numeric_limits<double>::quiet_NaN();
+  wired.updatePower({device}, start);
+  TEST_CHECK(island::batterySnapshot({device}, {}, config, nullptr, &wired, start).empty());
+  device.state.percentage = 42;
+  wired.updatePower({device}, start + 4s);
+  auto peripheral = island::batterySnapshot({device}, {}, config, nullptr, &wired, start + 9s);
+  TEST_CHECK(peripheral.front().glowStarted == start);
+  TEST_CHECK(!island::batterySnapshot({device}, {}, config, nullptr, &wired, start + 10s).front().glowStarted);
+  wired.updatePower({}, start + 5s);
+  TEST_CHECK(!wired.nextExpiry(start + 5s, 10));
+  wired.updatePower({device}, start + 6s);
+  TEST_CHECK(wired.recent(device.path, start + 15s, 10));
+
+  // A late UPower duplicate cannot revive an expired Bluetooth connection halo.
+  connections.updatePower({device}, start + 11s);
+  both = island::batterySnapshot({device}, {mouse}, config, nullptr, &connections, start + 12s);
+  TEST_CHECK(both.size() == 1 && !both.front().glowStarted);
   return 0;
 }

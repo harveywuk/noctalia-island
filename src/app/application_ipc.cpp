@@ -841,13 +841,14 @@ bool Application::runIdleAction(const IdleActionRequest& action) {
 }
 
 // Live activities posted by scripts and keybinds. Each command takes positional arguments, or one
-// JSON object: {"id": "...", "title": "...", "icon": "...", "progress": 0-100 or null}.
+// JSON object: id, title, icon, progress (0-100 or null), status (running, paused, failed).
 void Application::registerIslandActivityIpc() {
   struct Request {
     std::string id;
     std::string title;
     std::string icon;
     std::optional<std::optional<double>> progress;
+    std::optional<island::TransferStatus> status;
   };
   const auto parsePercent = [](const std::string& text) -> std::optional<std::optional<double>> {
     if (text == "-")
@@ -880,6 +881,10 @@ void Application::registerIslandActivityIpc() {
       else
         return "field 'progress' must be a number from 0 to 100, or null";
     }
+    if (const auto it = payload.find("status"); it != payload.end()) {
+      if (!it->is_string() || !(request.status = island::transferStatus(it->get<std::string>())))
+        return "field 'status' must be running, paused, or failed";
+    }
     return {};
   };
   const auto splitFirst = [](const std::string& input) {
@@ -904,8 +909,8 @@ void Application::registerIslandActivityIpc() {
     if (request.id.empty() || request.title.empty())
       return "error: island-activity-start requires <id> and <title>\n";
     m_island.startScriptActivity(request.id, request.title, request.icon);
-    if (request.progress)
-      m_island.updateScriptActivity(request.id, request.progress, {}, {});
+    if (request.progress || request.status)
+      m_island.updateScriptActivity(request.id, request.progress, {}, {}, request.status);
     return "ok\n";
   });
   m_ipcService.bind(
@@ -929,7 +934,7 @@ void Application::registerIslandActivityIpc() {
         }
         if (request.id.empty())
           return "error: island-activity-update requires <id>\n";
-        if (!m_island.updateScriptActivity(request.id, request.progress, request.title, request.icon))
+        if (!m_island.updateScriptActivity(request.id, request.progress, request.title, request.icon, request.status))
           return "error: no island activity named '" + request.id + "'\n";
         return "ok\n";
       }
