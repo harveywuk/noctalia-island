@@ -3,11 +3,13 @@
 #include "dbus/downloads/download_progress.h"
 #include "render/core/render_styles.h"
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace island {
@@ -70,6 +72,33 @@ namespace island {
     // A fresh result replaces the action as well as the text. Pointer/key
     // gestures begun for an older result must never activate its replacement.
     std::uint64_t serial;
+    // Display metadata only; activation always uses the source app identity.
+    std::string title;
+    std::string detail;
+  };
+
+  class RecentTransfers {
+  public:
+    using Clock = std::chrono::steady_clock;
+    struct Entry {
+      TransferFeedback feedback;
+      Clock::time_point received;
+    };
+    void remember(TransferFeedback feedback, Clock::time_point now = Clock::now()) {
+      m_entries.insert(m_entries.begin(), {std::move(feedback), now});
+      if (m_entries.size() > 3)
+        m_entries.pop_back();
+    }
+    const std::vector<Entry>& entries() const { return m_entries; }
+    const Entry* find(std::uint64_t serial) const {
+      const auto found =
+          std::ranges::find_if(m_entries, [serial](const auto& entry) { return entry.feedback.serial == serial; });
+      return found == m_entries.end() ? nullptr : &*found;
+    }
+    bool empty() const { return m_entries.empty(); }
+
+  private:
+    std::vector<Entry> m_entries;
   };
 
   inline std::optional<TransferStatus> transferStatus(std::string_view status) {

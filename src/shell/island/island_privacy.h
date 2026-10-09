@@ -41,6 +41,7 @@ namespace island {
     // Lower-case executables of those apps, where known, for focusing their windows.
     std::vector<std::string> binaries;
     std::vector<std::uint32_t> sourceIds;
+    bool includesMicrophone = false;
     const char* icon() const {
       switch (kind) {
       case PrivacyCaptureKind::Microphone:
@@ -57,7 +58,7 @@ namespace island {
       case PrivacyCaptureKind::Microphone:
         return "bar.widgets.privacy.microphone";
       case PrivacyCaptureKind::Camera:
-        return "bar.widgets.privacy.camera";
+        return includesMicrophone ? "island.privacy.camera-microphone" : "bar.widgets.privacy.camera";
       case PrivacyCaptureKind::Screen:
         return "bar.widgets.privacy.screen-sharing";
       }
@@ -73,6 +74,21 @@ namespace island {
       return text;
     }
   };
+
+  // Display precedence must never remove microphone data from the underlying service snapshot.
+  inline std::vector<PrivacyActivity> displayPrivacy(std::vector<PrivacyActivity> activities) {
+    const auto microphone = std::ranges::find(activities, PrivacyCaptureKind::Microphone, &PrivacyActivity::kind);
+    const auto camera = std::ranges::find(activities, PrivacyCaptureKind::Camera, &PrivacyActivity::kind);
+    if (microphone != activities.end() && camera != activities.end()) {
+      camera->includesMicrophone = true;
+      camera->apps.insert(camera->apps.end(), microphone->apps.begin(), microphone->apps.end());
+      std::ranges::sort(camera->apps);
+      const auto duplicates = std::ranges::unique(camera->apps);
+      camera->apps.erase(duplicates.begin(), duplicates.end());
+      activities.erase(microphone);
+    }
+    return activities;
+  }
 
   class PrivacySummary {
   public:

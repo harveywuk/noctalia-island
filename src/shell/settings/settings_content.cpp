@@ -7,6 +7,7 @@
 #include "shell/settings/backup_editor.h"
 #include "shell/settings/bar_widget_editor.h"
 #include "shell/settings/default_apps_editor.h"
+#include "shell/settings/focus_editor.h"
 #include "shell/settings/hyprland_display_editor.h"
 #include "shell/settings/hyprland_editor.h"
 #include "shell/settings/island_widget_editor.h"
@@ -1493,6 +1494,8 @@ namespace settings {
           activeGroupBody->addChild(std::move(displays));
         } else if (auto editor = makeHyprlandEditor(entry, ctx)) {
           activeGroupBody->addChild(std::move(editor));
+        } else if (entry.path == std::vector<std::string>{"notification", "focus"}) {
+          activeGroupBody->addChild(makeFocusEditor(ctx));
         } else if (const auto* list = std::get_if<ListSetting>(&entry.control)) {
           if (hoverWidgetGroup(entry.path)) {
             if (!islandWidgetEditorAdded) {

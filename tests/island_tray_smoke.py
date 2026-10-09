@@ -57,9 +57,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
 
     def media_tray(name):
         picture = Image.open(shot(name)).convert('RGB')
-        # Activity tabs change the footer height. Identify the solid fixture square by
-        # its whole connected shape so the wallpaper beneath a short card cannot match.
-        pixels={(x,y) for x in range(560,720) for y in range(200,320) if min(picture.getpixel((x,y)))>230}
+        # The contextual header keeps the tray at the trailing edge beside live indicators.
+        pixels={(x,y) for x in range(720,900) for y in range(20,70) if min(picture.getpixel((x,y)))>230}
         while pixels:
             pending=[pixels.pop()]; component=[]
             while pending:
@@ -80,7 +79,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert tray, (name, 'Tray fixture missing')
         picture = Image.open(shot(name)).convert('RGB')
         columns = {}
-        for x in range(560, 720):
+        for x in range(720, 900):
             ys = [y for y in range(tray[1]-12, tray[1]+13) if max(picture.getpixel((x, y))) > 100]
             if ys:
                 columns[x] = ys
@@ -93,7 +92,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         centers = [((xs[0]+xs[-1])/2, (min(y for x in xs for y in columns[x])
                     + max(y for x in xs for y in columns[x]))/2) for xs in groups]
         assert max(y for x, y in centers)-min(y for x, y in centers) <= 3, ('Icons are not aligned', centers)
-        assert abs((groups[0][0]+groups[-1][-1])/2-640) < 5, ('Combined row is not centered', centers)
+        assert 830 <= groups[-1][-1] <= 880, ('Status row lost its trailing inset', centers)
         return [(round(x), round(y)) for x, y in centers]
 
     try:
@@ -157,8 +156,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         time.sleep(1.5); move(580, 40); time.sleep(1)
         square = media_tray('media-tray-expanded')
         assert square, 'Tray missing beneath expanded playback controls'
-        assert abs(square[0]-640) < 16, ('Media tray is not centered', square)
-        assert square[1] < 260, ('Idle widgets leaked into the media footer', square)
+        assert square[0] > 820, ('Media tray is not in the contextual header', square)
+        assert square[1] < 70, ('Tray is not aligned with the title', square)
         before = events().count('Activate')
         move(*square); click()
         assert events().count('Activate') == before+1, 'Media tray did not activate its app'
@@ -177,7 +176,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert events().count('MenuEvent 1 clicked') == before+1, 'Media tray menu action did not reach the app'
         move(580, 40); time.sleep(1)
         before = events().count('PlayPause')
-        move(640, 169); click()
+        move(640, 233); click()
         assert events().count('PlayPause') == before+1, 'Tray footer interfered with playback controls'
 
         # Privacy, unread history and tray items occupy one shared row, including after tray changes.
@@ -204,11 +203,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         before = events().count('Activate')
         move(*icons[-1]); click()
         assert events().count('Activate') == before+1, 'Tray click missed after sharing the status row'
-        move(*icons[0]); click()
+        move(455, 42); click()
         panel_status = json.loads(msg('status'))
         content=run(['tesseract',str(shot('media-tray-microphone')),'stdout','--tessdata-dir',tessdata,'--psm','11'])
-        assert not panel_status['panelOpen'] and 'Microphone' in content, ('Microphone button missed its Live Activity', content, panel_status)
-        move(550, 40); click(); time.sleep(.5)
+        assert not panel_status['panelOpen'] and 'Live input' in content, ('Microphone button missed its Live Activity', content, panel_status)
+        move(455, 42); click(); time.sleep(.5)
         icons = status_row('media-tray-status-row-activity-return', 3)
         move(*icons[1]); click()
         assert json.loads(msg('status'))['activePanelId'] == 'notification-center', 'Unread button missed its panel'
@@ -233,8 +232,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert shell.poll() is None
         print('PASS: idle and media trays activate, hold the Island for menus, dispatch menu actions, '
               'survive playback updates, preserve playback controls, respect the tray preference, '
-              'and hide removed items; media status icons share a centered row with the tray, '
-              'recenter on item changes and open their activities or panels; menu-only items open on left click', flush=True)
+              'and hide removed items; media status indicators share the header with the tray, '
+              'keep their trailing inset on item changes and title clicks switch activities; menu-only items open on left click', flush=True)
     finally:
         if capture:
             capture.terminate(); capture.wait(timeout=5)

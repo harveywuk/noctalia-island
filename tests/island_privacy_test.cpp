@@ -17,6 +17,20 @@ int main() {
   TEST_CHECK(snapshot.size() == 3);
   TEST_CHECK(snapshot[0].appNames() == "Call, Zen");
   TEST_CHECK(snapshot[1].appNames() == "Call");
+  // Camera wins visually while the raw microphone activity remains available to controls.
+  const auto display = island::displayPrivacy(snapshot);
+  TEST_CHECK(display.size() == 2);
+  TEST_CHECK(display[0].kind == PrivacyCaptureKind::Camera && display[0].includesMicrophone);
+  TEST_CHECK(display[0].appNames() == "Call, Zen");
+  TEST_CHECK(std::string(display[0].labelKey()) == "island.privacy.camera-microphone");
+  TEST_CHECK(display[1].kind == PrivacyCaptureKind::Screen);
+  TEST_CHECK(snapshot.size() == 3 && snapshot[0].kind == PrivacyCaptureKind::Microphone);
+  TEST_CHECK(!snapshot[1].includesMicrophone);
+  auto microphoneOnly = snapshot;
+  std::erase_if(microphoneOnly, [](const auto& entry) { return entry.kind == PrivacyCaptureKind::Camera; });
+  const auto remainingDisplay = island::displayPrivacy(microphoneOnly);
+  TEST_CHECK(remainingDisplay.size() == 2 && remainingDisplay[0].kind == PrivacyCaptureKind::Microphone);
+
   config.micFilterRegex = "Zen";
   config.camFilterRegex = "Call";
   snapshot = summary.snapshot(state, config);

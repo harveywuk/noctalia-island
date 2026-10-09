@@ -43,6 +43,8 @@
     },
     "activities": {
       "media": "Media",
+      "now-playing": "Now Playing",
+      "switch-to": "Switch to {activity}",
       "downloads": "Downloads",
       "timers": "Timers",
       "microphone": "Mic",
@@ -112,6 +114,7 @@
       "open": "Open Calendar"
     },
     "privacy": {
+      "camera-microphone": "Camera and microphone",
       "audio-controls": "Open audio controls"
     },
     "battery": {
@@ -121,10 +124,16 @@
       "more-plural": "{count} more batteries"
     },
     "downloads": {
+      "hide-recent": "Hide recent transfers",
       "title": "Downloads",
       "finished": "Download finished",
       "transfer-finished": "Transfer finished",
       "failed": "Transfer failed",
+      "recent": "Recent transfers",
+      "recent-now": "Now",
+      "recent-minutes": "{count}m",
+      "recent-hours": "{count}h",
+      "recent-days": "{count}d",
       "paused": "Paused",
       "in-progress": "In Progress",
       "working": "Working…",
@@ -2356,6 +2365,7 @@
         "effects": "Effects",
         "filtering": "Filtering",
         "focus-styling": "Focus Styling",
+        "focus": "Focus",
         "formats": "Formats",
         "general": "General",
         "greeter": "Greeter",
@@ -4836,6 +4846,10 @@
         }
       },
       "island": {
+        "compact_layout": {
+          "label": "Compact layout",
+          "description": "Use 400 px activity cards instead of the roomier 520 px layout. Full panels keep room for their content."
+        },
         "appearance": {
           "label": "Appearance",
           "description": "macOS keeps the Island black with white content and colours each activity, like Apple’s Dynamic Island. Theme follows the shell palette."

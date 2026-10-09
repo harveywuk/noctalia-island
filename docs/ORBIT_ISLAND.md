@@ -69,7 +69,9 @@ calendar; otherwise an active countdown precedes downloads, media, and the idle 
 
 When two activities run at once, the Island splits as on iPhone: the capsule shows
 the first in the activity order and a round bubble beside it shows the next (album
-art for media, a progress ring for a timer or download). Clicking the bubble swaps
+art for media, a progress ring for a timer or download). A third eligible activity
+adds a second bubble to the right; media, downloads, timers, and Keep Awake can
+participate. Clicking a bubble swaps
 the two until the activity it brought forward ends. Expanding opens the activity
 currently in the capsule. Choosing Media, Downloads, Timers or Awake in the expanded
 card also selects it for the compact capsule while Split activities is on. Ending
@@ -112,6 +114,250 @@ the newest as its own card (app icon, app name and time, title and two lines of 
 with up to two older cards peeking out beneath and an "N more" count. Clicking the stack
 opens the notification history.
 
+## Apple Dynamic Island design reference
+
+The design target is a faithful desktop adaptation of Apple's Dynamic Island,
+including its layout, surface, symbols, motion, and Live Activity hierarchy.
+Apply this across compact and split activities, expanded cards, connection notices,
+and embedded panel icons. The reference is the Island itself as well as the
+individual status symbols.
+
+Use these primary references:
+
+- [Live Activities, Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/live-activities)
+  for presentation states, content hierarchy, shape, colour, and essential actions.
+- [Design dynamic Live Activities, WWDC23](https://developer.apple.com/videos/play/wwdc2023/10194/)
+  for optical placement, rounded margins, and continuity between states.
+- [SF Symbols, Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/sf-symbols)
+  for symbol proportions, weight, alignment, and consistent emphasis beside text.
+- [iPhone status icon guide](https://support.apple.com/en-gb/guide/iphone/iphef7bb57dc/ios)
+  for privacy, battery, connectivity, Focus, recording, and audio status meanings.
+- [Apple Design Resources](https://developer.apple.com/design/resources/)
+  for official UI examples and templates when reviewing visual proportions.
+- [Live Activities essentials, WWDC26](https://developer.apple.com/videos/play/wwdc2026/223/)
+  for concise activity content and adapting its presentation when width is limited.
+
+The user-supplied [Dynamic Island in iOS 27 reference](references/dynamic-island-ios27.html)
+is preserved unchanged from the exported Claude artifact supplied on 9 October 2026.
+Its compact, two-activity, three-activity, expanded, landscape, and Siri demos were
+reviewed in a browser. Use it as a presentation catalogue alongside the official
+sources above. The file explicitly uses schematic shapes and sample data; its
+coloured circles represent app icons. Our actual privacy indicators retain their
+specified meanings below. The demo's navigation buttons are page controls, and its
+camera dot represents phone hardware; neither belongs in the desktop Island.
+
+Carry its concise activity structure into the next mockup: identity and one live
+value when compact, a useful glance in each split bubble, and details with essential
+actions when expanded. For narrow desktop layouts, adapt the content to the available
+width while retaining readable values and usable controls. The current implementation
+already supports a primary activity and two bubbles. Review their proportions and
+spacing against the three-activity schematic; treat any change to bubble placement
+as a layout mockup, rather than a new activity capability.
+Its system-activity catalogue helps compare media, timers, recording, transfers,
+charging, audio connections, and Focus with our desktop equivalents. It does not
+establish that the shell implements every Apple service shown.
+
+The accepted contextual layout is implemented in the native Cupertino Island.
+The earlier comparison images remain a record of the design review.
+
+### Native contextual cards
+
+Cupertino cards use Comfortable sizing by default (520 logical pixels). Enable
+`compact_layout` in the Island layout settings for 400-pixel cards; it also supports
+per-monitor overrides. Both remain bounded by the output. Filled inner groups have
+at least 24 pixels of side clearance in Comfortable mode and 20 pixels in Compact,
+with matching extra top and bottom space. Full hosted panels use 24/20-pixel content
+insets and the same outer corner shape; panels can stay wider to fit their controls.
+
+Click the title to cycle only active activities. Tab and Enter/Space remain available;
+a single activity has a plain title. There are no navigation pills or arrows in the
+activity header. Recent transfers do not enter the live cycle and are available
+through a secondary history action. Escape or leaving the card dismisses it.
+
+Media retains the artwork background and waveform with status indicators present.
+The header's media dot uses a readable gradient derived from the artwork accent.
+Microphone-only capture is orange; camera capture is green, also when a microphone
+is active. Microphone details remain a separate active card. A red header dot requires
+an active native screen recording. External desktop sharing keeps its purple screen
+symbol. Compact indicators retain their rotation.
+
+Timers emphasize remaining time with pause/resume and cancel, and recording emphasizes
+elapsed time with Stop. Hover controls recheck the live timer state so a queued resume
+cannot start an idle or finished countdown. Timer creation stays in the full Timer
+panel; screenshot and recording initiation stay keyboard driven.
+
+Native validation on isolated GPU-backed Hyprland outputs passed for light/dark
+cards, both densities, pointer title switching, Enter/Space focus retention, media
+playback/seeking, notifications, recording status, panel transitions, corner scaling,
+and a fractional-scale monitor. The separate tray checks passed activation, menus,
+playback updates, live status alignment, adding/removing items, and the tray preference.
+The capture suite also passed keyboard selection, delayed screenshots, cancellation,
+silent/desktop/microphone recording, scaled monitors, reload, output removal and lock
+cancellation. The state, privacy and timer unit tests and translation checks passed.
+
+Rendered native examples: [Comfortable media](assets/island-design-review-20261009/native-comfortable-media.png),
+[Comfortable timer](assets/island-design-review-20261009/native-comfortable-timer.png),
+[Compact timer](assets/island-design-review-20261009/native-compact-timer.png),
+[Compact capture](assets/island-design-review-20261009/native-compact-capture.png),
+[recording](assets/island-design-review-20261009/native-recording.png),
+[expanded Control Centre](assets/island-design-review-20261009/native-expanded-control-centre.png),
+and [idle card spacing](assets/island-design-review-20261009/native-idle-padding.png).
+These are private test-desktop screenshots of the native shell, not browser mockups.
+
+### Presentation and layout target
+
+| Presentation | Desktop adaptation |
+| --- | --- |
+| Compact | A snug capsule with an activity identifier at the leading edge and one useful live value or visualiser at the trailing edge. Keep the clock for idle; let the activity own the playing state in the preview. |
+| Split | The primary capsule and a small adjacent round or oval activity. Keep the second activity informative with progress or a live symbol, and preserve click-to-switch. |
+| Expanded | One activity with its essential details and controls. Size the surface to its content; keep related elements in corresponding positions as it expands. |
+
+Apple's Island uses an opaque black surface. For this project, keep a black base
+with the requested artwork shader visible during playback, including underneath
+temporary notices. This is a deliberate desktop customization. Use restrained
+artwork colour, clear white text, and rounded symbols. Keep controls evenly inset
+from curved edges. Avoid an oversized empty header, permanent navigation pills,
+and repeated containers around every row. There is no desktop camera cutout to
+reserve space for.
+
+The expanded media preview has artwork, title and artist, a seek track, and bare
+transport symbols. A download preview prioritizes the current transfer and makes
+recent results available through a secondary action. Recording prioritizes elapsed
+time and Stop; a timer prioritizes remaining time and its relevant controls.
+Retain access to existing history, tray, and panel functions while simplifying
+their presentation. Unknown download totals remain indeterminate; mockups must
+not imply that Steam reports percentages, rates, or ETAs when it does not.
+
+Keep hover and keyboard expansion appropriate for a desktop. Expansion and content
+updates should maintain visual continuity and avoid colliding text or controls.
+Retain reduced-motion behavior and the user's compact indicator rotation.
+
+### Symbols and activity indicators
+
+Use the shell's native glyph system, matching the reference's apparent weight,
+rounded shapes, and alignment beside text. Review glyph silhouettes at their actual
+display size; mapping to a filled variant alone does not establish a visual match.
+Transport controls, recording, timers, downloads, Focus, battery, Wi-Fi, and audio
+devices should form a consistent family. Keep the bell balanced with neighbouring
+symbols. Show statuses supported by the desktop services, with labels that describe
+the actual activity.
+
+| Activity | Indicator in the proposed header |
+| --- | --- |
+| Microphone without camera | Orange dot |
+| Camera, including camera with microphone | Green dot, replacing the separate orange dot |
+| Confirmed screen recording | Red dot |
+| Media | Status dot using the current artwork's gradient |
+
+The microphone/camera precedence follows Apple's
+[privacy indicator explanation](https://support.apple.com/en-ie/108331).
+Keep the underlying microphone activity available when the green dot represents both
+devices. Tooltips and the opened card must identify the active devices and apps.
+Screen sharing or remote access remains distinguishable from confirmed recording;
+a capture stream alone does not establish that a recording is being saved.
+
+Use one clickable title in the proposed hover header to cycle through existing
+active panels. Do not add arrows beside it or retain the segmented strip. The title
+supports keyboard activation and stays put when only one panel is available.
+The small dots report current status rather than initiating activity. Show the red
+dot only while a confirmed recording is active, and remove it when recording stops.
+Keep familiar microphone, camera, and recording glyphs in the detailed
+cards. Privacy colours stay fixed as artwork changes. Use a neutral media fallback
+when artwork is unavailable, and retain the playing artwork and visualiser beneath
+temporary notices.
+
+Keep the clean capsule, existing compact rotation, and split activity behavior.
+Status controls belong with the existing tray and notification row; volume and
+brightness OSDs retain their uncluttered layouts. Focus configuration belongs in
+Settings, with quick Focus selection in Control Centre. Battery connection pulses,
+transfer progress, and completion feedback retain their established meanings and
+timings. Review any broader layout changes in a mockup before implementation.
+
+### Refinement review, 9 October 2026
+
+Open the [visual comparison board](references/island-visual-comparison.html) for
+five current-shell screenshot comparisons with the earlier desktop concept and
+separately labelled official Apple illustrations. Each shell image links to its
+unchanged full-desktop capture; the board crops and scales views for comparison.
+The concept is illustrative, not implemented UI or an official Apple screenshot.
+
+The follow-up [navigation mockup](references/island-navigation-mockup.html) replaces
+the strip with a clickable title that cycles through active panels. There are no
+navigation arrows. Media, privacy and recording dots report current activity;
+notifications and the tray remain alongside them. It offers Comfortable
+(520 CSS pixels) and Compact (400 CSS pixels) starting widths, reflecting the
+desktop's extra space without adding navigation containers. Its interactive samples
+cover media, transfers, timers, privacy and recording. The sample starts with no
+recording or privacy activity; an external preview selector can simulate either.
+Stopping the sample recording removes its red dot and its panel from the title cycle.
+
+Initiate a timer only from the full expanded Timer panel. The compact Island and
+hover card follow an existing timer and offer progress, pause/resume and cancel,
+never Start or Restart. The preview's separate view selector demonstrates the full
+panel and hover card without adding a timer launcher to the hover layout. Cancelling
+a timer removes it from the hover cycle. Capture initiation remains keyboard driven,
+directly or through the keyboard-opened screenshot panel; the red dot is not a launcher.
+Native cards now implement this title switching and activity hierarchy. The web
+sample remains illustrative: its artwork and waveform are static, and its timer
+counts down in the browser.
+Hyprland bindings remain the primary way to open full panels and initiate actions.
+Title clicking is a pointer convenience. Keep all relevant controls keyboard
+accessible and preserve focus when pausing, resuming, stopping or dismissing an
+activity. The web preview demonstrates keyboard control inside a card, not actual
+Hyprland keybind handling.
+Static previews are available for [Comfortable](assets/island-design-review-20261009/navigation-comfortable.png)
+and [Compact](assets/island-design-review-20261009/navigation-compact.png), each
+beside the actual expanded-media screenshot.
+
+The following table records the observations made before the native implementation.
+The contextual title, live indicators, history disclosure, and timer/recording
+hierarchy are implemented in the native shell.
+Apple's emphasis on concise information, even rounded margins, and essential actions
+informs the recommendations; the choices below adapt those principles to this desktop.
+
+| Order | Current observation | Proposed refinement |
+| --- | --- | --- |
+| First | Compact media hides its waveform whenever unread, battery, or privacy status occupies the trailing slot. Media and ordinary downloads also retain the centred clock. | Give the playing activity a stable artwork/waveform layout and reserve a small independent status area. Keep the clock for idle; show useful progress or phase for a transfer. Preserve track announcements. |
+| First | The expanded activity switcher adds 52 logical pixels above the content and asks for 88 pixels of width per activity, up to 648 before the output clamp. | Replace the segmented strip with the clickable title that cycles active panels. Keep content width tied to the activity, with keyboard access and a tooltip naming the next panel. |
+| First | The proposed privacy/media dots are absent from the running layout. Microphone and camera currently remain separate glyphs. | Implement orange for microphone only, green for camera with or without microphone, red for confirmed recording, and the artwork-gradient media indicator. Keep microphone details reachable when represented by green, and retain the distinction between recording and sharing. |
+| Next | Downloads always appends recent results and a wide Close button. Three results add 199 logical pixels before Close, making history dominate the live transfer. | Start with current transfer details; reveal recent results through a secondary action. Use a quieter dismissal affordance with the same keyboard and pointer access. |
+| Next | The timer uses a 16-pixel remaining-time label beside three controls. Recording gives its heading and app label more emphasis than the 12-pixel elapsed time. | Make remaining/elapsed time the main information. Keep pause/cancel or Stop easy to reach; move app-opening and configuration affordances into secondary positions. Preserve full per-app details for multi-session capture. |
+| Next | Filled transport glyphs and optical corrections already help, but recording uses a plain filled circle and card/status symbols still mix several visual treatments. | Review silhouettes at actual size, beginning with recording's concentric symbol, timer, download, and device glyphs. Match visual weight beside text and keep the already balanced bell small. Establish common curved-edge insets after removing the tab strip. |
+| Later | The capsule already springs and content crossfades. Three eligible activities already use a primary capsule and two bubbles, both on its right. | Refine the movement of shared artwork and symbols between compact and expanded positions. Review the full capsule-plus-bubbles width on narrow outputs and long labels before changing placement. A third activity is existing behavior, not a missing feature. |
+
+Implementation landmarks are the [status allocation and activity layouts](../src/shell/island/island.cpp),
+[base dimensions](../src/shell/island/island_state.h),
+[privacy summary](../src/shell/island/island_privacy.h), and
+[glyph aliases and optical adjustments](../src/render/text/glyph_registry.cpp).
+In particular, privacy display precedence must not remove microphone source data
+used by the live input controls.
+
+The fresh [compact media](assets/island-design-review-20261009/compact-media.png),
+[expanded media](assets/island-design-review-20261009/expanded-media.png),
+[timer](assets/island-design-review-20261009/timer.png), and
+[download](assets/island-design-review-20261009/downloads.png) frames come from the
+current release binary in the private compositor. The compact media frame includes
+a low-battery device, which demonstrates the waveform slot conflict; its amber halo
+is a transient device event. The
+[recent transfers](assets/island-design-review-20261009/recent-transfers.png) and
+[recording](assets/island-design-review-20261009/recording.png) frames are earlier
+same-day fixtures, checked against the current layout code.
+
+Retain the artwork shader and visualiser during playback, the requested device
+pulses and transfer feedback, compact indicator rotation, the shared media tray/status
+row, and the clean volume OSD. The connection notice and volume layout already have
+the compact emphasis sought here. Artwork contrast can receive a final visual pass
+after layout changes, without replacing playing artwork with a flat background.
+
+Validation: the fresh `--island-cupertino-only` run produced the dark appearance
+states and exercised playback and seeking, then stopped at the light media readiness
+check. The captured media controls are visible; OCR combined the expected word
+`home` into `tohome`, so the exact-word assertion timed out. This is not a passing
+full-suite result. The run disables animation and did not reach its final fractional
+scale checks; motion findings here are from source review. Earlier recent-transfer
+fixtures at 150% scale supplement the normal-scale visual review. A later implementation
+pass still needs interaction, motion, long-label, and fractional-scale validation.
+
 ## Download indicators
 
 Applications publishing `com.canonical.Unity.LauncherEntry.Update` progress appear
@@ -139,9 +385,12 @@ keyboard focus. Script activities without an app identity remain informational.
 Confirmed completion shows a green checkmark, a green halo, and **Download finished**
 for five seconds before returning to the current activity. This requires a desktop
 app to report 100% after active progress, or Steam to report an explicit finished
-update. Hiding, cancelling, or disconnecting alone does not signal success. Nearby
-finishes share one notice and restart its five-second lifetime. Reduced motion
-keeps the halo steady. Notifications, OSDs, keyboard controls, and open panels
+update. Steam completions show the game name above **Download finished**, using
+the same compact, centred layout. Long names ellipsize, with the full name in the
+tooltip. If its manifest has no name, the generic notice remains. Hiding,
+cancelling, or disconnecting alone does not signal success. Nearby finishes share
+one notice and restart its five-second lifetime; the latest confirmed game wins.
+Reduced motion keeps the halo steady. Notifications, OSDs, keyboard controls, and open panels
 retain priority. Activity rotation pauses while the notice is present, preserving
 the current activity's remaining display time. A notice that expires underneath
 an alert or open panel does not replay when that interruption ends.
@@ -165,6 +414,28 @@ reported percentage stays visible; unknown totals stop spinning. Running jobs
 appear before paused ones. A confirmed failure shows a red cross, red halo and
 **Transfer failed** for five seconds, using the same interruption and reduced-motion
 behavior as completion. Repeated reports of the same failure do not extend it.
+Steam failures show the game name above Steam's reported reason, such as **Not
+enough disk space** or **Disk write failure**. Recognised reasons omit Steam's
+depot wrapper; unfamiliar explicit failures retain its original report. Long
+names and reasons ellipsize, with both available in the tooltip. If the game name
+is unavailable, **Transfer failed** appears above the reason. Clicking still
+returns to Steam. A reported failure takes priority over success in the same poll.
+The expanded Downloads card keeps the three most recent confirmed results below
+active jobs, newest first. Each row shows its game or source name, result or error,
+and elapsed time. Click a row, or focus it with Tab and press Enter or Space, to
+return to its existing source window. Closed apps and script results remain
+informational; results never launch a new process. Several Steam games finishing
+in one poll retain separate history rows, while the brief notice still gives
+errors priority. Duplicate reports, cancellations and pauses add no results.
+
+History lasts for the current shell session and survives layout/config reloads.
+It remains available in the Downloads tab after active jobs finish, or through
+**Recent transfers** in the expanded idle Island. It never claims the compact
+capsule, split bubbles, activity rotation, progress ring or an auto-hidden bar.
+Long names and error text stay available in tooltips. Age labels update in place
+without interrupting a click or keyboard selection. The history section scrolls
+when the available output height is limited.
+
 These states require explicit Steam log events or script statuses. The standard
 desktop progress signal provides neither pause nor error status, so a stalled
 percentage or disappearing entry alone never produces either state.
@@ -556,8 +827,9 @@ the buttons and keyboard focus, and playing media retains its animated artwork.
 The card disappears on expiry, End or switching to Until off. Control Centre,
 launcher actions and IPC share the same timer; reloads preserve its deadline.
 
-Control Centre's Focus tab offers **Work**, **Gaming** and **Sleep**. Each has an
-editable comma-separated list of allowed app names or desktop IDs, an optional
+Control Centre's Focus tab offers quick **Off**, **Work**, **Gaming** and **Sleep**
+choices and **Follow schedules**. Configure profiles in **Settings → Notifications
+→ Focus**. Each has an editable comma-separated list of allowed app names or desktop IDs, an optional
 critical-alert exception and a local-time schedule. App matching ignores case,
 surrounding spaces and an optional `.desktop` suffix; it requires the full name.
 Silenced notifications remain in history according to normal history rules, and
@@ -573,7 +845,7 @@ A manual preset or Off lasts until the scheduled profile next changes; **Follow
 schedules** resumes immediately. Saved rules persist; manual choices reset on
 shell restart. The new brief Island feedback preserves playing media artwork.
 
-**Focus while recording** in Control Centre's Focus tab is off by default.
+**Focus while recording** in **Settings → Notifications → Focus** is off by default.
 When enabled, recordings started by the shell temporarily silence ordinary
 notification banners and sounds, while critical alerts and explicit DND bypasses
 remain allowed. The recording indicator stays visible. Suppressed notifications
@@ -743,8 +1015,8 @@ These options only affect the hover view. Compact activity indicators, incoming
 notifications, volume OSD and capture indicators keep working.
 
 The expanded media view also shows the system tray beneath its playback controls.
-In Cupertino appearance the tray shares one centered row with privacy and unread
-notification icons; other hover widgets remain in the idle view. Tray activation
+In Cupertino appearance the tray shares the trailing side of the contextual header
+with privacy and unread indicators; other hover widgets remain in the idle view. Tray activation
 and app menus work in both views. The tray respects `hover_show_tray` and takes no
 space when there are no tray items.
 

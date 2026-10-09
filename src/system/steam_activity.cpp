@@ -28,11 +28,9 @@ namespace {
     return result;
   }
 
-  bool failedUpdate(std::string_view reason) {
+  std::optional<std::string> failedUpdateReason(std::string_view reason) {
     // These are explicit error reports, never an inference from stopped progress.
     // Scheduling, user cancellation and unfamiliar reasons remain neutral.
-    if (reason.starts_with("Failed "))
-      return true;
     constexpr std::string_view errors[]{
         "Disk write failure",
         "Disk read failure",
@@ -42,9 +40,12 @@ namespace {
         "Content servers unreachable",
         "Corrupt update files"
     };
-    return std::ranges::any_of(errors, [reason](auto error) {
-      return reason == error || reason.ends_with(std::string("(") + std::string(error) + ")");
-    });
+    for (const auto error : errors)
+      if (reason == error || reason.ends_with(std::string("(") + std::string(error) + ")"))
+        return std::string(error);
+    if (reason.starts_with("Failed "))
+      return std::string(reason);
+    return std::nullopt;
   }
 } // namespace
 
@@ -68,8 +69,7 @@ std::vector<SteamTransfer> SteamActivity::read() {
     m_inode = 0;
     m_pending.clear();
     m_observedTransfers.clear();
-    m_completed = false;
-    m_failed = false;
+    m_results.clear();
     return {};
   }
   auto root = m_home / ".steam/steam";
@@ -82,8 +82,7 @@ std::vector<SteamTransfer> SteamActivity::read() {
     m_phases.clear();
     m_pending.clear();
     m_observedTransfers.clear();
-    m_completed = false;
-    m_failed = false;
+    m_results.clear();
     m_pid = pid;
     m_inode = logStat.st_ino;
     // A bounded tail also supports attaching while Steam is downloading.
@@ -102,7 +101,7 @@ std::vector<SteamTransfer> SteamActivity::read() {
     if (end == std::string::npos)
       break;
     auto line = m_pending.substr(consumed, end - consumed);
-    if (line.ends_with('\r'))
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
       line.pop_back();
     consumed = end + 1;
     if (line.size() < 23 || line[0] != '[')
@@ -138,11 +137,9 @@ std::vector<SteamTransfer> SteamActivity::read() {
       const auto scheduler = line.find(marker);
       if (scheduler != std::string::npos) {
         auto result = std::string_view(line).substr(scheduler + marker.size());
-        while (!result.empty() && (result.back() == ' ' || result.back() == '\t'))
-          result.remove_suffix(1);
-        const auto end = result.find(", state ");
-        if (end != std::string_view::npos && result.ends_with(")")) {
-          reason = result.substr(0, end);
+        const auto resultEnd = result.find(", state ");
+        if (resultEnd != std::string_view::npos && result.ends_with(")")) {
+          reason = result.substr(0, resultEnd);
           terminal = true;
           success = reason == "No Error";
           suspended = reason == "Suspended";
@@ -157,9 +154,12 @@ std::vector<SteamTransfer> SteamActivity::read() {
       } else {
         if (observed && !replay) {
           if (success)
-            m_completed = true;
-          else if (failedUpdate(reason))
-            m_failed = true;
+            m_results.push_back({.appId = id});
+          else if (const auto error = failedUpdateReason(reason))
+            m_results.push_back({.appId = id, .reason = *error});
+          // Retain separate results when several games finish in one poll.
+          if (m_results.size() > 32)
+            m_results.erase(m_results.begin());
         }
         m_observedTransfers.erase(id);
         m_phases.erase(id);
@@ -199,26 +199,32 @@ std::vector<SteamTransfer> SteamActivity::read() {
   m_pending.erase(0, consumed);
   if (m_pending.size() > 16384)
     m_pending.clear();
-  if (m_phases.empty())
+  if (m_phases.empty() && m_results.empty())
     return {};
   std::vector<std::filesystem::path> libraries{root};
   const auto folders = readFile(root / "steamapps/libraryfolders.vdf");
   static const std::regex pathPattern(R"re("path"\s*"((?:\\.|[^"\\])*)")re");
   for (auto it = std::sregex_iterator(folders.begin(), folders.end(), pathPattern); it != std::sregex_iterator(); ++it)
     libraries.emplace_back(unescape((*it)[1].str()));
-  std::vector<SteamTransfer> result;
   static const std::regex namePattern(R"re("name"\s*"((?:\\.|[^"\\])*)")re");
-  for (const auto& [id, phase] : m_phases) {
-    auto name = std::string("Steam");
+  const auto gameName = [&](const std::string& id) -> std::string {
     for (const auto& library : libraries) {
       const auto manifest = readFile(library / "steamapps" / ("appmanifest_" + id + ".acf"));
       std::smatch match;
-      if (std::regex_search(manifest, match, namePattern)) {
-        name += " · " + unescape(match[1].str());
-        break;
-      }
+      if (std::regex_search(manifest, match, namePattern) && !match[1].str().empty())
+        return unescape(match[1].str());
     }
-    result.push_back({id, name, phase});
+    return {};
+  };
+  // Resolve after parsing: None can remove the final row before success, and
+  // a small update can start and finish entirely between two polls. The latest
+  // confirmed games remain individually available to the recent-results card.
+  for (auto& result : m_results)
+    result.name = gameName(result.appId);
+  std::vector<SteamTransfer> result;
+  for (const auto& [id, phase] : m_phases) {
+    const auto name = gameName(id);
+    result.push_back({id, name.empty() ? "Steam" : "Steam · " + name, phase});
   }
   return result;
 }

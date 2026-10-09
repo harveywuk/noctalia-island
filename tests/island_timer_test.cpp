@@ -21,8 +21,20 @@ int main() {
   TEST_CHECK(!island::timerSnapshot("INVALID", 75, 100));
   TEST_CHECK(!island::timerSnapshot("RUNNING", 1e100, 100));
   TEST_CHECK(island::timerSnapshot("RUNNING", 3601, 4000)->time() == "1:00:01");
-  json state = {{"isRunning", true}, {"isDirty", true}, {"secondsLeft", 1250},
-                {"sessionPtr", {{"session", 1}, {"stage", 1}}}};
+  {
+    const auto displayed = *island::timerSnapshot("PAUSED", 75, 100);
+    TEST_CHECK(island::acceptsCountdownCommand(displayed, displayed, "START"));
+    TEST_CHECK(island::acceptsCountdownCommand(displayed, displayed, "RESET"));
+    TEST_CHECK(!island::acceptsCountdownCommand(displayed, *island::timerSnapshot("IDLE", 100, 100), "START"));
+    TEST_CHECK(!island::acceptsCountdownCommand(displayed, *island::timerSnapshot("NOTIFY", 0, 100), "START"));
+    TEST_CHECK(!island::acceptsCountdownCommand(displayed, *island::timerSnapshot("RUNNING", 74, 100), "START"));
+    TEST_CHECK(!island::acceptsCountdownCommand(displayed, *island::timerSnapshot("PAUSED", 75, 200), "START"));
+    TEST_CHECK(!island::acceptsCountdownCommand(displayed, displayed, "PAUSE"));
+    TEST_CHECK(island::acceptsCountdownCommand(displayed, *island::timerSnapshot("NOTIFY", 0, 100), "RESET"));
+  }
+  json state = {
+      {"isRunning", true}, {"isDirty", true}, {"secondsLeft", 1250}, {"sessionPtr", {{"session", 1}, {"stage", 1}}}
+  };
   json sessions = {{1500, 300}, {1500, 900}};
   auto pomo = island::pomodoroSnapshot(state, sessions);
   TEST_CHECK(pomo && pomo->active && pomo->running && !pomo->onBreak && pomo->duration == 1500);

@@ -64,7 +64,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
     def properties(proc, **values):
         command(proc, json.dumps(values)); time.sleep(.3)
     def move(x, y):
-        dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})'); time.sleep(.6)
+        dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})')
+        command(pointer, 'relative 1 0'); command(pointer, 'relative -1 0'); time.sleep(.6)
     def click(x, y):
         move(x, y); command(pointer, 'press'); time.sleep(.08); command(pointer, 'release'); time.sleep(.3)
     def shot(name, output='TEST-1'):
@@ -82,9 +83,16 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
                     '--psm', '11', '-c', 'tessedit_create_tsv=1', '-c', 'user_defined_dpi=96'])
         return list(csv.DictReader(io.StringIO(data), delimiter='\t', quoting=csv.QUOTE_NONE))
     def tab(label):
-        # Three fixed segments in the 360 px activity tray. Small inactive tab
-        # labels are unreliable OCR targets on the dark card background.
-        click({'Media': 530, 'Downloads': 640, 'Timers': 749}[label], 32)
+        # A single title cycles live activities; inactive panels have no launcher here.
+        expected = 'Now Playing' if label == 'Media' else label
+        for _ in range(4):
+            hover()
+            heading = ' '.join(w.get('text') or '' for w in text('title-switch')
+                               if int(w.get('top') or 0) < 65)
+            if expected.lower() in heading.lower():
+                return
+            click(455, 42)
+        raise AssertionError('Contextual title did not reach '+expected+': '+heading)
     def events(): return (out/'player-actions.log').read_text() if (out/'player-actions.log').exists() else ''
     env['ISLAND_TEST_ART'] = (repo/'assets/noctalia-wallpaper.png').as_uri()
     env['ISLAND_TEST_EVENTS'] = str(out/'player-actions.log')
@@ -120,19 +128,39 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             time.sleep(.8); hover()
             # Capture ending briefly owns the Island with a "Microphone Stopped" OSD.
             # Wait for the actual media controls before exercising their hit targets.
-            wait(lambda: any((word.get('text') or '').lower() == 'home'
+            wait(lambda: any('home' in (word.get('text') or '').lower()
                              for word in text(mode+'-media-ready')), 'Media controls did not appear')
             leave(); shot(mode+'-media-compact'); hover()
-            wait(lambda: any((word.get('text') or '').lower() == 'home'
+            wait(lambda: any('home' in (word.get('text') or '').lower()
                              for word in text(mode+'-media-expanded')), 'Media did not expand again after leaving')
             before = events().count('PlayPause')
-            click(640, 169)
+            click(640, 233)
             assert events().count('PlayPause') == before+1, 'Styled playback button did not activate'
-            click(640, 169); click(700, 114)
+            click(640, 233); click(700, 176)
             assert 'SetPosition' in events(), 'Styled seek bar did not seek'
             download(True); timer('PAUSED'); tab('Timers'); shot(mode+'-timers')
             tab('Downloads'); shot(mode+'-downloads'); tab('Media'); shot(mode+'-activities')
-            msg('island-focus'); command(keyboard, 15); shot(mode+'-keyboard-focus'); command(keyboard, 1)
+            msg('island-focus'); time.sleep(.3)
+            for _ in range(3):
+                command(keyboard, 15); time.sleep(.1)
+            time.sleep(.2)
+            shot(mode+'-keyboard-focus'); command(keyboard, 28); time.sleep(.3)
+            assert any('style-download' in (word.get('text') or '') for word in text(mode+'-keyboard-title-enter')), 'Enter did not switch the focused title'
+            command(keyboard, 57); time.sleep(.3)
+            assert any('1:15' in (word.get('text') or '') for word in text(mode+'-keyboard-title-space')), 'Space did not preserve title focus and switch again'
+            command(keyboard, 1)
+            # Density is a presentation preference and keeps active activities intact.
+            config = cfg/'config.toml'
+            config.write_text(config.read_text().replace('track_preview_seconds=0',
+                                                         'compact_layout=true\ntrack_preview_seconds=0'))
+            msg('config-reload'); time.sleep(.6); leave(); hover(); shot(mode+'-compact-hover')
+            msg('panel-open', 'control-center', 'home'); time.sleep(.5); shot(mode+'-compact-panel')
+            msg('panel-close'); msg('capture-menu'); time.sleep(.3); shot(mode+'-compact-capture-menu')
+            command(keyboard, 106); time.sleep(.3)
+            assert any('Audio' in (word.get('text') or '') for word in text(mode+'-compact-record-options')), 'Keyboard recording selection did not show audio options'
+            command(keyboard, 1)
+            config.write_text(config.read_text().replace('compact_layout=true\n', ''))
+            msg('config-reload'); time.sleep(.6)
             player.terminate(); player.wait(timeout=5); download(False); timer(); leave()
             properties(bluetooth, Connected=False); properties(battery, IsPresent=False)
 
@@ -147,9 +175,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             msg('record-region'); time.sleep(.5)
             move(100, 250); command(pointer, 'press'); move(500, 500); command(pointer, 'release')
             wait(lambda: msg('record-status').startswith('REC'), 'Private recording did not start')
-            leave(); time.sleep(1.1); shot(mode+'-recording'); msg('record-stop')
+            leave(); time.sleep(1.1); shot(mode+'-recording'); hover(); shot(mode+'-recording-hover'); msg('record-stop')
             wait(lambda: msg('record-status') == 'idle', 'Private recording did not stop')
             msg('notification-clear-active'); msg('notification-clear-history')
+            msg('capture-menu'); time.sleep(.3); shot(mode+'-capture-menu'); command(keyboard, 1)
             msg('panel-open', 'control-center', 'home'); time.sleep(.5); shot(mode+'-hosted-panel')
             msg('panel-close'); time.sleep(.5); shot(mode+'-panel-return')
 
@@ -191,7 +220,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
         dispatch('hl.dsp.focus({monitor="TEST-2"})'); move(640, 760); shot('fractional-monitor-hover', 'TEST-2')
         assert shell.poll() is None and not ctl('configerrors').strip()
         print('PASS: light/dark Island cards, calendar, widgets, batteries, privacy, media controls and seeking, '
-              'activity tabs, notifications, OSD, keyboard, panel return (also from the hover view), corner scale '
+              'contextual title switching, notifications, OSD, keyboard, panel return (also from the hover view), corner scale '
               'and fractional monitor', flush=True)
     finally:
         for proc in helpers:

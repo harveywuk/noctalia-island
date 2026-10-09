@@ -62,8 +62,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
 
     def text(name, output='TEST-1'):
         im = shot(name, output); scale = im.width/1280
-        crop = im.crop((round(430*scale), 0, round(850*scale), round(350*scale)))
-        path = out/(name+'-text.png'); crop.resize((1260, 1050)).save(path)
+        crop = im.crop((round(360*scale), 0, round(920*scale), round(380*scale)))
+        path = out/(name+'-text.png'); crop.resize((1680, 1140)).save(path)
         return run(['tesseract', str(path), 'stdout', '--tessdata-dir', TESSDATA, '--psm', '11'])
 
     def clear():
@@ -74,9 +74,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         move(1100, 600 if output=='TEST-1' else 1320)
         assert msg('capture-menu') == 'ok'; time.sleep(.8)
 
-    # Menu coordinates are logical, including the Island's top margin.
+    # The original semantic target positions span 380 px. Comfortable cards have a
+    # 496 px inner layout and a 12 px gutter, within the 520 px outer surface.
     def option(x, y, output='TEST-1'):
-        click(450+x, 8+y+(720 if output=='TEST-2' else 0))
+        click(392+x*496/380, 20+y+(720 if output=='TEST-2' else 0))
 
     def select_region():
         move(100, 250); send(pointer, 'press'); move(500, 500); send(pointer, 'release'); time.sleep(.35)

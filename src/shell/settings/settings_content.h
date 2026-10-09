@@ -124,6 +124,7 @@ namespace settings {
     std::function<void(const std::vector<std::string>&)> identifyDisplays;
     std::shared_ptr<BackupEditorState>* backupEditor = nullptr;
     std::shared_ptr<DefaultAppsEditorState>* defaultAppsEditor = nullptr;
+    std::size_t* focusProfile = nullptr;
   };
 
   std::size_t

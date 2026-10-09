@@ -258,6 +258,7 @@ private:
   std::shared_ptr<settings::DisplayEditorState> m_displayEditor;
   std::shared_ptr<settings::BackupEditorState> m_backupEditor;
   std::shared_ptr<settings::DefaultAppsEditorState> m_defaultAppsEditor;
+  std::size_t m_focusProfile = 0;
   std::shared_ptr<settings::DisplayIdentifier> m_displayIdentifier;
   IdleManager* m_idleManager = nullptr;
   ConfigService* m_config = nullptr;

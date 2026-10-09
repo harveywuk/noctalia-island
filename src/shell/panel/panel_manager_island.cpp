@@ -3,6 +3,7 @@
 #include "render/render_context.h"
 #include "shell/island/island.h"
 #include "shell/island/island_capture_glow.h"
+#include "shell/island/island_state.h"
 #include "shell/island/island_style.h"
 #include "shell/panel/panel.h"
 #include "shell/panel/panel_manager.h"
@@ -19,6 +20,20 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+  float islandPanelPadding(const IslandPanelSurface& host) {
+    return (host.cupertino ? (host.compactLayout ? 20.0F : 24.0F) : Style::panelPadding) * host.scale;
+  }
+  float islandPanelExtraPadding(const IslandPanelSurface& host) {
+    return 2 * (islandPanelPadding(host) - Style::panelPadding * host.scale);
+  }
+  float islandPanelWidth(const IslandPanelSurface& host, float contentWidth) {
+    return host.cupertino
+        ? std::max(contentWidth + islandPanelExtraPadding(host), island::cardWidth(host.compactLayout) * host.scale)
+        : contentWidth;
+  }
+} // namespace
+
 bool PanelManager::openIslandPanel(wl_output* output, std::string_view sourceBarName) {
   if (!m_islandHost)
     return false;
@@ -34,8 +49,12 @@ bool PanelManager::openIslandPanel(wl_output* output, std::string_view sourceBar
   const auto* monitor = m_platform->findOutputByWl(m_output);
   const float maxWidth = monitor ? static_cast<float>(monitor->effectiveLogicalWidth() - 32) : 800;
   const float maxHeight = monitor ? static_cast<float>(monitor->effectiveLogicalHeight() - 32) : 600;
-  m_panelVisualWidth = static_cast<std::uint32_t>(std::clamp(m_activePanel->islandWidth(maxWidth), 1.0F, maxWidth));
-  m_panelVisualHeight = static_cast<std::uint32_t>(std::clamp(m_activePanel->preferredHeight(), 1.0F, maxHeight));
+  m_panelVisualWidth = static_cast<std::uint32_t>(
+      std::clamp(islandPanelWidth(host, m_activePanel->islandWidth(maxWidth)), 1.0F, maxWidth)
+  );
+  m_panelVisualHeight = static_cast<std::uint32_t>(
+      std::clamp(m_activePanel->preferredHeight() + islandPanelExtraPadding(host), 1.0F, maxHeight)
+  );
   m_islandCollapsedWidth = host.width;
   m_islandCollapsedHeight = host.height;
   m_islandWidth = host.width;
@@ -135,7 +154,7 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
       m_inputDispatcher.setFocus(focus);
   }
   m_sceneRoot->setSize(static_cast<float>(width), static_cast<float>(height));
-  const float padding = Style::panelPadding * m_activePanel->contentScale();
+  const float padding = islandPanelPadding(*m_islandSurface);
   m_contentWidth = std::max(1.0F, static_cast<float>(m_panelVisualWidth) - 2 * padding);
   m_contentHeight = std::max(1.0F, static_cast<float>(m_panelVisualHeight) - 2 * padding);
   m_contentNode->setSize(m_contentWidth, m_contentHeight);
@@ -150,8 +169,12 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
         monitor ? static_cast<float>(monitor->effectiveLogicalHeight()) : static_cast<float>(height);
     const float maxHeight = std::max(1.0F, limitHeight - 32 * m_islandSurface->scale);
     const float maxWidth = std::max(1.0F, limitWidth - 32 * m_islandSurface->scale);
-    const float targetWidth = std::round(std::clamp(m_activePanel->islandWidth(maxWidth), 1.0F, maxWidth));
-    const float targetHeight = std::round(std::clamp(m_activePanel->islandHeight(maxHeight), 1.0F, maxHeight));
+    const float targetWidth = std::round(
+        std::clamp(islandPanelWidth(*m_islandSurface, m_activePanel->islandWidth(maxWidth)), 1.0F, maxWidth)
+    );
+    const float extra = islandPanelExtraPadding(*m_islandSurface);
+    const float targetHeight =
+        std::round(std::clamp(m_activePanel->islandHeight(std::max(1.0F, maxHeight - extra)) + extra, 1.0F, maxHeight));
     if (first
         || std::abs(targetWidth - static_cast<float>(m_panelVisualWidth)) >= 2
         || std::abs(targetHeight - static_cast<float>(m_panelVisualHeight)) >= 2) {
@@ -196,7 +219,7 @@ void PanelManager::applyIslandReveal(float progress) {
   m_bgNode->setPosition(x, y);
   m_bgNode->setSize(m_islandWidth, m_islandHeight);
   auto* capsule = static_cast<Box*>(m_bgNode);
-  const float radius = island::surfaceRadius(m_islandHeight, scale);
+  const float radius = island::surfaceRadius(m_islandHeight, scale, m_islandSurface->cupertino);
   capsule->setRadius(radius);
   if (m_islandCaptureGlow) {
     m_islandCaptureGlow->setGeometry(x, y, m_islandWidth, m_islandHeight, radius, scale);
@@ -239,7 +262,7 @@ void PanelManager::applyIslandReveal(float progress) {
             static_cast<int>(std::lround(m_islandWidth)), static_cast<int>(std::lround(m_islandHeight)), radius
         )
     );
-  const float padding = Style::panelPadding * m_activePanel->contentScale();
+  const float padding = islandPanelPadding(*m_islandSurface);
   m_contentNode->setPosition((m_islandWidth - static_cast<float>(m_panelVisualWidth)) / 2 + padding, padding);
   if (!m_closing)
     m_contentNode->setOpacity(m_islandResizing ? 1.0F : std::clamp((progress - 0.65F) / 0.35F, 0.0F, 1.0F));

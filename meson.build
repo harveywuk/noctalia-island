@@ -778,6 +778,7 @@ _noctalia_sources = files(
   'src/shell/settings/startup_apps_editor.cpp',
   'src/shell/settings/backup_editor.cpp',
   'src/shell/settings/default_apps_editor.cpp',
+  'src/shell/settings/focus_editor.cpp',
   'src/system/startup_apps.cpp',
   'src/shell/settings/display_identifier.cpp',
   'src/shell/settings/settings_content_common.cpp',

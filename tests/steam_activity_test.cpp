@@ -25,7 +25,7 @@ int main() {
       << "\"libraryfolders\" { \"1\" { \"path\" \""
       << external.string()
       << "\" } }";
-  const auto write = [&](const std::string& state, bool append = true, bool old = false) {
+  const auto write = [&](const std::string& state, bool append = true, bool old = false, int appId = 42) {
     const auto now = std::time(nullptr) - (old ? 3600 : 0);
     std::tm tm{};
     localtime_r(&now, &tm);
@@ -35,7 +35,7 @@ int main() {
     const bool event = state.starts_with("update ")
         || state.starts_with("scheduler finished : ")
         || state.starts_with("Shader update changed : ");
-    file << timestamp << " AppID 42 " << (event ? "" : "App update changed : ") << state << "\n";
+    file << timestamp << " AppID " << appId << " " << (event ? "" : "App update changed : ") << state << "\n";
   };
   SteamActivity activity(home);
   write("Running Update,Downloading,", false, true);
@@ -66,7 +66,8 @@ int main() {
   // confirms success; replaying it after shell restart must not announce again.
   write("update finished : No Error");
   assert(activity.read().empty());
-  assert(activity.takeCompletion());
+  auto completion = activity.takeCompletion();
+  assert(completion && completion->appId == "42" && completion->name == "Test game");
   assert(!activity.takeCompletion());
   write("update finished : No Error");
   assert(activity.read().empty() && !activity.takeCompletion());
@@ -81,9 +82,10 @@ int main() {
   assert(activity.read().empty() && !activity.takeCompletion());
   write("Running Update,Downloading,");
   assert(!activity.read().empty());
-  write("update finished : Disk write failure");
+  write("update finished : Disk write failure \t\r");
   assert(activity.read().empty() && !activity.takeCompletion());
-  assert(activity.takeFailure());
+  auto failure = activity.takeFailure();
+  assert(failure && failure->appId == "42" && failure->name == "Test game" && failure->reason == "Disk write failure");
   assert(!activity.takeFailure());
   write("update finished : Disk write failure");
   assert(activity.read().empty() && !activity.takeFailure()); // Duplicate errors do not prolong the notice.
@@ -94,7 +96,7 @@ int main() {
   // paused row through those messages, but allow explicit resumption.
   write("Running Update,Downloading,");
   assert(!activity.read().empty());
-  write("update canceled : Priority (Suspended)\r"); // Steam's real log uses CRLF.
+  write("update canceled : Priority (Suspended) \t\r"); // Steam's real log uses CRLF.
   write("Running Update,Stopping,");
   write("None");
   state = activity.read();
@@ -108,7 +110,10 @@ int main() {
   assert(activity.read()[0].phase == "downloading");
   write("update canceled : Failed updating depot 42 while starting download (No connection to content servers)\r");
   write("None");
-  assert(activity.read().empty() && activity.takeFailure());
+  assert(activity.read().empty());
+  failure = activity.takeFailure();
+  assert(failure && failure->appId == "42" && failure->name == "Test game");
+  assert(failure->reason == "No connection to content servers");
   assert(!activity.takeCompletion() && !activity.takeFailure());
 
   write("Running Update,Downloading,");
@@ -135,7 +140,9 @@ int main() {
   assert(activity.read()[0].phase == "downloading");
   write("None");
   write("scheduler finished : removed from schedule (result No Error, state 0xc) \r");
-  assert(activity.read().empty() && activity.takeCompletion() && !activity.takeFailure());
+  assert(activity.read().empty() && !activity.takeFailure());
+  completion = activity.takeCompletion();
+  assert(completion && completion->appId == "42" && completion->name == "Test game");
   write("scheduler finished : removed from schedule (result No Error, state 0xc)");
   assert(activity.read().empty() && !activity.takeCompletion());
   SteamActivity afterSchedulerFinish(home);
@@ -174,13 +181,117 @@ int main() {
   assert(!activity.read().empty() && !activity.takeCompletion());
   write("None");
   write("scheduler finished : removed from schedule (result Disk write failure, state 0x6)");
-  assert(activity.read().empty() && activity.takeFailure() && !activity.takeCompletion());
+  assert(activity.read().empty() && !activity.takeCompletion());
+  failure = activity.takeFailure();
+  assert(failure && failure->appId == "42" && failure->name == "Test game" && failure->reason == "Disk write failure");
   SteamActivity afterSchedulerFailure(home);
   assert(afterSchedulerFailure.read().empty() && !afterSchedulerFailure.takeFailure());
   write("Running Update,Downloading,");
   assert(!activity.read().empty());
   write("scheduler finished : removed from schedule (result Unfamiliar reason, state 0x6)");
   assert(activity.read().empty() && !activity.takeFailure() && !activity.takeCompletion());
+
+  // Resolve even when the whole transfer fits between two polls, and preserve
+  // the title as metadata rather than stripping a display prefix from it.
+  std::ofstream(external / "steamapps/appmanifest_42.acf") << R"("AppState" { "name" "Steam · Café \"Deluxe\"" })";
+  write("Running Update,Downloading,");
+  write("None");
+  write("scheduler finished : removed from schedule (result No Error, state 0xc)");
+  assert(activity.read().empty());
+  completion = activity.takeCompletion();
+  assert(completion && completion->appId == "42" && completion->name == "Steam · Café \"Deluxe\"");
+
+  // With several completions in one poll, the last log event wins, even if a
+  // different game's transfer remains active. Repeated success is ignored.
+  std::ofstream(root / "steamapps/appmanifest_43.acf") << R"("AppState" { "name" "Second game" })";
+  write("Running Update,Downloading,");
+  write("Running Update,Downloading,", true, false, 43);
+  write("Running Update,Downloading,", true, false, 44);
+  write("update finished : No Error", true, false, 43);
+  write("update finished : No Error");
+  write("update finished : No Error", true, false, 43);
+  state = activity.read();
+  assert(state.size() == 1 && state[0].appId == "44");
+  completion = activity.takeCompletion();
+  assert(completion && completion->appId == "42" && completion->name == "Steam · Café \"Deluxe\"");
+  assert(!activity.takeCompletion());
+
+  // A missing or empty manifest remains a real completion with no invented
+  // game title. It must not inherit the previous game's name.
+  write("update finished : No Error", true, false, 44);
+  assert(activity.read().empty());
+  completion = activity.takeCompletion();
+  assert(completion && completion->appId == "44" && completion->name.empty());
+  std::ofstream(root / "steamapps/appmanifest_44.acf") << R"("AppState" { "name" "" })";
+  write("Running Update,Downloading,", true, false, 44);
+  write("update finished : No Error", true, false, 44);
+  assert(activity.read().empty());
+  completion = activity.takeCompletion();
+  assert(completion && completion->name.empty());
+
+  // Quick failures retain both the game and Steam's reason even when no active
+  // row survives the poll. Known errors omit the verbose depot wrapper.
+  for (const std::string reason :
+       {"Disk read failure", "Missing file privileges", "Not enough disk space", "Content servers unreachable",
+        "Corrupt update files"}) {
+    write("Running Update,Downloading,", true, false, 43);
+    write("None", true, false, 43);
+    write("update canceled : Failed updating depot 123 while starting download (" + reason + ")", true, false, 43);
+    assert(activity.read().empty() && !activity.takeCompletion());
+    failure = activity.takeFailure();
+    assert(failure && failure->appId == "43" && failure->name == "Second game" && failure->reason == reason);
+    assert(!activity.takeFailure());
+  }
+
+  // Explicit but unfamiliar failures keep Steam's own report, without guessing
+  // a cause. When a later game has no name, no previous title can leak into it.
+  const std::string unfamiliar = "Failed updating depot 456 (Unexpected server response)";
+  write("Running Update,Downloading,", true, false, 43);
+  write("Running Update,Downloading,", true, false, 44);
+  write("update finished : Disk write failure", true, false, 43);
+  write("update canceled : " + unfamiliar, true, false, 44);
+  write("update finished : Disk write failure", true, false, 43); // Duplicate, not a new last failure.
+  assert(activity.read().empty());
+  failure = activity.takeFailure();
+  assert(failure && failure->appId == "44" && failure->name.empty() && failure->reason == unfamiliar);
+  assert(!activity.takeFailure());
+  SteamActivity afterNamedFailures(home);
+  assert(afterNamedFailures.read().empty() && !afterNamedFailures.takeFailure());
+
+  // Failure and success retain separate identities when reported together.
+  // The service keeps its existing rule that a reported error takes priority.
+  write("Running Update,Downloading,", true, false, 43);
+  write("Running Update,Downloading,");
+  write("scheduler finished : removed from schedule (result Not enough disk space, state 0x6)", true, false, 43);
+  write("update finished : No Error");
+  assert(activity.read().empty());
+  completion = activity.takeCompletion();
+  failure = activity.takeFailure();
+  assert(completion && completion->appId == "42");
+  assert(
+      failure && failure->appId == "43" && failure->name == "Second game" && failure->reason == "Not enough disk space"
+  );
+
+  write("Running Update,Downloading,");
+  write("update canceled : Failed updating depot 42 (Suspended) \r");
+  assert(activity.read()[0].phase == "paused" && !activity.takeFailure());
+
+  // Multiple terminal events in one poll remain individually available to
+  // history, in log order. A duplicate does not create another result.
+  write("Running Update,Downloading,");
+  write("Running Update,Downloading,", true, false, 43);
+  write("Running Update,Downloading,", true, false, 44);
+  write("update finished : No Error", true, false, 43);
+  write("update finished : Disk write failure");
+  write("update finished : No Error", true, false, 44);
+  write("update finished : No Error", true, false, 43);
+  assert(activity.read().empty());
+  const auto results = activity.takeResults();
+  assert(results.size() == 3);
+  assert(results[0].appId == "43" && results[0].name == "Second game" && !results[0].failed());
+  assert(results[1].appId == "42" && results[1].reason == "Disk write failure");
+  assert(results[2].appId == "44" && results[2].name.empty() && !results[2].failed());
+  assert(activity.takeResults().empty());
 
   std::ofstream(home / ".steam/steam.pid", std::ios::trunc) << "2147483647";
   assert(activity.read().empty()); // A crashed/exited client leaves no activity.

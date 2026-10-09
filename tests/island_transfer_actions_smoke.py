@@ -298,8 +298,16 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         steam_event('Shader update changed : None')
         steam_event('scheduler finished : removed from schedule (result No Error, state 0xc) \r')
         time.sleep(2.3)
-        result=shot('steam-scheduler-finished').crop((540,22,590,60))
+        result=shot('steam-scheduler-finished').crop((490,22,590,60))
         assert sum(g>150 and g>r+60 and g>b+40 for r,g,b in result.getdata())>10, 'Steam scheduler success was not announced'
+        # Long game titles keep the compact geometry and the completion line.
+        image=shot('steam-named-long-title').crop((540,15,790,65)).resize((750,150))
+        image.save(out/'steam-named-long-text.png')
+        named=run(['tesseract',str(out/'steam-named-long-text.png'),'stdout','--tessdata-dir',
+                   os.environ.get('NOCTALIA_TEST_TESSDATA',str(repo/'build-rishot/test-data/tessdata')),
+                   '--psm','6']).lower()
+        assert 'long adventure' in named and 'download finished' in named, named
+        run(['grim','-o','TEST-2',str(out/'steam-named-long-scaled.png')])
         assert 'steamfixture' in tooltip('steam-scheduler-source')
         click(); wait(lambda: active_class() == 'transfer-steam', 'Scheduler completion returns to Steam')
         no_notice('steam-scheduler-opened')
@@ -309,6 +317,12 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         steam_event('App update changed : None')
         steam_event('scheduler finished : removed from schedule (result Disk write failure, state 0x6)')
         time.sleep(2.3)
+        image=shot('steam-named-failure-long-title').crop((540,15,790,65)).resize((750,150))
+        image.save(out/'steam-named-failure-text.png')
+        named=run(['tesseract',str(out/'steam-named-failure-text.png'),'stdout','--tessdata-dir',
+                   os.environ.get('NOCTALIA_TEST_TESSDATA',str(repo/'build-rishot/test-data/tessdata')),
+                   '--psm','6']).lower()
+        assert 'long adventure' in named and 'disk write failure' in named, named
         assert 'steamfixture' in tooltip('failure-source-tooltip')
         click()
         wait(lambda: active_class() == 'transfer-steam', 'Failed transfer returns to Steam')

@@ -61,6 +61,8 @@ int main(int argc, char** argv) {
   assert(first("lock").starts_with("Lock"));
   assert(first("volume") == "Volume");
   assert(first("font") == "Font Family");
+  assert(first("focus while recording") == "Focus while recording");
+  assert(first("focus schedule") == "Configure a Focus");
   // Partial words still match, and every word must match.
   assert(!search(registry, "opac").empty());
   assert(search(registry, "dock zzzz").empty());

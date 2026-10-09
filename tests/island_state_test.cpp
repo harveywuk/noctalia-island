@@ -99,6 +99,20 @@ int main() {
   using island::view;
   using Priority = IslandActivityPriority;
   {
+    island::Activities live{true, false, true};
+    assert(island::nextActivity({}, Activity::Media) == Activity::None);
+    assert(island::nextActivity(live, Activity::None) == Activity::Media);
+    assert(island::nextActivity(live, Activity::Media) == Activity::Timers);
+    assert(island::nextActivity(live, Activity::Timers) == Activity::Media);
+    live.timers = false;
+    assert(island::nextActivity(live, Activity::Timers) == Activity::Media);
+    assert(island::nextActivity(live, Activity::Media) == Activity::Media);
+    live.capture = true;
+    assert(island::nextActivity(live, Activity::Media) == Activity::Capture);
+    assert(island::nextActivity(live, Activity::Capture) == Activity::Media);
+  }
+
+  {
     const auto cameraView = [](bool note, bool osd, bool expanded, Activity selected, bool camera,
                                bool screen = false) {
       return view(
@@ -411,6 +425,12 @@ int main() {
   IslandConfig cfg;
   assert(cfg.outerProgressRing); // progress traces the edge by default
   assert(!cfg.glass);
+  assert(!cfg.compactLayout);
+  IslandMonitorOverride densityOverride;
+  densityOverride.compactLayout = true;
+  assert(applyIslandOverride(cfg, densityOverride).compactLayout);
+  densityOverride.compactLayout = false;
+  assert(!applyIslandOverride(cfg, densityOverride).compactLayout);
   assert(cfg.hoverOpenDelayMs == 110 && cfg.hoverCloseDelayMs == 180);
   Diagnostics diagnostics;
   auto table = toml::parse("height = 900\nclock_size = -1\nscale = 1.1\nenabled = true\nouter_progress_ring = true\n");
@@ -445,9 +465,9 @@ int main() {
   assert(cfg.activityPriority == Priority::MediaTimersDownloads && cfg.activityCycleSeconds == 1);
   assert(cfg.mediaArtworkSize == 80 && cfg.volumeBarHeight == 5 && cfg.volumeShowPercentage);
   assert(cfg.splitActivities);
-  table = toml::parse("split_activities = false\n");
+  table = toml::parse("split_activities = false\ncompact_layout = true\n");
   readInto(table, cfg, islandSchema(), "island", diagnostics);
-  assert(!cfg.splitActivities);
+  assert(!cfg.splitActivities && cfg.compactLayout);
   table = toml::parse("calendar_labels = 'invalid'\n");
   readInto(table, cfg, islandSchema(), "island", diagnostics);
   assert(cfg.calendarLabels == IslandCalendarLabels::TodayAbbreviated);

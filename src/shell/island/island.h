@@ -137,11 +137,15 @@ private:
   // Desktop downloads and script activities, with running jobs before paused ones.
   std::vector<DownloadProgress> progressActivities() const;
   void expireScriptActivities();
-  void showTransferNotice(island::TransferNotice notice, DownloadSource source);
+  void reportTransfer(
+      island::TransferNotice notice, DownloadSource source, std::string title = {}, std::string detail = {},
+      bool announce = true
+  );
   bool transferApp(const DownloadSource& source, bool activate = false) const;
   bool activateTransferSource(Instance& inst, const DownloadSource& source);
   void activateTransfer(Instance& inst, const std::string& key);
   void activateTransferNotice(Instance& inst, std::uint64_t serial);
+  void activateRecentTransfer(Instance& inst, std::uint64_t serial);
   void timerCommand(const island::Countdown&, const std::string& command);
   WaylandConnection* m_wayland = nullptr;
   ConfigService* m_config = nullptr;
@@ -185,6 +189,7 @@ private:
   std::optional<OsdContent> m_osd;
   // Brief feedback for an explicitly reported finish or failure.
   std::optional<island::TransferFeedback> m_transferNotice;
+  island::RecentTransfers m_recentTransfers;
   std::uint64_t m_transferNoticeSerial = 0;
   Timer m_transferNoticeTimeout;
   Timer m_transferActivation;

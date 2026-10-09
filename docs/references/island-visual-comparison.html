@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Noctalia Island: screenshot comparison</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #111216; color: #f5f5f7; font: 15px/1.5 system-ui, sans-serif; }
+    main { max-width: 1120px; margin: auto; padding: 40px 36px; }
+    h1 { margin: 8px 0 12px; font-size: 38px; line-height: 1.15; letter-spacing: -.035em; }
+    h2 { margin: 0; font-size: 21px; letter-spacing: -.02em; }
+    h3 { margin: 0 0 8px; font-size: 16px; }
+    p { margin: 8px 0; }
+    a { color: #b2caff; text-underline-offset: 3px; }
+    .eyebrow { color: #b8becd; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+    .intro { max-width: 830px; color: #c2c6d1; }
+    .fine { font-size: 12px; color: #aeb4c3; }
+    .controls { display: flex; align-items: center; gap: 12px; margin: 22px 0; }
+    select { font: inherit; color: inherit; background: #23262e; border: 1px solid #545b6d; border-radius: 8px; padding: 7px 30px 7px 10px; }
+    a:focus-visible, select:focus-visible { outline: 2px solid #b2caff; outline-offset: 4px; }
+    .legend, .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .legend { margin: 20px 0 8px; padding: 0 18px; }
+    .legend strong { display: block; font-size: 16px; }
+    .legend span { display: block; color: #aeb4c3; font-size: 12px; }
+    .review { margin: 16px 0; padding: 20px; background: #1a1c22; border: 1px solid #30343e; border-radius: 18px; }
+    .review > header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+    .number { color: #9ca9c6; font-size: 13px; font-variant-numeric: tabular-nums; }
+    figure { margin: 0; min-width: 0; }
+    .stage { display: flex; justify-content: center; align-items: flex-start; }
+    .crop { width: 380px; max-width: 100%; position: relative; overflow: hidden; display: block; border-radius: 5px; }
+    .crop img { position: absolute; max-width: none; height: auto; display: block; }
+    figcaption { color: #c2c6d1; margin-top: 14px; font-size: 14px; }
+    figcaption strong { color: #fff; }
+    .reason { color: #b9c8e4; border-top: 1px solid #353944; padding-top: 12px; margin-top: 16px; font-size: 13px; }
+    .refs { margin-top: 30px; padding-top: 24px; border-top: 1px solid #353944; }
+    .apple { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 18px 0; }
+    .apple figure { padding: 16px; background: #22252c; border-radius: 14px; }
+    .apple img { display: block; width: 100%; height: 160px; object-fit: contain; }
+    details { padding: 14px 0; border-top: 1px solid #353944; }
+    summary { cursor: pointer; font-weight: 600; }
+    li { margin: 6px 0; }
+    footer { padding-top: 18px; color: #aeb4c3; font-size: 13px; }
+    [hidden] { display: none !important; }
+    @media (max-width: 700px) {
+      main { padding: 24px 16px; }
+      h1 { font-size: 31px; }
+      .legend { display: none; }
+      .pair, .apple { grid-template-columns: 1fr; }
+      .stage { height: auto !important; }
+      figure::before { content: attr(data-label); display: block; margin: 0 0 10px; color: #aeb4c3; font-size: 12px; }
+      .apple figure::before { display: none; }
+    }
+    @media print {
+      .controls, details { display: none; }
+      .review { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Noctalia Island · visual review · 9 October 2026</div>
+    <h1>Our shell, beside the design direction</h1>
+    <p class="intro">The native shell screenshots reveal the biggest opportunities: quieter navigation, stronger live values, and a stable media visualiser. The existing artwork and playback controls give us a good foundation.</p>
+    <p class="fine">Left: real shell renderer with test data. Right: our earlier generated concept, not Apple screenshots or implemented UI. Views are cropped and scaled to comparable widths, not a pixel-for-pixel size specification.</p>
+    <p class="fine">Follow-up: <a href="island-navigation-mockup.html">try the quieter navigation mockup with Comfortable and Compact sizing</a>.</p>
+  </header>
+  <div class="controls">
+    <label for="state">Compare</label>
+    <select id="state">
+      <option value="all">All five states</option>
+      <option value="compact">Compact media</option>
+      <option value="media">Expanded media</option>
+      <option value="downloads">Downloads and history</option>
+      <option value="timer">Timer</option>
+      <option value="recording">Screen recording</option>
+    </select>
+    <span id="count" class="fine" role="status">5 comparisons</span>
+  </div>
+  <div class="legend" aria-hidden="true">
+    <div><strong>Current shell</strong><span>Unchanged screenshot pixels</span></div>
+    <div><strong>Earlier concept</strong><span>Proposed desktop adaptation</span></div>
+  </div>
+  <div id="comparisons"></div>
+  <section class="refs">
+    <h2>The official reference behind the comparison</h2>
+    <p class="intro">Apple's illustrations favour readable live information, content that fits the curved surface, and essential actions. Their red centre marks the phone's sensor region, not a privacy status. Our desktop needs no camera cutout.</p>
+    <div class="apple">
+      <figure>
+        <a href="https://developer.apple.com/tutorials/images/com.apple.HIG/live-activities-balanced-content@2x.png"><img src="../assets/island-design-review-20261009/live-activities-balanced-content@2x.png" alt="Official Apple schematic: an activity symbol and an eight-minute value in a compact black Island"></a>
+        <figcaption><strong>Compact:</strong> identity and one useful value. Keep the activity readable at a glance.</figcaption>
+      </figure>
+      <figure>
+        <a href="https://developer.apple.com/tutorials/images/com.apple.HIG/live-activities-layout-correct@2x.png"><img src="../assets/island-design-review-20261009/live-activities-layout-correct@2x.png" alt="Official Apple schematic: an expanded delivery activity with arrival time and one contact action"></a>
+        <figcaption><strong>Expanded:</strong> activity content and a relevant action share one continuous surface.</figcaption>
+      </figure>
+    </div>
+    <p class="fine">Official illustrations © Apple. Sources: <a href="https://developer.apple.com/design/human-interface-guidelines/live-activities">Live Activities HIG</a> · <a href="https://developer.apple.com/videos/play/wwdc2023/10194/">Design dynamic Live Activities</a>. Also reviewed: <a href="dynamic-island-ios27.html">your supplied iOS 27 schematic</a>. Its navigation buttons are demonstration controls, not Island chrome.</p>
+  </section>
+  <details>
+    <summary>Screenshot provenance and limits</summary>
+    <p>Compact media, expanded media and timer were captured from the current release binary in a private compositor on 9 October. Downloads with history and recording are earlier same-day fixtures checked against the current layout code. Full desktop originals are linked from every current-shell image.</p>
+    <p>The screenshots use fixture players, transfers and capture sessions. They do not show personal apps. Cropping and uniform scaling happen only in this review page; the source PNG files are preserved unchanged.</p>
+    <p>Animation was disabled in the fresh run. It reached the dark states and playback/seek checks, then stopped because light-mode OCR read “tohome” instead of “home”. The full suite did not pass. These frames support a layout comparison, not a motion or complete interaction verdict.</p>
+    <p>The concept is illustrative: its Steam progress bar is not evidence that Steam exposes a percentage. Unknown totals must remain indeterminate. Its compact proportions, subtle outlines, duplicate media markers, and extra header should also be refined before implementation. Keep the user's clean appearance and avoid copying every decorative detail.</p>
+    <ul>
+      <li>Fresh captures: <code>build-rishot/hyprland-smoke-6_ldy6fp</code>.</li>
+      <li>History: <code>build-rishot/hyprland-smoke-oz1vr7dl/recent-three-with-active.png</code>.</li>
+      <li>Recording: <code>build-rishot/hyprland-smoke-2gyobld7/recording-alone.png</code>.</li>
+      <li><a href="../assets/island-design-review-20261009/downloads.png">Additional current transfer without history</a> · <a href="../assets/island-design-review-20261009/desktop-layout-concept.png">Full original generated concept</a> · <a href="../ORBIT_ISLAND.md#refinement-review-9-october-2026">Source audit and implementation landmarks</a>.</li>
+    </ul>
+  </details>
+  <footer>Keep the artwork shader, compact indicator rotation, connection pulses and transfer feedback. This is a visual comparison; the running shell has not been changed.</footer>
+</main>
+<script>
+  const assetRoot = '../assets/island-design-review-20261009/';
+  const entries = [
+    {
+      id: 'compact', title: 'Compact media: let the activity stay visible',
+      file: 'compact-media.png', crop: [450, 0, 380, 90], concept: [205, 222, 366, 139],
+      current: '<strong>Clock and battery dominate.</strong> In this playing state, the headphone battery warning occupies the waveform slot. The amber halo is a temporary device event.',
+      proposed: '<strong>Artwork and waveform stay together.</strong> Keep an independent, discreet status area and reserve the clock for idle. The exact compact proportions still need a native mockup.',
+      reason: 'First priority: preserve the visualiser when privacy, unread or battery status appears.'
+    },
+    {
+      id: 'media', title: 'Expanded media: remove competing navigation',
+      file: 'expanded-media.png', crop: [450, 0, 380, 270], concept: [62, 435, 635, 352],
+      current: '<strong>The playback layout is already close.</strong> Artwork, title, seeking and bare transport symbols work well. The segmented tabs pull attention upward.',
+      proposed: '<strong>A quiet heading and small selectors.</strong> Keep the artwork shader and align status controls with the tray. Let title, artist and playback remain the focus.',
+      reason: 'Replace the tab strip first. Keep artwork visible; assess its contrast with several real covers before changing shader intensity.'
+    },
+    {
+      id: 'downloads', title: 'Downloads: make history secondary',
+      file: 'recent-transfers.png', crop: [450, 0, 380, 442], concept: [725, 436, 641, 350],
+      current: '<strong>History occupies most of the card.</strong> Three recent results and a wide Close button outweigh the single active transfer.',
+      proposed: '<strong>Lead with the current transfer.</strong> A secondary Recent transfers action keeps the useful history reachable. The illustrated bar must be indeterminate when no total is reported.',
+      reason: 'Keep truthful download phases and the existing completion glow while reducing the default card height.'
+    },
+    {
+      id: 'timer', title: 'Timer: make the remaining time the headline',
+      file: 'timer.png', crop: [450, 0, 380, 150], concept: [62, 863, 635, 154],
+      current: '<strong>Time is one small label in a row.</strong> Tabs, a tinted container and three buttons compete with 1:15. The screenshot shows a paused timer.',
+      proposed: '<strong>A large value with essential controls.</strong> Keep the timer name secondary and make pause or resume, plus cancel, easy to reach. The concept shows a running timer.',
+      reason: 'The hierarchy should work in both paused and running states, with controls and labels reflecting the actual state.'
+    },
+    {
+      id: 'recording', title: 'Recording: elapsed time and Stop should lead',
+      file: 'recording.png', crop: [431, 0, 418, 250], concept: [725, 863, 642, 152],
+      current: '<strong>Elapsed time is the smallest detail.</strong> Navigation, a heading, explanation and app name all take precedence over the red 0:13 value.',
+      proposed: '<strong>One recording activity with a clear duration.</strong> A concentric recording symbol and reachable Stop control create a simpler glance. Preserve details for multiple capture sessions.',
+      reason: 'Use red for confirmed recording. Keep sharing and remote access distinguishable, and retain microphone/camera details behind their status indicators.'
+    }
+  ];
+  function makeCrop(file, rect, sourceWidth, alt) {
+    const [x, y, w, h] = rect;
+    const link = document.createElement('a');
+    link.href = assetRoot + file;
+    link.className = 'crop';
+    link.style.aspectRatio = `${w} / ${h}`;
+    const img = document.createElement('img');
+    img.src = link.href;
+    img.alt = alt;
+    img.style.width = `${sourceWidth / w * 100}%`;
+    img.style.left = `${-x / w * 100}%`;
+    img.style.top = `${-y / h * 100}%`;
+    link.append(img);
+    return link;
+  }
+  const container = document.querySelector('#comparisons');
+  entries.forEach((entry, index) => {
+    const section = document.createElement('section');
+    section.className = 'review';
+    section.dataset.state = entry.id;
+    section.innerHTML = `<header><span class="number">0${index + 1}</span><h2>${entry.title}</h2></header><div class="pair"></div><p class="reason">${entry.reason}</p>`;
+    const stageHeight = Math.max(entry.crop[3] / entry.crop[2], entry.concept[3] / entry.concept[2]) * 380;
+    [['Current shell', entry.file, entry.crop, 1280, entry.current], ['Earlier concept', 'desktop-layout-concept.png', entry.concept, 1422, entry.proposed]].forEach(([label, file, rect, width, caption]) => {
+      const figure = document.createElement('figure');
+      figure.dataset.label = label;
+      const stage = document.createElement('div');
+      stage.className = 'stage';
+      stage.style.height = `${stageHeight}px`;
+      stage.append(makeCrop(file, rect, width, `${label}: ${entry.title}`));
+      const description = document.createElement('figcaption');
+      description.innerHTML = caption;
+      figure.append(stage, description);
+      section.querySelector('.pair').append(figure);
+    });
+    container.append(section);
+  });
+  document.querySelector('#state').addEventListener('change', event => {
+    const selected = event.target.value;
+    container.querySelectorAll('.review').forEach(section => {
+      section.hidden = selected !== 'all' && selected !== section.dataset.state;
+    });
+    document.querySelector('#count').textContent = selected === 'all' ? '5 comparisons' : '1 comparison';
+  });
+</script>
+</body>
+</html>

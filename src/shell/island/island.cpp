@@ -209,6 +209,7 @@ struct Island::Instance {
   bool inside = false;
   bool hovered = false;
   bool badgeHovered = false;
+  bool recentTransfersExpanded = false;
   // Split Island: other running activities in round bubbles beside the capsule, as on iPhone.
   // The first sits behind the capsule and slides out from under its right end; the second sits
   // behind the first and slides out from under that, for a third concurrent activity.
@@ -300,6 +301,7 @@ struct Island::Instance {
     ProgressBar* progress;
   };
   std::vector<DownloadUi> downloadUi;
+  std::vector<std::pair<std::uint64_t, Label*>> recentTransferUi;
   island::ProgressOutline* downloadLedRing = nullptr;
   bool seeking = false;
   std::int64_t seekLengthUs = 0;
@@ -349,6 +351,29 @@ namespace {
   std::string countdownTime(const island::Countdown& timer) {
     return timer.event && timer.remaining <= 0 ? i18n::tr("island.up-next.now") : timer.time();
   }
+  std::string transferMessage(const island::TransferFeedback& feedback) {
+    if (!feedback.detail.empty())
+      return feedback.detail;
+    return i18n::tr(
+        feedback.notice == island::TransferNotice::Failed                 ? "island.downloads.failed"
+            : feedback.notice == island::TransferNotice::TransferFinished ? "island.downloads.transfer-finished"
+                                                                          : "island.downloads.finished"
+    );
+  }
+
+  std::string recentTransferAge(const island::RecentTransfers::Entry& entry) {
+    const auto minutes =
+        std::chrono::duration_cast<std::chrono::minutes>(island::RecentTransfers::Clock::now() - entry.received)
+            .count();
+    if (minutes < 1)
+      return i18n::tr("island.downloads.recent-now");
+    if (minutes < 60)
+      return i18n::tr("island.downloads.recent-minutes", "count", minutes);
+    if (minutes < 1440)
+      return i18n::tr("island.downloads.recent-hours", "count", minutes / 60);
+    return i18n::tr("island.downloads.recent-days", "count", minutes / 1440);
+  }
+
   std::string activityTime(std::chrono::seconds remaining) {
     const auto seconds = remaining.count();
     return seconds >= 3600 ? std::format("{}:{:02}:{:02}", seconds / 3600, seconds / 60 % 60, seconds % 60)
@@ -607,11 +632,11 @@ void Island::initialize(
     try {
       m_downloads = std::make_unique<DownloadProgressService>(*bus);
       m_downloads->changed = [this] { refresh(); };
-      m_downloads->completed = [this](const DownloadSource& source) {
-        showTransferNotice(island::TransferNotice::DownloadFinished, source);
-      };
-      m_downloads->failed = [this](const DownloadSource& source) {
-        showTransferNotice(island::TransferNotice::Failed, source);
+      m_downloads->reported = [this](const DownloadResult& result, bool announce) {
+        reportTransfer(
+            result.failed ? island::TransferNotice::Failed : island::TransferNotice::DownloadFinished, result.source,
+            result.title, result.detail, announce
+        );
       };
     } catch (const std::exception& error) {
       Logger("island").warn("download progress unavailable: {}", error.what());
@@ -768,7 +793,7 @@ bool Island::updateScriptActivity(
     it->status = *status;
   it->updated = std::chrono::steady_clock::now();
   if (failed)
-    showTransferNotice(island::TransferNotice::Failed, {.name = it->title});
+    reportTransfer(island::TransferNotice::Failed, {.name = it->title});
   expireScriptActivities();
   refresh();
   return true;
@@ -782,16 +807,26 @@ bool Island::endScriptActivity(const std::string& id) {
   const auto title = found->title;
   m_scriptActivities.erase(found);
   if (finished)
-    showTransferNotice(island::TransferNotice::TransferFinished, {.name = title});
+    reportTransfer(island::TransferNotice::TransferFinished, {.name = title});
   expireScriptActivities();
   refresh();
   return true;
 }
 
-void Island::showTransferNotice(island::TransferNotice notice, DownloadSource source) {
+void Island::reportTransfer(
+    island::TransferNotice notice, DownloadSource source, std::string title, std::string detail, bool announce
+) {
   if (!enabled())
     return;
-  m_transferNotice = island::TransferFeedback{notice, std::move(source), ++m_transferNoticeSerial};
+  auto feedback = island::TransferFeedback{
+      notice, std::move(source), ++m_transferNoticeSerial, std::move(title), std::move(detail)
+  };
+  m_recentTransfers.remember(feedback);
+  if (!announce) {
+    refresh();
+    return;
+  }
+  m_transferNotice = std::move(feedback);
   m_transferNoticeTimeout.start(5s, [this] {
     m_transferNotice.reset();
     refresh();
@@ -872,8 +907,20 @@ void Island::activateTransferNotice(Instance& inst, std::uint64_t serial) {
   refresh();
 }
 
+void Island::activateRecentTransfer(Instance& inst, std::uint64_t serial) {
+  const auto* entry = m_recentTransfers.find(serial);
+  // A queued gesture belongs to this result, even if history has since rotated.
+  if (entry && activateTransferSource(inst, entry->feedback.source))
+    refresh();
+}
+
 void Island::timerCommand(const island::Countdown& timer, const std::string& command) {
   if (!scripting::PluginRegistry::instance().hasEntry(timer.panel))
+    return;
+  // A queued resume must not turn an ended or reset timer into a new timer.
+  const auto current = countdowns();
+  const auto live = std::ranges::find(current, timer.plugin, &island::Countdown::plugin);
+  if (live == current.end() || !island::acceptsCountdownCommand(timer, *live, command))
     return;
   scripting::PluginStateStore::instance().set(timer.plugin, timer.commandKey(), nlohmann::json(command).dump());
   refresh();
@@ -1587,6 +1634,8 @@ void Island::prepare(Instance& inst) {
   const std::string announcement = preview ? (player->title.empty() ? trackArtist : player->title) : "";
   const std::string announcementArtist = preview && !player->title.empty() ? trackArtist : "";
   auto downloads = progressActivities();
+  const auto& recentTransfers = m_recentTransfers.entries();
+  const bool downloadCard = !downloads.empty() || !recentTransfers.empty();
   // A bubble click put this job in the capsule; it stays there while it runs.
   island::orderTransfers(downloads, inst.splitLead);
   const auto timers = countdowns();
@@ -1629,6 +1678,7 @@ void Island::prepare(Instance& inst) {
               && !inst.captureMenu
               && inst.captureRemaining <= 0
               && downloads.empty()
+              && (!cfg.hoverShowDownloads || recentTransfers.empty())
               && !timerActive)))
     releaseKeyboard(inst);
   const bool expansionRequested = inst.hovered || (inst.keyboardMode && !focusedConnection && !focusedNetwork);
@@ -1638,7 +1688,7 @@ void Island::prepare(Instance& inst) {
     inst.heldMedia = false;
   const island::Activities availableActivities{
       cfg.hoverShowMedia && player && (playing || inst.heldMedia),
-      cfg.hoverShowDownloads && !downloads.empty(),
+      cfg.hoverShowDownloads && downloadCard,
       cfg.hoverShowTimers && timerActive,
       microphone.has_value(),
       awake.has_value(),
@@ -1648,9 +1698,10 @@ void Island::prepare(Instance& inst) {
   const auto compactActivity = recording ? island::Activity::Capture
       : !announcement.empty()            ? island::Activity::Media
                                          : inst.compactActivity.selected();
-  inst.activities.update(expansionRequested, availableActivities, compactActivity);
+  inst.activities.update(expansionRequested, availableActivities, compactActivity, downloads.empty());
   // Keep the existing calendar/timer layout for a lone timer, until switching is useful.
-  const auto selected = inst.activities.selected == island::Activity::Timers && !inst.activities.switching
+  const auto selected =
+      !gCupertino && inst.activities.selected == island::Activity::Timers && !inst.activities.switching
       ? island::Activity::None
       : inst.activities.selected;
   const auto normalView = island::view(
@@ -1662,7 +1713,7 @@ void Island::prepare(Instance& inst) {
       m_transferNotice.has_value() && (!inst.keyboardMode || focusedTransfer),
       inst.connection.has_value() && (!inst.keyboardMode || focusedConnection),
       inst.network.has_value() && (!inst.keyboardMode || focusedNetwork), microphone.has_value(), awake.has_value(),
-      captureActive, recording, cameraActive
+      captureActive, recording, cameraActive, !recentTransfers.empty()
   );
   const auto view = m_notification && m_notification->urgency == Urgency::Critical ? normalView
       : inst.captureRemaining > 0                                                  ? island::View::CaptureCountdown
@@ -1685,7 +1736,13 @@ void Island::prepare(Instance& inst) {
       || view == island::View::Capture
       || view == island::View::Camera
       || view == island::View::Timers;
-  const bool showSwitcher = expandedView && inst.activities.switching && availableActivities.count() > 0;
+  const bool contextualHeader = gCupertino && expandedView && view != island::View::Calendar;
+  const bool showSwitcher = !gCupertino && expandedView && inst.activities.switching && availableActivities.count() > 0;
+  auto cyclingActivities = availableActivities;
+  cyclingActivities.downloads = cfg.hoverShowDownloads && !downloads.empty();
+  if (view != island::View::Downloads)
+    inst.recentTransfersExpanded = false;
+  const bool showRecentTransfers = !gCupertino || downloads.empty() || inst.recentTransfersExpanded;
   // Split Island: with two activities running, the compact capsule shows one and a bubble beside
   // it the other, rather than the activity order hiding the second.
   const auto primaryActivity = view == island::View::Activity ? island::Activity::Media
@@ -1726,7 +1783,7 @@ void Island::prepare(Instance& inst) {
       : std::span<const DownloadProgress>(downloads);
   // Cupertino focuses an expanded activity on that activity alone, like Apple's Dynamic
   // Island; batteries, unread history and hover widgets stay in the idle (calendar) view.
-  // The media card keeps its tray beside the privacy and unread icons below playback controls.
+  // Activity cards keep the tray beside their privacy and unread indicators in the header.
   // Temporary OSDs keep their own content; capture resumes in the following view.
   const bool showExtras = !gCupertino || view == island::View::Calendar;
   const bool chargingOsd = view == island::View::Osd && m_osd && m_osd->kind == OsdKind::Charging;
@@ -1754,11 +1811,13 @@ void Island::prepare(Instance& inst) {
           || view == island::View::Timers
           || view == island::View::TimerActivity);
   constexpr float badgeWidth = 24.0F;
-  if (view == island::View::Microphone)
+  if (gCupertino)
+    privacyList = island::displayPrivacy(std::move(privacyList));
+  if (!gCupertino && view == island::View::Microphone)
     std::erase_if(privacyList, [](const auto& activity) { return activity.kind == PrivacyCaptureKind::Microphone; });
-  if (view == island::View::Capture)
+  if (!gCupertino && view == island::View::Capture)
     std::erase_if(privacyList, [](const auto& activity) { return activity.kind == PrivacyCaptureKind::Screen; });
-  if (cameraView)
+  if (!gCupertino && cameraView)
     std::erase_if(privacyList, [](const auto& activity) { return activity.kind == PrivacyCaptureKind::Camera; });
   if (!island::showsStatusIcons(view))
     privacyList.clear();
@@ -1811,9 +1870,13 @@ void Island::prepare(Instance& inst) {
   const bool transferAction = view == island::View::TransferNotice && transferApp(m_transferNotice->source);
   const auto downloadRows = std::min(downloads.size(), std::size_t{4});
   std::array<bool, 4> downloadActions{};
+  std::array<bool, 3> recentActions{};
   if (view == island::View::Downloads)
     for (std::size_t i = 0; i < downloadRows; ++i)
       downloadActions[i] = transferApp(downloads[i].source);
+  if (view == island::View::Downloads)
+    for (std::size_t i = 0; i < recentTransfers.size(); ++i)
+      recentActions[i] = transferApp(recentTransfers[i].feedback.source);
   std::string actionSignature;
   if (m_notification)
     for (const auto& part : m_notification->actions)
@@ -1907,7 +1970,7 @@ void Island::prepare(Instance& inst) {
       cardPresentation = announcement + "\n" + announcementArtist;
     break;
   case island::View::Calendar:
-    signature += time + date;
+    signature += time + date + (cfg.hoverShowDownloads && !recentTransfers.empty() ? "|recent" : "");
     break;
   case island::View::Rest:
     signature += time;
@@ -1930,16 +1993,22 @@ void Island::prepare(Instance& inst) {
         signature += std::format(
             "|action:{}:{}:{}", downloadActions[i], downloads[i].source.desktopId, downloads[i].source.wmClass
         );
+    if (view == island::View::Downloads)
+      for (std::size_t i = 0; i < recentTransfers.size(); ++i)
+        signature += std::format("|recent:{}:{}", recentTransfers[i].feedback.serial, recentActions[i]);
     break;
   }
   if (view != island::View::Notification && view != island::View::Osd)
     signature += std::format("|unread:{}|count:{}", showUnread, showUnread && expandedView ? unreadCount : 0);
-  signature += std::format("|keyboard:{}", inst.keyboardMode);
+  signature += std::format(
+      "|keyboard:{}|recent-expanded:{}|recording:{}", inst.keyboardMode, inst.recentTransfersExpanded, recording
+  );
   if (expandedView)
     signature += std::format(
-        "|switcher:{}:{}:{}:{}:{}:{}:{}:{}", showSwitcher, availableActivities.media, availableActivities.downloads,
-        availableActivities.timers, availableActivities.microphone, availableActivities.awake,
-        availableActivities.capture, availableActivities.camera
+        "|switcher:{}:{}:{}:{}:{}:{}:{}:{}|media-indicator:{}|live-downloads:{}", showSwitcher,
+        availableActivities.media, availableActivities.downloads, availableActivities.timers,
+        availableActivities.microphone, availableActivities.awake, availableActivities.capture,
+        availableActivities.camera, playing, cyclingActivities.downloads
     );
   if (expandedView || view == island::View::TimerActivity)
     for (const auto& timer : timers)
@@ -1948,7 +2017,9 @@ void Island::prepare(Instance& inst) {
           timer.finished, timer.duration, timer.session, timer.url, timer.event && timer.remaining <= 0
       );
   for (const auto& activity : privacyList)
-    signature += std::format("|privacy:{}:{}", static_cast<int>(activity.kind), activity.appNames());
+    signature += std::format(
+        "|privacy:{}:{}:{}", static_cast<int>(activity.kind), activity.appNames(), activity.includesMicrophone
+    );
   if (slotBell)
     signature += "|slot-bell";
   if (showBattery || expandedView)
@@ -2237,6 +2308,7 @@ void Island::prepare(Instance& inst) {
         || (inst.awakeLabel && awake)
         || !inst.timerUi.empty()
         || !inst.downloadUi.empty()
+        || !inst.recentTransferUi.empty()
         || (view == island::View::Media && player))
       m_renderContext->makeCurrent(inst.surface->renderTarget());
     geometry(inst);
@@ -2272,6 +2344,12 @@ void Island::prepare(Instance& inst) {
       if (ui.progress)
         ui.progress->setProgress(static_cast<float>(download->progress));
     }
+    for (const auto& [serial, age] : inst.recentTransferUi) {
+      if (const auto* entry = m_recentTransfers.find(serial)) {
+        age->setText(recentTransferAge(*entry));
+        age->measure(renderer);
+      }
+    }
     // Keep the title's marquee alive while the playback position advances.
     if (view == island::View::Media && player) {
       if (inst.seekProgress)
@@ -2296,6 +2374,13 @@ void Island::prepare(Instance& inst) {
       view, cfg.height, cfg.clockSize, cfg.clockSeconds, cfg.calendarLabels != IslandCalendarLabels::Initials,
       cfg.mediaArtworkSize, !announcement.empty()
   );
+  const bool paddedCard = gCupertino
+      && (expandedView
+          || view == island::View::Notification
+          || view == island::View::CaptureMenu
+          || view == island::View::CaptureCountdown);
+  if (paddedCard)
+    w = island::cardWidth(cfg.compactLayout);
   if (showSwitcher)
     w = std::max({w, 360.0F, 32.0F + 88.0F * static_cast<float>(availableActivities.count())});
   w = island::batteryWidth(w, view, showBattery, showUnread);
@@ -2304,6 +2389,10 @@ void Island::prepare(Instance& inst) {
   if (compactView)
     w += 2 * privacyWidth;
   w = std::min(w, static_cast<float>(inst.surface->width()) / s - 16);
+  // Existing inner groups start 12 px in. Add an outer gutter so their filled
+  // backgrounds clear the large Island curve by 20 px compact / 24 px comfortable.
+  const float cardGutter = paddedCard ? (cfg.compactLayout ? 8.0F : 12.0F) : 0.0F;
+  w = std::max(1.0F, w - 2 * cardGutter);
   if (!inst.root) {
     inst.root = std::make_unique<Node>();
     inst.root->setAnimationManager(&inst.animations);
@@ -2391,8 +2480,9 @@ void Island::prepare(Instance& inst) {
   inst.activityScroll = nullptr;
   inst.badgeHovered = false;
   inst.pressedAction.clear();
-  const bool showMediaStatus = view == island::View::Activity && !showUnread && !showBattery && privacyList.empty();
-  const bool showVisualizer = showMediaStatus && playing;
+  const bool showMediaStatus =
+      view == island::View::Activity && (gCupertino || (!showUnread && !showBattery && privacyList.empty()));
+  const bool showVisualizer = playing && (showMediaStatus || (gCupertino && view == island::View::Media));
   std::unique_ptr<Node> retainedWidgets;
   if (expandedView && inst.hoverWidgets && inst.hoverWidgets->trayOnlyMode() == !showExtras)
     retainedWidgets = inst.hoverWidgets->parent()->removeChild(inst.hoverWidgets);
@@ -2428,6 +2518,7 @@ void Island::prepare(Instance& inst) {
   inst.awakeLabel = nullptr;
   inst.timerUi.clear();
   inst.downloadUi.clear();
+  inst.recentTransferUi.clear();
   inst.downloadLedRing = nullptr;
   Node* canvas = inst.content;
 
@@ -2487,7 +2578,7 @@ void Island::prepare(Instance& inst) {
     return x;
   };
   const auto sectionCard = [&](float top, float bottom) {
-    if (bottom - top <= 6)
+    if (bottom - top <= 6 || contextualHeader)
       return;
     auto card = std::make_unique<Box>();
     card->setCardStyle(s, 1.0F, Style::cardBordersEnabled());
@@ -2905,14 +2996,16 @@ void Island::prepare(Instance& inst) {
   } else if (view == island::View::Downloads) {
     // Script activities share this card; it is "In Progress" unless every row is a download.
     const bool onlyDownloads = std::ranges::all_of(downloads, [](const auto& item) { return item.icon.empty(); });
-    glyph(onlyDownloads ? "download" : "stack-2", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
-    label(
-        i18n::tr(onlyDownloads ? "island.downloads.title" : "island.downloads.in-progress"), 56, 17, w - 78,
-        Style::fontSizeTitle, foreground, false, 1, FontWeight::SemiBold
-    );
+    if (!gCupertino) {
+      glyph(onlyDownloads ? "download" : "stack-2", 22, 18, 22, islandTint(kAppleBlue, ColorRole::Primary));
+      label(
+          i18n::tr(onlyDownloads ? "island.downloads.title" : "island.downloads.in-progress"), 56, 17, w - 78,
+          Style::fontSizeTitle, foreground, false, 1, FontWeight::SemiBold
+      );
+    }
     const auto rows = downloadRows;
     for (std::size_t i = 0; i < rows; ++i) {
-      const float y = 57 + static_cast<float>(i) * 55;
+      const float y = (gCupertino ? 18.0F : 57.0F) + static_cast<float>(i) * 55;
       sectionCard(y - 6, y + 45);
       const auto& download = downloads[i];
       // Cupertino leads each row with a round badge; paused transfers use amber.
@@ -2951,12 +3044,12 @@ void Island::prepare(Instance& inst) {
         button->inputArea()->setTabFocusKey("download:" + download.key);
       }
     }
-    h = 60 + static_cast<float>(rows) * 55;
+    h = (gCupertino ? 22.0F : 60.0F) + static_cast<float>(rows) * 55;
     if (downloads.size() > rows) {
       label(i18n::trp("island.downloads.more", downloads.size() - rows), 22, h, w - 44, 12, muted);
       h += 28;
     }
-    if (player && cfg.hoverShowMedia && !showSwitcher) {
+    if (player && cfg.hoverShowMedia && !showSwitcher && !contextualHeader) {
       pill(control(22, h, w - 44, 32, i18n::tr("island.downloads.media"), "", "", 0, true, [panel] {
         panel("media");
       }));
@@ -2998,7 +3091,7 @@ void Island::prepare(Instance& inst) {
         title->setPosition(inset * s, y);
         if (artistLabel)
           artistLabel->setPosition(inset * s, y + title->height() + gap);
-      } else {
+      } else if (!gCupertino || view != island::View::Activity) {
         clockLabel = label(time, inset, 0, w - inset * 2, size, foreground, true);
         const float clockY = (cfg.height * s - clockLabel->height()) / 2.0F + cfg.clockOffset * s;
         clockLabel->setPosition(
@@ -3009,15 +3102,17 @@ void Island::prepare(Instance& inst) {
     }
     if (view == island::View::Activity) {
       artwork(12, (cfg.height - 38) / 2, 38);
+      const float mediaStatusX =
+          w - 44 - (gCupertino ? privacyWidth + (showBattery ? 42 : 0) + (showUnread ? 36 : 0) : 0);
       if (showMediaStatus && !playing)
-        glyph("media-pause", w - 44, (cfg.height - 24) / 2, 24, muted);
+        glyph("media-pause", mediaStatusX, (cfg.height - 24) / 2, 24, muted);
       if (showVisualizer) {
         if (!retainedVisualizer)
           retainedVisualizer = std::make_unique<IslandAudioVisualizer>(m_spectrum, *inst.surface);
         inst.visualizer = static_cast<IslandAudioVisualizer*>(retainedVisualizer.get());
         // Foreground, not the accent: white on the black capsule, like Apple's Now Playing waveform.
         inst.visualizer->setGradient(foreground, foreground);
-        inst.visualizer->setPosition((w - 44) * s, (cfg.height - 24) * s / 2);
+        inst.visualizer->setPosition(mediaStatusX * s, (cfg.height - 24) * s / 2);
         inst.visualizer->setSize(24 * s, 24 * s);
         canvas->addChild(std::move(retainedVisualizer));
       }
@@ -3090,25 +3185,33 @@ void Island::prepare(Instance& inst) {
     action(0, 0, w, cfg.height, "capture-open", openCapture);
   } else if (view == island::View::Capture || cameraView) {
     const bool onlyRecording = !cameraView && recording && m_screenSessions.sessions().empty();
-    const auto tint = cameraView ? kAppleGreen : onlyRecording ? kAppleRed : kApplePurple;
-    leadingBadge(
-        cameraView          ? "privacy-camera"
-            : onlyRecording ? "player-record-filled"
-                            : "privacy-screen",
-        22, 20, 40, tint, ColorRole::Primary
-    );
-    const auto title = cameraView ? "bar.widgets.privacy.camera"
-        : onlyRecording           ? "island.capture.recording"
-        : recording               ? "island.capture.title"
-                                  : "bar.widgets.privacy.screen-sharing";
-    label(i18n::tr(title), 74, 17, w - 130, 17, foreground, false, 1, FontWeight::SemiBold);
-    label(i18n::tr(cameraView ? "island.camera.detail" : "island.capture.detail"), 74, 43, w - 96, 12, muted);
-    auto* settings =
-        control(w - 50, 18, 28, 28, "", "settings", i18n::tr("island.capture.settings"), 16, true, [panel] {
-          panel("privacy");
-        });
-    settings->inputArea()->setAcceptedButtons(0);
-    action(w - 50, 18, 28, 28, "capture-privacy", [panel] { panel("privacy"); });
+    if (gCupertino && onlyRecording) {
+      h = 12;
+    } else {
+      const auto tint = cameraView ? kAppleGreen : onlyRecording ? kAppleRed : kApplePurple;
+      leadingBadge(
+          cameraView          ? "privacy-camera"
+              : onlyRecording ? "player-record-filled"
+                              : "privacy-screen",
+          22, 20, 40, tint, ColorRole::Primary
+      );
+      const auto title = cameraView ? "bar.widgets.privacy.camera"
+          : onlyRecording           ? "island.capture.recording"
+          : recording               ? "island.capture.title"
+                                    : "bar.widgets.privacy.screen-sharing";
+      if (!gCupertino)
+        label(i18n::tr(title), 74, 17, w - 130, 17, foreground, false, 1, FontWeight::SemiBold);
+      label(
+          i18n::tr(cameraView ? "island.camera.detail" : "island.capture.detail"), 74, gCupertino ? 29 : 43, w - 130,
+          12, muted
+      );
+      auto* settings =
+          control(w - 50, 18, 28, 28, "", "settings", i18n::tr("island.capture.settings"), 16, true, [panel] {
+            panel("privacy");
+          });
+      settings->inputArea()->setAcceptedButtons(0);
+      action(w - 50, 18, 28, 28, "capture-privacy", [panel] { panel("privacy"); });
+    }
   } else if (view == island::View::AwakeActivity && awake) {
     glyph("caffeine-on", 22, (cfg.height - 24) / 2, 24, islandTint(kAppleOrange, ColorRole::Primary));
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
@@ -3122,8 +3225,9 @@ void Island::prepare(Instance& inst) {
     inst.awakeLabel->setPosition(inst.awakeLabel->x(), top + title->height() + 2 * s);
   } else if (view == island::View::Awake && awake) {
     leadingBadge("caffeine-on", 22, 18, 40, kAppleOrange, ColorRole::Primary);
-    label(i18n::tr("utilities.keep-awake.title"), 74, 16, w - 130, 17, foreground, false, 1, FontWeight::SemiBold);
-    label(i18n::tr("island.awake.detail"), 74, 42, w - 96, 12, muted);
+    if (!gCupertino)
+      label(i18n::tr("utilities.keep-awake.title"), 74, 16, w - 130, 17, foreground, false, 1, FontWeight::SemiBold);
+    label(i18n::tr("island.awake.detail"), 74, gCupertino ? 29 : 42, w - 130, 12, muted);
     auto* power = control(w - 50, 18, 28, 28, "", "settings", i18n::tr("island.awake.settings"), 16, true, [panel] {
       panel("power");
     });
@@ -3154,8 +3258,12 @@ void Island::prepare(Instance& inst) {
     pill(end);
   } else if (view == island::View::Microphone && microphone) {
     leadingBadge("microphone", 22, 20, 40, kAppleOrange, ColorRole::Primary);
-    label(i18n::tr("island.microphone.title"), 74, 17, w - 130, 17, foreground, false, 1, FontWeight::SemiBold);
-    label(microphone->appNames(), 74, 43, w - 96, 12, muted, false, 1, FontWeight::Normal, true);
+    if (gCupertino)
+      label(microphone->appNames(), 74, 29, w - 130, 17, foreground, false, 1, FontWeight::SemiBold, true);
+    else {
+      label(i18n::tr("island.microphone.title"), 74, 17, w - 130, 17, foreground, false, 1, FontWeight::SemiBold);
+      label(microphone->appNames(), 74, 43, w - 96, 12, muted, false, 1, FontWeight::Normal, true);
+    }
     auto* audio =
         control(w - 50, 18, 28, 28, "", "settings", i18n::tr("island.privacy.audio-controls"), 16, true, [panel] {
           panel("audio");
@@ -3163,26 +3271,40 @@ void Island::prepare(Instance& inst) {
     audio->inputArea()->setAcceptedButtons(0);
     action(w - 50, 18, 28, 28, "microphone-audio", [panel] { panel("audio"); });
   } else if (view == island::View::Media && player) {
-    const float mediaOffset = std::max(0.0F, cfg.mediaArtworkSize - 56.0F);
-    const float textX = 27.0F + cfg.mediaArtworkSize + 16.0F;
-    artwork(27, 22 + (56.0F + mediaOffset - cfg.mediaArtworkSize) / 2.0F, cfg.mediaArtworkSize);
+    const float artworkSize =
+        gCupertino ? std::max(cfg.mediaArtworkSize, cfg.compactLayout ? 50.0F : 64.0F) : cfg.mediaArtworkSize;
+    const float mediaOffset = std::max(0.0F, artworkSize - 56.0F);
+    const float textX = 27.0F + artworkSize + 16.0F;
+    const float waveformWidth = showVisualizer && gCupertino ? 54.0F : 0;
+    artwork(27, 22, artworkSize);
     label(
-        player->title, textX, 27 + mediaOffset / 2.0F, w - textX - 25, Style::fontSizeTitle, foreground, false, 1,
-        FontWeight::SemiBold, true
+        player->title, textX, 27 + mediaOffset / 2.0F, w - textX - 25 - waveformWidth,
+        gCupertino ? (cfg.compactLayout ? 16 : 19) : Style::fontSizeTitle, foreground, false, 1, FontWeight::SemiBold,
+        true
     );
     label(
-        joinedArtists(player->artists), textX, 51 + mediaOffset / 2.0F, w - textX - 25, Style::fontSizeCaption, muted
+        joinedArtists(player->artists), textX, 53 + mediaOffset / 2.0F, w - textX - 25 - waveformWidth,
+        gCupertino ? 14 : Style::fontSizeCaption, muted
     );
     const auto& source = player->identity.empty() ? player->desktopEntry : player->identity;
-    if (!source.empty()) {
+    if (!gCupertino && !source.empty()) {
       label(source, textX, 73 + mediaOffset / 2.0F, w - textX - 42, Style::fontSizeMini, muted);
       glyph("chevron-right", w - 37, 73 + mediaOffset / 2.0F, 12, muted);
     }
+    if (showVisualizer && gCupertino) {
+      if (!retainedVisualizer)
+        retainedVisualizer = std::make_unique<IslandAudioVisualizer>(m_spectrum, *inst.surface);
+      inst.visualizer = static_cast<IslandAudioVisualizer*>(retainedVisualizer.get());
+      const auto accent = m_flow.accent();
+      inst.visualizer->setGradient(islandFixed(rgba(accent.r, accent.g, accent.b), 1), foreground);
+      inst.visualizer->setPosition((w - 70) * s, (22 + (artworkSize - 30) / 2) * s);
+      inst.visualizer->setSize(40 * s, 30 * s);
+      canvas->addChild(std::move(retainedVisualizer));
+    }
     const float fraction =
         player->lengthUs > 0 ? static_cast<float>(player->positionUs) / static_cast<float>(player->lengthUs) : 0;
-    // Twice the usual track height, centred where the thinner bar sat, inside the seek target.
-    inst.seekProgress = progress(inst.seeking ? inst.seekFraction : fraction, 27, 104 + mediaOffset, w - 54, 8.0F);
-    // Cupertino tints the track's progress with its artwork's most vivid colour.
+    inst.seekProgress =
+        progress(inst.seeking ? inst.seekFraction : fraction, 27, 104 + mediaOffset, w - 54, gCupertino ? 4.0F : 8.0F);
     if (gCupertino && cfg.mediaGradient && m_flowArt == artPath && m_flow.hasArtwork()) {
       const auto accent = m_flow.accent();
       inst.seekProgress->setFill(islandFixed(rgba(accent.r, accent.g, accent.b), 1.0F));
@@ -3199,24 +3321,25 @@ void Island::prepare(Instance& inst) {
     const std::string bus = player->busName;
     const auto button = [&](float x, const std::string& icon, const std::string& tooltip, bool available,
                             std::function<void()> cb) {
-      auto* mediaControl = control(x, 137 + mediaOffset, 44, 48, "", icon, tooltip, 23, available, std::move(cb));
+      auto* mediaControl =
+          control(x, 137 + mediaOffset, 44, 48, "", icon, tooltip, gCupertino ? 26 : 23, available, std::move(cb));
       if (icon == "media-play" || icon == "media-pause") {
         mediaControl->inputArea()->setTabFocusKey("playback");
-        // Apple's transport controls are bare symbols; the theme look keeps a filled play button.
         setIslandVariant(mediaControl, gCupertino ? ButtonVariant::Ghost : ButtonVariant::Default);
         mediaControl->setRadius(Style::scaledRadius(22, s));
       }
     };
-    button(w / 2 - 89, "media-prev", i18n::tr("control-center.media.previous"), player->canGoPrevious, [this, bus] {
-      m_mpris->previous(bus);
-    });
+    const float spread = gCupertino && !cfg.compactLayout ? 82.0F : 67.0F;
+    button(
+        w / 2 - 22 - spread, "media-prev", i18n::tr("control-center.media.previous"), player->canGoPrevious,
+        [this, bus] { m_mpris->previous(bus); }
+    );
     button(
         w / 2 - 22, playing ? "media-pause" : "media-play",
         i18n::tr(playing ? "control-center.media.pause" : "control-center.media.play"),
         playing ? player->canPause : player->canPlay, [this, bus] { m_mpris->playPause(bus); }
     );
-    // Solid transport symbols, the same as the Control Center's media card.
-    button(w / 2 + 45, "media-next", i18n::tr("control-center.media.next"), player->canGoNext, [this, bus] {
+    button(w / 2 - 22 + spread, "media-next", i18n::tr("control-center.media.next"), player->canGoNext, [this, bus] {
       m_mpris->next(bus);
     });
     action(20, 15, w - 40, 81 + mediaOffset, "media-panel", [panel] { panel("media"); });
@@ -3229,6 +3352,7 @@ void Island::prepare(Instance& inst) {
         m_mpris->setPosition(bus, static_cast<std::int64_t>(static_cast<double>(length) * seekFraction));
       };
     }
+    h = 190 + mediaOffset;
   } else if (view == island::View::Connection) {
     const auto& connection = *inst.connection;
     const auto status =
@@ -3294,32 +3418,42 @@ void Island::prepare(Instance& inst) {
     button->inputArea()->setTabFocusKey(notice.actionKey());
   } else if (view == island::View::TransferNotice) {
     const bool failed = m_transferNotice->notice == island::TransferNotice::Failed;
-    const float x = statusText(
-        i18n::tr(
-            failed ? "island.downloads.failed"
-                : m_transferNotice->notice == island::TransferNotice::TransferFinished
-                ? "island.downloads.transfer-finished"
-                : "island.downloads.finished"
-        ),
-        {}
+    const auto message = i18n::tr(
+        failed ? "island.downloads.failed"
+            : m_transferNotice->notice == island::TransferNotice::TransferFinished
+            ? "island.downloads.transfer-finished"
+            : "island.downloads.finished"
     );
+    const auto& title = m_transferNotice->title;
+    const auto& detail = m_transferNotice->detail;
+    const float x = statusText(
+        title.empty() ? message : title,
+        !detail.empty()     ? detail
+            : title.empty() ? ""
+                            : message
+    );
+    auto tooltip = m_transferNotice->source.name;
+    if (!title.empty())
+      tooltip += (tooltip.empty() ? "" : "\n") + title;
+    if (!detail.empty())
+      tooltip += (tooltip.empty() ? "" : "\n") + detail;
     glyph(
         failed ? "circle-x-filled" : "circle-check-filled", x, (h - statusIconSize) / 2, statusIconSize,
         islandFixed(failed ? kAppleRed : kAppleGreen, 1.0F)
     );
     if (transferAction) {
-      auto* button = control(
-          6, 6, w - 12, h - 12, "", "", m_transferNotice->source.name, 0, true,
-          [this, &inst, serial = m_transferNotice->serial] { activateTransferNotice(inst, serial); }
-      );
+      auto* button =
+          control(6, 6, w - 12, h - 12, "", "", tooltip, 0, true, [this, &inst, serial = m_transferNotice->serial] {
+            activateTransferNotice(inst, serial);
+          });
       button->setRadius((h - 12) * s / 2);
       setIslandActionStyle(button);
       button->inputArea()->setTabFocusKey("transfer:" + std::to_string(m_transferNotice->serial));
-    } else if (!m_transferNotice->source.name.empty()) {
+    } else if (!tooltip.empty()) {
       auto area = std::make_unique<InputArea>();
       area->setSize(w * s, h * s);
       area->setAcceptedButtons(0);
-      area->setTooltip(m_transferNotice->source.name);
+      area->setTooltip(tooltip);
       canvas->addChild(std::move(area));
     }
   } else if (view == island::View::Osd && m_osd && (m_osd->kind == OsdKind::Dnd || m_osd->kind == OsdKind::Charging)) {
@@ -3491,8 +3625,10 @@ void Island::prepare(Instance& inst) {
     // in place of the time stamp, and only an opened notification (or keyboard mode) lists them.
     const bool actionsOpen = recordingResult || expanded || inst.keyboardMode;
     const bool hasActions = actionsOpen && !visibleActions.empty();
-    const float maxHeight =
-        std::min(expanded ? 640.0F : 360.0F, inst.outputHeight / s - 16.0F - (privacyList.empty() ? 0.0F : 32.0F));
+    const float maxHeight = std::min(
+        expanded ? 640.0F : 360.0F,
+        inst.outputHeight / s - 16.0F - 2 * cardGutter - (privacyList.empty() ? 0.0F : 32.0F)
+    );
     const float footerHeight = hasActions ? 46.0F : 16.0F;
     const float textBottom = maxHeight - footerHeight;
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
@@ -3664,6 +3800,16 @@ void Island::prepare(Instance& inst) {
         }
       });
   }
+  if (contextualHeader) {
+    constexpr float headerHeight = 44;
+    for (const auto& child : inst.content->children())
+      child->setPosition(child->x(), child->y() + headerHeight * s);
+    for (auto& hit : inst.actions)
+      hit.y += headerHeight;
+    if (inst.seek)
+      inst.seekY += headerHeight;
+    h += headerHeight;
+  }
   if (showSwitcher) {
     // Translate the main card and its manual hit regions together. Tabs remain
     // fixed above both the card and the scrolling footer.
@@ -3712,10 +3858,68 @@ void Island::prepare(Instance& inst) {
   auto footer = std::make_unique<Node>();
   if (expandedView)
     canvas = footer.get();
+  if (view == island::View::Downloads && !recentTransfers.empty() && showRecentTransfers) {
+    label(i18n::tr("island.downloads.recent"), 22, h + 3, w - 44, 12, muted);
+    h += 30;
+    for (std::size_t i = 0; i < recentTransfers.size(); ++i) {
+      const auto& entry = recentTransfers[i];
+      const auto& feedback = entry.feedback;
+      const auto message = transferMessage(feedback);
+      const auto title = !feedback.title.empty() ? feedback.title
+          : !feedback.source.name.empty()        ? feedback.source.name
+                                                 : message;
+      const bool failed = feedback.notice == island::TransferNotice::Failed;
+      sectionCard(h - 6, h + 45);
+      glyph(
+          failed ? "circle-x-filled" : "circle-check-filled", 24, h + 8, 24,
+          islandFixed(failed ? kAppleRed : kAppleGreen, 1.0F)
+      );
+      label(title, 62, h, w - 146, 13, foreground);
+      label(message, 62, h + 22, w - 84, 12, muted);
+      auto* age = label(recentTransferAge(entry), w - 76, h, 54, 12, muted);
+      age->setTextAlign(TextAlign::End);
+      inst.recentTransferUi.emplace_back(feedback.serial, age);
+      auto tooltip = title + "\n" + message;
+      if (!feedback.source.name.empty() && feedback.source.name != title)
+        tooltip = feedback.source.name + "\n" + tooltip;
+      if (recentActions[i]) {
+        auto* row = control(12, h - 4, w - 24, 49, "", "", tooltip, 0, true, [this, &inst, serial = feedback.serial] {
+          activateRecentTransfer(inst, serial);
+        });
+        row->setRadius(Style::scaledRadiusXl(s));
+        setIslandActionStyle(row);
+        row->inputArea()->setTabFocusKey("recent-transfer:" + std::to_string(feedback.serial));
+      } else {
+        auto area = std::make_unique<InputArea>();
+        area->setPosition(12 * s, (h - 4) * s);
+        area->setSize((w - 24) * s, 49 * s);
+        area->setAcceptedButtons(0);
+        area->setTooltip(tooltip);
+        canvas->addChild(std::move(area));
+      }
+      h += 55;
+    }
+    h += 4;
+  }
   if (view == island::View::Capture || cameraView) {
     if (recording && !cameraView) {
-      label("Noctalia", 22, h + 4, w - 178, 14, foreground, false, 1, FontWeight::SemiBold);
-      inst.recordingLabel = label(recordingTime, 22, h + 29, w - 178, 12, islandTint(kAppleRed, ColorRole::Error));
+      if (gCupertino) {
+        auto symbol = std::make_unique<Box>();
+        symbol->setFill(rgba(0, 0, 0, 0));
+        symbol->setBorder(islandFixed(kAppleRed, 1), 3 * s);
+        symbol->setSize(42 * s, 42 * s);
+        symbol->setRadius(21 * s);
+        symbol->setPosition(24 * s, (h + 12) * s);
+        canvas->addChild(std::move(symbol));
+        glyph("circle-filled", 34, h + 22, 22, islandFixed(kAppleRed, 1));
+        inst.recordingLabel = label(
+            recordingTime, 86, h + 2, w - 264, cfg.compactLayout ? 28 : 34, foreground, false, 1, FontWeight::SemiBold
+        );
+        label(i18n::tr("island.capture.recording"), 86, h + 46, w - 264, 13, muted);
+      } else {
+        label("Noctalia", 22, h + 4, w - 178, 14, foreground, false, 1, FontWeight::SemiBold);
+        inst.recordingLabel = label(recordingTime, 22, h + 29, w - 178, 12, islandTint(kAppleRed, ColorRole::Error));
+      }
       const auto session = ScreenRecorder::instance().sessionId();
       auto* stop = control(
           w - 148, h + 10, 126, 34, i18n::tr("island.capture.stop"), "", "", 0, !ScreenRecorder::instance().stopping(),
@@ -3730,7 +3934,7 @@ void Island::prepare(Instance& inst) {
       );
       stop->inputArea()->setTabFocusKey("capture-stop");
       pill(stop);
-      h += 66;
+      h += gCupertino ? 86 : 66;
     }
     for (const auto& [app, started] : appSessions.sessions()) {
       label(app, 22, h + 4, w - 178, 14, foreground, false, 1, FontWeight::SemiBold, true);
@@ -3826,6 +4030,51 @@ void Island::prepare(Instance& inst) {
         continue;
       const float sectionTop = h;
       const Color tint = countdownTint(timer);
+      if (gCupertino && !timer.event) {
+        const float diameter = cfg.compactLayout ? 38.0F : 44.0F;
+        auto ring = std::make_unique<DownloadRing>(
+            diameter * s, 2.5F * s, timer.fraction(), islandTint(tint, ColorRole::Primary)
+        );
+        auto* ringPtr = ring.get();
+        ring->setPosition(24 * s, (h + 13) * s);
+        canvas->addChild(std::move(ring));
+        glyph(
+            timer.icon, 24 + (diameter - 22) / 2, h + 13 + (diameter - 22) / 2, 22, islandTint(tint, ColorRole::Primary)
+        );
+        const float timeX = 24 + diameter + 18;
+        const float buttonSize = cfg.compactLayout ? 36.0F : 42.0F;
+        const float controlsX = w - 24 - 2 * buttonSize - 10;
+        const float timeWidth = std::max(1.0F, controlsX - timeX - 12);
+        const float timeFont = cfg.compactLayout ? 28 : 34;
+        const auto timeMetrics = renderer.measureText(
+            countdownTime(timer), timeFont * s, FontWeight::SemiBold, 0, 1, TextAlign::Start,
+            m_config->config().shell.fontFamily
+        );
+        const float fittedFont = timeFont * std::min(1.0F, timeWidth * s / std::max(1.0F, timeMetrics.width));
+        auto* remaining = label(
+            countdownTime(timer), timeX, h + 4, timeWidth, fittedFont, islandTint(tint, ColorRole::Primary), false, 1,
+            FontWeight::SemiBold
+        );
+        inst.timerUi.push_back({timer.plugin, remaining, [ringPtr](float value) { ringPtr->setProgress(value); }});
+        const auto detail = countdownTitle(timer)
+            + (timer.running ? "" : " · " + i18n::tr(timer.finished ? "island.timer.finished" : "island.timer.paused"));
+        label(detail, timeX, h + 46, std::max(1.0F, controlsX - timeX - 12), 13, muted);
+        auto* toggle = control(
+            controlsX, h + 16, buttonSize, buttonSize, "", timer.running ? "media-pause" : "media-play",
+            i18n::tr(timer.running ? "island.timer.pause" : "island.timer.resume"), 18,
+            !timer.finished && timer.remaining > 0, [this, timer] { timerCommand(timer, timer.toggleCommand()); }
+        );
+        toggle->inputArea()->setTabFocusKey(timer.plugin + "-toggle");
+        roundButton(toggle);
+        auto* cancel = control(
+            controlsX + buttonSize + 10, h + 16, buttonSize, buttonSize, "", "x", i18n::tr("island.timer.cancel"), 18,
+            true, [this, timer] { timerCommand(timer, timer.cancelCommand()); }
+        );
+        cancel->inputArea()->setTabFocusKey(timer.plugin + "-cancel");
+        roundButton(cancel);
+        h += 86;
+        continue;
+      }
       auto ring =
           std::make_unique<DownloadRing>(36 * s, 2.5F * s, timer.fraction(), islandTint(tint, ColorRole::Primary));
       auto* ringPtr = ring.get();
@@ -3897,32 +4146,6 @@ void Island::prepare(Instance& inst) {
         sectionCard(sectionTop, h);
         continue;
       }
-      if (gCupertino) {
-        const float x = w - 22 - controlsWidth + 10;
-        const bool toggleAvailable = !timer.finished && timer.remaining > 0;
-        auto* toggle = control(
-            x, h + 8, 32, 32, "", timer.running ? "media-pause" : "media-play",
-            i18n::tr(timer.running ? "island.timer.pause" : "island.timer.resume"), 16, toggleAvailable,
-            [this, timer] { timerCommand(timer, timer.toggleCommand()); }
-        );
-        toggle->inputArea()->setTabFocusKey(timer.plugin + "-toggle");
-        roundButton(toggle, kAppleOrange);
-        auto* cancel =
-            control(x + 40, h + 8, 32, 32, "", "x", i18n::tr("island.timer.cancel"), 16, true, [this, timer] {
-              timerCommand(timer, timer.cancelCommand());
-            });
-        cancel->inputArea()->setTabFocusKey(timer.plugin + "-cancel");
-        roundButton(cancel);
-        auto* open = control(
-            x + 80, h + 8, 32, 32, "", "chevron-right", i18n::tr("island.timer.open"), 16, true,
-            [panel, timer] { panel(timer.panel); }
-        );
-        open->inputArea()->setTabFocusKey(timer.plugin + "-open");
-        roundButton(open);
-        h += 56;
-        sectionCard(sectionTop, h);
-        continue;
-      }
       h += 48;
       const float buttonWidth = (w - 60) / 3;
       auto* toggle = control(
@@ -3948,11 +4171,14 @@ void Island::prepare(Instance& inst) {
   // section itself is not shown (the Cupertino Island keeps it to the calendar view), unless
   // the hover view's unread section is turned off.
   const bool rowBell = expandedView && showUnread && cfg.hoverShowUnread && !showExtras;
-  const bool mediaTray = view == island::View::Media && !showExtras;
-  const float statusWidth = static_cast<float>(privacyList.size() + (rowBell ? 1 : 0)) * 24;
+  const bool mediaTray = contextualHeader || (view == island::View::Media && !showExtras);
+  const bool mediaIndicator = contextualHeader && playing;
+  const bool recordingIndicator = contextualHeader && recording;
+  const int leadingIndicators = int(mediaIndicator) + int(recordingIndicator);
+  const float statusWidth = static_cast<float>(privacyList.size() + (rowBell ? 1 : 0) + leadingIndicators) * 24;
   const float trayGap = statusWidth > 0 ? 8.0F : 0.0F;
   const bool showHoverWidgets = expandedView
-      && (showExtras || view == island::View::Media)
+      && (showExtras || view == island::View::Media || contextualHeader)
       && m_widgetFactory
       && (cfg.hoverShowTray
           || !cfg.hoverWidgets.empty()
@@ -3978,27 +4204,158 @@ void Island::prepare(Instance& inst) {
       );
     }
     inst.hoverWidgets = static_cast<IslandWidgetHost*>(retainedWidgets.get());
-    const float availableWidth = w - 44 - (mediaTray ? statusWidth + trayGap : 0);
+    const float availableWidth = contextualHeader ? std::max(24.0F, std::min(120.0F, w - 200 - statusWidth))
+                                                  : w - 44 - (mediaTray ? statusWidth + trayGap : 0);
     inst.hoverWidgets->updateWidgets(renderer, std::max(1.0F, availableWidth * s));
   }
   const bool inlineTray = mediaTray && inst.hoverWidgets && inst.hoverWidgets->height() > 0;
   const float trayWidth = inlineTray ? inst.hoverWidgets->contentWidth() / s : 0;
   const float statusHeight = inlineTray ? std::max(24.0F, inst.hoverWidgets->height() / s) : 24.0F;
-  if (!privacyList.empty() || rowBell || inlineTray) {
+  if (contextualHeader || !privacyList.empty() || rowBell || inlineTray) {
+    Node* statusCanvas = canvas;
+    if (contextualHeader)
+      canvas = inst.content;
     // Capture indicators are clickable icons in compact views and beside notifications,
     // and as a centred row in the expanded Island. Hovering names the capturing app.
     const float rowWidth = statusWidth + (inlineTray ? trayGap + trayWidth : 0);
     const float x = compactView
         ? w - (showUnread ? (view == island::View::Activity ? 48 : 38) : 14) - (showBattery ? 42 : 0) - privacyWidth
-        : (w - rowWidth) / 2;
-    const float y = compactView ? (cfg.height - 24) / 2 : h + (inlineTray ? 8 + (statusHeight - 24) / 2 : 0);
+        : contextualHeader ? w - 22 - rowWidth
+                           : (w - rowWidth) / 2;
+    const float y = compactView ? (cfg.height - 24) / 2
+        : contextualHeader      ? 16
+                                : h + (inlineTray ? 8 + (statusHeight - 24) / 2 : 0);
+    const auto dot = [&](float left, ColorSpec color, const std::string& tooltip, bool fromArtwork = false) {
+      constexpr float diameter = 7;
+      const float dotX = left + (24 - diameter) / 2, dotY = y + (24 - diameter) / 2;
+      auto circle = std::make_unique<Box>();
+      if (fromArtwork && m_flow.hasArtwork()) {
+        const auto accent = m_flow.accent();
+        RoundedRectStyle gradient;
+        gradient.fillMode = FillMode::LinearGradient;
+        gradient.gradientDirection = GradientDirection::Vertical;
+        const Color top = rgba(accent.r * .65F + .35F, accent.g * .65F + .35F, accent.b * .65F + .35F);
+        const Color bottom = rgba(accent.r, accent.g, accent.b);
+        gradient.gradientStops = {{{0, top}, {1, bottom}, {1, bottom}, {1, bottom}}};
+        circle->setStyle(gradient);
+      } else {
+        circle->setFill(color);
+      }
+      circle->setRadius(diameter * s / 2);
+      circle->setSize(diameter * s, diameter * s);
+      circle->setPosition(dotX * s, dotY * s);
+      circle->setHitTestVisible(false);
+      canvas->addChild(std::move(circle));
+      auto hint = std::make_unique<InputArea>();
+      hint->setAcceptedButtons(0);
+      hint->setSize(24 * s, 24 * s);
+      hint->setPosition(left * s, y * s);
+      hint->setTooltip(tooltip);
+      canvas->addChild(std::move(hint));
+    };
+    if (mediaIndicator)
+      dot(x, muted, i18n::tr("island.activities.now-playing"), true);
+    if (recordingIndicator)
+      dot(x + (mediaIndicator ? 24 : 0), islandFixed(kAppleRed, 1), i18n::tr("island.capture.recording"));
+    if (contextualHeader) {
+      const auto activity = view == island::View::Media ? island::Activity::Media
+          : view == island::View::Downloads             ? island::Activity::Downloads
+          : view == island::View::Timers                ? island::Activity::Timers
+          : view == island::View::Microphone            ? island::Activity::Microphone
+          : view == island::View::Awake                 ? island::Activity::Awake
+          : view == island::View::Camera                ? island::Activity::Camera
+                                                        : island::Activity::Capture;
+      const auto titleFor = [&](island::Activity item) {
+        switch (item) {
+        case island::Activity::Media:
+          return i18n::tr("island.activities.now-playing");
+        case island::Activity::Downloads:
+          return i18n::tr("island.activities.downloads");
+        case island::Activity::Timers:
+          return i18n::tr("island.activities.timers");
+        case island::Activity::Microphone:
+          return i18n::tr("island.microphone.title");
+        case island::Activity::Awake:
+          return i18n::tr("utilities.keep-awake.title");
+        case island::Activity::Camera:
+          return i18n::tr("bar.widgets.privacy.camera");
+        case island::Activity::Capture:
+          return i18n::tr(recording ? "island.capture.recording" : "bar.widgets.privacy.screen-sharing");
+        default:
+          return std::string{};
+        }
+      };
+      const auto next = island::nextActivity(cyclingActivities, activity);
+      const auto title = titleFor(activity);
+      const float font = cfg.compactLayout ? 14 : 16;
+      const float titleWidth = std::max(
+          1.0F,
+          std::min(
+              x - 34,
+              renderer.measureText(
+                          title, font * s, FontWeight::Normal, 0, 1, TextAlign::Start,
+                          m_config->config().shell.fontFamily
+              )
+                          .width
+                      / s
+                  + 4
+          )
+      );
+      if (next != island::Activity::None && next != activity) {
+        const auto switchActivity = [this, &inst, next] {
+          TooltipManager::instance().forceDestroy();
+          inst.activities.selected = next;
+          inst.recentTransfersExpanded = false;
+          if (inst.config.splitActivities
+              && (next == island::Activity::Media
+                  || next == island::Activity::Downloads
+                  || next == island::Activity::Timers
+                  || next == island::Activity::Awake))
+            inst.compactActivity.promote(next);
+          refresh();
+        };
+        auto* heading = control(
+            22, 12, titleWidth, 32, title, "", i18n::tr("island.activities.switch-to", "activity", titleFor(next)), 0,
+            true, switchActivity, font, 0
+        );
+        // Use the Island's stable action target across card rebuilds; keyboard activation
+        // continues through the button's focus key.
+        heading->inputArea()->setAcceptedButtons(0);
+        action(22, 12, titleWidth, 32, "activity-title", switchActivity);
+        heading->inputArea()->setTabFocusKey("activity-title");
+        setIslandStatusStyle(heading, muted);
+      } else {
+        auto* heading = label(title, 22, 12, titleWidth, font, muted);
+        heading->setPosition(22 * s, (28 * s - heading->height() / 2));
+      }
+    }
     for (std::size_t i = 0; i < privacyList.size(); ++i) {
       const auto& activity = privacyList[i];
+      if (contextualHeader) {
+        const float left = x + static_cast<float>(i + leadingIndicators) * 24;
+        const auto tooltip = i18n::tr(activity.labelKey()) + ": " + activity.appNames();
+        if (activity.kind == PrivacyCaptureKind::Screen) {
+          glyph(activity.icon(), left + 4, y + 4, 16, islandTint(kApplePurple, ColorRole::Primary));
+          auto hint = std::make_unique<InputArea>();
+          hint->setAcceptedButtons(0);
+          hint->setSize(24 * s, 24 * s);
+          hint->setPosition(left * s, y * s);
+          hint->setTooltip(tooltip);
+          canvas->addChild(std::move(hint));
+        } else {
+          dot(left, islandFixed(activity.kind == PrivacyCaptureKind::Camera ? kAppleGreen : kAppleOrange, 1), tooltip);
+        }
+        continue;
+      }
+      const bool privacyDot = gCupertino && !slotBell && activity.kind != PrivacyCaptureKind::Screen;
       auto* icon = control(
-          x + static_cast<float>(i) * 24, y, 24, 24, "", slotBell ? "notification-unread" : activity.icon(),
+          x + static_cast<float>(i) * 24, y, 24, 24, "",
+          slotBell         ? "notification-unread"
+              : privacyDot ? "circle-filled"
+                           : activity.icon(),
           slotBell ? i18n::tr("notifications.unread-history")
                    : i18n::tr(activity.labelKey()) + ": " + activity.appNames(),
-          16, true,
+          privacyDot ? 7 : 16, true,
           [panel, openMicrophone, openCapture, openCamera, slotBell, kind = activity.kind] {
             if (!slotBell && kind == PrivacyCaptureKind::Microphone)
               openMicrophone();
@@ -4037,8 +4394,10 @@ void Island::prepare(Instance& inst) {
           auto ghost = std::make_unique<Glyph>();
           // The outgoing visual must not cover the incoming icon's pointer target.
           ghost->setHitTestVisible(false);
-          ghost->setGlyph(inst.slotIcon);
-          ghost->setGlyphSize(16 * s);
+          const bool outgoingDot =
+              gCupertino && (inst.slotIcon == "privacy-camera" || inst.slotIcon == "privacy-microphone");
+          ghost->setGlyph(outgoingDot ? "circle-filled" : inst.slotIcon);
+          ghost->setGlyphSize((outgoingDot ? 7 : 16) * s);
           ghost->setColor(
               inst.slotIcon == "privacy-camera"           ? islandTint(kAppleGreen, ColorRole::Primary)
                   : inst.slotIcon == "privacy-microphone" ? islandTint(kAppleOrange, ColorRole::Primary)
@@ -4083,7 +4442,7 @@ void Island::prepare(Instance& inst) {
       }
     }
     if (rowBell) {
-      const float bellX = x + static_cast<float>(privacyList.size()) * 24;
+      const float bellX = x + static_cast<float>(privacyList.size() + leadingIndicators) * 24;
       auto* bell = control(
           bellX, y, 24, 24, "", "notification-unread", i18n::trp("notifications.unread-count", unreadCount), 16, true,
           [panel] { panel("notifications"); }, 10, 0
@@ -4096,11 +4455,21 @@ void Island::prepare(Instance& inst) {
     if (inlineTray) {
       // The tray centers its contents in the remaining width; center the status icons
       // beside those contents so the complete row stays centered as tray items change.
-      inst.hoverWidgets->setPosition((22 + statusWidth + trayGap) * s, (h + 8) * s);
-      footer->addChild(std::move(retainedWidgets));
-      h += statusHeight + 16;
-    } else if (!compactView)
+      if (contextualHeader) {
+        // The tray host centres its contents inside its allotted width.
+        const float offset = (inst.hoverWidgets->width() / s - trayWidth) / 2;
+        inst.hoverWidgets->setPosition(
+            (x + statusWidth + trayGap - offset) * s, (y + 12) * s - inst.hoverWidgets->height() / 2
+        );
+        inst.content->addChild(std::move(retainedWidgets));
+      } else {
+        inst.hoverWidgets->setPosition((22 + statusWidth + trayGap) * s, (h + 8) * s);
+        footer->addChild(std::move(retainedWidgets));
+        h += statusHeight + 16;
+      }
+    } else if (!compactView && !contextualHeader)
       h += 32;
+    canvas = statusCanvas;
   }
   const auto batteryRing = [&](const island::Battery& battery, float x, float y, float diameter, bool drawRing = true) {
     const auto role = battery.low ? ColorRole::Error : ColorRole::Primary;
@@ -4292,7 +4661,30 @@ void Island::prepare(Instance& inst) {
         });
     });
   }
-  if (view == island::View::Downloads) {
+  if (view == island::View::Calendar && cfg.hoverShowDownloads && !recentTransfers.empty()) {
+    auto* recent =
+        control(22, h + 8, w - 44, 32, i18n::tr("island.downloads.recent"), "download", "", 16, true, [this, &inst] {
+          inst.activities.selected = island::Activity::Downloads;
+          inst.recentTransfersExpanded = true;
+          refresh();
+        });
+    recent->inputArea()->setTabFocusKey("recent-transfers");
+    pill(recent);
+    h += 48;
+  }
+  if (view == island::View::Downloads && gCupertino && !downloads.empty() && !recentTransfers.empty()) {
+    auto* recent = control(
+        22, h + 6, w - 44, 32,
+        i18n::tr(inst.recentTransfersExpanded ? "island.downloads.hide-recent" : "island.downloads.recent"), "", "", 0,
+        true, [this, &inst] {
+          inst.recentTransfersExpanded = !inst.recentTransfersExpanded;
+          refresh();
+        }
+    );
+    recent->inputArea()->setTabFocusKey("recent-transfers");
+    h += 44;
+  }
+  if (view == island::View::Downloads && !gCupertino) {
     auto* close = control(22, h, w - 44, 32, i18n::tr("island.downloads.close"), "", "", 0, true, [this, &inst] {
       if (inst.keyboardMode)
         releaseKeyboard(inst);
@@ -4323,7 +4715,8 @@ void Island::prepare(Instance& inst) {
     for (const auto& child : footer->children())
       child->setPosition(child->x(), child->y() - footerTop * s);
     footer->setSize(w * s, footerHeight * s);
-    const float available = std::max(1.0F, inst.outputHeight / s - footerTop - 24 - kExpandedBottomInset);
+    const float available =
+        std::max(1.0F, inst.outputHeight / s - footerTop - 24 - kExpandedBottomInset - 2 * cardGutter);
     if (footerHeight > available) {
       auto scroll = std::make_unique<ScrollView>();
       scroll->setContentScale(s);
@@ -4345,6 +4738,20 @@ void Island::prepare(Instance& inst) {
   // margin so a card ending the content stays inside the Island's large lower corners.
   if (expandedView)
     h = std::max(h + kExpandedBottomInset, cfg.height);
+  if (cardGutter > 0) {
+    for (const auto& child : inst.content->children())
+      child->setPosition(child->x() + cardGutter * s, child->y() + cardGutter * s);
+    for (auto& hit : inst.actions) {
+      hit.x += cardGutter;
+      hit.y += cardGutter;
+    }
+    if (inst.seek) {
+      inst.seekX += cardGutter;
+      inst.seekY += cardGutter;
+    }
+    w += 2 * cardGutter;
+    h += 2 * cardGutter;
+  }
   inst.content->setSize(w * s, h * s);
   inst.content->layout(renderer);
   if (inst.activityScroll)
@@ -4356,6 +4763,7 @@ void Island::prepare(Instance& inst) {
       // moving Enter/Space onto the next app or a media control.
       if (keyboardFocus.key
           && (keyboardFocus.key->starts_with("download:")
+              || keyboardFocus.key->starts_with("recent-transfer:")
               || keyboardFocus.key->starts_with("capture-open-")
               || keyboardFocus.key->starts_with("camera-open-")
               || *keyboardFocus.key == "capture-stop")) {
@@ -4693,6 +5101,7 @@ bool Island::focusKeyboard() {
       && !cardActionKey(inst).has_value()
       && (!m_mpris || !m_mpris->activePlayer())
       && progressActivities().empty()
+      && (!inst.config.hoverShowDownloads || m_recentTransfers.empty())
       && !awakeRemaining()
       && !ScreenRecorder::instance().active()
       && !inst.captureMenu
@@ -5003,8 +5412,16 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   inst.suppressHover = true;
   if (m_notification && m_notification->urgency != Urgency::Critical && m_notification->timeout > 0)
     m_notifications->resumeExpiry(m_notification->id, m_notification->timeout);
-  return IslandPanelSurface{inst.surface.get(),       inst.output, inst.width * inst.scale,
-                            inst.height * inst.scale, inst.scale,  inst.flowShown ? inst.flowTexture : TextureHandle{}};
+  return IslandPanelSurface{
+      inst.surface.get(),
+      inst.output,
+      inst.width * inst.scale,
+      inst.height * inst.scale,
+      inst.scale,
+      inst.flowShown ? inst.flowTexture : TextureHandle{},
+      inst.config.appearance == IslandAppearance::Cupertino,
+      inst.config.compactLayout
+  };
 }
 
 Color Island::capsuleColor() const { return resolveColorSpec(islandRole(ColorRole::Surface)); }

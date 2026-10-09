@@ -1320,6 +1320,7 @@ namespace settings {
       if (legacy)
         islandSetting("general", "reserve_space", ToggleSetting{island.reserveSpace});
       islandSetting("layout", "appearance", enumSelect(kIslandAppearances, island.appearance));
+      islandSetting("layout", "compact_layout", ToggleSetting{island.compactLayout});
       islandSetting("layout", "glass", ToggleSetting{island.glass});
       islandSetting("layout", "outer_progress_ring", ToggleSetting{island.outerProgressRing});
       islandSetting("layout", "height", SliderSetting{island.height, 44, 72, 1, true});
@@ -3599,6 +3600,16 @@ namespace settings {
     }
 
     // Notifications
+    entries.push_back(makeEntry(
+        SettingsSection::Notifications, "focus", tr("utilities.focus.while-recording"),
+        tr("utilities.focus.recording-detail"), {"notification", "focus", "while_recording"},
+        ToggleSetting{cfg.notification.focus.whileRecording}, "focus recording screen capture quiet notifications"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Notifications, "focus", tr("utilities.focus.configure"), tr("utilities.focus.schedule-detail"),
+        {"notification", "focus"}, ButtonSetting{},
+        "focus profiles work gaming sleep allowed apps critical notifications schedule times days"
+    ));
     entries.push_back(makeEntry(
         SettingsSection::Notifications, "general", tr("settings.schema.notifications.daemon.label"),
         tr("settings.schema.notifications.daemon.description"), {"notification", "enable_daemon"},

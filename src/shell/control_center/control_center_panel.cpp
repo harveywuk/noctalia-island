@@ -84,7 +84,7 @@ ControlCenterPanel::ControlCenterPanel(const ControlCenterServices& services) {
   m_tabs[tabIndex(TabId::Power)] =
       std::make_unique<PowerTab>(services.upower, services.powerProfiles, services.idleInhibitor);
   m_tabs[tabIndex(TabId::Privacy)] = std::make_unique<PrivacyTab>(services.audio, services.config, services.platform);
-  m_tabs[tabIndex(TabId::Focus)] = std::make_unique<FocusTab>(services.notifications, services.config);
+  m_tabs[tabIndex(TabId::Focus)] = std::make_unique<FocusTab>(services.notifications);
   m_tabButtons.fill(nullptr);
   m_tabContainers.fill(nullptr);
   m_tabHeaderActions.fill(nullptr);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 
 namespace island {
   enum class View {
@@ -59,14 +60,19 @@ namespace island {
   struct ActivitySelection {
     Activity selected = Activity::None;
     bool switching = false;
-    constexpr void update(bool expanded, Activities available, Activity preferred = Activity::None) {
+    constexpr void
+    update(bool expanded, Activities available, Activity preferred = Activity::None, bool passiveDownloads = false) {
       if (!expanded) {
         selected = Activity::None;
         switching = false;
         return;
       }
       switching |= available.count() > 1;
-      if (!available.contains(selected))
+      if (!available.contains(selected)) {
+        // Recent results remain selectable, but cannot take over the idle
+        // calendar or another activity when expansion first opens.
+        if (passiveDownloads)
+          available.downloads = false;
         selected = available.contains(preferred) ? preferred
             : available.downloads                ? Activity::Downloads
             : available.media                    ? Activity::Media
@@ -76,8 +82,25 @@ namespace island {
             : available.capture                  ? Activity::Capture
             : available.camera                   ? Activity::Camera
                                                  : Activity::None;
+      }
     }
   };
+
+  // The title cycles only live activities. Callers exclude passive history from this list.
+  constexpr Activity nextActivity(Activities available, Activity current) {
+    constexpr std::array order{Activity::Media, Activity::Downloads, Activity::Timers, Activity::Microphone,
+                               Activity::Awake, Activity::Capture,   Activity::Camera};
+    const auto found = std::ranges::find(order, current);
+    const auto start = found == order.end() ? order.size() - 1 : static_cast<std::size_t>(found - order.begin());
+    for (std::size_t step = 1; step <= order.size(); ++step) {
+      const auto candidate = order[(start + step) % order.size()];
+      if (available.contains(candidate))
+        return candidate;
+    }
+    return Activity::None;
+  }
+
+  constexpr float cardWidth(bool compact) { return compact ? 400.0F : 520.0F; }
 
   struct Size {
     float width;
@@ -138,7 +161,8 @@ namespace island {
       bool notification, bool osd, bool hovered, bool playing, bool heldMedia, bool downloads = false,
       bool timer = false, bool hoverMedia = true, bool hoverDownloads = true, Activity selected = Activity::None,
       Activity compact = Activity::None, bool transferNotice = false, bool connection = false, bool network = false,
-      bool microphone = false, bool awake = false, bool capture = false, bool recording = false, bool camera = false
+      bool microphone = false, bool awake = false, bool capture = false, bool recording = false, bool camera = false,
+      bool recentTransfers = false
   ) {
     if (notification)
       return View::Notification;
@@ -173,7 +197,7 @@ namespace island {
         return View::Awake;
       if (selected == Activity::Media && hoverMedia && (playing || heldMedia))
         return View::Media;
-      if (selected == Activity::Downloads && hoverDownloads && downloads)
+      if (selected == Activity::Downloads && hoverDownloads && (downloads || recentTransfers))
         return View::Downloads;
       if (selected == Activity::Timers && timer)
         return View::Timers;

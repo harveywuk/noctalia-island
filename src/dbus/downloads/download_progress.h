@@ -14,6 +14,13 @@ struct DownloadSource {
   std::string wmClass;
 };
 
+struct DownloadResult {
+  DownloadSource source;
+  std::string title;
+  std::string detail;
+  bool failed = false;
+};
+
 // Keep the desktop identity and WM class together. Display names are never
 // used to guess a target window, and no desktop Exec command is launched.
 inline DownloadSource downloadSource(const std::string& desktopId, std::span<const DesktopEntry> entries) {

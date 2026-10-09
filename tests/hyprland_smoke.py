@@ -174,6 +174,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-transfer-actions-only' in sys.argv:
             from island_transfer_actions_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-recent-transfers-only' in sys.argv:
+            from island_recent_transfers_smoke import prepare
+            prepare(base,cfg,env)
         if '--island-steam-leds-only' in sys.argv:
             from island_steam_leds_smoke import prepare
             prepare(base,cfg,env)
@@ -238,6 +241,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--island-transfer-actions-only' in sys.argv:
             from island_transfer_actions_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-recent-transfers-only' in sys.argv:
+            from island_recent_transfers_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-steam-leds-only' in sys.argv:

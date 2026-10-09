@@ -19,7 +19,9 @@ namespace island {
     bool running = false, active = false, finished = false, pomodoro = false, onBreak = false, event = false;
     // Up-next calendar events carry their own title and an optional meeting link.
     std::string title, url;
-    float fraction() const { return duration > 0 ? std::clamp(static_cast<float>(remaining) / static_cast<float>(duration), 0.0F, 1.0F) : 0; }
+    float fraction() const {
+      return duration > 0 ? std::clamp(static_cast<float>(remaining) / static_cast<float>(duration), 0.0F, 1.0F) : 0;
+    }
     std::string time() const {
       return remaining >= 3600 ? std::format("{}:{:02}:{:02}", remaining / 3600, remaining / 60 % 60, remaining % 60)
                                : std::format("{}:{:02}", remaining / 60, remaining % 60);
@@ -29,44 +31,90 @@ namespace island {
     std::string cancelCommand() const { return pomodoro ? "resetAll" : "RESET"; }
   };
 
+  // Hover actions can control an existing countdown, never create or restart one.
+  inline bool acceptsCountdownCommand(const Countdown& displayed, const Countdown& live, const std::string& command) {
+    if (!live.active
+        || live.event
+        || live.plugin != displayed.plugin
+        || live.duration != displayed.duration
+        || live.session != displayed.session
+        || live.onBreak != displayed.onBreak)
+      return false;
+    if (command == live.cancelCommand())
+      return true;
+    return !live.finished && live.remaining > 0 && live.running == displayed.running && command == live.toggleCommand();
+  }
+
   inline std::optional<int> countdownSeconds(const nlohmann::json& value) {
-    if (!value.is_number()) return std::nullopt;
+    if (!value.is_number())
+      return std::nullopt;
     const auto seconds = value.get<double>();
-    if (!std::isfinite(seconds) || seconds < 0 || seconds > 31536000) return std::nullopt;
+    if (!std::isfinite(seconds) || seconds < 0 || seconds > 31536000)
+      return std::nullopt;
     return static_cast<int>(seconds);
   }
 
   // These are adapters for the plugins' published state, not another timer engine.
-  inline std::optional<Countdown> timerSnapshot(const nlohmann::json& state, const nlohmann::json& remaining,
-                                               const nlohmann::json& duration) {
-    if (!state.is_string()) return std::nullopt;
+  inline std::optional<Countdown>
+  timerSnapshot(const nlohmann::json& state, const nlohmann::json& remaining, const nlohmann::json& duration) {
+    if (!state.is_string())
+      return std::nullopt;
     const std::string status = state.get<std::string>();
-    if (status != "IDLE" && status != "RUNNING" && status != "PAUSED" && status != "NOTIFY") return std::nullopt;
+    if (status != "IDLE" && status != "RUNNING" && status != "PAUSED" && status != "NOTIFY")
+      return std::nullopt;
     const auto seconds = countdownSeconds(remaining), total = countdownSeconds(duration);
-    if (!seconds || !total) return std::nullopt;
-    return Countdown{"noctalia/timer", "noctalia/timer:panel", "island.timer.title", "hourglass",
-        *seconds, *total, 0, status == "RUNNING", status != "IDLE", status == "NOTIFY"};
+    if (!seconds || !total)
+      return std::nullopt;
+    return Countdown{
+        "noctalia/timer",    "noctalia/timer:panel", "island.timer.title", "hourglass", *seconds, *total, 0,
+        status == "RUNNING", status != "IDLE",       status == "NOTIFY"
+    };
   }
 
   inline std::optional<Countdown> pomodoroSnapshot(const nlohmann::json& state, const nlohmann::json& sessions) {
-    if (!state.is_object() || !sessions.is_array() || !state.contains("sessionPtr")
-        || !state["sessionPtr"].is_object() || !state.contains("secondsLeft")
-        || !state.contains("isRunning") || !state["isRunning"].is_boolean()
-        || !state.contains("isDirty") || !state["isDirty"].is_boolean()) return std::nullopt;
+    if (!state.is_object()
+        || !sessions.is_array()
+        || !state.contains("sessionPtr")
+        || !state["sessionPtr"].is_object()
+        || !state.contains("secondsLeft")
+        || !state.contains("isRunning")
+        || !state["isRunning"].is_boolean()
+        || !state.contains("isDirty")
+        || !state["isDirty"].is_boolean())
+      return std::nullopt;
     const auto& ptr = state["sessionPtr"];
-    if (!ptr.contains("session") || !ptr.contains("stage")) return std::nullopt;
+    if (!ptr.contains("session") || !ptr.contains("stage"))
+      return std::nullopt;
     const auto session = countdownSeconds(ptr["session"]), stage = countdownSeconds(ptr["stage"]);
     const auto remaining = countdownSeconds(state["secondsLeft"]);
-    if (!session || *session < 1 || static_cast<std::size_t>(*session) > sessions.size()
-        || !stage || (*stage != 1 && *stage != 2) || !remaining) return std::nullopt;
+    if (!session
+        || *session < 1
+        || static_cast<std::size_t>(*session) > sessions.size()
+        || !stage
+        || (*stage != 1 && *stage != 2)
+        || !remaining)
+      return std::nullopt;
     const auto& cycle = sessions[static_cast<std::size_t>(*session - 1)];
-    if (!cycle.is_array() || cycle.size() < 2) return std::nullopt;
+    if (!cycle.is_array() || cycle.size() < 2)
+      return std::nullopt;
     const auto duration = countdownSeconds(cycle[static_cast<std::size_t>(*stage - 1)]);
-    if (!duration || *duration == 0) return std::nullopt;
+    if (!duration || *duration == 0)
+      return std::nullopt;
     const bool running = state["isRunning"].get<bool>();
-    return Countdown{"thepunkoff/pomodoro", "thepunkoff/pomodoro:panel",
-        *stage == 1 ? "island.timer.focus" : "island.timer.break", *stage == 1 ? "brain" : "coffee",
-        *remaining, *duration, *session, running, running || state["isDirty"].get<bool>(), false, true, *stage == 2};
+    return Countdown{
+        "thepunkoff/pomodoro",
+        "thepunkoff/pomodoro:panel",
+        *stage == 1 ? "island.timer.focus" : "island.timer.break",
+        *stage == 1 ? "brain" : "coffee",
+        *remaining,
+        *duration,
+        *session,
+        running,
+        running || state["isDirty"].get<bool>(),
+        false,
+        true,
+        *stage == 2
+    };
   }
 
   // The next timed calendar event starting within `minutes`. It reads "now" for its first five

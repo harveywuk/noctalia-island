@@ -1011,6 +1011,7 @@ settings::SettingsContentContext SettingsWindow::makeContentContext(
           },
       .backupEditor = &m_backupEditor,
       .defaultAppsEditor = &m_defaultAppsEditor,
+      .focusProfile = &m_focusProfile,
   };
 }
 

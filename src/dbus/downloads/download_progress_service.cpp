@@ -15,13 +15,17 @@ DownloadProgressService::DownloadProgressService(SessionBus& bus)
       ) {
   m_steamPoll.startRepeating(std::chrono::seconds(2), [this] {
     auto transfers = m_steam.read();
-    const bool finished = m_steam.takeCompletion();
-    const bool failure = m_steam.takeFailure();
-    if (finished && completed)
-      completed(downloadSource("steam.desktop", desktopEntries()));
-    // An error wins when several transfers finish in the same poll.
-    if (failure && failed)
-      failed(downloadSource("steam.desktop", desktopEntries()));
+    const auto results = m_steam.takeResults();
+    if (!results.empty() && reported) {
+      // The latest error still wins the brief notice. History keeps log order.
+      auto notice = results.size() - 1;
+      for (std::size_t i = 0; i < results.size(); ++i)
+        if (results[i].failed())
+          notice = i;
+      const auto source = downloadSource("steam.desktop", desktopEntries());
+      for (std::size_t i = 0; i < results.size(); ++i)
+        reported({source, results[i].name, results[i].reason, results[i].failed()}, i == notice);
+    }
     const bool different = transfers != m_steamTransfers;
     m_steamTransfers = std::move(transfers);
     updateLeds();
@@ -59,8 +63,8 @@ DownloadProgressService::DownloadProgressService(SessionBus& bus)
             return;
           const bool finished = previous.completedBy(entry.state);
           m_entries[key] = std::move(entry);
-          if (finished && completed)
-            completed(downloadSource(id, desktopEntries()));
+          if (finished && reported)
+            reported({.source = downloadSource(id, desktopEntries())}, true);
           if (changed)
             changed();
         } catch (const sdbus::Error&) {

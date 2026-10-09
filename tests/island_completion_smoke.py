@@ -248,11 +248,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         # cannot imply a resume. Their unknown-size ring must be stationary too.
         msg('island-activity-start', json.dumps({'id': 'backup', 'title': 'Backing up', 'progress': 42}))
         activity('paused'); time.sleep(.6)
-        assert 'paused' in text('paused-compact')
+        assert 'paused' in text('paused-compact', (590, 22, 690, 58), '7')
         move(735, 12)
         paused_text = text('paused-expanded')
         assert 'paused' in paused_text and '42' in paused_text, paused_text
-        assert 'backing up' in text('paused-title', (518, 108, 700, 133), '7')
+        assert 'backing up' in text('paused-title', (518, 116, 700, 140), '7')
         artwork('paused-download-artwork')
         msg('island-activity-update', json.dumps({'id': 'backup', 'progress': 43}))
         time.sleep(.4)
@@ -261,7 +261,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         activity('running'); time.sleep(.4)
         resumed = text('resumed-expanded')
         assert '43' in resumed and 'paused' not in resumed, resumed
-        assert 'backing up' in text('resumed-title', (518, 108, 700, 133), '7')
+        assert 'backing up' in text('resumed-title', (518, 116, 700, 140), '7')
         move(); activity('paused', progress=None); time.sleep(.6)
         amber = shot('paused-unknown').crop((511, 22, 549, 58))
         assert sum(r > 160 and 80 < g < r-35 and b < 80 for r, g, b in amber.getdata()) > 20
@@ -289,13 +289,74 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         activity('running', progress=44); time.sleep(.6); move(735, 12)
         retried = text('retry-existing-transfer')
         assert '44' in retried, retried
-        assert 'backing up' in text('retry-title', (518, 108, 700, 133), '7')
+        assert 'backing up' in text('retry-title', (518, 116, 700, 140), '7')
         move()
         began = time.monotonic(); activity('failed', progress=100)
         msg('island-activity-end', 'backup'); time.sleep(.6)
         failure('ending-failed-retains-error'); absent('ending-failed-never-succeeds')
         at(began, 5.7)
         assert red(shot('ended-failure-expired')) < 10
+
+        # Real Steam log completions carry the game title through the service.
+        # The private fixture has its own HOME and never touches the real client.
+        steam = subprocess.Popen([sys.executable, str(repo/'tests/fixtures/island_steam.py')], env=env,
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        helpers.append(steam)
+        command(steam, 'Running Update,Downloading,'); time.sleep(2.5)
+        steam_root = pathlib.Path(env['HOME'])/'.steam/steam'
+
+        def steam_finish(reason='No Error'):
+            with (steam_root/'logs/content_log.txt').open('a') as log:
+                for event in ('App update changed : None',
+                              f'scheduler finished : removed from schedule (result {reason}, state 0xc)'):
+                    log.write(time.strftime('[%Y-%m-%d %H:%M:%S]')+' AppID 42 '+event+'\n')
+
+        steam_finish()
+        wait(lambda: green(shot('steam-await-completion')) > 40, 'Named Steam completion')
+        began = time.monotonic(); at(began, .6)
+        named = text('steam-named-completion', (490, 15, 790, 65), '6')
+        assert 'test game' in named and 'download finished' in named, named
+        artwork('steam-named-artwork')
+        shot('steam-named-scaled', 'TEST-2')
+        at(began, 2.7); steam_finish()  # A repeated scheduler line cannot restart the notice.
+        at(began, 4.2); present('steam-named-before-expiry')
+        at(began, 5.7); absent('steam-named-expired'); media_ready('steam-named-return-media')
+
+        command(steam, 'Running Update,Downloading,'); time.sleep(2.3)
+        steam_finish('Not enough disk space')
+        wait(lambda: red(shot('steam-await-failure')) > 40, 'Named Steam failure')
+        began = time.monotonic(); at(began, .6)
+        named = text('steam-named-failure', (490, 15, 790, 65), '6')
+        assert 'test game' in named and 'not enough disk space' in named, named
+        image = failure('steam-named-failure-halo')
+        assert red(image, (565, 73, 715, 80), threshold=25) > 40, 'Named failure lost its red halo'
+        artwork('steam-named-failure-artwork')
+        shot('steam-named-failure-scaled', 'TEST-2')
+        at(began, 2.7); steam_finish('Not enough disk space')
+        at(began, 4.2); failure('steam-named-failure-before-expiry')
+        at(began, 5.7)
+        assert red(shot('steam-named-failure-expired')) < 10, 'Repeated Steam error extended its notice'
+        absent('steam-named-failure-not-success'); media_ready('steam-named-failure-return-media')
+
+        # Missing names fall back cleanly instead of retaining a previous title.
+        (steam_root/'steamapps/appmanifest_42.acf').unlink()
+        command(steam, 'Running Update,Downloading,'); time.sleep(2.3)
+        steam_finish()
+        wait(lambda: green(shot('steam-await-fallback')) > 40, 'Unnamed Steam completion')
+        began = time.monotonic(); at(began, .6)
+        fallback = text('steam-unnamed-completion', (490, 15, 790, 65), '6')
+        assert 'download finished' in fallback and 'test game' not in fallback, fallback
+        at(began, 5.7); absent('steam-unnamed-expired')
+
+        command(steam, 'Running Update,Downloading,'); time.sleep(2.3)
+        steam_finish('Disk read failure')
+        wait(lambda: red(shot('steam-await-unnamed-failure')) > 40, 'Unnamed Steam failure')
+        began = time.monotonic(); at(began, .6)
+        fallback = text('steam-unnamed-failure', (490, 15, 790, 65), '6')
+        assert 'transfer failed' in fallback and 'disk read failure' in fallback and 'test game' not in fallback, fallback
+        at(began, 5.7)
+        assert red(shot('steam-unnamed-failure-expired')) < 10
+        steam.terminate(); steam.wait(timeout=5)
 
         # Reduced motion keeps a steady halo. Rotation must pause behind the
         # notice, preserving its selected activity and remaining dwell time.
@@ -329,7 +390,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert shell.poll() is None
         print('PASS: five-second completion and halo, duplicates, overlapping finishes, remaining downloads, '
               'media return, artwork continuity and playback changes, OSD/notification/panel/keyboard '
-              'interruptions, pause/resume, explicit failure and retry, paused rotation and reduced motion',
+              'interruptions, pause/resume, explicit failure and retry, named Steam completions, failure reasons and fallback, '
+              'paused rotation and reduced motion',
               flush=True)
     finally:
         for process in helpers:

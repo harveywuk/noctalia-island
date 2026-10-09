@@ -14,6 +14,9 @@ from island_capture_menu_smoke import prepare as prepare_menu, REPO, TESSDATA
 
 def prepare(base, cfg, env):
     prepare_menu(base, cfg, env)
+    with (cfg/'config.toml').open('a') as config:
+        config.write('\n[notification.focus.work]\nallowed_apps=["Retained App"]\nallow_critical=false\n'
+                     'start_minute=1335\nend_minute=405\ndays=65\n')
     fixtures=base/'focus-bin'; fixtures.mkdir()
     (fixtures/'wf-recorder').write_text(
         '#!/usr/bin/python3\nimport os,sys\nfrom pathlib import Path\n'
@@ -63,6 +66,16 @@ def run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell):
     def text(name,output='TEST-1'):
         return ' '.join(w for w,x,y in words(name,output))
 
+    def setting(label, name, scroll=False):
+        import ocr
+        for _ in range(12 if scroll else 1):
+            shot(name)
+            point=ocr.find(out/(name+'.png'), label, min_x=300)
+            if point and point[1]<650:
+                return point
+            move(1100,580); send(pointer,'scroll 2'); time.sleep(.3)
+        raise AssertionError('Setting not found: '+label)
+
     def focus():
         return json.loads(msg('focus-status'))
 
@@ -95,14 +108,26 @@ def run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell):
         record('off'); stop('off'); clear() # Opt-in, no change to existing recording behavior.
 
         msg('panel-open','control-center','focus'); time.sleep(1)
-        content=words('recording-focus-setting')
-        row=next(y for w,x,y in content if w.lower()=='recording' and any(
-            word=='while' and abs(y-yy)<8 for word,xx,yy in content))
-        click(876,row)
+        quick=text('focus-quick-controls')
+        assert all(word in quick for word in ('Work','Gaming','Sleep')),quick
+        assert 'Configure' not in quick and 'while recording' not in quick,quick
+        msg('panel-close'); msg('settings-open','notifications'); time.sleep(1)
+        click(*setting('Focus','focus-settings-overview'))
+        assert 'Retained App' in text('focus-settings-profile'), 'Existing Focus profile was not loaded'
         settings=base/'state/noctalia/settings.toml'
+        click(*setting('Retained App','focus-settings-apps')); key(107); key(57); key(3)
+        click(*setting('Save Focus','focus-settings-save',scroll=True))
+        wait(lambda:settings.exists() and tomllib.loads(settings.read_text()).get('notification',{}).get('focus',{}).get('work'),
+             'Focus profile was not saved from Settings')
+        saved=tomllib.loads(settings.read_text())['notification']['focus']['work']
+        # Unchanged fields inherit the original profile instead of redundant overrides.
+        assert saved=={'allowed_apps':['Retained App 2']},saved
+        move(1100,300); send(pointer,'scroll -30'); time.sleep(.5)
+        row=setting('Focus while recording','focus-settings-recording')
+        click(1132,row[1]+10) # Toggle is centred beside the title and its one-line description.
         wait(lambda:settings.exists() and tomllib.loads(settings.read_text()).get('notification',{}).get('focus',{}).get('while_recording'),
              'Focus while recording toggle was not saved')
-        shot('recording-focus-setting-enabled'); key(1); time.sleep(.6)
+        shot('recording-focus-setting-enabled'); msg('settings-close'); time.sleep(.6)
 
         # Neither opening a selector nor cancelling the pre-record countdown changes Focus.
         selection(); assert focus()['mode']=='off'; key(1)
@@ -146,7 +171,13 @@ def run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell):
         msg('focus-set','off'); msg('config-reload'); time.sleep(.6)
         assert focus()['mode']=='off'; stop('off'); clear()
         assert shell.poll() is None and not ctl('configerrors').strip()
-        print('PASS: opt-in toggle persistence, selector/countdown cancellation, recording Focus, live artwork, quiet history, urgent alerts, saved preview, no replay, preset/DND restoration, manual override, reload, recorder failure and scaled output',flush=True)
+        print('PASS: quick Control Centre, Settings profile round-trip and recording toggle persistence, selector/countdown cancellation, recording Focus, live artwork, quiet history, urgent alerts, saved preview, no replay, preset/DND restoration, manual override, reload, recorder failure and scaled output',flush=True)
+    except Exception:
+        shot('focus-settings-failure')
+        settings=base/'state/noctalia/settings.toml'
+        if settings.exists():
+            (out/'failed-settings.toml').write_text(settings.read_text())
+        raise
     finally:
         if shell.poll() is None:
             msg('record-stop')

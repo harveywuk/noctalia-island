@@ -1,0 +1,268 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Dynamic Island in iOS 27</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: single reading column, a live schematic "island" at the top, then a catalogue table and source cards. */
+:root{
+  --bg:#f3f4f7; --surface:#ffffff; --fg:#14161c; --muted:#5b6070; --line:#dfe2ea;
+  --accent:#2f56e0; --accent-soft:#e6ecff;
+  --new:#1b7f4b; --new-soft:#e1f4ea; --pro:#8a4b0f; --pro-soft:#fbeedd; --old:#5b6070; --old-soft:#eceef3;
+  --island:#000000; --island-fg:#f4f5f8; --island-dim:#9aa0ae; --stage:#dde1ea;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1116; --surface:#171a21; --fg:#eceef3; --muted:#9aa0ae; --line:#2a2e38;
+  --accent:#7d98ff; --accent-soft:#1d2645;
+  --new:#5fd19a; --new-soft:#14301f; --pro:#f0b36b; --pro-soft:#3a2810; --old:#a7adbb; --old-soft:#232731;
+  --island:#000000; --island-fg:#f4f5f8; --island-dim:#8a90a0; --stage:#242833; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1116; --surface:#171a21; --fg:#eceef3; --muted:#9aa0ae; --line:#2a2e38;
+  --accent:#7d98ff; --accent-soft:#1d2645;
+  --new:#5fd19a; --new-soft:#14301f; --pro:#f0b36b; --pro-soft:#3a2810; --old:#a7adbb; --old-soft:#232731;
+  --island:#000000; --island-fg:#f4f5f8; --island-dim:#8a90a0; --stage:#242833; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6;padding-inline:16px;padding-block:32px 64px}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{font-family:var(--f-display);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(2rem,5vw,3rem);letter-spacing:-.02em}
+h2{font-size:1.6rem;letter-spacing:-.01em}
+h3{font-size:1.1rem}
+p{margin:0;max-width:65ch}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--old-soft);padding:.1em .35em;border-radius:4px}
+.eyebrow{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:1.1rem;color:var(--muted)}
+section{display:flex;flex-direction:column;gap:20px}
+.head{display:flex;flex-direction:column;gap:12px}
+
+/* Live schematic */
+.demo{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:16px}
+.stage{background:var(--stage);border-radius:14px;min-height:220px;display:flex;align-items:flex-start;justify-content:center;padding-top:22px;overflow:hidden;transition:min-height .3s}
+.stage.land{min-height:150px}
+.row{display:flex;gap:8px;align-items:center;justify-content:center}
+.pill{background:var(--island);color:var(--island-fg);border-radius:999px;height:36px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 12px;font-family:var(--f-mono);font-size:.8rem;transition:all .35s cubic-bezier(.3,.7,.2,1)}
+.cam{width:12px;height:12px;border-radius:50%;background:#1b1d24;flex:none}
+.dot{width:20px;height:20px;border-radius:50%;flex:none}
+.d1{background:#ff9f0a}.d2{background:#30d158}.d3{background:#64d2ff}
+.bubble{background:var(--island);width:36px;height:36px;border-radius:50%;display:grid;place-items:center;flex:none}
+.expanded{background:var(--island);color:var(--island-fg);border-radius:34px;width:min(100%,360px);padding:16px 18px;display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;font-size:.8rem;font-family:var(--f-mono)}
+.expanded .cam{grid-column:2;justify-self:center}
+.expanded .big{grid-column:1/-1;font-family:var(--f-body);font-size:.95rem;color:var(--island-fg)}
+.bar{grid-column:1/-1;height:6px;border-radius:3px;background:#2a2d36;overflow:hidden}
+.bar i{display:block;height:100%;width:62%;background:#30d158}
+.dim{color:var(--island-dim)}
+.siri{background:var(--island);color:var(--island-dim);border-radius:999px;height:40px;width:min(100%,300px);display:flex;align-items:center;gap:10px;padding:0 16px;font-size:.85rem;box-shadow:0 0 0 2px rgba(120,160,255,.45),0 0 18px rgba(120,160,255,.35)}
+.caret{width:2px;height:16px;background:#9fb6ff;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.pill,.stage{transition:none}.caret{animation:none}}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tabs button{font:inherit;font-size:.85rem;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:6px 14px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.caption{font-size:.92rem;color:var(--muted);min-height:3.2em}
+.note{font-size:.8rem;color:var(--muted)}
+
+/* What's new list */
+.changes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.change{border-top:2px solid var(--fg);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.change p{font-size:.95rem;color:var(--muted)}
+
+/* Tags */
+.tag{display:inline-block;font-family:var(--f-mono);font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.t-new{background:var(--new-soft);color:var(--new)}
+.t-pro{background:var(--pro-soft);color:var(--pro)}
+.t-old{background:var(--old-soft);color:var(--old)}
+
+/* Tables */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:.92rem}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+
+/* Sources */
+.sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.src{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-decoration:none;color:var(--fg)}
+.src:hover{border-color:var(--accent)}
+.src span{font-size:.85rem;color:var(--muted)}
+.src b{font-weight:600}
+.host{font-family:var(--f-mono);font-size:.72rem;color:var(--accent)}
+footer{font-size:.82rem;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div class="eyebrow">Reference · iOS 27 · updated 9 Oct 2026</div>
+    <h1>Dynamic Island in iOS 27</h1>
+    <p class="lede">What changed in iOS 27, every place a Live Activity can show up, and the system activities that use the island. Shapes below are simple schematics; for Apple's own artwork, use the official links at the bottom.</p>
+  </header>
+
+  <div class="demo" aria-label="Schematic of Dynamic Island presentations">
+    <div class="stage" id="stage"><div id="view"></div></div>
+    <div class="tabs" role="group" aria-label="Presentation">
+      <button id="b-compact" data-v="compact" aria-pressed="true">Compact</button>
+      <button id="b-minimal" data-v="minimal" aria-pressed="false">Two activities</button>
+      <button id="b-three" data-v="three" aria-pressed="false">Three activities</button>
+      <button id="b-expanded" data-v="expanded" aria-pressed="false">Expanded</button>
+      <button id="b-land" data-v="land" aria-pressed="false">Landscape</button>
+      <button id="b-siri" data-v="siri" aria-pressed="false">Siri</button>
+    </div>
+    <p class="caption" id="cap"></p>
+    <p class="note">Schematic only. Coloured dots stand in for an app's own icon; text is sample data.</p>
+  </div>
+
+  <section>
+    <div class="head">
+      <div class="eyebrow">What's new</div>
+      <h2>Four changes in iOS 27</h2>
+    </div>
+    <div class="changes">
+      <div class="change">
+        <span><span class="tag t-new">iOS 27</span></span>
+        <h3>Siri lives in the island</h3>
+        <p>Swipe down on the Dynamic Island, or press and hold the side button, to open Siri. Answers appear as text cards. Needs iPhone 15 Pro or later.</p>
+      </div>
+      <div class="change">
+        <span><span class="tag t-new">iOS 27</span></span>
+        <h3>Landscape support</h3>
+        <p>Compact and minimal Live Activities now stay visible when iPhone is turned sideways, in a narrower layout.</p>
+      </div>
+      <div class="change">
+        <span><span class="tag t-pro">iPhone 18 Pro</span></span>
+        <h3>Three activities at once</h3>
+        <p>The smaller island on iPhone 18 Pro and Pro Max can show three Live Activities. Other models stay at two.</p>
+      </div>
+      <div class="change">
+        <span><span class="tag t-new">Policy</span></span>
+        <h3>No promotional activities</h3>
+        <p>Apple's June 2026 App Review update names Live Activities in its anti-spam rule, so they can't carry unsolicited marketing.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head">
+      <div class="eyebrow">Anatomy</div>
+      <h2>The presentations every Live Activity provides</h2>
+      <p>Apps build these with ActivityKit and WidgetKit. The system picks which one to show.</p>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Presentation</th><th>When it shows</th><th>What goes in it</th><th>iOS 27</th></tr></thead>
+      <tbody>
+        <tr><td>Compact</td><td>One Live Activity running</td><td>A leading item and a trailing item either side of the camera, such as an icon and a time</td><td><span class="tag t-new">Landscape</span></td></tr>
+        <tr><td>Minimal</td><td>Two or more activities running</td><td>One essential glance, such as a progress ring. One sits attached to the island, the other detached</td><td><span class="tag t-new">Landscape</span></td></tr>
+        <tr><td>Expanded</td><td>Long-press, or an alerting update</td><td>Leading, centre, trailing and bottom regions around the sensors; can include buttons</td><td><span class="tag t-old">Unchanged</span></td></tr>
+        <tr><td>Limited width</td><td>iPhone in landscape</td><td>A shorter trailing view, since compact views can't grow wider sideways (<code>isDynamicIslandLimitedInWidth</code>)</td><td><span class="tag t-new">New</span></td></tr>
+        <tr><td>Lock Screen</td><td>Locked or on the Lock Screen</td><td>The full banner view; also reused, scaled up, in StandBy</td><td><span class="tag t-old">Unchanged</span></td></tr>
+        <tr><td>Small family</td><td>Apple Watch, CarPlay</td><td>A compact layout an app opts into with <code>.supplementalActivityFamilies([.small])</code></td><td><span class="tag t-old">Unchanged</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="head">
+      <div class="eyebrow">Where they appear</div>
+      <h2>One Live Activity, six places</h2>
+      <p>A Live Activity started on iPhone follows you to these surfaces automatically.</p>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Surface</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Dynamic Island</td><td>Compact, minimal and expanded views; now in portrait and landscape</td></tr>
+        <tr><td>Lock Screen</td><td>Full banner view, updated without unlocking</td></tr>
+        <tr><td>StandBy</td><td>Lock Screen view at 200% when iPhone is charging on its side</td></tr>
+        <tr><td>Apple Watch</td><td>Shows in the Smart Stack</td></tr>
+        <tr><td>Mac</td><td>Shows in the macOS menu bar</td></tr>
+        <tr><td>CarPlay</td><td>Shows on the CarPlay Dashboard</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="head">
+      <div class="eyebrow">Catalogue</div>
+      <h2>System activities that use the island</h2>
+      <p>Apple doesn't publish one master list, so this is compiled from Apple's guides and how earlier versions behave. Items marked "Earlier iOS" carry over into iOS 27; check Apple's iPhone User Guide for the definitive behaviour on your model.</p>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Activity</th><th>What you see</th><th>Since</th></tr></thead>
+      <tbody>
+        <tr><td>Siri</td><td>Glowing "Search or Ask" field; answers in cards from the island</td><td><span class="tag t-new">iOS 27</span></td></tr>
+        <tr><td>Multiple activities (×3)</td><td>Three activities side by side</td><td><span class="tag t-pro">iPhone 18 Pro</span></td></tr>
+        <tr><td>Now Playing</td><td>Artwork and a waveform; expands to playback controls</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Phone and FaceTime calls</td><td>Call duration and audio indicator; expands to call controls</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Timers</td><td>Countdown; expands to pause and cancel</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Alarms</td><td>Ringing alarm with snooze and stop</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Maps directions</td><td>Next turn and distance</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Screen recording</td><td>Recording indicator and elapsed time</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Voice Memos</td><td>Recording indicator and live waveform</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>AirDrop</td><td>Transfer progress ring</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Face ID</td><td>Brief unlock animation</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Apple Pay and Wallet</td><td>Payment confirmation tick</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Charging</td><td>Battery level when you plug in</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Silent mode</td><td>Bell indicator when you switch Ring/Silent</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>AirPods and audio devices</td><td>Connection and battery status</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Focus</td><td>Focus name when a Focus turns on or off</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Personal Hotspot</td><td>Indicator while devices are connected</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+        <tr><td>Third-party apps</td><td>Any app's Live Activity: deliveries, sports scores, rides, flights, workouts</td><td><span class="tag t-old">Earlier iOS</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="head">
+      <div class="eyebrow">Official Apple sources</div>
+      <h2>Where to get the real visuals</h2>
+      <p>These are Apple's own pages. Design Resources has the iOS UI kits with Dynamic Island components, and SF Symbols has the icon library.</p>
+    </div>
+    <div class="sources">
+      <a class="src" href="https://developer.apple.com/design/resources/" target="_blank" rel="noopener"><span class="host">developer.apple.com</span><b>Apple Design Resources</b><span>Official iOS UI kits for Figma and Sketch</span></a>
+      <a class="src" href="https://developer.apple.com/sf-symbols/" target="_blank" rel="noopener"><span class="host">developer.apple.com</span><b>SF Symbols</b><span>Apple's icon library and app</span></a>
+      <a class="src" href="https://developer.apple.com/design/human-interface-guidelines/live-activities" target="_blank" rel="noopener"><span class="host">developer.apple.com</span><b>HIG: Live Activities</b><span>Design rules with Apple's example layouts</span></a>
+      <a class="src" href="https://developer.apple.com/videos/play/wwdc2026/223/" target="_blank" rel="noopener"><span class="host">developer.apple.com</span><b>WWDC26: Live Activities essentials</b><span>Session covering the iOS 27 landscape style</span></a>
+      <a class="src" href="https://support.apple.com/guide/iphone/view-live-activities-in-the-dynamic-island-iph28f50d10d/ios" target="_blank" rel="noopener"><span class="host">support.apple.com</span><b>View Live Activities in the Dynamic Island</b><span>iPhone User Guide, iOS 27 edition</span></a>
+      <a class="src" href="https://support.apple.com/guide/iphone/get-started-with-siri-ai-iphv6zwrg8jvfgr/ios" target="_blank" rel="noopener"><span class="host">support.apple.com</span><b>Get started with Siri AI</b><span>The new island-based Siri</span></a>
+      <a class="src" href="https://support.apple.com/guide/iphone/whats-new-in-ios-27-iphfed2c4091/ios" target="_blank" rel="noopener"><span class="host">support.apple.com</span><b>What's new in iOS 27</b><span>Apple's full feature list</span></a>
+      <a class="src" href="https://developer.apple.com/documentation/ActivityKit" target="_blank" rel="noopener"><span class="host">developer.apple.com</span><b>ActivityKit documentation</b><span>The framework apps use to build Live Activities</span></a>
+    </div>
+  </section>
+
+  <footer>Compiled 9 October 2026 from Apple's developer and support pages plus launch coverage of iOS 27 (released 14 September 2026) and iPhone 18 Pro. Not affiliated with Apple. Apple, iPhone, Siri and Dynamic Island are trademarks of Apple Inc.</footer>
+</div>
+
+<script>
+(function(){
+  var views = {
+    compact: {html:'<div class="pill" style="width:220px"><span class="dot d1"></span><span class="cam"></span><span>4:59</span></div>',
+      cap:'Compact: one activity, split into a leading item and a trailing item either side of the camera.'},
+    minimal: {html:'<div class="row"><div class="pill" style="width:150px"><span class="dot d1"></span><span class="cam"></span><span class="dim">●</span></div><div class="bubble"><span class="dot d2"></span></div></div>',
+      cap:'Minimal: with two activities, one stays attached to the island and the other sits in a detached circle.'},
+    three: {html:'<div class="row"><div class="bubble"><span class="dot d3"></span></div><div class="pill" style="width:110px"><span class="dot d1"></span><span class="cam"></span></div><div class="bubble"><span class="dot d2"></span></div></div>',
+      cap:'iPhone 18 Pro and Pro Max: the smaller island can hold three activities at once, for example a timer, directions and music.'},
+    expanded: {html:'<div class="expanded"><span class="dot d1"></span><span class="cam"></span><span>12 min</span><span class="big">Order ready for collection</span><span class="dim" style="grid-column:1/-1">Preparing · step 2 of 3</span><div class="bar"><i></i></div></div>',
+      cap:'Expanded: shown on long-press or an alerting update, with regions around the sensors and room for buttons.'},
+    land: {html:'<div class="pill" style="width:150px;height:30px"><span class="dot d1" style="width:16px;height:16px"></span><span class="cam"></span><span class="dot d2" style="width:16px;height:16px"></span></div>',
+      cap:'New in iOS 27: Live Activities stay visible in landscape. Width is limited, so apps swap text for a compact icon.', land:true},
+    siri: {html:'<div class="siri"><span class="caret"></span><span>Search or Ask</span></div>',
+      cap:'New in iOS 27: swipe down on the island to type to Siri. A glowing field opens and answers appear as cards beneath it.'}
+  };
+  var view=document.getElementById('view'), cap=document.getElementById('cap'), stage=document.getElementById('stage');
+  var btns=document.querySelectorAll('.tabs button');
+  function show(k){
+    var v=views[k]; view.innerHTML=v.html; cap.textContent=v.cap;
+    stage.classList.toggle('land', !!v.land);
+    btns.forEach(function(b){b.setAttribute('aria-pressed', b.dataset.v===k ? 'true':'false');});
+  }
+  btns.forEach(function(b){b.addEventListener('click',function(){show(b.dataset.v);});});
+  show('compact');
+})();
+</script>
+
+</body></html>

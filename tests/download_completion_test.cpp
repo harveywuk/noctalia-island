@@ -85,4 +85,39 @@ int main() {
   assert(island::transferStatus("failed") == TransferStatus::Failed);
   assert(!island::transferStatus("") && !island::transferStatus("stalled"));
   assert(!island::transferStatus("Paused"));
+
+  // Recent results are bounded, newest first and independent of the brief notice.
+  // Repeated names from one app keep distinct result identities and timestamps.
+  island::RecentTransfers recent;
+  const auto began = island::RecentTransfers::Clock::now();
+  for (std::uint64_t serial = 1; serial <= 4; ++serial)
+    recent.remember(
+        {island::TransferNotice::DownloadFinished, source, serial, "Same title", {}},
+        began + std::chrono::seconds(serial)
+    );
+  assert(recent.entries().size() == 3 && !recent.find(1));
+  assert(recent.entries().front().feedback.serial == 4 && recent.entries().back().feedback.serial == 2);
+  assert(recent.find(3)->received == began + std::chrono::seconds(3));
+  assert(recent.find(3)->feedback.source.wmClass == "TransferWindow");
+  recent.remember({island::TransferNotice::Failed, other, 5, "Another game", "Disk write failure"}, began);
+  assert(recent.entries().front().feedback.detail == "Disk write failure");
+  assert(!recent.find(2) && recent.find(5)->feedback.source.desktopId == "other");
+
+  // History is an explicit expanded selection, never a live compact download.
+  island::ActivitySelection historySelection;
+  historySelection.update(true, {.downloads = true}, Activity::None, true);
+  assert(historySelection.selected == Activity::None);
+  const auto historyView = [&](bool hovered) {
+    return island::view(
+        false, false, hovered, false, false, false, false, true, true, historySelection.selected, Activity::None, false,
+        false, false, false, false, false, false, false, true
+    );
+  };
+  assert(historyView(false) == View::Rest && historyView(true) == View::Calendar);
+  historySelection.selected = Activity::Downloads;
+  historySelection.update(true, {.downloads = true}, Activity::None, true);
+  assert(historyView(true) == View::Downloads && historyView(false) == View::Rest);
+  historySelection.update(false, {.downloads = true}, Activity::None, true);
+  historySelection.update(true, {.media = true, .downloads = true}, Activity::None, true);
+  assert(historySelection.selected == Activity::Media && historySelection.switching);
 }

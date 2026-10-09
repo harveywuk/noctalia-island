@@ -20,8 +20,8 @@ public:
   ~DownloadProgressService();
   [[nodiscard]] std::vector<DownloadProgress> active() const;
   std::function<void()> changed;
-  std::function<void(const DownloadSource&)> completed;
-  std::function<void(const DownloadSource&)> failed;
+  // Every confirmed result reaches history; only the selected result announces.
+  std::function<void(const DownloadResult&, bool announce)> reported;
 
 private:
   struct Entry {

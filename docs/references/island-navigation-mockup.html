@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Noctalia Island: contextual activity cards</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #121319; color: #f6f6fa; font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1180px; padding: 36px 32px; margin: auto; }
+  h1 { margin: 8px 0 10px; font-size: 36px; letter-spacing: -.035em; line-height: 1.2; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  p { margin: 8px 0; }
+  .eyebrow { color: #b4bdce; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+  .intro { max-width: 790px; color: #c0c5d1; }
+  .toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 24px 0; }
+  .toolbar label { display: flex; gap: 8px; align-items: center; }
+  select { color: inherit; font: inherit; background: #222632; padding: 8px 12px; border: 1px solid #50596c; border-radius: 8px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  a { color: #b9ceff; text-underline-offset: 3px; }
+  :focus-visible { outline: 2px solid #b9ceff; outline-offset: 4px; }
+  .comparison { display: grid; grid-template-columns: 392px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .comparison > section { min-width: 0; }
+  .column-head { min-height: 58px; }
+  .muted { color: #a9afbe; }
+  .small { font-size: 12px; }
+  .stage { min-height: 365px; border-radius: 16px; display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; background: #20232e; }
+  .current-crop { width: 380px; max-width: 100%; aspect-ratio: 380 / 270; position: relative; overflow: hidden; display: block; }
+  .current-crop img { width: 336.842105%; max-width: none; position: absolute; left: -118.421053%; top: 0; }
+  .island { position: relative; isolation: isolate; width: 520px; max-width: 100%; background: #030306; border-radius: 42px; padding: 20px 24px 22px; box-shadow: 0 12px 28px #0004; }
+  .island::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: radial-gradient(ellipse at 63% 67%, #b2a3ed21, transparent 47%), radial-gradient(ellipse at 29% 35%, #6a74f42b, transparent 53%), radial-gradient(ellipse at 51% 47%, #eee2760d, transparent 43%); pointer-events: none; }
+  .island.compact { width: 400px; padding: 16px 20px 18px; border-radius: 34px; }
+  .island-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 20px; }
+  .statuses { display: flex; align-items: center; }
+  .statuses { gap: 0; flex-shrink: 0; }
+  .island-title { font-size: 14px; font-weight: 550; color: #c4c5d1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; padding: 8px 0; min-width: 0; text-align: left; }
+  .island-title:disabled { cursor: default; opacity: 1; }
+  .icon-button { border: 0; background: transparent; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+  .icon-button:hover { background: #ffffff0e; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .status-icon { display: grid; place-items: center; width: 24px; height: 32px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: block; }
+  .media-dot { background: linear-gradient(135deg, #fff293, #a4aaff 57%, #676bff); }
+  .camera-dot { background: #30d158; }
+  .recording-dot { background: #ff453a; }
+  .mic-dot { background: #ff9f0a; }
+  .bell svg { width: 15px; height: 15px; fill: currentColor; stroke-width: 1; }
+  .tray-toggle svg { width: 14px; height: 14px; }
+  .song { display: flex; gap: 16px; align-items: center; }
+  .art { width: 64px; height: 64px; border-radius: 13px; object-fit: cover; flex-shrink: 0; }
+  .track { flex: 1; min-width: 0; }
+  .track-title { font-size: 19px; line-height: 1.25; font-weight: 650; letter-spacing: -.02em; }
+  .artist { color: #a8a9b9; margin-top: 6px; font-size: 14px; }
+  .wave { display: flex; align-items: center; gap: 3px; height: 30px; margin-left: auto; padding-left: 6px; color: #b0afff; }
+  .wave i { display: block; width: 3px; background: currentColor; border-radius: 3px; }
+  .seek { margin-top: 24px; height: 4px; background: #5c5e765e; border-radius: 4px; }
+  .seek span { display: block; width: 37%; height: 100%; border-radius: inherit; background: #b6b4ff; }
+  .timestamps { display: flex; justify-content: space-between; color: #9295a7; font-size: 11px; margin-top: 7px; font-variant-numeric: tabular-nums; }
+  .transport { display: flex; align-items: center; justify-content: center; gap: 38px; margin-top: 7px; }
+  .transport button { width: 44px; height: 44px; }
+  .transport svg { width: 26px; height: 26px; fill: currentColor; stroke: none; }
+  .transport .play svg { width: 25px; height: 25px; }
+  .compact .island-header { margin-bottom: 14px; gap: 2px; }
+  .compact .island-title { font-size: 12px; }
+  .compact .statuses .icon-button { width: 28px; }
+  .compact .art { width: 50px; height: 50px; border-radius: 10px; }
+  .compact .song { gap: 12px; }
+  .compact .track-title { font-size: 15px; }
+  .compact .artist { font-size: 12px; margin-top: 4px; }
+  .compact .wave { gap: 2px; }
+  .compact .seek { margin-top: 18px; }
+  .compact .transport { gap: 28px; }
+  .compact .transport button { width: 38px; height: 38px; }
+  .activity-symbol { width: 46px; height: 46px; flex-shrink: 0; }
+  .activity-symbol svg { width: 100%; height: 100%; stroke-width: 1.7; }
+  .live-row { display: flex; align-items: center; gap: 18px; min-height: 78px; }
+  .live-value { font-size: 38px; font-weight: 550; letter-spacing: -.04em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .compact .live-value { font-size: 30px; }
+  .live-controls { display: flex; gap: 10px; margin-left: auto; }
+  .live-controls button { width: 42px; height: 42px; border: 0; border-radius: 50%; background: #24242d; display: grid; place-items: center; }
+  .live-controls svg rect { fill: currentColor; stroke: none; }
+  .compact .live-controls { gap: 6px; }
+  .compact .live-controls button { width: 36px; height: 36px; }
+  .orange { color: #ff9f0a; }
+  .blue { color: #3ab9ff; }
+  .red { color: #ff453a; }
+  .secondary-action { margin-top: 22px; display: flex; align-items: center; justify-content: space-between; border: 0; border-top: 1px solid #292a36; background: none; padding: 15px 0 0; width: 100%; color: #b5b7c8; font-size: 13px; text-align: left; }
+  .indeterminate { margin-top: 22px; height: 4px; border-radius: 4px; background: #163348; }
+  .indeterminate span { display: block; width: 25%; height: 100%; margin-left: 18%; background: #39baff; border-radius: inherit; }
+  .popover { background: #181a24; border: 1px solid #373b4c; border-radius: 14px; padding: 14px 16px; position: absolute; top: 58px; right: 20px; width: 255px; box-shadow: 0 8px 30px #0009; z-index: 2; font-size: 13px; }
+  .popover button { float: right; border: 0; background: none; padding: 0 0 5px 10px; }
+  .timer-form { display: grid; gap: 16px; }
+  .timer-form label { display: grid; gap: 7px; color: #b9bfce; font-size: 14px; }
+  .timer-form input { width: 100%; min-width: 0; border: 1px solid #454654; border-radius: 10px; background: #191920; color: #fff; padding: 10px 12px; font: inherit; }
+  .timer-form .duration-row { display: grid; grid-template-columns: 1fr 110px; align-items: end; gap: 14px; }
+  .start-timer { min-height: 43px; border: 0; border-radius: 12px; background: #ff9f0a; color: #151009; font-weight: 650; }
+  .timer-progress { height: 4px; background: #ff9f0a26; margin-top: 20px; border-radius: 3px; overflow: hidden; }
+  .timer-progress span { display: block; height: 100%; background: #ff9f0a; border-radius: inherit; }
+  .preview-hint { color: #9fa7b9; font-size: 12px; margin: -10px 0 20px; }
+  .caption { color: #b9bfce; padding: 14px 0; font-size: 13px; }
+  .callouts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 16px; padding: 24px 0; border-top: 1px solid #373a45; }
+  .callouts p { font-size: 13px; color: #b9bfce; }
+  footer { color: #9fa7b9; font-size: 12px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 1050px) { .comparison { grid-template-columns: minmax(0, 1fr); } .comparison > section:nth-child(2) { grid-row: 1; } .stage { min-height: 0; padding: 24px; } }
+  @media (max-width: 580px) { main { padding: 24px 14px; } h1 { font-size: 30px; } .stage { padding: 16px 6px; } .callouts { grid-template-columns: 1fr; gap: 12px; } .toolbar { gap: 8px; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Desktop navigation study · interactive mockup</div>
+  <h1>Click the title. Follow the activity.</h1>
+  <p class="intro">Keyboard first: Hyprland bindings open full panels and initiate actions. Clicking the title is a convenient way to switch active hover panels. New timers start in the full Timer panel; hover controls manage what is already running.</p>
+  <div class="toolbar">
+    <label>Size <select id="density"><option value="comfortable">Comfortable · 520 px</option><option value="compact">Compact · 400 px</option></select></label>
+    <label>View <select id="view"><option value="hover">Hover card</option><option value="full-timer">Expanded Timer panel</option></select></label>
+    <label>Sample state <select id="scenario"><option value="everyday">Media + download</option><option value="media-only">Media only</option><option value="timer">Timer already running</option><option value="recording">Recording already active</option></select></label>
+    <label>Privacy <select id="privacy"><option value="none">Inactive</option><option value="camera">Camera + mic</option><option value="mic">Mic only</option></select></label>
+  </div>
+  <p class="preview-hint">The controls above simulate the view and existing activity for this mockup. They are outside the Island. No real recording or desktop timer is started.</p>
+  <div class="comparison">
+    <section>
+      <div class="column-head"><h2>Current shell</h2><p class="muted small">Actual screenshot · expanded media</p></div>
+      <div class="stage"><a class="current-crop" href="../assets/island-design-review-20261009/expanded-media.png"><img src="../assets/island-design-review-20261009/expanded-media.png" alt="Current shell: segmented Media, Downloads and Timers navigation above playback controls"></a></div>
+      <p class="caption">The filled tab strip competes with the music and expands as more activities become available.</p>
+    </section>
+    <section>
+      <div class="column-head"><h2><span id="view-label">Proposed hover card</span> <span id="size-label" class="muted">· Comfortable</span></h2><p class="muted small" id="interaction-hint">Click the title to switch active panels.</p></div>
+      <div class="stage">
+        <div class="island" id="island">
+          <header class="island-header">
+            <button class="island-title" id="heading" type="button">Now Playing</button>
+            <div class="statuses" aria-label="Active statuses and tray">
+              <span class="status-icon" id="media-status" role="img" title="Music playing" aria-label="Music playing"><span class="dot media-dot"></span></span>
+              <span class="status-icon" id="privacy-status" role="img" title="Camera and microphone active" aria-label="Camera and microphone active" hidden><span class="dot camera-dot" id="privacy-dot"></span></span>
+              <span class="status-icon" id="record-status" role="img" title="Screen recording active" aria-label="Screen recording active" hidden><span class="dot recording-dot"></span></span>
+              <button class="icon-button bell" id="notifications" title="Notifications" aria-label="Notifications"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0v5l2 3H4l2-3Z"/><path d="M10 20h4"/></svg></button>
+              <button class="icon-button tray-toggle" id="tray" title="System tray" aria-label="System tray"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+          </header>
+          <div id="content"></div>
+          <aside id="popover" class="popover" hidden aria-label="Preview details"><button id="close-popover" aria-label="Close details">×</button><div id="popover-content"></div></aside>
+        </div>
+      </div>
+      <p class="caption" id="proposal-caption">Larger artwork and readable track details, with a stable waveform and bare playback controls. The header shares space without becoming a separate panel.</p>
+    </section>
+  </div>
+  <div class="callouts">
+    <section><h2>01 · Keyboard first</h2><p>Use Hyprland bindings to open full panels. Tab, Enter and Space operate the activity controls. Clicking or activating the title cycles existing hover panels; a single panel stays put.</p></section>
+    <section><h2>02 · Dots report activity</h2><p>Orange for mic only; green for camera with or without mic; red only while recording. These are indicators. Recording is started with the keyboard or screenshot panel.</p></section>
+    <section><h2>03 · Start in the full panel</h2><p>Create a timer in the expanded Timer panel. The compact Island and hover card only show its progress and controls such as pause/resume and cancel. Both sizing options remain available.</p></section>
+  </div>
+  <footer>Preview only, with sample activities. This does not modify the running shell. Widths are starting points in CSS pixels, not final native scaling specifications. The artwork background and waveform are static representations; motion is not evaluated here. <a href="island-visual-comparison.html">Open the full screenshot comparison</a> · <a href="https://developer.apple.com/design/human-interface-guidelines/live-activities">Apple Live Activities reference</a>.</footer>
+</main>
+<script>
+  const svg = body => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
+  const pause = '<rect x="6" y="4" width="4" height="16" rx="1.5"/><rect x="14" y="4" width="4" height="16" rx="1.5"/>';
+  const play = '<path d="M7 4.5c0-1 1-1.5 1.8-1l12 7.5c.8.5.8 1.5 0 2l-12 7.5c-.8.5-1.8 0-1.8-1Z"/>';
+  const back = '<rect x="3" y="5" width="3" height="14" rx="1"/><path d="M19 5 7 12l12 7Z"/>';
+  const forward = '<rect x="18" y="5" width="3" height="14" rx="1"/><path d="m5 5 12 7-12 7Z"/>';
+  const timerSymbol = '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3M19 5l1 1"/>';
+  const downloadSymbol = '<path d="M12 3v12m-5-5 5 5 5-5M5 18v3h14v-3"/>';
+  const recordSymbol = '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5" fill="currentColor" stroke="none"/>';
+  const waveform = '<div class="wave" aria-label="Audio waveform">'+[11,20,29,17,25,13,7].map(h=>`<i style="height:${h}px"></i>`).join('')+'</div>';
+  const titles = {media:'Now Playing',downloads:'Downloads',timer:'Timer',recording:'Recording',privacy:'Privacy'};
+  const content = document.querySelector('#content');
+  let current = 'media';
+  let view = 'hover';
+  let playing = true;
+  let downloadsActive = true;
+  let recordingActive = false;
+  let privacy = 'none';
+  let popupTrigger = null;
+  let timer = {active:false, running:false, remaining:0, total:0, deadline:0, label:'Timer'};
+  function activePanels() {
+    return ['media', ...(downloadsActive ? ['downloads'] : []), ...(timer.active ? ['timer'] : []), ...(privacy !== 'none' ? ['privacy'] : []), ...(recordingActive ? ['recording'] : [])];
+  }
+  function remainingTime() {
+    return timer.running ? Math.max(0, timer.deadline - performance.now()) : timer.remaining;
+  }
+  function formattedTime(milliseconds) {
+    const seconds = Math.ceil(milliseconds / 1000);
+    return `${Math.floor(seconds / 60).toString().padStart(2,'0')}:${(seconds % 60).toString().padStart(2,'0')}`;
+  }
+  function updateTimerText() {
+    const value = document.querySelector('#timer-value');
+    if (value) value.textContent = formattedTime(remainingTime());
+    const progress = document.querySelector('#timer-progress');
+    if (progress) {
+      const percentage = timer.total ? remainingTime() / timer.total * 100 : 0;
+      progress.querySelector('span').style.width = `${percentage}%`;
+      progress.setAttribute('aria-valuenow', Math.round(percentage));
+    }
+  }
+  function syncHeader() {
+    const panels = activePanels();
+    const heading = document.querySelector('#heading');
+    heading.textContent = titles[current];
+    heading.disabled = view !== 'hover' || panels.length < 2;
+    const next = panels[(panels.indexOf(current) + 1) % panels.length];
+    heading.title = heading.disabled ? titles[current] : `Switch to ${titles[next]}`;
+    heading.setAttribute('aria-label', heading.disabled ? titles[current] : `${titles[current]}. Switch to ${titles[next]}`);
+    document.querySelector('#media-status').hidden = !playing;
+    document.querySelector('#record-status').hidden = !recordingActive;
+    const privacyIndicator = document.querySelector('#privacy-status');
+    privacyIndicator.hidden = privacy === 'none';
+    document.querySelector('#privacy-dot').className = `dot ${privacy === 'mic' ? 'mic-dot' : 'camera-dot'}`;
+    privacyIndicator.title = privacy === 'mic' ? 'Microphone active' : 'Camera and microphone active';
+    privacyIndicator.setAttribute('aria-label', privacyIndicator.title);
+    document.querySelector('#view-label').textContent = view === 'hover' ? 'Proposed hover card' : 'Full expanded Timer panel';
+    document.querySelector('#interaction-hint').textContent = view === 'full-timer' ? 'Timer creation lives here, outside the hover card.' : panels.length > 1 ? 'Click the title to switch active panels.' : 'One active panel. The title stays put.';
+  }
+  function show(id = current) {
+    const focusedAction = document.activeElement?.dataset.action;
+    const contentHadFocus = content.contains(document.activeElement);
+    const panels = activePanels();
+    current = view === 'full-timer' ? 'timer' : panels.includes(id) ? id : panels[0];
+    syncHeader();
+    document.querySelector('#popover').hidden = true;
+    if (current === 'media') {
+      content.innerHTML = `<div class="song"><img class="art" src="../../assets/noctalia-wallpaper.png" alt="Noctalia album artwork"><div class="track"><div class="track-title">A little closer to home</div><div class="artist">Orbit · Native Noctalia</div></div>${playing ? waveform : ''}</div><div class="seek"><span></span></div><div class="timestamps"><span>1:21</span><span>3:38</span></div><div class="transport"><button class="icon-button" data-action="previous-track" aria-label="Previous track">${svg(back)}</button><button class="icon-button play" data-action="play" aria-label="${playing?'Pause':'Resume playback'}">${svg(playing?pause:play)}</button><button class="icon-button" data-action="next-track" aria-label="Next track">${svg(forward)}</button></div>`;
+      document.querySelector('#proposal-caption').textContent = 'The title changes the active panel. Artwork, waveform and existing playback controls remain the focus. Inactive privacy and recording indicators disappear.';
+    }
+    if (current === 'downloads') {
+      content.innerHTML = `<div class="song"><div class="activity-symbol blue">${svg(downloadSymbol)}</div><div class="track"><div class="track-title">Baldur's Gate 3</div><div class="artist">Downloading · Steam</div></div></div><div class="indeterminate" aria-label="Download in progress, total unknown"><span></span></div><button class="secondary-action" data-action="history">Recent transfers ${svg('<path d="m9 6 6 6-6 6"/>')}</button>`;
+      document.querySelector('#proposal-caption').textContent = 'This panel appears because a transfer is active. Unknown totals stay indeterminate. History remains a secondary action.';
+    }
+    if (current === 'timer') {
+      if (timer.active) {
+        const finished = remainingTime() <= 0;
+        const pauseControl = finished ? '' : `<button data-action="timer-pause" aria-label="${timer.running?'Pause':'Resume'} timer">${svg(timer.running?pause:play)}</button>`;
+        content.innerHTML = `<div class="live-row"><div class="activity-symbol orange">${svg(timerSymbol)}</div><div><div class="live-value orange" id="timer-value"></div><div class="artist" id="timer-label"></div></div><div class="live-controls">${pauseControl}<button data-action="timer-cancel" aria-label="${finished?'Dismiss':'Cancel'} timer">${svg('<path d="m7 7 10 10M17 7 7 17"/>')}</button></div></div><div class="timer-progress" id="timer-progress" role="progressbar" aria-label="Time remaining" aria-valuemin="0" aria-valuemax="100"><span></span></div>`;
+        document.querySelector('#timer-label').textContent = `${timer.label}${finished ? ' · Finished' : timer.running ? '' : ' · Paused'}`;
+        updateTimerText();
+      } else {
+        content.innerHTML = `<form class="timer-form" id="timer-form"><label>Timer name<input name="label" value="Tea timer" maxlength="40" autocomplete="off"></label><div class="duration-row"><label>Minutes<input name="minutes" type="number" min="1" max="1440" step="1" value="5" required></label><button class="start-timer" type="submit">Start</button></div></form>`;
+      }
+      document.querySelector('#proposal-caption').textContent = view === 'full-timer' ? 'Create a timer only in this full expanded panel. After starting, switch the preview back to Hover card to follow its progress and pause or resume it.' : 'An existing timer, with progress and pause/resume or cancel. After cancellation it leaves the hover cycle. There is no Start or Restart action here.';
+    }
+    if (current === 'recording') {
+      content.innerHTML = `<div class="live-row"><div class="activity-symbol red">${svg(recordSymbol)}</div><div><div class="live-value">02:18</div><div class="artist">Screen recording</div></div><div class="live-controls"><button data-action="record-stop" aria-label="Stop recording">${svg('<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>')}</button></div></div>`;
+      document.querySelector('#proposal-caption').textContent = 'This sample recording is already active. Stop removes both its panel and red indicator. Starting capture belongs to a keyboard shortcut or the keyboard-opened screenshot panel.';
+    }
+    if (current === 'privacy') {
+      content.innerHTML = `<div class="song"><div class="activity-symbol ${privacy === 'mic' ? 'orange' : ''}">${privacy === 'mic' ? svg('<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>') : svg('<rect x="3" y="6" width="13" height="12" rx="3"/><path d="m16 10 5-3v10l-5-3"/>')}</div><div class="track"><div class="track-title">${privacy === 'mic' ? 'Microphone in use' : 'Camera and microphone'}</div><div class="artist">Sample call · Active</div></div></div>`;
+      document.querySelector('#proposal-caption').textContent = 'One green indicator represents camera use, including camera with microphone. Orange is microphone only. The contextual card keeps device details available.';
+    }
+    if (contentHadFocus) {
+      const replacement = focusedAction ? [...content.querySelectorAll('[data-action]')].find(button => button.dataset.action === focusedAction) : null;
+      const heading = document.querySelector('#heading');
+      const fallback = !heading.disabled ? heading : content.querySelector('button, input');
+      (replacement || fallback)?.focus({preventScroll:true});
+    }
+  }
+  function popup(message) {
+    popupTrigger = document.activeElement;
+    document.querySelector('#popover-content').textContent = message;
+    document.querySelector('#popover').hidden = false;
+    document.querySelector('#close-popover').focus();
+  }
+  function closePopup() {
+    document.querySelector('#popover').hidden = true;
+    if (popupTrigger?.isConnected) popupTrigger.focus({preventScroll:true});
+    popupTrigger = null;
+  }
+  document.querySelector('#density').addEventListener('change', event => {
+    const compact = event.target.value === 'compact';
+    document.querySelector('#island').classList.toggle('compact', compact);
+    document.querySelector('#size-label').textContent = compact ? '· Compact' : '· Comfortable';
+  });
+  document.querySelector('#view').addEventListener('change', event => {
+    view = event.target.value;
+    show(current);
+  });
+  document.querySelector('#heading').addEventListener('click', () => {
+    if (view !== 'hover') return;
+    const panels = activePanels();
+    show(panels[(panels.indexOf(current)+1) % panels.length]);
+  });
+  document.querySelector('#scenario').addEventListener('change', event => {
+    const scenario = event.target.value;
+    playing = true;
+    downloadsActive = scenario === 'everyday';
+    recordingActive = scenario === 'recording';
+    const remaining = scenario === 'timer' ? 272000 : 0;
+    timer = {active:scenario==='timer', running:scenario==='timer', remaining, total:300000, deadline:performance.now()+remaining, label:'Tea timer'};
+    view = 'hover';
+    document.querySelector('#view').value = view;
+    show(scenario === 'timer' ? 'timer' : scenario === 'recording' ? 'recording' : 'media');
+  });
+  document.querySelector('#privacy').addEventListener('change', event => {
+    privacy = event.target.value;
+    show(current);
+  });
+  document.querySelector('#notifications').addEventListener('click', () => popup('Notification Centre opens here. The bell stays beside privacy indicators and the tray.'));
+  document.querySelector('#tray').addEventListener('click', () => popup('System tray opens here: Steam, network and audio apps. This control stays beside the status indicators.'));
+  document.querySelector('#close-popover').addEventListener('click', closePopup);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !document.querySelector('#popover').hidden) closePopup(); });
+  content.addEventListener('submit', event => {
+    if (event.target.id !== 'timer-form') return;
+    event.preventDefault();
+    if (view !== 'full-timer' || !event.target.reportValidity()) return;
+    const values = new FormData(event.target);
+    const minutes = Number(values.get('minutes'));
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) return;
+    const remaining = minutes * 60000;
+    timer = {active:true, running:true, remaining, total:remaining, deadline:performance.now()+remaining, label:String(values.get('label')).trim() || 'Timer'};
+    show('timer');
+    content.querySelector('[data-action="timer-pause"]')?.focus();
+  });
+  content.addEventListener('click', event => {
+    const action = event.target.closest('[data-action]')?.dataset.action;
+    if (action === 'play') { playing = !playing; show('media'); }
+    else if (action === 'timer-pause' && timer.active && remainingTime() > 0) {
+      timer.remaining = remainingTime();
+      timer.running = !timer.running;
+      timer.deadline = performance.now() + timer.remaining;
+      show('timer');
+    } else if (action === 'timer-cancel') {
+      timer.active = false;
+      timer.running = false;
+      show();
+    } else if (action === 'record-stop') {
+      recordingActive = false;
+      show();
+    } else if (action === 'history') popup('Recent transfers: Darktide finished; Hades II needs more disk space; Stardew Valley finished. History opens as a separate view.');
+    else if (action) popup('Preview control only. No real playback, timer or recording is affected.');
+  });
+  setInterval(() => {
+    if (!timer.active || !timer.running) return;
+    if (remainingTime() <= 0) {
+      timer.running = false;
+      timer.remaining = 0;
+      if (current === 'timer') show('timer');
+    } else updateTimerText();
+  }, 250);
+  show('media');
+</script>
+</body>
+</html>
