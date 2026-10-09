@@ -188,6 +188,45 @@ int main() {
     ok = check(!manager.updateBody(0xDEADBEEF, "nobody"), "updateBody accepted an unknown id") && ok;
   }
 
+  // A decoded preview updates in place and must never resurrect a dismissed result.
+  {
+    const auto id = manager.addOrReplace(
+        NotificationRequest{
+            .appName = "recording-test",
+            .summary = "Recording saved",
+            .timeout = 5000,
+            .origin = NotificationOrigin::Internal,
+            .persistInHistory = true,
+        }
+    );
+    manager.markNotificationHistorySeen();
+    const auto before = historyEntry(manager, id)->notification;
+    (void)manager.addOrReplace(NotificationRequest{.appName = "other-app", .summary = "after-recording"});
+    int updates = 0;
+    const auto callback = manager.addEventCallback([&](const Notification& n, NotificationEvent event) {
+      if (n.id == id && event == NotificationEvent::Updated)
+        ++updates;
+    });
+    NotificationImageData image{.width = 1, .height = 1, .rowStride = 4, .data = {255, 0, 0, 255}};
+    ok = check(manager.updateImage(id, image), "preview rejected a live result") && ok;
+    const auto* after = historyEntry(manager, id);
+    ok = check(after && after->notification.imageData == image && after->seen, "preview changed history seen state")
+        && ok;
+    ok = check(
+             after
+                 && after->notification.receivedTime == before.receivedTime
+                 && after->notification.expiryTime == before.expiryTime,
+             "preview restarted the result lifetime"
+         )
+        && ok;
+    ok = check(manager.history().back().notification.summary == "after-recording", "preview reordered history") && ok;
+    ok = check(manager.updateImage(id, image) && updates == 1, "same preview sent another update") && ok;
+    manager.close(id, CloseReason::Dismissed);
+    ok = check(!manager.updateImage(id, image) && updates == 1, "preview resurrected a dismissed result") && ok;
+    ok = check(!manager.updateImage(0xDEADBEEF, image), "preview accepted an unknown result") && ok;
+    manager.removeEventCallback(callback);
+  }
+
   // External notifications are unaffected.
   (void)manager.addOrReplace(NotificationRequest{.appName = "other-app", .summary = "external"});
   ok = check(historyContains(manager, "external"), "an external notification stopped being persisted") && ok;

@@ -11,9 +11,15 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <optional>
 #include <unordered_map>
 
 namespace island {
+  inline std::string batteryAddress(std::string address) {
+    std::ranges::transform(address, address.begin(), [](unsigned char c) { return std::tolower(c); });
+    return address;
+  }
+
   // Key connection age by BlueZ identity, independently of when battery data arrives.
   class BatteryConnections {
   public:
@@ -28,11 +34,16 @@ namespace island {
         });
       });
       for (const auto& device : devices)
-        if (device.connected)
-          m_connected.try_emplace(device.path, Connection{now, PreviewTarget{std::string(focusedOutput)}});
+        if (device.connected) {
+          const auto [entry, added] =
+              m_connected.try_emplace(device.path, Connection{now, PreviewTarget{std::string(focusedOutput)}});
+          if (added)
+            m_latest = Event{device.path, true, entry->second};
+        }
     }
     void updatePower(
-        const std::vector<UPowerDeviceInfo>& devices, Clock::time_point now, std::string_view focusedOutput = {}
+        const std::vector<UPowerDeviceInfo>& devices, Clock::time_point now, std::string_view focusedOutput = {},
+        const std::vector<BluetoothDeviceInfo>& bluetooth = {}
     ) {
       std::erase_if(m_power, [&](const auto& entry) {
         return std::ranges::none_of(devices, [&](const auto& device) {
@@ -46,9 +57,15 @@ namespace island {
         auto [entry, added] = m_power.try_emplace(device.path);
         auto& connection = entry->second;
         const bool system = device.isLaptopBattery() || device.type == UPowerDeviceType::Ups;
-        if ((added && !system) || (plugged.value_or(false) && !connection.plugged))
+        if ((added && !system) || (plugged.value_or(false) && !connection.plugged)) {
           connection.preview = Connection{now, PreviewTarget{std::string(focusedOutput)}};
-        else if (plugged == false && connection.plugged)
+          // BlueZ owns a shared wireless device's event age; late UPower data is not a new connection.
+          const bool wireless = !device.serial.empty() && std::ranges::any_of(bluetooth, [&](const auto& bt) {
+            return batteryAddress(bt.address) == batteryAddress(device.serial);
+          });
+          if (!system && !wireless)
+            m_latest = Event{device.path, false, *connection.preview};
+        } else if (plugged == false && connection.plugged)
           connection.preview.reset();
         // A temporarily unknown state must not manufacture another charger connection.
         if (plugged)
@@ -61,7 +78,28 @@ namespace island {
       for (auto& [path, connection] : m_power)
         if (connection.preview)
           connection.preview->target.reconcile(available, focused);
+      if (m_latest)
+        m_latest->connection.target.reconcile(available, focused);
     }
+    struct Preview {
+      std::string path;
+      bool bluetooth;
+      Clock::time_point started;
+    };
+    std::optional<Preview>
+    preview(Clock::time_point now, int seconds, std::string_view setting = "all", std::string_view output = {}) const {
+      // Retain the latest identity after removal/expiry so older connections never replay.
+      if (!m_latest
+          || now >= m_latest->connection.started + std::chrono::seconds(seconds)
+          || !m_latest->connection.target.matches(setting, output))
+        return std::nullopt;
+      const auto active = started(m_latest->path, now, seconds, setting, output);
+      return active == m_latest->connection.started
+          ? std::optional{Preview{m_latest->path, m_latest->bluetooth, *active}}
+          : std::nullopt;
+    }
+    // Opening the card consumes its preview on every monitor, leaving the glow's age intact.
+    void dismissPreview() { m_latest.reset(); }
     std::optional<Clock::time_point> started(
         const std::string& path, Clock::time_point now, int seconds, std::string_view setting, std::string_view output
     ) const {
@@ -110,6 +148,12 @@ namespace island {
       bool plugged = false;
     };
     std::unordered_map<std::string, PowerConnection> m_power;
+    struct Event {
+      std::string path;
+      bool bluetooth;
+      Connection connection;
+    };
+    std::optional<Event> m_latest;
   };
 
   struct Battery {
@@ -137,11 +181,6 @@ namespace island {
       if (battery.glowStarted && (!latest || battery.glowStarted > latest->glowStarted))
         latest = &battery;
     return latest;
-  }
-
-  inline std::string batteryAddress(std::string address) {
-    std::ranges::transform(address, address.begin(), [](unsigned char c) { return std::tolower(c); });
-    return address;
   }
 
   inline int bluetoothBatteryThreshold(const BatteryConfig& config, const UPowerDeviceInfo& device) {
@@ -239,7 +278,10 @@ namespace island {
       return width;
     if (view == View::Rest)
       return width + 88 + (unread ? 32 : 0);
-    if (view == View::Activity || view == View::DownloadActivity || view == View::TimerActivity)
+    if (view == View::Activity
+        || view == View::DownloadActivity
+        || view == View::TimerActivity
+        || view == View::AwakeActivity)
       return width + 64;
     return width;
   }

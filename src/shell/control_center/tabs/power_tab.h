@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/timer_manager.h"
 #include "shell/control_center/tab.h"
 
 #include <cstdint>
@@ -14,16 +15,18 @@ class Renderer;
 class Segmented;
 class Toggle;
 class UPowerService;
+class IdleInhibitor;
 class PowerProfilesService;
 class PowerTabTestAccess;
 struct UPowerChargeLimitState;
 
 class PowerTab : public Tab {
 public:
-  PowerTab(UPowerService* upower, PowerProfilesService* powerProfiles);
+  PowerTab(UPowerService* upower, PowerProfilesService* powerProfiles, IdleInhibitor* idle = nullptr);
 
   std::unique_ptr<Flex> create() override;
   void onClose() override;
+  void setActive(bool active) override;
 
 private:
   friend class PowerTabTestAccess;
@@ -67,6 +70,9 @@ private:
 
   UPowerService* m_upower = nullptr;
   PowerProfilesService* m_powerProfiles = nullptr;
+  IdleInhibitor* m_idle = nullptr;
+  Label* m_awakeStatus = nullptr;
+  Timer m_countdownRefresh;
 
   Flex* m_root = nullptr;
 

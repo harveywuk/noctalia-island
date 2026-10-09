@@ -3,6 +3,7 @@
 #include "config/config_types.h"
 #include "core/timer_manager.h"
 #include "notification.h"
+#include "notification/focus_state.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -100,6 +101,9 @@ public:
   // itself back to the top of the notification list or reset its own age. Returns false once the
   // notification is no longer live, which is how such a caller learns to stop.
   bool updateBody(uint32_t id, std::string body);
+  // Attaches a background-generated preview without restarting the notification or its expiry.
+  // Returns false if the user has already dismissed it.
+  bool updateImage(uint32_t id, NotificationImageData image);
 
   void setActionInvokeCallback(ActionInvokeCallback callback);
   // Actions on internally generated notifications are handled in-process: there is no D-Bus client
@@ -151,6 +155,13 @@ public:
   void setDoNotDisturb(bool enabled);
   [[nodiscard]] bool doNotDisturb() const noexcept;
   [[nodiscard]] bool toggleDoNotDisturb();
+  void configureFocus(const FocusConfig& config);
+  void setRecordingActive(bool active);
+  bool selectFocus(std::string_view id);
+  [[nodiscard]] const std::string& focusId() const { return m_appliedFocus; }
+  [[nodiscard]] bool focusAutomatic() const { return m_recordingFocus.active() || m_focus.automatic(); }
+  [[nodiscard]] bool dndSuppresses(const Notification& notification) const;
+  std::function<void(const std::string&)> focusFeedback;
   void setStateCallback(StateCallback callback);
   void setSoundPlayer(class SoundPlayer* soundPlayer);
 
@@ -165,6 +176,12 @@ public:
   void flushPersistedHistory();
 
 private:
+  void updateFocus(bool announce = true);
+  focus::State m_focus;
+  focus::RecordingOverride m_recordingFocus;
+  Timer m_focusTimer;
+  bool m_manualDnd = false;
+  std::string m_appliedFocus;
   void cleanupOldHistoryEntries();
   void upsertHistory(const Notification& notification, bool active, std::optional<CloseReason> closeReason);
   void markHistoryClosed(uint32_t id, CloseReason reason);

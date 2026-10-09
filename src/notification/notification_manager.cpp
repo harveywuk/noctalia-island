@@ -237,6 +237,26 @@ bool NotificationManager::updateBody(uint32_t id, std::string body) {
   return true;
 }
 
+bool NotificationManager::updateImage(uint32_t id, NotificationImageData image) {
+  const auto it = m_idToIndex.find(id);
+  if (it == m_idToIndex.end())
+    return false;
+  Notification& n = m_notifications[it->second];
+  if (n.imageData == image)
+    return true;
+  n.imageData = std::move(image);
+  if (const auto entry = m_historyIndex.find(id); entry != m_historyIndex.end()) {
+    m_history[entry->second].notification.imageData = n.imageData;
+    m_history[entry->second].eventSerial = ++m_changeSerial;
+    schedulePersistHistory();
+  } else {
+    ++m_changeSerial;
+  }
+  for (auto& [token, cb] : m_eventCallbacks)
+    cb(n, NotificationEvent::Updated);
+  return true;
+}
+
 int NotificationManager::addEventCallback(EventCallback callback) {
   int token = m_nextCallbackToken++;
   m_eventCallbacks.emplace_back(token, std::move(callback));
@@ -437,7 +457,7 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
       cb(n, NotificationEvent::Added);
     }
   }
-  const bool dndAllowsSound = !m_doNotDisturb || dndPolicy == NotificationDndPolicy::Bypass;
+  const bool dndAllowsSound = !dndSuppresses(n);
   if (dndAllowsSound && m_soundPlayer != nullptr && dispatch.playSound) {
     m_soundPlayer->play("message-new-instant");
   }
@@ -833,13 +853,78 @@ uint32_t NotificationManager::suppressExternal(std::string_view appName, Urgency
 }
 
 void NotificationManager::setDoNotDisturb(bool enabled) {
-  if (m_doNotDisturb == enabled) {
-    return;
-  }
-  m_doNotDisturb = enabled;
-  if (m_stateCallback) {
+  m_recordingFocus.userChangedFocus();
+  const auto now = std::time(nullptr);
+  std::tm local{};
+  localtime_r(&now, &local);
+  m_focus.select("off", local);
+  m_manualDnd = enabled;
+  updateFocus();
+}
+
+void NotificationManager::configureFocus(const FocusConfig& config) {
+  m_recordingFocus.configure(config.whileRecording);
+  m_focus.configure(config);
+  updateFocus();
+  if (config.work.scheduleEnabled || config.gaming.scheduleEnabled || config.sleep.scheduleEnabled)
+    m_focusTimer.startRepeating(std::chrono::seconds(15), [this] { updateFocus(); });
+  else
+    m_focusTimer.stop();
+  // Exception edits must also dismiss banners no longer allowed by the current profile.
+  if (m_stateCallback)
     m_stateCallback();
+}
+
+bool NotificationManager::selectFocus(std::string_view id) {
+  const auto now = std::time(nullptr);
+  std::tm local{};
+  localtime_r(&now, &local);
+  if (!m_focus.select(id, local))
+    return false;
+  m_recordingFocus.userChangedFocus();
+  m_manualDnd = false;
+  updateFocus();
+  return true;
+}
+
+void NotificationManager::setRecordingActive(bool active) {
+  m_recordingFocus.setRecording(active);
+  // The recording activity and saved preview already provide feedback. An OSD
+  // here would briefly cover them and could appear in the first captured frames.
+  updateFocus(false);
+}
+
+void NotificationManager::updateFocus(bool announce) {
+  const auto now = std::time(nullptr);
+  std::tm local{};
+  localtime_r(&now, &local);
+  m_focus.update(local);
+  if (!m_focus.active().empty())
+    m_manualDnd = false;
+  const std::string id = m_recordingFocus.active() ? "recording" : m_focus.active();
+  const bool dnd = m_manualDnd || !id.empty();
+  const bool focusChanged = m_appliedFocus != id;
+  const bool changed = focusChanged || m_doNotDisturb != dnd;
+  m_appliedFocus = id;
+  m_doNotDisturb = dnd;
+  if (changed && m_stateCallback)
+    m_stateCallback();
+  if (announce && focusChanged && focusFeedback)
+    focusFeedback(m_appliedFocus);
+}
+
+bool NotificationManager::dndSuppresses(const Notification& n) const {
+  if (!m_doNotDisturb || n.dndPolicy == NotificationDndPolicy::Bypass)
+    return false;
+  if (m_recordingFocus.active())
+    return n.urgency != Urgency::Critical;
+  if (const auto* active = m_focus.current()) {
+    if (active->allowCritical && n.urgency == Urgency::Critical)
+      return false;
+    if (focus::allowsApp(*active, n.appName, n.desktopEntry.value_or("")))
+      return false;
   }
+  return true;
 }
 
 bool NotificationManager::doNotDisturb() const noexcept { return m_doNotDisturb; }

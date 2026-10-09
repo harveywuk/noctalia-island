@@ -568,13 +568,22 @@ void NotificationToast::hideDndSuppressed() { hideBanners(true); }
 void NotificationToast::hideAllBanners() { hideBanners(false); }
 
 void NotificationToast::hideBanners(bool dndSuppressedOnly) {
-  std::erase_if(m_pendingAdds, [dndSuppressedOnly](const Notification& pending) {
-    return !dndSuppressedOnly || pending.dndPolicy == NotificationDndPolicy::Respect;
+  std::erase_if(m_pendingAdds, [this, dndSuppressedOnly](const Notification& pending) {
+    return !dndSuppressedOnly || (m_notifications && m_notifications->dndSuppresses(pending));
   });
 
   for (std::size_t index = m_entries.size(); index-- > 0;) {
     const auto& entry = m_entries[index];
-    if (dndSuppressedOnly && entry.dndPolicy != NotificationDndPolicy::Respect) {
+    if (dndSuppressedOnly
+        && (!m_notifications
+            || !m_notifications->dndSuppresses(
+                Notification{
+                    .dndPolicy = entry.dndPolicy,
+                    .appName = entry.appName,
+                    .urgency = entry.urgency,
+                    .desktopEntry = entry.desktopEntry
+                }
+            ))) {
       continue;
     }
 
@@ -616,9 +625,7 @@ void NotificationToast::onNotificationEvent(const Notification& n, NotificationE
     return;
   switch (event) {
   case NotificationEvent::Added:
-    if (m_notifications != nullptr
-        && m_notifications->doNotDisturb()
-        && n.dndPolicy == NotificationDndPolicy::Respect) {
+    if (m_notifications != nullptr && m_notifications->dndSuppresses(n)) {
       break;
     }
     m_pendingAdds.push_back(n);
@@ -839,11 +846,10 @@ void NotificationToast::flushPendingAdds() {
   if (m_pendingAdds.empty()) {
     return;
   }
-  const bool dndEnabled = m_notifications != nullptr && m_notifications->doNotDisturb();
   auto pending = std::move(m_pendingAdds);
   m_pendingAdds.clear();
   for (const auto& n : pending) {
-    if (!dndEnabled || n.dndPolicy != NotificationDndPolicy::Respect) {
+    if (!m_notifications || !m_notifications->dndSuppresses(n)) {
       addPopup(n);
     }
   }
@@ -2733,13 +2739,12 @@ InputArea* NotificationToast::buildCard(
           .maxLines = 1,
           .textAlign = TextAlign::End,
           .visible = !entry.hovered,
-          .configure =
-              [cornerX, scale, &renderer](Label& label) {
-                label.measure(renderer);
-                label.setPosition(
-                    cornerX, cardInnerPad(scale) + std::round((closeButtonSize(scale) - label.height()) * 0.5F)
-                );
-              },
+          .configure = [cornerX, scale, &renderer](Label& label) {
+            label.measure(renderer);
+            label.setPosition(
+                cornerX, cardInnerPad(scale) + std::round((closeButtonSize(scale) - label.height()) * 0.5F)
+            );
+          },
       })
   );
   cardRoot->addChild(

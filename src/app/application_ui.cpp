@@ -350,6 +350,9 @@ void Application::initLockScreenAndSession() {
   });
   m_lockScreen.setSessionHooks(
       [this]() {
+        m_screenshotService.cancelTextCapture();
+        m_screenshotService.cancelMenuCapture();
+        m_island.closeCaptureMenu();
         m_idleGraceOverlay.hide();
         m_lockscreenWidgetsController.onLockStateChanged();
         m_idleManager.setSessionLocked(true);
@@ -792,6 +795,14 @@ void Application::initNotificationAndOsd() {
   m_island.setCalendar(&m_calendarService);
   m_panelManager.setIslandHost(&m_island);
   m_screenshotService.setIslandHost(&m_island);
+  m_island.beginCapture = [this](capture::LaunchOptions options) {
+    return m_screenshotService.beginMenuCapture(options);
+  };
+  m_island.cancelCapture = [this] { m_screenshotService.cancelMenuCapture(); };
+  m_screenshotService.captureCountdown = [this](bool recording, int remaining, const std::string& output) {
+    m_island.setCaptureCountdown(recording, remaining, output);
+  };
+  m_configService.addReloadCallback([this] { m_screenshotService.cancelMenuCapture(); });
   m_island.closeHostedPanel = [this] {
     m_screenshotService.releaseIslandCapture();
     if (m_panelManager.isIslandOpen())
@@ -842,6 +853,7 @@ void Application::initNotificationAndOsd() {
   m_configService.addReloadCallback([this]() { m_notificationToast.onConfigReload(); });
   auto applyNotificationFilterConfig = [this]() {
     m_notificationManager.setFilters(m_configService.config().notification.filters);
+    m_notificationManager.configureFocus(m_configService.config().notification.focus);
   };
   auto applyHistoryRetention = [this]() {
     m_notificationManager.setHistoryRetentionHours(m_configService.config().notification.historyRetentionHours);
@@ -860,6 +872,17 @@ void Application::initNotificationAndOsd() {
 
   TooltipManager::instance().initialize(m_wayland, &m_configService, &m_renderContext);
   m_osdOverlay.initialize(m_wayland, &m_configService, &m_renderContext);
+  m_notificationManager.focusFeedback = [this](const std::string& id) {
+    if (!m_lockScreen.isActive())
+      m_osdOverlay.show(
+          OsdContent{
+              .kind = OsdKind::Script,
+              .icon = id.empty() ? "focus-off" : "focus-on",
+              .value = i18n::tr(id.empty() ? "utilities.focus.off-feedback" : "utilities.focus." + id),
+              .showProgress = false
+          }
+      );
+  };
   m_windowSwitcher.initialize(
       m_wayland, &m_renderContext, m_compositorPlatform, &m_configService, &m_asyncTextureCache
   );
@@ -933,6 +956,13 @@ void Application::initNotificationAndOsd() {
   m_audioOsd.bindOverlay(m_osdOverlay);
   m_audioOsd.setSoundPlayer(m_soundPlayer.get());
   m_screenshotService.setSoundPlayer(m_soundPlayer.get());
+  m_screenshotService.textCaptureAllowed = [this] { return !m_lockScreen.isActive(); };
+  m_screenshotService.textCaptureFeedback = [this](const std::string& value) {
+    if (!m_lockScreen.isActive())
+      m_osdOverlay.show(
+          OsdContent{.kind = OsdKind::Script, .icon = "text-recognition", .value = value, .showProgress = false}
+      );
+  };
   if (m_pipewireService != nullptr) {
     m_audioOsd.primeFromService(*m_pipewireService);
   }

@@ -106,10 +106,12 @@ namespace noctalia::config::schema {
         field(&IslandConfig::trackPreviewSeconds, "track_preview_seconds", Range<std::int64_t>{0, 30}),
         field(&IslandConfig::pausedMediaSeconds, "paused_media_seconds", Range<std::int64_t>{0, 30}),
         field(&IslandConfig::bluetoothPreviewSeconds, "bluetooth_preview_seconds", Range<std::int64_t>{0, 30}),
+        field(&IslandConfig::networkPreviewSeconds, "network_preview_seconds", Range<std::int64_t>{0, 30}),
         field(&IslandConfig::revealOnTrackChange, "reveal_on_track_change"),
         field(&IslandConfig::upNextMinutes, "up_next_minutes", Range<std::int64_t>{0, 60}),
         field(&IslandConfig::trackPreviewMonitor, "track_preview_monitor"),
         field(&IslandConfig::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
+        field(&IslandConfig::networkPreviewMonitor, "network_preview_monitor"),
         field(&IslandConfig::volumeBarHeight, "volume_bar_height", Range<float>{5.0F, 24.0F}),
         field(&IslandConfig::volumeShowPercentage, "volume_show_percentage"),
         field(&IslandConfig::glass, "glass"),
@@ -308,9 +310,32 @@ namespace noctalia::config::schema {
     return s;
   }
 
+  const Schema<FocusProfileConfig>& focusProfileSchema() {
+    static const Schema<FocusProfileConfig> s = {
+        field(&FocusProfileConfig::allowedApps, "allowed_apps"),
+        field(&FocusProfileConfig::allowCritical, "allow_critical"),
+        field(&FocusProfileConfig::scheduleEnabled, "schedule_enabled"),
+        field(&FocusProfileConfig::startMinute, "start_minute", Range<std::int64_t>{0, 1439}),
+        field(&FocusProfileConfig::endMinute, "end_minute", Range<std::int64_t>{0, 1439}),
+        field(&FocusProfileConfig::days, "days", Range<std::int64_t>{0, 127}),
+    };
+    return s;
+  }
+
+  const Schema<FocusConfig>& focusSchema() {
+    static const Schema<FocusConfig> s = {
+        field(&FocusConfig::whileRecording, "while_recording"),
+        subTable(&FocusConfig::work, "work", focusProfileSchema()),
+        subTable(&FocusConfig::gaming, "gaming", focusProfileSchema()),
+        subTable(&FocusConfig::sleep, "sleep", focusProfileSchema()),
+    };
+    return s;
+  }
+
   const Schema<NotificationConfig>& notificationSchema() {
     static const Schema<NotificationConfig> s = {
         field(&NotificationConfig::enableDaemon, "enable_daemon"),
+        subTable(&NotificationConfig::focus, "focus", focusSchema()),
         field(&NotificationConfig::showAppName, "show_app_name"),
         field(&NotificationConfig::showActions, "show_actions"),
         field(&NotificationConfig::position, "position"),
@@ -1950,6 +1975,8 @@ namespace noctalia::config::schema {
           field(&ShellConfig::ScreenshotConfig::pipeCommand, "pipe_command"),
           field(&ShellConfig::ScreenshotConfig::directory, "directory"),
           field(&ShellConfig::ScreenshotConfig::filenamePattern, "filename_pattern"),
+          field(&ShellConfig::ScreenshotConfig::textLanguages, "text_languages"),
+          field(&ShellConfig::ScreenshotConfig::textDataDirectory, "text_data_directory"),
       };
       return s;
     }
@@ -2890,9 +2917,13 @@ namespace noctalia::config::schema {
         optionalIntField(
             &IslandMonitorOverride::bluetoothPreviewSeconds, "bluetooth_preview_seconds", Range<std::int64_t>{0, 30}
         ),
+        optionalIntField(
+            &IslandMonitorOverride::networkPreviewSeconds, "network_preview_seconds", Range<std::int64_t>{0, 30}
+        ),
         optionalBoolField(&IslandMonitorOverride::revealOnTrackChange, "reveal_on_track_change"),
         field(&IslandMonitorOverride::trackPreviewMonitor, "track_preview_monitor"),
         field(&IslandMonitorOverride::bluetoothPreviewMonitor, "bluetooth_preview_monitor"),
+        field(&IslandMonitorOverride::networkPreviewMonitor, "network_preview_monitor"),
         optionalFloatField(&IslandMonitorOverride::volumeBarHeight, "volume_bar_height", Range<float>{5, 24}),
         optionalBoolField(&IslandMonitorOverride::volumeShowPercentage, "volume_show_percentage"),
         optionalBoolField(&IslandMonitorOverride::glass, "glass"),

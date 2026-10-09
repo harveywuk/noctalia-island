@@ -319,6 +319,13 @@ namespace {
         changed = true;
       }
     }
+    if (!mergeOnly || dictHas(props, PW_KEY_STREAM_MONITOR)) {
+      const bool monitor = isTruthyPipeWireProp(dictGet(props, PW_KEY_STREAM_MONITOR));
+      if (nd.streamMonitor != monitor) {
+        nd.streamMonitor = monitor;
+        changed = true;
+      }
+    }
     return changed;
   }
 
@@ -686,7 +693,9 @@ namespace {
   }
 
   [[nodiscard]] bool isAudioCaptureConsumer(const PipeWireService::NodeData& nd) {
-    return std::ranges::contains(kAudioCaptureConsumerClasses, nd.mediaClass) && !nd.streamCaptureSink;
+    return std::ranges::contains(kAudioCaptureConsumerClasses, nd.mediaClass)
+        && !nd.streamCaptureSink
+        && !nd.streamMonitor;
   }
 
   [[nodiscard]] bool isCameraSource(const PipeWireService::NodeData& nd) {
@@ -1226,6 +1235,7 @@ void PipeWireService::onRegistryGlobal(std::uint32_t id, const char* type, std::
     nd->id = id;
     nd->serial = parseUint64Or(dictGet(props, PW_KEY_OBJECT_SERIAL));
     nd->name = dictGet(props, PW_KEY_NODE_NAME);
+    nd->bluetoothAddress = dictGet(props, "api.bluez5.address");
     nd->description = dictGet(props, PW_KEY_NODE_DESCRIPTION);
     if (nd->description.empty()) {
       nd->description = dictGet(props, PW_KEY_NODE_NICK);
@@ -1409,6 +1419,7 @@ void PipeWireService::onNodeInfo(std::uint32_t id, const pw_node_info* info) {
   const bool wasPrivacyCandidate = isPrivacyCandidateClass(nd.mediaClass);
   bool filterPropsChanged = false;
   bool profileDeviceChanged = false;
+  bool bluetoothIdentityChanged = false;
 
   if (info->props != nullptr) {
     std::string mediaClass = dictGet(info->props, PW_KEY_MEDIA_CLASS);
@@ -1423,6 +1434,11 @@ void PipeWireService::onNodeInfo(std::uint32_t id, const pw_node_info* info) {
     std::string name = dictGet(info->props, PW_KEY_NODE_NAME);
     if (!name.empty()) {
       nd.name = name;
+    }
+    if (dictHas(info->props, "api.bluez5.address")) {
+      auto address = dictGet(info->props, "api.bluez5.address");
+      bluetoothIdentityChanged = address != nd.bluetoothAddress;
+      nd.bluetoothAddress = std::move(address);
     }
     std::string appName = dictGet(info->props, "application.name");
     if (appName.empty()) {
@@ -1493,6 +1509,7 @@ void PipeWireService::onNodeInfo(std::uint32_t id, const pw_node_info* info) {
     recomputeEffectiveMute(nd);
   }
   if (profileDeviceChanged
+      || bluetoothIdentityChanged
       || (isStream && (!wasStreamReady || filterPropsChanged))
       || wasProgramStream != isStream
       || wasPrivacyCandidate
@@ -1859,7 +1876,8 @@ void PipeWireService::rebuildState() {
   };
 
   auto addCapture = [&nextPrivacy](
-                        PrivacyCaptureKind kind, std::uint32_t nodeId, std::string appName, std::string binary = {}
+                        PrivacyCaptureKind kind, std::uint32_t nodeId, std::string appName, std::string binary = {},
+                        std::uint32_t sourceId = 0
                     ) {
     if (appName.empty()) {
       return false;
@@ -1868,6 +1886,10 @@ void PipeWireService::rebuildState() {
       return capture.kind == kind && capture.appName == appName;
     });
     if (duplicate != nextPrivacy.captures.end()) {
+      if (duplicate->binary.empty())
+        duplicate->binary = std::move(binary);
+      if (sourceId && !std::ranges::contains(duplicate->sourceIds, sourceId))
+        duplicate->sourceIds.push_back(sourceId);
       return false;
     }
     nextPrivacy.captures.push_back(
@@ -1876,6 +1898,7 @@ void PipeWireService::rebuildState() {
             .nodeId = nodeId,
             .appName = std::move(appName),
             .binary = std::move(binary),
+            .sourceIds = sourceId ? std::vector{sourceId} : std::vector<std::uint32_t>{},
         }
     );
     return true;
@@ -1885,13 +1908,16 @@ void PipeWireService::rebuildState() {
     if (node == nullptr || !isAudioCaptureConsumer(*node)) {
       return false;
     }
-    return addCapture(PrivacyCaptureKind::Microphone, node->id, privacyAppName(*node));
+    return addCapture(
+        PrivacyCaptureKind::Microphone, node->id, privacyAppName(*node), lowercaseAscii(node->applicationBinary)
+    );
   };
 
   for (const auto& [id, nd] : m_nodes) {
     AudioNode node;
     node.id = id;
     node.name = nd->name;
+    node.bluetoothAddress = nd->bluetoothAddress;
     node.description = nd->description;
     node.applicationName = nd->applicationName;
     node.applicationId = nd->applicationId;
@@ -1963,7 +1989,10 @@ void PipeWireService::rebuildState() {
       continue;
     }
 
-    addCapture(*kind, consumer->id, privacyAppName(*consumer), lowercaseAscii(consumer->applicationBinary));
+    addCapture(
+        *kind, consumer->id, privacyAppName(*consumer), lowercaseAscii(consumer->applicationBinary),
+        *kind == PrivacyCaptureKind::Microphone ? source->id : 0
+    );
   }
 
   // Apps that open the webcam directly never appear in the graph. Skip ones PipeWire already
@@ -1982,6 +2011,8 @@ void PipeWireService::rebuildState() {
   std::ranges::sort(next.sinks, {}, &AudioNode::id);
   std::ranges::sort(next.sources, {}, &AudioNode::id);
   std::ranges::sort(next.programOutputs, {}, &AudioNode::id);
+  for (auto& capture : nextPrivacy.captures)
+    std::ranges::sort(capture.sourceIds);
   std::ranges::sort(nextPrivacy.captures, {}, [](const PrivacyCapture& capture) {
     return std::tie(capture.kind, capture.appName, capture.nodeId);
   });

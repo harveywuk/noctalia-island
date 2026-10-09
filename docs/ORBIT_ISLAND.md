@@ -19,7 +19,14 @@ The Island provides:
   time in the theme accent colour and commits the seek on release.
   Playback controls use Noctalia's themed buttons, with hover/press feedback and
   delayed tooltips. Unavailable controls stay disabled.
-- Compact playing activity and brief track announcements in the clock slot.
+- Compact playing activity and five-second track announcements in the clock slot.
+  The title and artist appear on separate centred lines beside the artwork, with
+  the animated artwork background and visualiser retained. Metadata received while
+  paused announces when playback starts; resuming the same track stays quiet.
+  Browser players that reuse track IDs or page URLs still announce changed titles.
+  Previews briefly take priority over compact downloads and timers, then restore
+  the current activity. Alerts, OSDs and open panels retain priority. The existing
+  Track preview duration and monitor settings apply, including zero to disable.
   A five-band accent-coloured visualiser replaces the right-hand music glyph.
   It follows the default desktop audio output through the existing PipeWire spectrum
   service and settles when the output is silent.
@@ -63,8 +70,15 @@ calendar; otherwise an active countdown precedes downloads, media, and the idle 
 When two activities run at once, the Island splits as on iPhone: the capsule shows
 the first in the activity order and a round bubble beside it shows the next (album
 art for media, a progress ring for a timer or download). Clicking the bubble swaps
-the two until the activity it brought forward ends. Hovering or an alert tucks the
-bubble back under the capsule. Set `split_activities = false` to hide the second
+the two until the activity it brought forward ends. Expanding opens the activity
+currently in the capsule. Choosing Media, Downloads, Timers or Awake in the expanded
+card also selects it for the compact capsule while Split activities is on. Ending
+the selected activity falls back to the configured activity order. Each monitor
+keeps its own selection. Jobs from one app, including Steam games, swap by their
+individual transfer identities. Replacing a bubble crossfades its content; a click
+held across an activity ending cannot activate the replacement. Reduced motion
+changes the content immediately. Hovering or an alert tucks the bubble back under
+the capsule. Set `split_activities = false` to hide the second
 activity instead, or to cycle activities with `cycle_activities = true`.
 
 Turning Do Not Disturb on or off from a keybind or `noctalia msg notification-dnd-set`
@@ -72,6 +86,20 @@ shows a short pill drawn like the macOS Big Sur Control Center tile: a round tog
 (solid indigo with a white moon when on, grey when off), "Do Not Disturb", and On or
 Off under it. Plugging in a laptop's charger shows a green "Charging" pill with the
 battery level. Turn the charging pill off with `[osd.kinds] charging = false`.
+
+Connection, Charging, Do Not Disturb and transfer-result cards centre their icon
+and text together, using the same icon size, spacing and title weight. Two-line
+cards centre their detail beneath the title; transfer results keep a single line.
+Actionable cards share a subtle hover fill and keyboard focus outline. Media
+artwork stays visible beneath these cards while playback continues.
+
+Successive device, network and transfer-result cards gently fade their icon and
+text when the visible message changes, even if the capsule stays the same size.
+The group remains centred throughout. A burst replaces the incoming content with
+the latest message instead of queuing older cards or restarting a still-dominant
+outgoing fade. Battery percentages, signal updates, keyboard focus and identical
+completion messages stay steady. These transitions preserve each event's expiry,
+keep the artwork running underneath and settle immediately with animations disabled.
 
 In the Cupertino look, microphone and brightness changes show as Big Sur's Display
 module: the name and level over a white-filled groove with the symbol inside its leading
@@ -166,6 +194,16 @@ byte counts are not reliable live percentages, so this reader shows activity
 instead of an estimated percentage. Native desktop progress, if Steam publishes
 it, takes precedence over the log reader.
 
+For investigation of Steam's LED output, `python3 scripts/steam-led-probe.py`
+reads the version 1 snapshots exposed by the optional
+[leds-valve-shim](https://github.com/anna-oake/leds-valve-shim) virtual driver and
+prints changed snapshots as JSON for two minutes. `--seconds` adjusts the duration.
+This diagnostic reads LED colours, brightness and effects only. It cannot identify
+which process wrote them or treat them as confirmed download percentages. Noctalia
+does not install or load the kernel module, and this probe is not connected to the
+Island's progress display. A live Steam capture is needed before defining that
+mapping; the existing Steam log and native desktop progress readers remain in use.
+
 ## Script activities
 
 Scripts and keybinds can post their own live activity. It shows like a download:
@@ -229,7 +267,45 @@ The icon is a Tabler glyph name. The pill fades after a moment. With the Island 
 it shows as a regular OSD, and it shows even when `[osd.kinds]` hides the built-in
 OSDs.
 
-## Screenshot thumbnail
+## Screenshot and recording menu
+
+Capture is keyboard driven. Bind `noctalia msg capture-menu` to **Shift+Print**
+to open the compact **Screenshot** and **Record** menu, or choose **Screenshot &
+Recording** in the launcher. The hover Island has no capture launcher button.
+Screenshots offer **Region**, **Window** and **Monitor**; recordings offer Region
+and Monitor. Both support an optional 3, 5 or 10 second delay.
+Tab moves between controls and the arrow keys change the focused group. Enter
+activates a control; Escape closes the menu or cancels a selection
+or countdown.
+
+Window selection gives the visible application beneath the pointer a subtle tint
+and shows its window title above the keyboard hints. Long titles are truncated to
+keep the caption within the monitor. Click to
+choose it, or cycle with Tab/Shift+Tab or the left/right arrows and press Enter.
+The selected window is brought forward, and its bounds are checked again after the
+countdown so a moved or resized window is captured at its new size. Closing the
+selected window cancels the capture. Window selection currently uses Hyprland IPC
+with visibility information and native window capture support; other desktops
+report it unavailable. Window screenshots preserve native pixels and exclude the
+Island, selection overlay, other windows and cursor.
+
+Choose the capture area first. The Island then counts down with a Cancel button,
+removes its capture controls and takes a fresh frame. Delayed screenshots stay
+live during selection even when normal screenshots use the freeze preference.
+The usual save, clipboard and annotation settings still apply. Pending captures
+are cancelled when the session locks, configuration reloads or outputs change.
+Playing media artwork keeps animating behind the menu and countdown. Ordinary
+notifications wait behind these controls; critical alerts retain priority.
+
+Recording adds **Off**, **Desktop** and **Mic** audio choices. Desktop records the
+default output's monitor source; Mic uses the default microphone input. A missing
+input reports an error instead of substituting desktop audio. Silent recording
+does not need an audio server. Recordings use `wf-recorder`, appear in the existing
+Screen Live Activity and save under the Videos directory's `Recordings` folder.
+`noctalia msg record-stop` also cancels a recording that is still counting down.
+The existing direct recording commands retain desktop audio by default.
+
+## Capture previews
 
 When the shell saves a screenshot, its "Screenshot saved" notification carries a
 thumbnail at the card's right, like a macOS screenshot thumbnail. Clicking the card
@@ -237,7 +313,48 @@ opens the image, and its buttons are Markup (the shell's annotator) and Show in
 Folder. `noctalia msg island-focus` reaches the same buttons from the keyboard:
 Tab to one, Enter to use it, Escape to dismiss.
 
+When a recording finishes, the Island shows **Recording saved** with its duration,
+file size and a video thumbnail. **Play** opens the saved video in the default player;
+**Show in Folder** opens its containing folder. The preview returns to the previous
+activity after five seconds, or stays available while hovered or keyboard focused.
+Its green completion glow lasts five seconds even when the card is held open.
+Ongoing captures and urgent alerts keep their privacy or warning colour, and playing
+media keeps its animated artwork underneath. Reduced motion uses a steady glow.
+
+The thumbnail is decoded in the background with `ffmpeg`, with a three-second limit.
+If it is unavailable or decoding fails, a video symbol appears and both actions still
+work. A late thumbnail never reopens a dismissed notification or extends its lifetime.
+
 ## Battery indicators
+
+Connecting a Bluetooth device or wired battery peripheral briefly shows a compact
+card with its name, matching device symbol and charge percentage when available.
+Unknown charge stays unlabelled. Headphones and speakers show **Audio output**
+only when the active, available PipeWire output matches their Bluetooth address;
+matching a friendly device name alone is not enough. The card updates if the
+output changes during its lifetime, without extending the preview.
+
+Click an audio device's card to open Control Centre's sound controls inside the
+Island, or another Bluetooth device's card to open the Bluetooth page. A subtle
+hover highlight and a tooltip describe the action. Hovering keeps the card in place
+until its original deadline; it does not extend the preview. Wired battery cards
+remain informational. Opening a card consumes its preview on every monitor while
+the original battery glow continues.
+
+`noctalia msg island-focus` selects a visible, actionable connection card. Tab and
+Shift+Tab retain that action, Enter or Space opens it, and Escape returns keyboard
+input to the desktop. Expiry, removal or replacement releases keyboard focus;
+battery updates preserve it. Connections arriving while keyboard media controls
+are already in use leave those controls in focus.
+
+**Settings → Dynamic Island → Media → Device connection preview** controls the
+card duration (five seconds by default, zero to disable). The existing
+`bluetooth_preview_seconds` and `bluetooth_preview_monitor` keys control duration
+and monitor targeting. The newest connection replaces the previous card, removal
+dismisses it, and older connections never replay. Notifications, volume changes,
+transfer notices, expanded controls and open panels retain priority. The preview
+expires behind them, and playing media keeps its artwork background. System
+charging retains its dedicated charging card.
 
 The island reuses Noctalia's UPower and Bluetooth battery services. A system
 battery appears in the compact capsule while charging or below its existing
@@ -252,8 +369,8 @@ around the Island. It pulses green above 60%, amber from 20% through 60%, and re
 below 20%. The small device indicator remains inside; battery charge no longer
 draws a progress bar around the capsule. Percentage updates do not restart the
 glow. It follows the Bluetooth preview monitor setting, independently of the
-compact preview duration, and stays steady when animations are disabled. Capture
-and critical alerts retain their red glow, and transfer notices take priority.
+compact preview duration, and stays steady when animations are disabled. Recording
+startup, desktop sharing, critical alerts and transfer notices take priority.
 
 Hovering adds battery rows beneath the calendar, media or download content, with
 device names, percentages, status and available time estimates. Healthy system
@@ -264,23 +381,181 @@ There is no new battery polling process or duplicate low-battery notification.
 When the compact battery ring is present alongside a download, the download ring
 remains visible and its percentage/count is available in the expanded view.
 
+## Network connection cards
+
+Connecting to Wi-Fi shows a centred **Connected to** card with the network name;
+wired connections show **Ethernet connected**. A connection must settle for
+750 ms before appearing. A lost connection must last 2.5 seconds before the Island
+shows **Connection lost**, followed by **Connection restored** when the same
+network returns. Short dropouts, startup, signal changes, scans, IP renewals and
+VPN metadata stay quiet. This reports the network link, not Internet reachability.
+
+Click the card to open Control Centre's network controls. The same action works
+with `noctalia msg island-focus`, then Enter or Space. Hovering keeps the card
+compact without extending its deadline, and opening it consumes the preview on
+all monitors. Escape, expiry or replacement returns keyboard input to the desktop.
+
+Cards last five seconds by default. **Settings → Dynamic Island → OSD → Network
+connection preview** sets their duration, with zero disabling them. The
+`network_preview_seconds` and `network_preview_monitor` settings also support
+per-monitor overrides. Monitor targeting offers all outputs, the focused output
+at the event, or a specific connector.
+
+Notifications, OSDs, transfer notices, device connections, expanded controls and
+open panels retain priority. Network cards expire behind them without replaying,
+and playing media keeps its animated artwork beneath the card.
+
 ## Privacy indicators
 
 Active microphone, camera and screen-sharing captures reported by Noctalia's
-existing PipeWire service appear as themed icons in the compact island. Hovering
-the island shows one row per capture type with the app names, alongside media,
-downloads and batteries. Multiple streams from the same app share a row.
+privacy service share one rotating slot in the compact island, alongside unread
+history when present. It cycles every five seconds and pauses over the hovered
+icon so its tooltip and click target stay put. The bell uses the same 16 px glyph
+size as the privacy icons, both in the slot and when shown on its own. These icons
+retain their status colours on hover and press, without a background highlight.
+Hovering the island shows the capture icons in a centred row alongside media,
+downloads and batteries.
+Each icon's tooltip names the apps; multiple streams from the same app share an icon.
 The existing `shell.privacy` filters apply; stopped captures disappear.
 
-The microphone icon opens the existing audio controls. Camera and screen-sharing
-icons expand the app details; stopping those captures remains in the owning app.
-Capture icons also remain visible beneath notifications and OSDs. Hovering an icon
+The orange microphone icon opens a Live Activity inside the Island. It names the
+capturing apps and shows each linked microphone with a live input meter, an explicit
+muted state and a mute/unmute button. Controls affect that input device, including
+other apps using it, and never silently fall back to an unrelated default input.
+The meter uses a fixed -60 to 0 dBFS scale. Passive monitors exist only while the
+card is visible and the input is unmuted; audio samples are not retained. If no
+input route can be resolved, the card shows an unavailable message instead of a mute button.
+The card joins the expanded activity selector while capture is active, preserves
+playing media artwork, and disappears when capture ends. Its settings button opens
+the full Audio controls. External microphone mute changes update the card in place.
+
+The green camera icon opens a Camera Live Activity with each capturing app,
+its elapsed time, and **Open App** to reach its camera controls. It uses both
+PipeWire capture links and the existing direct V4L2 device detection. Parallel
+streams from one app share a row until its last stream ends. Camera and screen
+sessions have independent timers, even when the same app uses both. The camera
+card joins the activity selector and supports `island-focus`, preserving animated
+media artwork, notification priority and the existing `cam_filter_regex` setting.
+Its elapsed timer starts when the shell first detects the unfiltered capture,
+survives configuration reloads, and resets after filtering or a shell restart.
+Apps without an open window show feedback in the card.
+
+The purple screen-sharing icon opens a Screen Live Activity. Each capturing app
+has its own elapsed timer and **Open app** button. Timers start when the shell first
+detects an active, unfiltered capture; multiple streams from one app share the timer
+until its last stream ends. Reloading configuration or changing monitors preserves
+the elapsed time. Restarting the shell or filtering the app starts a new observation.
+Apps without an open window show feedback in the card.
+
+Recordings started by the shell appear in the same activity with **Stop recording**.
+Clicking the compact recording timer opens the card; stopping requires the explicit
+button. While the encoder finishes, the card shows **Saving…** and disables Stop.
+Stopping a shell recording leaves other apps' capture sessions running. External
+capture controls remain in their owning apps. The card joins the activity selector,
+supports `island-focus`, and keeps playing media artwork animated underneath.
+Notifications and OSDs retain their normal priority while recording continues.
+Starting a recording gives two gentle red pulses over 4.8 seconds, then the steady
+red recording icon and timer carry its status. Opening the card, changing monitors
+or reloading settings does not replay the cue. Reduced motion uses a brief steady
+red glow with the same timeout. Microphone and camera activity use steady amber
+and green icons without an outer red glow. Saving retains its five-second green
+confirmation when no screen-sharing session or urgent alert takes priority.
+
+The Camera and Screen activities' settings buttons open the Privacy tab in
+Control Centre, which groups current captures by type and app. Volume and other OSDs keep their own layout. Hovering an icon
 keeps it still for clicking; hovering the clock opens the expanded view.
 
-This has the same detection coverage as Noctalia's native privacy widget: it uses
-PipeWire capture links and app metadata, not a separate hardware-access monitor.
-Applications that bypass PipeWire are outside that detection. The existing privacy
-OSDs are retained and no new polling process is added.
+Desktop sharing adds a purple glow around the Island for as long as a screen
+capture link is present. It gently pulses without fading completely out, stays
+visible with auto-hide, and follows the capsule into hosted panels such as Control
+Centre. Reduced motion holds a steady glow. Recording startup and critical alerts
+take colour priority; purple returns after the recording's two startup pulses.
+The media artwork continues underneath, and the usual `screen_filter_regex`
+applies. Stopping the last screen capture clears the sharing glow.
+
+Screen detection uses PipeWire capture links and app metadata, including portal
+screen sharing and remote desktop apps that use this path. An unlinked source or
+an idle remote server does not activate it. Direct DRM, X11 or compositor capture
+that bypasses PipeWire is outside this coverage; this is a capture indicator, not
+a detector of every remote login. Cameras also include direct V4L2 device users.
+The existing privacy OSDs are retained and no new polling process is added.
+
+## Text capture, Keep Awake and Focus
+
+Search the launcher for **Copy Text from Screen**, then drag over the text to copy.
+Recognition runs locally with Tesseract; the Island briefly confirms completion.
+Escape cancels selection. Empty results and recognition failures leave the clipboard
+unchanged. Locking cancels pending text capture. No screenshot file or annotation
+editor is created, regardless of the normal screenshot settings.
+
+Install `tesseract` and the language data you need (`tesseract-data-eng` on Arch
+for English). The advanced Screenshot settings expose recognition languages
+(default `eng`, or multiple codes such as `eng+deu`) and an optional language-data
+folder. The corresponding keys are `shell.screenshot.text_languages` and
+`shell.screenshot.text_data_directory`. A missing engine or language model reports
+failure without replacing the clipboard.
+
+Control Centre's Power tab offers **Keep Awake** for 15, 30 or 60 minutes, until
+turned off, or Off. Timed choices replace the previous deadline and release the
+idle inhibitor when they expire. Choosing Until off cancels an existing deadline.
+Launcher actions also provide the three timed choices. This prevents automatic
+idle sleep using the existing compositor/logind support; it does not block manual
+suspend. Timers are local to the running shell and reset on restart.
+
+Timed Keep Awake sessions also appear as an Island Live Activity. When it is the
+only activity, the compact capsule shows a cup and the remaining time. Alongside
+media, downloads or timers it uses the existing split bubbles, activity cycle and
+expanded selector; its default priority follows those activities. The expanded
+card offers **+15 min**, **End** and a link to Power controls. Adding time extends
+the current deadline rather than starting again from now. Countdown ticks preserve
+the buttons and keyboard focus, and playing media retains its animated artwork.
+The card disappears on expiry, End or switching to Until off. Control Centre,
+launcher actions and IPC share the same timer; reloads preserve its deadline.
+
+Control Centre's Focus tab offers **Work**, **Gaming** and **Sleep**. Each has an
+editable comma-separated list of allowed app names or desktop IDs, an optional
+critical-alert exception and a local-time schedule. App matching ignores case,
+surrounding spaces and an optional `.desktop` suffix; it requires the full name.
+Silenced notifications remain in history according to normal history rules, and
+are not replayed when Focus ends. Existing notification-filter DND bypasses still
+apply. Plain Do Not Disturb keeps its existing behavior without preset exceptions.
+
+Schedules are disabled initially. Set the times and days, enable the schedule,
+and choose **Save Focus**. Overnight times belong to their starting day, so a
+Monday 22:00 to 07:00 interval ends Tuesday morning. Equal start/end times and an
+empty day selection are rejected for enabled schedules. Overlapping schedules
+prefer Sleep, then Gaming, then Work. Schedules are checked every 15 seconds.
+A manual preset or Off lasts until the scheduled profile next changes; **Follow
+schedules** resumes immediately. Saved rules persist; manual choices reset on
+shell restart. The new brief Island feedback preserves playing media artwork.
+
+**Focus while recording** in Control Centre's Focus tab is off by default.
+When enabled, recordings started by the shell temporarily silence ordinary
+notification banners and sounds, while critical alerts and explicit DND bypasses
+remain allowed. The recording indicator stays visible. Suppressed notifications
+remain in history under the normal retention rules and are not replayed afterward.
+The temporary Focus ends when the recorder exits, including errors, before the
+saved recording preview is posted. Cancelling selection or a countdown does not
+change Focus. External screen sharing does not activate this option.
+
+Your existing Focus or Do Not Disturb choice is kept underneath, and schedules
+continue to advance. A manual Focus or DND choice takes precedence for the rest
+of the recording, including across configuration reloads. The next recording can
+activate the temporary Focus again. The saved setting is
+`notification.focus.while_recording`; `focus-status` reports `recording` and
+`automatic: true` while the temporary Focus is active.
+
+IPC equivalents for scripts and keybinds:
+
+```sh
+noctalia msg text-capture
+noctalia msg caffeine-for 30
+noctalia msg caffeine-status
+noctalia msg focus-set work
+noctalia msg focus-set auto
+noctalia msg focus-status
+noctalia msg panel-open control-center privacy
+```
 
 ## Timer and Pomodoro
 
@@ -333,7 +608,8 @@ notifications remain visible while focused. Escape releases focus and collapses
 media, or dismisses the focused notification. An incoming notification releases
 focus so it cannot inherit a key press intended for the previous content.
 Hovering alone leaves keyboard focus with the current app. With no media player
-or notification, active download, or countdown, the command opens the existing calendar panel.
+or notification, active download, countdown, microphone, camera or screen capture, recording, or timed Keep Awake,
+the command opens the existing calendar panel.
 
 Bind `noctalia msg island-focus` to a shortcut in your compositor.
 
@@ -343,7 +619,7 @@ This is the first native port, not complete Orbit parity. Noctalia's native pane
 standalone Settings window, persistent plugin windows, lock screen and desktop
 editors retain their own hosts; they are not regular shell panels. Orbit's exact
 glass deck styling, spectrum visualizer, notch mode, and smart hiding remain to be ported. Track announcements
-currently ellipsize instead of using Orbit's three-pass marquee. The hover calendar follows Orbit: today is centred between the three previous
+use Noctalia's scrolling labels instead of Orbit's three-pass marquee. The hover calendar follows Orbit: today is centred between the three previous
 and next days, with a larger accent date and fading outer columns. Weekday labels
 use the process locale, with three-letter abbreviations centred in equal-width
 columns above the dates.
@@ -614,8 +890,9 @@ To install or update the fork, run `scripts/install-local.sh` as described in th
 restarts the running unit.
 
 Hyprland's shell shortcuts and lock/idle commands now use Noctalia. The two
-Orbit-specific recording shortcuts are removed because this port has no recording
-panel yet. Other capture shortcuts remain in their existing configuration.
+Orbit-specific recording shortcuts were removed during migration. The new capture
+menu can be bound with `noctalia msg capture-menu`; existing capture shortcuts
+remain in their current configuration.
 Backups of the old startup, shortcut and idle files are in
 `~/.local/state/noctalia-island/migration-backup/20260926-203655`.
 

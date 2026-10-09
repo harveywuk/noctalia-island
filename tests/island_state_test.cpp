@@ -5,6 +5,7 @@
 #include "shell/island/island_activity.h"
 #include "shell/island/island_media.h"
 #include "shell/island/island_state.h"
+#include "shell/island/island_transfer.h"
 
 #include <cassert>
 
@@ -62,10 +63,148 @@ int main() {
   media.update("four", "Playing", start + 16s);
   media.update("", "", start + 17s);
   assert(!media.compact(start + 17s) && !media.announcing(start + 17s));
+  island::MediaActivity staged;
+  staged.update("one", "Paused", start);
+  assert(!staged.announcing(start));
+  staged.update("one", "Playing", start + 1s);
+  assert(staged.announcing(start + 5999ms) && !staged.announcing(start + 6s));
+  staged.update("one", "Paused", start + 7s);
+  staged.update("two", "Paused", start + 8s);
+  assert(!staged.announcing(start + 8s));
+  staged.update("two", "Playing", start + 9s);
+  assert(staged.announcing(start + 13s));
+  staged.update("two", "Paused", start + 10s);
+  staged.update("two", "Playing", start + 11s);
+  assert(!staged.announcing(start + 11s)); // Resume cannot repeat the announcement.
+  staged.update("three", "Stopped", start + 12s);
+  staged.update("three", "Playing", start + 13s);
+  assert(staged.announcing(start + 13s));
+  MprisPlayerInfo browser;
+  browser.busName = "browser";
+  browser.sourceUrl = "https://example.com/radio";
+  browser.trackId = "/track/current";
+  browser.title = "First song";
+  browser.artists = {"First artist"};
+  const auto firstKey = island::mediaAnnouncementKey(browser);
+  browser.positionUs = 1000000;
+  browser.artUrl = "file:///cover.png";
+  assert(island::mediaAnnouncementKey(browser) == firstKey);
+  browser.title = "Next song";
+  assert(island::mediaAnnouncementKey(browser) != firstKey);
+  const auto secondKey = island::mediaAnnouncementKey(browser);
+  browser.artists = {"Another artist"};
+  assert(island::mediaAnnouncementKey(browser) != secondKey);
   using island::Activity;
   using island::View;
   using island::view;
   using Priority = IslandActivityPriority;
+  {
+    const auto cameraView = [](bool note, bool osd, bool expanded, Activity selected, bool camera,
+                               bool screen = false) {
+      return view(
+          note, osd, expanded, true, true, false, false, true, true, selected, Activity::Media, false, false, false,
+          false, false, screen, false, camera
+      );
+    };
+    assert(cameraView(false, false, false, Activity::None, true) == View::Activity);
+    assert(cameraView(false, false, true, Activity::Camera, true) == View::Camera);
+    assert(cameraView(false, false, true, Activity::Camera, false) == View::Media);
+    assert(cameraView(false, false, true, Activity::Media, true) == View::Media);
+    assert(cameraView(false, false, true, Activity::Capture, true, true) == View::Capture);
+    assert(cameraView(false, false, true, Activity::Camera, true, true) == View::Camera);
+    assert(cameraView(true, true, true, Activity::Camera, true) == View::Notification);
+    assert(cameraView(false, true, true, Activity::Camera, true) == View::Osd);
+    assert(
+        view(
+            false, false, true, false, false, false, false, true, true, Activity::None, Activity::None, false, false,
+            false, false, false, false, false, true
+        )
+        == View::Camera
+    );
+    island::ActivitySelection selected;
+    selected.update(true, {false, false, false, false, false, false, true});
+    assert(selected.selected == Activity::Camera);
+    selected.update(true, {true, false, false, true, false, true, true});
+    assert(selected.selected == Activity::Camera && selected.switching);
+    selected.update(true, {true, false, false, true, false, true, false});
+    assert(selected.selected == Activity::Media);
+    assert((island::Activities{true, true, true, true, true, true, true}.count() == 7));
+  }
+  {
+    const auto captureView = [](bool notification, bool osd, bool hover, Activity selected, bool screen,
+                                bool recording) {
+      return view(
+          notification, osd, hover, true, true, false, false, true, true, selected, Activity::Media, false, false,
+          false, false, false, screen || recording, recording
+      );
+    };
+    assert(captureView(false, false, false, Activity::None, true, false) == View::Activity);
+    assert(captureView(false, false, false, Activity::None, false, true) == View::RecordingActivity);
+    assert(captureView(false, false, true, Activity::Capture, true, false) == View::Capture);
+    assert(captureView(false, false, true, Activity::Capture, false, true) == View::Capture);
+    assert(captureView(false, false, true, Activity::Media, false, true) == View::Media);
+    assert(captureView(false, false, true, Activity::Capture, false, false) == View::Media);
+    assert(captureView(true, true, true, Activity::Capture, true, true) == View::Notification);
+    assert(captureView(false, true, false, Activity::None, true, true) == View::Osd);
+    island::ActivitySelection selected;
+    selected.selected = Activity::Capture;
+    selected.update(true, {true, false, false, false, false, true});
+    assert(selected.selected == Activity::Capture && selected.switching);
+    selected.update(true, {true, false, false, false, false, false});
+    assert(selected.selected == Activity::Media);
+    selected.update(true, {false, false, false, false, false, true});
+    assert(selected.selected == Activity::Capture);
+  }
+  {
+    island::Activities awakeOnly{false, false, false, false, true};
+    island::ActivitySelection selected;
+    selected.update(true, awakeOnly);
+    assert(selected.selected == Activity::Awake && !selected.switching);
+    assert(
+        view(
+            false, false, false, false, false, false, false, true, true, Activity::None, Activity::None, false, false,
+            false, false, true
+        )
+        == View::AwakeActivity
+    );
+    assert(
+        view(
+            false, false, true, false, false, false, false, true, true, Activity::Awake, Activity::None, false, false,
+            false, false, true
+        )
+        == View::Awake
+    );
+    assert(
+        view(
+            true, false, true, false, false, false, false, true, true, Activity::Awake, Activity::None, false, false,
+            false, false, true
+        )
+        == View::Notification
+    );
+    assert(
+        view(
+            false, true, true, false, false, false, false, true, true, Activity::Awake, Activity::None, false, false,
+            false, false, true
+        )
+        == View::Osd
+    );
+    selected.update(true, {true, false, false, false, true});
+    assert(selected.selected == Activity::Awake && selected.switching);
+    selected.update(true, {true, false, false, false, false});
+    assert(selected.selected == Activity::Media);
+    auto order = island::activityOrder(Priority::TimersDownloadsMedia);
+    assert(island::secondaryActivity({true, false, false, false, true}, order, Activity::Media) == Activity::Awake);
+    island::CompactActivity cycle;
+    cycle.update({true, false, false, false, true}, Priority::TimersDownloadsMedia, true, 5, false, start);
+    assert(cycle.selected() == Activity::Media);
+    cycle.update({true, false, false, false, true}, Priority::TimersDownloadsMedia, true, 5, false, start + 5s);
+    assert(cycle.selected() == Activity::Awake);
+    cycle.promote(Activity::Awake);
+    cycle.update({true, false, false, false, true}, Priority::TimersDownloadsMedia, false, 5, false, start + 6s);
+    assert(cycle.selected() == Activity::Awake);
+    cycle.update({true, false, false, false, false}, Priority::TimersDownloadsMedia, false, 5, false, start + 7s);
+    assert(cycle.selected() == Activity::Media);
+  }
   for (const auto& option : kIslandActivityPriority) {
     const auto order = island::activityOrder(option.value);
     island::CompactActivity cycle;
@@ -132,6 +271,40 @@ int main() {
   );
   assert(view(false, true, false, true, false, true, true, true, true, Activity::None, Activity::Media) == View::Osd);
   island::ActivitySelection selection;
+  {
+    island::ActivitySelection expanded;
+    expanded.update(true, {true, true, true}, Activity::Timers);
+    assert(expanded.selected == Activity::Timers); // Expand the capsule being viewed.
+    expanded.selected = Activity::Media;
+    expanded.update(true, {true, true, true}, Activity::Timers);
+    assert(expanded.selected == Activity::Media); // Refreshes cannot change an explicit selection.
+    expanded.update(true, {false, true, true}, Activity::Timers);
+    assert(expanded.selected == Activity::Timers); // Ended activity follows compact priority.
+    expanded.update(false, {true, true, true}, Activity::Media);
+    expanded.update(true, {true, true, true}, Activity::Media);
+    assert(expanded.selected == Activity::Media);
+    expanded.update(false, {false, true, true});
+    expanded.update(true, {false, true, true}, Activity::Media);
+    assert(expanded.selected == Activity::Downloads); // Hidden/unavailable cards still fall back.
+  }
+  {
+    std::vector<DownloadProgress> transfers{
+        {.desktopId = "steam.desktop", .name = "First", .key = "steam:42"},
+        {.desktopId = "steam.desktop", .name = "Second", .key = "steam:43"},
+        {.desktopId = "steam.desktop", .name = "Third", .key = "steam:44"}
+    };
+    std::string lead = "steam:43";
+    island::orderTransfers(transfers, lead);
+    assert(transfers[0].name == "Second" && transfers[1].name == "First" && transfers[2].name == "Third");
+    island::orderTransfers(transfers, lead);
+    assert(transfers[0].name == "Second");
+    transfers.erase(transfers.begin());
+    island::orderTransfers(transfers, lead);
+    assert(lead.empty() && transfers[0].name == "First");
+    transfers.push_back({.desktopId = "steam.desktop", .name = "New second", .key = "steam:43"});
+    island::orderTransfers(transfers, lead);
+    assert(transfers[0].name == "First"); // A new transfer cannot inherit a finished job's choice.
+  }
   island::ActivitySelection otherMonitor;
   otherMonitor.update(true, {false, true, true});
   otherMonitor.selected = Activity::Timers;
@@ -158,6 +331,33 @@ int main() {
   assert(view(false, false, true, false, true, true, true, true, true, selection.selected) == View::Media);
   selection.update(true, {false, false, false});
   assert(selection.selected == Activity::None);
+  selection.update(true, {false, false, false, true});
+  assert(selection.selected == Activity::Microphone);
+  assert(
+      view(
+          false, false, true, false, false, false, false, true, true, selection.selected, Activity::None, false, false,
+          false, true
+      )
+      == View::Microphone
+  );
+  assert(
+      view(
+          true, false, true, false, false, false, false, true, true, selection.selected, Activity::None, false, false,
+          false, true
+      )
+      == View::Notification
+  );
+  assert(
+      view(
+          false, true, true, false, false, false, false, true, true, selection.selected, Activity::None, false, false,
+          false, true
+      )
+      == View::Osd
+  );
+  selection.update(true, {true, false, false, true});
+  assert(selection.selected == Activity::Microphone && selection.switching);
+  selection.update(true, {true, false, false, false});
+  assert(selection.selected == Activity::Media);
   // A track starts, expands on hover, is paused from its own controls, then loses hover.
   assert(view(false, false, false, false, false) == View::Rest);
   assert(view(false, false, false, true, false) == View::Activity);

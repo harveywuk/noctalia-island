@@ -1,12 +1,18 @@
 #pragma once
 
 #include "capture/annotation_overlay.h"
+#include "capture/capture_options.h"
+#include "capture/screen_recorder.h"
 #include "capture/screenshot_capture.h"
 #include "capture/screenshot_region_overlay.h"
+#include "capture/toplevel_thumbnail_capture.h"
+#include "core/timer_manager.h"
 
+#include <atomic>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -38,6 +44,7 @@ public:
     bool rememberLastRegion = false;
     bool showCursor = false;
     bool annotate = false;
+    bool extractText = false;
     std::string pipeCommand;
     std::string directory;
     std::string filenamePattern;
@@ -76,8 +83,35 @@ public:
   void setIslandHost(Island* island) { m_islandHost = island; }
   void releaseIslandCapture();
   void setSoundPlayer(SoundPlayer* soundPlayer);
+  std::function<void(const std::string&)> textCaptureFeedback;
+  std::function<bool()> textCaptureAllowed;
+  void cancelTextCapture();
+  // Menu captures select a target first, then count down before taking a fresh frame.
+  std::string beginMenuCapture(capture::LaunchOptions options);
+  void cancelMenuCapture();
+  std::function<void(bool recording, int remaining, const std::string& output)> captureCountdown;
 
 private:
+  struct MenuCapture {
+    capture::LaunchOptions launch;
+    OutputOptions outputOptions;
+    LogicalRect region;
+    std::string output;
+    std::string windowId;
+    std::chrono::steady_clock::time_point deadline;
+    int lastRemaining = -1;
+  };
+  std::optional<capture::LaunchOptions> m_menuSelection;
+  std::optional<MenuCapture> m_menuCapture;
+  Timer m_menuTimer;
+  void finishMenuSelection(LogicalRect region, wl_output* output, capture::LaunchOptions options);
+  void tickMenuCapture();
+  void runMenuCapture();
+  void refreshWindowTargets();
+  void requestWindowTargets(std::function<void(std::optional<std::vector<capture::WindowTarget>>)> callback);
+  Timer m_windowRefresh;
+  std::shared_ptr<std::atomic<bool>> m_windowCancel;
+  std::shared_ptr<int> m_windowLifetime = std::make_shared<int>(0);
   struct PendingCapture {
     wl_output* output = nullptr;
     std::optional<LogicalRect> region;
@@ -183,11 +217,17 @@ private:
   makeScreenshotPath(const OutputOptions& options, const std::string& labelBase, int suffix = 0) const;
   // Posts "Screenshot saved" with a thumbnail and Open, Markup and Show in Folder actions.
   void notifySaved(const std::filesystem::path& path, const ScreencopyImage& image);
+  void notifyRecordingSaved(const ScreenRecorder::Result& result);
   void onSavedNotificationAction(std::uint32_t id, const std::string& actionKey, const std::string& activationToken);
   void notifyError(const std::string& message);
   void rememberRegion(const LogicalRect& region);
   [[nodiscard]] std::optional<LogicalRect> loadRememberedRegion() const;
   void playCaptureSound();
+  bool extractText(const std::vector<std::uint8_t>& png);
+  std::shared_ptr<std::atomic<bool>> m_textCancel;
+  std::shared_ptr<int> m_textLifetime = std::make_shared<int>(0);
+  std::shared_ptr<std::atomic<bool>> m_recordingPreviewCancel;
+  std::shared_ptr<int> m_recordingPreviewLifetime = std::make_shared<int>(0);
 
   WaylandConnection& m_wayland;
   CompositorPlatform& m_platform;
@@ -195,6 +235,7 @@ private:
   ConfigService& m_configService;
   ClipboardService* m_clipboard = nullptr;
   ScreenshotCapture m_capture;
+  ToplevelThumbnailCapture m_windowCapture;
   std::unique_ptr<capture::ScreenshotRegionOverlay> m_regionOverlay;
   std::vector<PendingCapture> m_captureQueue;
   std::unique_ptr<AllOutputsBatch> m_allOutputsBatch;
@@ -211,6 +252,6 @@ private:
   bool m_freezeCaptureActive = false;
   SoundPlayer* m_soundPlayer = nullptr;
   Island* m_islandHost = nullptr;
-  // Recent "Screenshot saved" notifications and the files their actions open.
+  // Recent capture notifications and the files their actions open.
   std::vector<std::pair<std::uint32_t, std::filesystem::path>> m_savedNotifications;
 };

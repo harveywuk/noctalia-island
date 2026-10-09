@@ -5,8 +5,21 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace island {
+  // Jobs from one app still have distinct identities. Forget a finished lead so
+  // a later job cannot inherit a choice made for an earlier transfer.
+  inline void orderTransfers(std::vector<DownloadProgress>& transfers, std::string& leadKey) {
+    if (leadKey.empty())
+      return;
+    const auto lead = std::ranges::find(transfers, leadKey, &DownloadProgress::key);
+    if (lead == transfers.end())
+      leadKey.clear();
+    else
+      std::rotate(transfers.begin(), lead, lead + 1);
+  }
+
   enum class TransferStatus { Running, Paused, Failed };
   enum class TransferNotice { DownloadFinished, TransferFinished, Failed };
 

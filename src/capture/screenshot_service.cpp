@@ -3,6 +3,7 @@
 #include "capture/screen_recorder.h"
 #include "capture/screenshot_region_overlay.h"
 #include "compositors/compositor_platform.h"
+#include "compositors/hyprland/hyprland_runtime.h"
 #include "config/config_service.h"
 #include "config/config_types.h"
 #include "core/deferred_call.h"
@@ -12,6 +13,7 @@
 #include "core/process/process.h"
 #include "i18n/i18n.h"
 #include "ipc/ipc_service.h"
+#include "launcher/launcher_util.h"
 #include "notification/notification.h"
 #include "notification/notification_manager.h"
 #include "pipewire/sound_player.h"
@@ -40,6 +42,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <stb/stb_image_resize2.h>
 #include <sys/wait.h>
@@ -145,7 +148,10 @@ namespace {
   }
 
   [[nodiscard]] bool hasAnyOutput(const ScreenshotService::OutputOptions& options) {
-    return options.saveToFile || options.copyToClipboard || (options.pipeToCommand && !options.pipeCommand.empty());
+    return options.extractText
+        || options.saveToFile
+        || options.copyToClipboard
+        || (options.pipeToCommand && !options.pipeCommand.empty());
   }
 
   [[nodiscard]] bool needsScreenshotPath(const ScreenshotService::OutputOptions& options) {
@@ -622,7 +628,8 @@ ScreenshotService::ScreenshotService(
     NotificationManager& notifications, ClipboardService* clipboard
 )
     : m_wayland(wayland), m_platform(platform), m_notifications(notifications), m_configService(configService),
-      m_clipboard(clipboard), m_capture(wayland) {
+      m_clipboard(clipboard), m_capture(wayland), m_windowCapture(wayland) {
+  ScreenRecorder::instance().activeChanged = [this](bool active) { m_notifications.setRecordingActive(active); };
   m_notifications.addInternalActionCallback(
       [this](std::uint32_t id, const std::string& actionKey, const std::string& activationToken) {
         onSavedNotificationAction(id, actionKey, activationToken);
@@ -630,7 +637,23 @@ ScreenshotService::ScreenshotService(
   );
 }
 
-ScreenshotService::~ScreenshotService() { ScreenRecorder::instance().shutdown(); }
+ScreenshotService::~ScreenshotService() {
+  m_menuTimer.stop();
+  m_windowRefresh.stop();
+  m_windowCapture.cancelInFlight();
+  m_windowLifetime.reset();
+  if (m_windowCancel)
+    *m_windowCancel = true;
+  m_recordingPreviewLifetime.reset();
+  if (m_recordingPreviewCancel)
+    *m_recordingPreviewCancel = true;
+  m_textLifetime.reset();
+  if (m_textCancel)
+    *m_textCancel = true;
+  // Application UI members have already been destroyed by this point.
+  ScreenRecorder::instance().activeChanged = {};
+  ScreenRecorder::instance().shutdown();
+}
 
 void ScreenshotService::rememberRegion(const LogicalRect& region) {
   if (region.width < 2 || region.height < 2) {
@@ -657,6 +680,7 @@ std::optional<LogicalRect> ScreenshotService::loadRememberedRegion() const {
 bool ScreenshotService::available() const noexcept { return m_capture.available(); }
 
 void ScreenshotService::onOutputChange() {
+  cancelMenuCapture();
   if (m_regionOverlay != nullptr) {
     m_regionOverlay->onOutputChange();
   }
@@ -676,6 +700,10 @@ bool ScreenshotService::onPointerEvent(const PointerEvent& event) {
 }
 
 bool ScreenshotService::onKeyboardEvent(const KeyboardEvent& event) {
+  if (m_menuCapture && event.pressed && KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
+    cancelMenuCapture();
+    return true;
+  }
   if (m_annotationOverlay != nullptr && m_annotationOverlay->isActive()) {
     if (m_annotationOverlay->onKeyboardEvent(event)) {
       return true;
@@ -699,7 +727,8 @@ bool ScreenshotService::onKeyboardEvent(const KeyboardEvent& event) {
 }
 
 bool ScreenshotService::overlayBusy() const noexcept {
-  return (m_regionOverlay != nullptr && m_regionOverlay->isActive())
+  return m_menuCapture.has_value()
+      || (m_regionOverlay != nullptr && m_regionOverlay->isActive())
       || (m_annotationOverlay != nullptr && m_annotationOverlay->isActive())
       || m_freezeCaptureActive;
 }
@@ -721,6 +750,221 @@ ScreenshotService::OutputOptions ScreenshotService::outputOptionsFromConfig(cons
   return options;
 }
 
+std::string ScreenshotService::beginMenuCapture(capture::LaunchOptions options) {
+  if (textCaptureAllowed && !textCaptureAllowed())
+    return i18n::tr("island.capture-menu.locked");
+  if (!available())
+    return i18n::tr("island.capture-menu.unavailable");
+  if (overlayBusy() || m_capture.busy() || m_textCancel)
+    return i18n::tr("island.capture-menu.busy");
+  if (options.recording && ScreenRecorder::instance().active())
+    return i18n::tr("island.capture-menu.recording-active");
+  if (options.recording && !process::commandExists("wf-recorder"))
+    return i18n::tr("island.capture-menu.missing-recorder");
+  if (options.target == capture::Target::Window
+      && (options.recording || !m_platform.hyprlandRuntime().available() || !m_windowCapture.available()))
+    return i18n::tr("island.capture-menu.window-unavailable");
+  auto* context = PanelManager::instance().renderContext();
+  if (!context)
+    return i18n::tr("island.capture-menu.unavailable");
+  options.delaySeconds = std::clamp(options.delaySeconds, 0, 10);
+  m_regionRenderContext = context;
+  m_regionOutputOptions = outputOptionsFromConfig(m_configService.config());
+  if (!options.recording && !m_regionOutputOptions.annotate && !hasAnyOutput(m_regionOutputOptions))
+    return i18n::tr("island.capture-menu.no-output");
+  // Selection stays live, so a delayed screenshot contains the frame after the countdown.
+  m_regionOutputOptions.freezeScreen = false;
+  const bool monitor = options.target == capture::Target::Monitor;
+  const bool window = options.target == capture::Target::Window;
+  m_regionFullscreenPick = monitor;
+  m_recordSelection = false;
+  m_menuSelection = options;
+  ensureRegionOverlay();
+  m_regionOverlay->setFrozenScreenshots({});
+  m_regionOverlay->begin(false, monitor, false, std::nullopt, window);
+  if (window)
+    refreshWindowTargets();
+  return {};
+}
+
+void ScreenshotService::requestWindowTargets(
+    std::function<void(std::optional<std::vector<capture::WindowTarget>>)> callback
+) {
+  if (m_windowCancel)
+    *m_windowCancel = true;
+  auto cancel = std::make_shared<std::atomic<bool>>(false);
+  m_windowCancel = cancel;
+  const std::weak_ptr<int> lifetime = m_windowLifetime;
+  const bool launched = process::runAsync(
+      std::vector<std::string>{"hyprctl", "-j", "clients"},
+      {.onExit =
+           [lifetime, cancel, callback](process::RunResult result) {
+             auto windows =
+                 result && !result.outTruncated ? capture::parseHyprlandCaptureWindows(result.out) : std::nullopt;
+             DeferredCall::callLater([lifetime, cancel, callback, windows = std::move(windows)]() mutable {
+               if (!lifetime.expired() && !*cancel)
+                 callback(std::move(windows));
+             });
+           }},
+      {.timeout = std::chrono::seconds(1), .maxOutputBytes = 2 * 1024 * 1024, .cancel = cancel}
+  );
+  if (!launched)
+    callback(std::nullopt);
+}
+
+void ScreenshotService::refreshWindowTargets() {
+  if (!m_menuSelection || m_menuSelection->target != capture::Target::Window || !m_regionOverlay->isActive())
+    return;
+  requestWindowTargets([this](std::optional<std::vector<capture::WindowTarget>> windows) {
+    if (!windows) {
+      cancelMenuCapture();
+      notifyError(i18n::tr("island.capture-menu.window-unavailable"));
+      return;
+    }
+    m_regionOverlay->setWindowTargets(std::move(*windows));
+    m_windowRefresh.start(std::chrono::milliseconds(350), [this] { refreshWindowTargets(); });
+  });
+}
+
+void ScreenshotService::cancelMenuCapture() {
+  const bool selecting = m_menuSelection.has_value();
+  const bool pending = m_menuCapture.has_value();
+  m_menuTimer.stop();
+  m_windowRefresh.stop();
+  m_windowCapture.cancelInFlight();
+  if (m_windowCancel)
+    *m_windowCancel = true;
+  m_menuSelection.reset();
+  m_menuCapture.reset();
+  if (selecting)
+    cancelRegionCapture();
+  if (pending && captureCountdown)
+    captureCountdown(false, 0, {});
+}
+
+void ScreenshotService::finishMenuSelection(LogicalRect region, wl_output* output, capture::LaunchOptions options) {
+  const bool monitor = options.target == capture::Target::Monitor;
+  const WaylandOutput* selected = monitor ? findOutput(m_wayland, output) : nullptr;
+  if (!monitor)
+    for (const auto& candidate : m_wayland.outputs())
+      if (region.x >= candidate.logicalX
+          && region.y >= candidate.logicalY
+          && region.x + region.width <= candidate.logicalX + candidate.logicalWidth
+          && region.y + region.height <= candidate.logicalY + candidate.logicalHeight) {
+        selected = &candidate;
+        break;
+      }
+  if ((options.recording || monitor) && !selected) {
+    notifyError(i18n::tr("island.capture-menu.one-monitor"));
+    return;
+  }
+  m_menuCapture = MenuCapture{
+      .launch = options,
+      .outputOptions = m_regionOutputOptions,
+      .region = region,
+      .output = selected ? selected->connectorName : std::string{},
+      .deadline = std::chrono::steady_clock::now() + std::chrono::seconds(options.delaySeconds)
+  };
+  m_menuTimer.startRepeating(std::chrono::milliseconds(100), [this] { tickMenuCapture(); });
+  tickMenuCapture();
+}
+
+void ScreenshotService::tickMenuCapture() {
+  if (!m_menuCapture)
+    return;
+  if (textCaptureAllowed && !textCaptureAllowed()) {
+    cancelMenuCapture();
+    return;
+  }
+  const int remaining = static_cast<int>(
+      std::chrono::ceil<std::chrono::seconds>(m_menuCapture->deadline - std::chrono::steady_clock::now()).count()
+  );
+  if (remaining <= 0) {
+    if (captureCountdown)
+      captureCountdown(false, 0, {});
+    // Let the selector and countdown disappear from the compositor before capturing.
+    m_menuTimer.start(std::chrono::milliseconds(200), [this] { runMenuCapture(); });
+  } else if (remaining != m_menuCapture->lastRemaining) {
+    m_menuCapture->lastRemaining = remaining;
+    if (captureCountdown)
+      captureCountdown(m_menuCapture->launch.recording, remaining, m_menuCapture->output);
+  }
+}
+
+void ScreenshotService::runMenuCapture() {
+  auto pending = std::exchange(m_menuCapture, std::nullopt);
+  if (!pending || (textCaptureAllowed && !textCaptureAllowed()))
+    return;
+  const auto& request = *pending;
+  if (request.launch.target == capture::Target::Window) {
+    m_menuCapture = request;
+    // Resolve the same window again after the countdown, following moves and resizes.
+    requestWindowTargets([this, request](std::optional<std::vector<capture::WindowTarget>> windows) {
+      if (textCaptureAllowed && !textCaptureAllowed()) {
+        m_menuCapture.reset();
+        return;
+      }
+      if (windows) {
+        const auto found = std::ranges::find(*windows, request.windowId, &capture::WindowTarget::id);
+        if (found != windows->end()) {
+          ext_foreign_toplevel_handle_v1* selected = nullptr;
+          m_wayland.visitExtToplevelHandles([&](auto* handle) {
+            if (m_platform.compositorWindowIdForExtToplevel(handle) == request.windowId)
+              selected = handle;
+          });
+          if (selected) {
+            const auto destPath = needsScreenshotPath(request.outputOptions)
+                ? std::optional(makeScreenshotPath(request.outputOptions, "window"))
+                : std::nullopt;
+            // Keep native pixels and exclude desktop overlays, other windows and the cursor.
+            m_windowCapture.capture(
+                selected, std::numeric_limits<int>::max(), std::numeric_limits<int>::max(),
+                [this, options = request.outputOptions,
+                 destPath](std::optional<ScreencopyImage> image, std::string error) {
+                  m_menuCapture.reset();
+                  if (textCaptureAllowed && !textCaptureAllowed())
+                    return;
+                  std::optional<capture::ScreenshotImage> result;
+                  if (image) {
+                    playCaptureSound();
+                    result = capture::ScreenshotImage{.image = std::move(*image)};
+                  }
+                  onCaptureComplete(std::move(result), error, options, destPath);
+                }
+            );
+            return;
+          }
+        }
+      }
+      m_menuCapture.reset();
+      notifyError(i18n::tr("island.capture-menu.window-gone"));
+    });
+    return;
+  }
+  const auto found = std::ranges::find(m_wayland.outputs(), request.output, &WaylandOutput::connectorName);
+  if (!request.output.empty() && found == m_wayland.outputs().end()) {
+    notifyError(i18n::tr("island.capture-menu.unavailable"));
+    return;
+  }
+  if (request.launch.recording) {
+    const auto& region = request.region;
+    const auto geometry = request.launch.target == capture::Target::Monitor
+        ? std::string{}
+        : std::format("{},{} {}x{}", region.x, region.y, region.width, region.height);
+    const auto error = ScreenRecorder::instance().start(request.output, geometry, request.launch.audio);
+    if (!error.empty())
+      notifyError(error);
+  } else {
+    if (request.launch.target == capture::Target::Region && request.outputOptions.rememberLastRegion)
+      rememberRegion(request.region);
+    playCaptureSound();
+    if (request.launch.target == capture::Target::Monitor)
+      completeFullscreenSelection(found->output, request.outputOptions);
+    else
+      captureGlobalRegion(request.region, request.outputOptions);
+  }
+}
+
 std::string ScreenshotService::beginRecording(bool monitor) {
   if (ScreenRecorder::instance().active())
     return "error: recording already active\n";
@@ -740,15 +984,39 @@ std::string ScreenshotService::beginRecording(bool monitor) {
 }
 
 void ScreenshotService::registerIpc(IpcService& ipc, const ConfigService& configService) {
-  ScreenRecorder::instance().completed = [this](bool success, const std::string& message) {
-    m_notifications.addInternal(
-        "Noctalia", success ? "Recording saved" : "Recording failed", message,
-        success ? Urgency::Normal : Urgency::Critical
-    );
+  ipc.bind(noctalia::cli::msg::textCapture, [this](const std::string&) -> std::string {
+    if (textCaptureAllowed && !textCaptureAllowed())
+      return "error: session is locked\n";
+    if (!available())
+      return "error: screen capture unavailable\n";
+    if (overlayBusy() || m_textCancel)
+      return "error: a capture is already in progress\n";
+    if (!process::commandExists("tesseract")) {
+      if (textCaptureFeedback)
+        textCaptureFeedback(i18n::tr("utilities.text.missing-engine"));
+      return "error: install tesseract and its language data to extract text\n";
+    }
+    if (!m_clipboard || !m_clipboard->isAvailable())
+      return "error: clipboard unavailable\n";
+    auto* context = PanelManager::instance().renderContext();
+    if (!context)
+      return "error: render context unavailable\n";
+    beginRegionCapture(*context, OutputOptions{.saveToFile = false, .extractText = true});
+    return "ok\n";
+  });
+  ScreenRecorder::instance().completed = [this](const ScreenRecorder::Result& result) {
+    if (result.success)
+      notifyRecordingSaved(result);
+    else
+      m_notifications.addInternal(
+          "Noctalia", i18n::tr("notifications.internal.recording-failed"), result.error, Urgency::Critical
+      );
   };
   ipc.bind(noctalia::cli::msg::recordRegion, [this](const std::string&) { return beginRecording(false); });
   ipc.bind(noctalia::cli::msg::recordMonitor, [this](const std::string&) { return beginRecording(true); });
-  ipc.bind(noctalia::cli::msg::recordStop, [](const std::string&) {
+  ipc.bind(noctalia::cli::msg::recordStop, [this](const std::string&) {
+    if ((m_menuSelection && m_menuSelection->recording) || (m_menuCapture && m_menuCapture->launch.recording))
+      cancelMenuCapture();
     ScreenRecorder::instance().stop();
     return std::string("ok\n");
   });
@@ -761,7 +1029,7 @@ void ScreenshotService::registerIpc(IpcService& ipc, const ConfigService& config
     if (!available()) {
       return "error: screen capture is not available on this compositor\n";
     }
-    if (m_annotationOverlay != nullptr && m_annotationOverlay->isActive()) {
+    if (overlayBusy()) {
       return "error: a screenshot overlay is already active\n";
     }
     auto* renderContext = PanelManager::instance().renderContext();
@@ -776,7 +1044,7 @@ void ScreenshotService::registerIpc(IpcService& ipc, const ConfigService& config
     if (!available()) {
       return "error: screen capture is not available on this compositor\n";
     }
-    if (m_annotationOverlay != nullptr && m_annotationOverlay->isActive()) {
+    if (overlayBusy()) {
       return "error: a screenshot overlay is already active\n";
     }
     const std::string token = StringUtils::trim(args);
@@ -861,6 +1129,7 @@ wl_output* ScreenshotService::preferredCaptureOutput() const {
 }
 
 void ScreenshotService::captureFullscreen(const OutputOptions& options, wl_output* output) {
+  cancelMenuCapture();
   if (!available()) {
     notifyError("Screen capture is not available on this compositor");
     return;
@@ -901,6 +1170,7 @@ void ScreenshotService::captureFullscreenInteractive(RenderContext& renderContex
 }
 
 void ScreenshotService::beginRegionCapture(RenderContext& renderContext, const OutputOptions& options) {
+  cancelMenuCapture();
   if (!available()) {
     notifyError("Screen capture is not available on this compositor");
     return;
@@ -933,6 +1203,7 @@ void ScreenshotService::beginRegionCapture(RenderContext& renderContext, const O
 }
 
 void ScreenshotService::beginFullscreenCapture(RenderContext& renderContext, const OutputOptions& options) {
+  cancelMenuCapture();
   if (!available()) {
     notifyError("Screen capture is not available on this compositor");
     return;
@@ -978,14 +1249,40 @@ void ScreenshotService::ensureRegionOverlay() {
       primaryKeybindLabel(keybinds.cancel, KeybindAction::Cancel)
   );
   m_regionOverlay->setFailureCallback([this](const std::string& message) {
+    m_windowRefresh.stop();
+    if (m_windowCancel)
+      *m_windowCancel = true;
+    m_menuSelection.reset();
     m_frozenScreenshots.clear();
     m_regionFullscreenPick = false;
     m_recordSelection = false;
     notifyError(message);
   });
 
+  m_regionOverlay->setWindowCompleteCallback([this](capture::WindowTarget window) {
+    m_windowRefresh.stop();
+    if (m_windowCancel)
+      *m_windowCancel = true;
+    const auto options = std::exchange(m_menuSelection, std::nullopt);
+    if (!options || options->target != capture::Target::Window)
+      return;
+    m_platform.focusCompositorWindow(window.id);
+    finishMenuSelection(window.bounds, nullptr, *options);
+    if (m_menuCapture)
+      m_menuCapture->windowId = window.id;
+  });
+
   m_regionOverlay->setCompleteCallback(
       [this](std::optional<LogicalRect> region, wl_output* output, capture::ConfirmAction action) {
+        if (auto menu = std::exchange(m_menuSelection, std::nullopt)) {
+          m_windowRefresh.stop();
+          if (m_windowCancel)
+            *m_windowCancel = true;
+          m_regionFullscreenPick = false;
+          if (region)
+            finishMenuSelection(*region, output, *menu);
+          return;
+        }
         if (m_recordSelection) {
           m_recordSelection = false;
           const bool monitor = std::exchange(m_regionFullscreenPick, false);
@@ -1382,6 +1679,7 @@ void ScreenshotService::ensureAnnotationOverlay() {
 }
 
 void ScreenshotService::beginAnnotation(RenderContext& renderContext, const OutputOptions& options, bool freezeFirst) {
+  cancelMenuCapture();
   m_regionRenderContext = &renderContext;
   m_regionOutputOptions = options;
   m_regionFullscreenPick = false;
@@ -1869,6 +2167,9 @@ bool ScreenshotService::finishDelivery(
     return false;
   }
 
+  if (options.extractText)
+    return extractText(png);
+
   bool delivered = false;
   std::string failureMessage;
 
@@ -1917,6 +2218,90 @@ bool ScreenshotService::finishDelivery(
     notifyError(failureMessage.empty() ? "No screenshot output enabled" : failureMessage);
   }
   return delivered;
+}
+
+void ScreenshotService::cancelTextCapture() {
+  if (m_textCancel) {
+    *m_textCancel = true;
+    m_textCancel.reset();
+  }
+  if (m_regionOutputOptions.extractText)
+    cancelRegionCapture();
+}
+
+bool ScreenshotService::extractText(const std::vector<std::uint8_t>& png) {
+  if (textCaptureAllowed && !textCaptureAllowed())
+    return false;
+  // mkstemp creates a private file; only the recogniser receives its path. Neither image nor
+  // recognised text goes into screenshot history, notifications or logs.
+  char pattern[] = "/tmp/noctalia-text-XXXXXX";
+  const int fd = mkstemp(pattern);
+  if (fd < 0) {
+    notifyError(i18n::tr("utilities.text.failed"));
+    return false;
+  }
+  fcntl(fd, F_SETFD, FD_CLOEXEC);
+  const std::string path(pattern);
+  std::size_t offset = 0;
+  while (offset < png.size()) {
+    const auto count = write(fd, png.data() + offset, png.size() - offset);
+    if (count < 0 && errno == EINTR)
+      continue;
+    if (count <= 0)
+      break;
+    offset += static_cast<std::size_t>(count);
+  }
+  close(fd);
+  if (offset != png.size()) {
+    unlink(path.c_str());
+    notifyError(i18n::tr("utilities.text.failed"));
+    return false;
+  }
+  const auto& config = m_configService.config().shell.screenshot;
+  std::vector<std::string> args{"tesseract", path, "stdout", "-l", config.textLanguages, "--psm", "11"};
+  if (!config.textDataDirectory.empty()) {
+    args.emplace_back("--tessdata-dir");
+    args.push_back(config.textDataDirectory);
+  }
+  auto cancel = std::make_shared<std::atomic<bool>>(false);
+  m_textCancel = cancel;
+  const std::weak_ptr<int> lifetime = m_textLifetime;
+  if (textCaptureFeedback)
+    textCaptureFeedback(i18n::tr("utilities.text.reading"));
+  const bool launched = process::runAsync(
+      args,
+      {.onExit =
+           [this, lifetime, cancel, path](process::RunResult result) {
+             unlink(path.c_str());
+             DeferredCall::callLater([this, lifetime, cancel, result = std::move(result)] {
+               if (lifetime.expired() || *cancel || m_textCancel != cancel)
+                 return;
+               m_textCancel.reset();
+               if (textCaptureAllowed && !textCaptureAllowed())
+                 return;
+               std::string key = "utilities.text.failed";
+               if (result && !result.outTruncated) {
+                 const auto text = StringUtils::trim(result.out);
+                 if (text.empty())
+                   key = "utilities.text.empty";
+                 else if (m_clipboard && m_clipboard->copyText(text))
+                   key = "utilities.text.copied";
+                 else
+                   key = "utilities.text.copy-failed";
+               }
+               if (textCaptureFeedback)
+                 textCaptureFeedback(i18n::tr(key));
+             });
+           }},
+      {.timeout = std::chrono::seconds(30), .maxOutputBytes = 1024 * 1024, .cancel = cancel}
+  );
+  if (!launched) {
+    m_textCancel.reset();
+    unlink(path.c_str());
+    if (textCaptureFeedback)
+      textCaptureFeedback(i18n::tr("utilities.text.failed"));
+  }
+  return launched;
 }
 
 void ScreenshotService::onCaptureComplete(
@@ -1983,6 +2368,92 @@ void ScreenshotService::notifySaved(const std::filesystem::path& path, const Scr
   if (m_savedNotifications.size() > 8) {
     m_savedNotifications.erase(m_savedNotifications.begin());
   }
+}
+
+void ScreenshotService::notifyRecordingSaved(const ScreenRecorder::Result& result) {
+  const auto seconds = result.duration.count();
+  const std::string duration = seconds >= 3600
+      ? std::format("{}:{:02}:{:02}", seconds / 3600, seconds / 60 % 60, seconds % 60)
+      : std::format("{}:{:02}", seconds / 60, seconds % 60);
+  NotificationRequest request;
+  request.appName = "Noctalia";
+  request.summary = i18n::tr("notifications.internal.recording-saved");
+  request.body = i18n::tr(
+      "notifications.internal.recording-details", "duration", duration, "size",
+      launcher_util::formatByteSize(result.bytes)
+  );
+  request.origin = NotificationOrigin::Internal;
+  request.category = std::string(kRecordingNotificationCategory);
+  request.timeout = 5000;
+  request.actions = {
+      "default",
+      i18n::tr("notifications.internal.recording-play"),
+      "folder",
+      i18n::tr("notifications.internal.screenshot-show-in-folder"),
+  };
+  const auto id = m_notifications.addOrReplace(std::move(request));
+  if (!id)
+    return;
+  m_savedNotifications.emplace_back(id, result.path);
+  if (m_savedNotifications.size() > 8)
+    m_savedNotifications.erase(m_savedNotifications.begin());
+
+  // Publish the usable result immediately. A bounded decoder job fills the preview later.
+  if (m_recordingPreviewCancel)
+    *m_recordingPreviewCancel = true;
+  auto cancel = std::make_shared<std::atomic<bool>>(false);
+  m_recordingPreviewCancel = cancel;
+  const std::weak_ptr<int> lifetime = m_recordingPreviewLifetime;
+  constexpr int width = 480, height = 270;
+  constexpr std::size_t bytes = width * height * 4;
+  const bool launched = process::runAsync(
+      std::vector<std::string>{
+          "ffmpeg",
+          "-nostdin",
+          "-v",
+          "error",
+          "-threads",
+          "1",
+          "-i",
+          result.path.string(),
+          "-map",
+          "0:v:0",
+          "-frames:v",
+          "1",
+          "-an",
+          "-sn",
+          "-filter_threads",
+          "1",
+          "-vf",
+          "scale=480:270:force_original_aspect_ratio=decrease,pad=480:270:(ow-iw)/2:(oh-ih)/2,setsar=1",
+          "-threads",
+          "1",
+          "-f",
+          "rawvideo",
+          "-pix_fmt",
+          "rgba",
+          "pipe:1",
+      },
+      {.onExit =
+           [this, lifetime, cancel, id](process::RunResult preview) {
+             if (!preview || preview.outTruncated || preview.out.size() != bytes || *cancel)
+               return;
+             NotificationImageData image{
+                 .width = width,
+                 .height = height,
+                 .rowStride = width * 4,
+                 .data = std::vector<std::uint8_t>(preview.out.begin(), preview.out.end()),
+             };
+             DeferredCall::callLater([this, lifetime, cancel, id, image = std::move(image)]() mutable {
+               if (lifetime.expired() || *cancel)
+                 return;
+               (void)m_notifications.updateImage(id, std::move(image));
+             });
+           }},
+      {.timeout = std::chrono::seconds(3), .maxOutputBytes = bytes, .cancel = cancel}
+  );
+  if (!launched)
+    m_recordingPreviewCancel.reset();
 }
 
 void ScreenshotService::onSavedNotificationAction(

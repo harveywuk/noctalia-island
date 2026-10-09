@@ -22,16 +22,23 @@ ScreenRecorder& ScreenRecorder::instance() {
   return recorder;
 }
 
-std::string ScreenRecorder::start(const std::string& output, const std::string& geometry) {
+std::string
+ScreenRecorder::start(const std::string& output, const std::string& geometry, capture::RecordingAudio audio) {
   if (active())
     return "A recording is already running";
   if (!process::commandExists("wf-recorder"))
     return "Install wf-recorder to record video";
-  // Resolve the sink's monitor explicitly: never fall back to the default microphone.
-  auto sink = process::runSyncWithTimeout({"pactl", "get-default-sink"}, 2s);
-  const auto source = StringUtils::trim(sink.out);
-  if (!sink || source.empty())
-    return "Cannot find the desktop audio output";
+  // Resolve the requested source explicitly. Silent video does not need an audio server.
+  std::string source;
+  if (audio != capture::RecordingAudio::Off) {
+    const bool desktop = audio == capture::RecordingAudio::Desktop;
+    auto device = process::runSyncWithTimeout({"pactl", desktop ? "get-default-sink" : "get-default-source"}, 2s);
+    source = StringUtils::trim(device.out);
+    if (!device || source.empty() || (!desktop && source.ends_with(".monitor")))
+      return desktop ? "Cannot find the desktop audio output" : "Cannot find a microphone input";
+    if (desktop)
+      source += ".monitor";
+  }
   auto directoryResult = process::runSyncWithTimeout({"xdg-user-dir", "VIDEOS"}, 2s);
   std::filesystem::path directory = StringUtils::trim(directoryResult.out);
   if (!directoryResult || !directory.is_absolute()) {
@@ -52,15 +59,25 @@ std::string ScreenRecorder::start(const std::string& output, const std::string& 
   m_log += ".log";
   // NVENC keeps gaming capture off the CPU. Software is used when no NVIDIA GPU is present.
   const bool nvidia = std::filesystem::exists("/proc/driver/nvidia/version");
-  std::vector<std::string> args{"wf-recorder", "--overwrite",
-                                "--no-dmabuf", "-o",
-                                output,        "--audio=" + source + ".monitor",
-                                "-C",          "aac",
-                                "-r",          "60",
-                                "-c",          nvidia ? "h264_nvenc" : "libx264",
-                                "-x",          "yuv420p",
-                                "-F",          "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-                                "-f",          m_path.string()};
+  std::vector<std::string> args{
+      "wf-recorder",
+      "--overwrite",
+      "--no-dmabuf",
+      "-o",
+      output,
+      "-r",
+      "60",
+      "-c",
+      nvidia ? "h264_nvenc" : "libx264",
+      "-x",
+      "yuv420p",
+      "-F",
+      "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+      "-f",
+      m_path.string()
+  };
+  if (!source.empty())
+    args.insert(args.end(), {"--audio=" + source, "-C", "aac"});
   if (nvidia) {
     args.insert(args.end(), {"-p", "preset=p4", "-p", "cq=20"});
   } else {
@@ -85,7 +102,10 @@ std::string ScreenRecorder::start(const std::string& output, const std::string& 
   m_pid = pid;
   m_stopping = false;
   m_started = std::chrono::steady_clock::now();
+  ++m_sessionId;
   m_poll.startRepeating(200ms, [this] { poll(); });
+  if (activeChanged)
+    activeChanged(true);
   return {};
 }
 
@@ -97,13 +117,20 @@ void ScreenRecorder::stop() {
   ::kill(m_pid, SIGINT); // Let the encoder flush audio and finish the MP4 container.
 }
 
+std::chrono::seconds ScreenRecorder::elapsed() const {
+  if (!active())
+    return 0s;
+  return std::chrono::duration_cast<std::chrono::seconds>(
+      (m_stopping ? m_stopRequested : std::chrono::steady_clock::now()) - m_started
+  );
+}
+
 std::string ScreenRecorder::label() const {
   if (!active())
     return {};
   if (m_stopping)
     return "Saving…";
-  const auto seconds =
-      std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - m_started).count();
+  const auto seconds = elapsed().count();
   return std::format("REC {:02}:{:02}  ■", seconds / 60, seconds % 60);
 }
 
@@ -117,16 +144,25 @@ void ScreenRecorder::poll() {
       ::kill(m_pid, SIGKILL);
     return;
   }
+  const auto duration = elapsed();
   m_pid = -1;
+  m_stopping = false;
   m_poll.stop();
+  if (activeChanged)
+    activeChanged(false);
   std::error_code error;
   const auto bytes = std::filesystem::file_size(m_path, error);
   const bool success = result > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0 && !error && bytes > 0;
-  const std::string message = success ? m_path.string() : "Recording failed; details: " + m_log.string();
   if (success)
     std::filesystem::remove(m_log, error);
   if (completed)
-    completed(success, message);
+    completed({
+        .success = success,
+        .path = m_path,
+        .duration = duration,
+        .bytes = success ? bytes : 0,
+        .error = success ? std::string{} : "Recording failed; details: " + m_log.string(),
+    });
 }
 
 void ScreenRecorder::shutdown() {
@@ -141,6 +177,9 @@ void ScreenRecorder::shutdown() {
     ::kill(m_pid, SIGKILL);
     ::waitpid(m_pid, nullptr, 0);
     m_pid = -1;
+    if (activeChanged)
+      activeChanged(false);
   }
   m_poll.stop();
+  activeChanged = {};
 }

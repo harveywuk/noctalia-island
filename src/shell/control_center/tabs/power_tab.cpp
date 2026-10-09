@@ -3,7 +3,9 @@
 #include "dbus/power/power_profiles_service.h"
 #include "dbus/upower/upower_service.h"
 #include "i18n/i18n.h"
+#include "idle/idle_inhibitor.h"
 #include "render/core/renderer.h"
+#include "shell/panel/panel_manager.h"
 #include "time/time_format.h"
 #include "ui/builders.h"
 #include "ui/controls/toggle.h"
@@ -112,8 +114,8 @@ bool PowerTab::shouldShowChargeLimit(const UPowerChargeLimitState& state) noexce
   return hasNumericThreshold || firmwareManaged || chargeLimitControlState(state).visible;
 }
 
-PowerTab::PowerTab(UPowerService* upower, PowerProfilesService* powerProfiles)
-    : m_upower(upower), m_powerProfiles(powerProfiles) {}
+PowerTab::PowerTab(UPowerService* upower, PowerProfilesService* powerProfiles, IdleInhibitor* idle)
+    : m_upower(upower), m_powerProfiles(powerProfiles), m_idle(idle) {}
 
 std::unique_ptr<Flex> PowerTab::create() {
   const float scale = contentScale();
@@ -138,6 +140,39 @@ std::unique_ptr<Flex> PowerTab::create() {
   content->setDirection(FlexDirection::Vertical);
   content->setAlign(FlexAlign::Stretch);
   content->setGap(Style::spaceMd * scale);
+
+  if (m_idle && m_idle->available()) {
+    auto card = ui::column({.gap = 8 * scale});
+    applySectionCardStyle(*card, scale, panelCardOpacity());
+    addTitle(*card, i18n::tr("utilities.keep-awake.title"), scale);
+    card->addChild(
+        ui::label(
+            {.out = &m_awakeStatus, .fontSize = 12 * scale, .color = colorSpecFromRole(ColorRole::OnSurfaceVariant)}
+        )
+    );
+    auto durations = ui::row({.gap = 8 * scale});
+    for (int minutes : {15, 30, 60}) {
+      durations->addChild(
+          ui::button(
+              {.text = i18n::tr("utilities.keep-awake.minutes", "minutes", std::to_string(minutes)),
+               .fontSize = 12 * scale,
+               .onClick = [this, minutes] { m_idle->setEnabledFor(std::chrono::minutes(minutes)); }}
+          )
+      );
+    }
+    durations->addChild(
+        ui::button({.text = i18n::tr("utilities.keep-awake.indefinite"), .fontSize = 12 * scale, .onClick = [this] {
+                      m_idle->setEnabled(true);
+                    }})
+    );
+    durations->addChild(
+        ui::button({.text = i18n::tr("utilities.keep-awake.off"), .fontSize = 12 * scale, .onClick = [this] {
+                      m_idle->setEnabled(false);
+                    }})
+    );
+    card->addChild(std::move(durations));
+    content->addChild(std::move(card));
+  }
 
   // Shown only while no other card has anything to show (no UPower devices, no profiles).
   auto empty = control_center::makeEmptyState(
@@ -402,7 +437,15 @@ void PowerTab::buildPeripheralsCard(Flex& root, float scale) {
   root.addChild(std::move(card));
 }
 
+void PowerTab::setActive(bool active) {
+  m_countdownRefresh.stop();
+  if (active && m_awakeStatus)
+    m_countdownRefresh.startRepeating(std::chrono::seconds(15), [] { PanelManager::instance().refresh(); });
+}
+
 void PowerTab::onClose() {
+  m_countdownRefresh.stop();
+  m_awakeStatus = nullptr;
   m_root = nullptr;
   m_statusCard = nullptr;
   m_statusGlyph = nullptr;
@@ -443,12 +486,24 @@ void PowerTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
 }
 
 void PowerTab::syncEmptyState() {
+  if (m_awakeStatus && m_idle) {
+    const auto left = m_idle->remaining();
+    m_awakeStatus->setText(
+        !m_idle->enabled() ? i18n::tr("utilities.keep-awake.inactive")
+            : left         ? i18n::tr(
+                                 "utilities.keep-awake.remaining", "minutes",
+                                 std::to_string(std::chrono::ceil<std::chrono::minutes>(*left).count())
+                             )
+                           : i18n::tr("utilities.keep-awake.until-off")
+    );
+  }
   if (m_emptyCard == nullptr) {
     return;
   }
   const auto shown = [](const Flex* card) { return card != nullptr && card->visible(); };
   m_emptyCard->setVisible(
-      !shown(m_statusCard)
+      !m_awakeStatus
+      && !shown(m_statusCard)
       && !shown(m_profilesCard)
       && !shown(m_chargingCard)
       && !shown(m_healthCard)

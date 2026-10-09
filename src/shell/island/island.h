@@ -1,9 +1,10 @@
 #pragma once
-
+#include "capture/capture_options.h"
 #include "core/timer_manager.h"
 #include "notification/notification.h"
 #include "shell/bar/widget_action_dispatcher.h"
 #include "shell/island/island_media.h"
+#include "shell/island/island_network.h"
 #include "shell/island/island_panel_surface.h"
 #include "shell/island/island_privacy.h"
 #include "shell/island/island_state.h"
@@ -27,6 +28,7 @@ class WidgetFactory;
 class IpcService;
 struct BarServices;
 class PipeWireSpectrum;
+class IdleInhibitor;
 class SessionBus;
 class DownloadProgressService;
 struct DownloadProgress;
@@ -61,11 +63,17 @@ public:
   void refresh();
   void onWorkspaceChanged();
   bool showOsd(const OsdContent&);
+  void onNetworkStateChanged(const NetworkState&);
   // Calendar events about to start count down in the timers slot.
   void setCalendar(CalendarService* calendar) { m_calendar = calendar; }
   bool onNotification(const Notification&, NotificationEvent);
   bool onPointerEvent(const PointerEvent&);
   bool focusKeyboard();
+  bool openCaptureMenu(wl_output* output = nullptr);
+  void closeCaptureMenu();
+  void setCaptureCountdown(bool recording, int remaining, const std::string& output);
+  std::function<std::string(capture::LaunchOptions)> beginCapture;
+  std::function<void()> cancelCapture;
   bool onKeyboardEvent(const KeyboardEvent&);
   void hideDndSuppressed();
   // Reading history consumes previews without closing notifications or their actions.
@@ -83,6 +91,7 @@ public:
   bool endScriptActivity(const std::string& id);
   [[nodiscard]] bool enabled() const;
   [[nodiscard]] bool osdVisible() const;
+  [[nodiscard]] bool desktopShared() const { return m_desktopShared; }
   std::function<void(wl_output*, const std::string&)> openPanel;
   // Raises a window of the first app found among lower-case executable names; false if none.
   std::function<bool(const std::vector<std::string>&)> focusApp;
@@ -105,10 +114,13 @@ private:
   void updateGlass(Instance&, float x, float y, float radius);
   void updateVisibility(Instance&);
   bool trackPreview(const IslandConfig&, wl_output*) const;
+  bool connectionAudioOsd(const Instance&) const;
+  std::optional<std::string> cardActionKey(const Instance&) const;
   void releaseKeyboard(Instance&);
   // The flowing artwork gradient behind the capsule while media plays (Cupertino look).
   void updateFlow(Instance&, const std::string& artwork);
-  void crossfadeOut(Instance&, std::unique_ptr<Node> previous);
+  void crossfadeOut(Instance&, std::unique_ptr<Node> previous, bool cardChanged);
+  void clearCrossfade(Instance&);
   void fitSurface(Instance&);
   bool animatesFlow(const Instance&) const;
   void syncFlowTimer();
@@ -120,6 +132,7 @@ private:
   void destroySurfaces();
   std::vector<island::Battery> batteries(const IslandConfig&, wl_output*) const;
   std::vector<island::PrivacyActivity> privacy() const;
+  std::optional<std::chrono::seconds> awakeRemaining() const;
   std::vector<island::Countdown> countdowns() const;
   // Desktop downloads and script activities, with running jobs before paused ones.
   std::vector<DownloadProgress> progressActivities() const;
@@ -141,7 +154,11 @@ private:
   BluetoothService* m_bluetooth = nullptr;
   PipeWireService* m_pipewire = nullptr;
   PipeWireSpectrum* m_spectrum = nullptr;
+  IdleInhibitor* m_idle = nullptr;
   mutable island::PrivacySummary m_privacySummary;
+  island::CaptureSessions m_screenSessions;
+  island::CaptureSessions m_cameraSessions;
+  bool m_desktopShared = false;
   std::unique_ptr<DownloadProgressService> m_downloads;
   CalendarService* m_calendar = nullptr;
   // Up-next events the user dismissed, keyed by countdown id.
@@ -160,6 +177,7 @@ private:
   std::unique_ptr<WidgetFactory> m_widgetFactory;
   noctalia::bar::WidgetActionDispatcher m_widgetActions;
   std::vector<std::unique_ptr<Instance>> m_instances;
+  std::uint64_t m_crossfadeSerial = 0;
   std::optional<Notification> m_notification;
   std::vector<Notification> m_urgentNotifications;
   std::optional<TimePoint> m_notificationDeadline;
@@ -180,6 +198,8 @@ private:
   std::chrono::steady_clock::time_point m_flowStart = std::chrono::steady_clock::now();
   std::unique_ptr<island::BatteryConnections> m_batteryConnections;
   Timer m_batteryTimeout;
+  island::NetworkActivity m_networkActivity;
+  Timer m_networkTimeout;
   Timer m_osdTimeout;
   // OSDs are dropped until then: a panel just closed, and its last slider or toggle changes
   // must not replay as an OSD once the Island is back.

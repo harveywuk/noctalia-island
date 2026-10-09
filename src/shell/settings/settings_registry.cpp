@@ -1364,6 +1364,8 @@ namespace settings {
       };
       islandSetting("monitors", "track_preview_monitor", previewMonitor(island.trackPreviewMonitor));
       islandSetting("monitors", "bluetooth_preview_monitor", previewMonitor(island.bluetoothPreviewMonitor));
+      islandSetting("osd", "network_preview_seconds", SliderSetting{island.networkPreviewSeconds, 0, 30, 1, true});
+      islandSetting("monitors", "network_preview_monitor", previewMonitor(island.networkPreviewMonitor));
       islandSetting("osd", "volume_bar_height", SliderSetting{island.volumeBarHeight, 5, 24, 1, true});
       islandSetting("osd", "volume_show_percentage", ToggleSetting{island.volumeShowPercentage});
       const auto hoverWidgets = [&](std::string key, const std::vector<std::string>& items) {
@@ -2562,6 +2564,22 @@ namespace settings {
       );
       entries.push_back(std::move(e));
     }
+    entries.push_back(makeEntry(
+        SettingsSection::Screenshot, "screenshot-output", tr("utilities.text.languages-label"),
+        tr("utilities.text.languages-detail"), {"shell", "screenshot", "text_languages"},
+        TextSetting{.value = cfg.shell.screenshot.textLanguages, .placeholder = "eng", .browseFileExtensions = {}},
+        "text capture recognition OCR language", true
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Screenshot, "screenshot-output", tr("utilities.text.data-label"),
+        tr("utilities.text.data-detail"), {"shell", "screenshot", "text_data_directory"},
+        TextSetting{
+            .value = cfg.shell.screenshot.textDataDirectory,
+            .browseMode = TextSettingBrowseMode::SelectFolder,
+            .browseFileExtensions = {}
+        },
+        "text capture recognition OCR language data directory", true
+    ));
     entries.push_back(makeEntry(
         SettingsSection::Screenshot, "screenshot-output", tr("settings.schema.shell.screenshot-pipe-to-command.label"),
         tr("settings.schema.shell.screenshot-pipe-to-command.description"), {"shell", "screenshot", "pipe_to_command"},

@@ -26,6 +26,8 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
     env.update(XDG_CURRENT_DESKTOP='labwc',XDG_SESSION_TYPE='wayland',HOME=str(base))
     env.update(NOCTALIA_ASSETS_DIR=str(REPO/'assets'), GSETTINGS_BACKEND='keyfile',
                PIPEWIRE_RUNTIME_DIR=str(runtime), PULSE_SERVER='unix:'+str(runtime/'pulse/native'))
+    # Direct V4L2 detection must not import host camera users into this private desktop.
+    (base/'emptyproc').mkdir(); env['NOCTALIA_PRIVACY_PROC_ROOT']=str(base/'emptyproc')
     env['DBUS_SYSTEM_BUS_ADDRESS']=env['DBUS_SESSION_BUS_ADDRESS']
     processes=[]
     def run(args): return subprocess.check_output(args,env=env,text=True,stderr=subprocess.STDOUT,timeout=15)
@@ -112,14 +114,18 @@ with tempfile.TemporaryDirectory(prefix='noctalia-capture-smoke-') as tmp:
         wait(lambda:msg('record-status').startswith('REC'),'region recording start')
         time.sleep(2)
         run(['grim',str(out/'recording-indicator.png')])
-        # Click the red island timer to stop, then verify idle and video/audio streams.
-        move(640,38);command(pointer,'press')
+        # Opening the recording activity must not stop it. Its explicit Stop button
+        # stays usable when held across elapsed-time ticks.
+        move(640,38);click();time.sleep(1)
+        assert msg('record-status').startswith('REC'), 'opening the recording card stopped it'
+        run(['grim',str(out/'recording-activity.png')])
+        move(735,117);command(pointer,'press')
         before_tick=msg('record-status').strip()
         wait(lambda:msg('record-status').strip()!=before_tick,'recording timer tick while pressed')
         time.sleep(1.1) # Include the Island's one-second refresh before release.
         assert msg('record-status').startswith('REC'), 'press alone must not stop recording'
         command(pointer,'release')
-        wait(lambda:msg('record-status').strip()=='idle','click-to-stop')
+        wait(lambda:msg('record-status').strip()=='idle','activity-stop')
         assert msg('screenshot-annotate').strip()=='ok';time.sleep(1)
         move(487,40);click();time.sleep(1);run(['grim',str(out/'monitor-picker.png')]);move(690,45);click();time.sleep(.5);run(['grim',str(out/'monitor-picked.png')])
         wait(lambda:msg('record-status').startswith('REC'),'monitor recording start')

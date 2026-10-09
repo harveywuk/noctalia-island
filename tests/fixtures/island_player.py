@@ -7,10 +7,10 @@ root='org.mpris.MediaPlayer2'
 player=root+'.Player'
 props={
  root:{'Identity':GLib.Variant('s','Island Test Player'),'DesktopEntry':GLib.Variant('s','test'), 'CanQuit':GLib.Variant('b',False),'CanRaise':GLib.Variant('b',os.environ.get('ISLAND_TEST_CAN_RAISE') == '1'),'HasTrackList':GLib.Variant('b',False),'SupportedUriSchemes':GLib.Variant('as',[]),'SupportedMimeTypes':GLib.Variant('as',[])},
- player:{'PlaybackStatus':GLib.Variant('s','Playing'),'LoopStatus':GLib.Variant('s','None'),'Rate':GLib.Variant('d',1),'Shuffle':GLib.Variant('b',False),'Volume':GLib.Variant('d',.7),'Position':GLib.Variant('x',74000000),'MinimumRate':GLib.Variant('d',1),'MaximumRate':GLib.Variant('d',1),**{k:GLib.Variant('b',True) for k in ['CanControl','CanPlay','CanPause','CanGoNext','CanGoPrevious','CanSeek']}}
+ player:{'PlaybackStatus':GLib.Variant('s',os.environ.get('ISLAND_TEST_STATUS','Playing')),'LoopStatus':GLib.Variant('s','None'),'Rate':GLib.Variant('d',1),'Shuffle':GLib.Variant('b',False),'Volume':GLib.Variant('d',.7),'Position':GLib.Variant('x',74000000),'MinimumRate':GLib.Variant('d',1),'MaximumRate':GLib.Variant('d',1),**{k:GLib.Variant('b',True) for k in ['CanControl','CanPlay','CanPause','CanGoNext','CanGoPrevious','CanSeek']}}
 }
 def metadata(title):
- return GLib.Variant('a{sv}',{'mpris:trackid':GLib.Variant('o','/track/one'),'mpris:length':GLib.Variant('x',218000000),'xesam:title':GLib.Variant('s',title),'xesam:artist':GLib.Variant('as',['Orbit • Native Noctalia']),'mpris:artUrl':GLib.Variant('s',os.environ['ISLAND_TEST_ART'])})
+ return GLib.Variant('a{sv}',{'mpris:trackid':GLib.Variant('o','/track/one'),**({'xesam:url':GLib.Variant('s',os.environ['ISLAND_TEST_URL'])} if os.environ.get('ISLAND_TEST_URL') else {}),'mpris:length':GLib.Variant('x',218000000),'xesam:title':GLib.Variant('s',title),'xesam:artist':GLib.Variant('as',[os.environ.get('ISLAND_TEST_ARTIST','Orbit • Native Noctalia')]),'mpris:artUrl':GLib.Variant('s',os.environ['ISLAND_TEST_ART'])})
 props[player]['Metadata']=metadata(os.environ.get('ISLAND_TEST_TITLE','A little closer to home'))
 if os.environ.get('ISLAND_TEST_TICK'):
  props[player]['Position']=GLib.Variant('x',0)

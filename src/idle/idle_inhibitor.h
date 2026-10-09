@@ -1,6 +1,9 @@
 #pragma once
 
+#include "core/timer_manager.h"
+
 #include <functional>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -28,6 +31,10 @@ public:
   void setAnchorSurfacesProvider(AnchorSurfacesProvider provider);
   void toggle();
   void setEnabled(bool enabled);
+  void setEnabledFor(std::chrono::milliseconds duration);
+  // Adds to a running deadline without restarting an ended or indefinite session.
+  bool extendTimed(std::chrono::milliseconds duration);
+  [[nodiscard]] std::optional<std::chrono::seconds> remaining() const;
   [[nodiscard]] bool enabled() const noexcept { return m_enabled; }
   [[nodiscard]] bool available() const noexcept;
   void setChangeCallback(ChangeCallback callback);
@@ -53,6 +60,8 @@ private:
   AnchorSurfacesProvider m_anchorSurfacesProvider;
   ChangeCallback m_changeCallback;
   bool m_enabled = false;
+  Timer m_expiryTimer;
+  std::optional<std::chrono::steady_clock::time_point> m_deadline;
   bool m_loggedWaylandEnable = false;
   bool m_loggedLogindEnable = false;
 };

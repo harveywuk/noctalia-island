@@ -174,6 +174,19 @@ void Application::initIpc() {
       m_panelManager.refresh();
     }
   };
+  m_ipcService.bind(noctalia::cli::msg::focusSet, [this](const std::string& args) {
+    return m_notificationManager.selectFocus(StringUtils::trim(args))
+        ? std::string("ok\n")
+        : std::string("error: focus-set requires off, auto, work, gaming or sleep\n");
+  });
+  m_ipcService.bind(noctalia::cli::msg::focusStatus, [this](const std::string&) {
+    const auto& id = m_notificationManager.focusId();
+    return nlohmann::json{
+               {"mode", id.empty() ? (m_notificationManager.doNotDisturb() ? "dnd" : "off") : id},
+               {"automatic", m_notificationManager.focusAutomatic()}
+           }.dump()
+        + "\n";
+  });
 
   m_ipcService.bind(
       noctalia::cli::msg::notificationDndSet, [this, applyNotificationDnd](const std::string& args) -> std::string {
@@ -192,7 +205,7 @@ void Application::initIpc() {
         }
 
         const bool currentState = m_notificationManager.doNotDisturb();
-        if (currentState == *nextState) {
+        if (currentState == *nextState && m_notificationManager.focusId().empty()) {
           return "ok\n";
         }
         applyNotificationDnd(*nextState);
@@ -763,6 +776,13 @@ void Application::initIpc() {
     return m_island.focusKeyboard() ? "ok\n" : "error: island is unavailable\n";
   });
   registerIslandActivityIpc();
+  m_ipcService.bind(noctalia::cli::msg::captureMenu, [this](const std::string&) -> std::string {
+    if (m_lockScreen.isActive())
+      return "error: session is locked\n";
+    return m_island.openCaptureMenu(m_compositorPlatform.preferredInteractiveOutput())
+        ? "ok\n"
+        : "error: island is unavailable\n";
+  });
   m_desktopWidgetsController.registerIpc(m_ipcService);
   m_lockscreenWidgetsController.registerIpc(m_ipcService);
   m_panelManager.registerIpc(m_ipcService);

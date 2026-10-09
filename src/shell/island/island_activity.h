@@ -8,23 +8,24 @@
 #include <optional>
 
 namespace island {
-  using ActivityOrder = std::array<Activity, 3>;
+  // Timed Keep Awake follows the user's ordering of media, downloads and timers.
+  using ActivityOrder = std::array<Activity, 4>;
 
   constexpr ActivityOrder activityOrder(IslandActivityPriority priority) {
     using enum Activity;
     switch (priority) {
     case IslandActivityPriority::TimersMediaDownloads:
-      return {Timers, Media, Downloads};
+      return {Timers, Media, Downloads, Awake};
     case IslandActivityPriority::DownloadsTimersMedia:
-      return {Downloads, Timers, Media};
+      return {Downloads, Timers, Media, Awake};
     case IslandActivityPriority::DownloadsMediaTimers:
-      return {Downloads, Media, Timers};
+      return {Downloads, Media, Timers, Awake};
     case IslandActivityPriority::MediaTimersDownloads:
-      return {Media, Timers, Downloads};
+      return {Media, Timers, Downloads, Awake};
     case IslandActivityPriority::MediaDownloadsTimers:
-      return {Media, Downloads, Timers};
+      return {Media, Downloads, Timers, Awake};
     default:
-      return {Timers, Downloads, Media};
+      return {Timers, Downloads, Media, Awake};
     }
   }
 

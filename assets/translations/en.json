@@ -1,9 +1,81 @@
 {
   "island": {
+    "capture-menu": {
+      "title": "Capture",
+      "keyboard-hint": "← → options · Tab next",
+      "screenshot": "Screenshot",
+      "record": "Record",
+      "area": "Area",
+      "region": "Region",
+      "window": "Window",
+      "monitor": "Monitor",
+      "delay": "Delay",
+      "off": "Off",
+      "audio": "Audio",
+      "desktop": "Desktop",
+      "microphone": "Mic",
+      "cancel": "Cancel",
+      "select-region": "Select Region",
+      "select-window": "Select Window",
+      "loading-windows": "Finding windows…",
+      "window-hint": "Click or Enter to capture · Tab to switch · Esc to cancel",
+      "no-windows": "No visible windows · Esc to cancel",
+      "window-unavailable": "Window selection is unavailable on this desktop.",
+      "window-gone": "The selected window is no longer available.",
+      "select-monitor": "Select Monitor",
+      "starting-recording": "Starting recording",
+      "taking-screenshot": "Taking screenshot",
+      "countdown": "In {seconds}s",
+      "locked": "Unlock the session to capture the screen.",
+      "unavailable": "Screen capture is unavailable.",
+      "busy": "Another capture is already in progress.",
+      "recording-active": "A recording is already running.",
+      "missing-recorder": "Install wf-recorder to record video.",
+      "no-output": "Enable saving, copying or annotation in Screenshot settings.",
+      "one-monitor": "Select an area within one monitor."
+    },
+    "connection": {
+      "connected": "Connected",
+      "audio-output": "Audio output",
+      "battery-detail": "{status} · {percentage}%",
+      "open-audio": "Open sound controls",
+      "open-bluetooth": "Open Bluetooth devices"
+    },
     "activities": {
       "media": "Media",
       "downloads": "Downloads",
-      "timers": "Timers"
+      "timers": "Timers",
+      "microphone": "Mic",
+      "awake": "Awake",
+      "capture": "Screen",
+      "camera": "Camera"
+    },
+    "camera": {
+      "detail": "Your camera is in use"
+    },
+    "capture": {
+      "title": "Screen capture",
+      "recording": "Screen recording",
+      "detail": "Your screen is being captured",
+      "elapsed": "Active for {time}",
+      "stop": "Stop recording",
+      "saving": "Saving…",
+      "settings": "Open privacy controls"
+    },
+    "microphone": {
+      "title": "Microphone",
+      "live": "Live input",
+      "muted": "Muted",
+      "mute": "Mute microphone",
+      "unmute": "Unmute microphone",
+      "unavailable": "Input controls unavailable"
+    },
+    "awake": {
+      "detail": "Preventing automatic sleep",
+      "remaining": "remaining",
+      "extend": "+15 min",
+      "end": "End",
+      "settings": "Open power controls"
     },
     "status": {
       "dnd": "Do Not Disturb",
@@ -12,6 +84,7 @@
       "off": "Off"
     },
     "split": {
+      "awake": "Show Keep Awake",
       "media": "Show Now Playing",
       "downloads": "Show downloads",
       "timers": "Show timer"
@@ -68,6 +141,18 @@
       "display": "Display",
       "microphone": "Microphone",
       "sound": "Sound"
+    },
+    "network": {
+      "connected-to": "Connected to",
+      "wifi-connected": "Wi-Fi connected",
+      "ethernet-connected": "Ethernet connected",
+      "cellular-connected": "Mobile network connected",
+      "lost": "Connection lost",
+      "restored": "Connection restored",
+      "ethernet": "Ethernet",
+      "wifi": "Wi-Fi",
+      "cellular": "Mobile network",
+      "open-controls": "Open network controls"
     }
   },
   "auth": {
@@ -594,7 +679,9 @@
       "power": "Power",
       "screen-time": "Screen Time",
       "system": "System",
-      "weather": "Weather"
+      "weather": "Weather",
+      "privacy": "Privacy",
+      "focus": "Focus"
     },
     "weather": {
       "daily": {
@@ -1365,6 +1452,10 @@
         "keywords": "screen recording video capture",
         "title": "Record Screen"
       },
+      "capture-menu": {
+        "keywords": "capture screenshot recording screen monitor region audio timer",
+        "title": "Screenshot & Recording"
+      },
       "screenshot": {
         "keywords": "screenshot capture region screen",
         "title": "Take Screenshot"
@@ -1429,7 +1520,39 @@
         "title": "Pick Color",
         "keywords": "color colour picker eyedropper hex"
       },
-      "pick-color-missing": "Install hyprpicker to pick colours from the screen"
+      "pick-color-missing": "Install hyprpicker to pick colours from the screen",
+      "text-capture": {
+        "title": "Copy Text from Screen",
+        "keywords": "text OCR read image extract scan screenshot"
+      },
+      "keep-awake-15": {
+        "title": "Keep Awake for 15 Minutes",
+        "keywords": "caffeine sleep screen awake timer"
+      },
+      "keep-awake-30": {
+        "title": "Keep Awake for 30 Minutes",
+        "keywords": "caffeine sleep screen awake timer"
+      },
+      "keep-awake-60": {
+        "title": "Keep Awake for 1 Hour",
+        "keywords": "caffeine sleep screen awake timer"
+      },
+      "focus-work": {
+        "title": "Work Focus",
+        "keywords": "focus work notifications concentrate"
+      },
+      "focus-gaming": {
+        "title": "Gaming Focus",
+        "keywords": "focus game gaming notifications"
+      },
+      "focus-sleep": {
+        "title": "Sleep Focus",
+        "keywords": "focus sleep quiet notifications"
+      },
+      "focus-off": {
+        "title": "Turn Focus Off",
+        "keywords": "focus disable notifications"
+      }
     },
     "time": {
       "local": "Local",
@@ -1760,6 +1883,10 @@
       "mpris-disabled": "MPRIS disabled",
       "polkit-agent": "Polkit Agent",
       "polkit-no-session": "Polkit agent needs logind, elogind, or XDG_SESSION_ID. On seatd-only setups it cannot register for graphical prompts. Use terminal pkexec for greeter sync, or install elogind for in-session authentication.",
+      "recording-details": "{duration} · {size}",
+      "recording-failed": "Recording failed",
+      "recording-play": "Play",
+      "recording-saved": "Recording saved",
       "screen-time-reset": "Screen Time",
       "screen-time-reset-success": "Usage history cleared.",
       "screenshot-markup": "Markup",
@@ -4835,23 +4962,23 @@
         },
         "track_preview_monitor": {
           "label": "Track preview monitor",
-          "description": "Choose where new track titles appear. Focused monitor uses the display focused when the track changes."
+          "description": "Choose where new track titles and artists appear. Focused monitor uses the display focused when playback starts."
         },
         "bluetooth_preview_monitor": {
-          "label": "Bluetooth connection preview monitor",
-          "description": "Choose where the battery ring appears after connection. Low-battery warnings and hover details remain on every Island."
+          "label": "Device connection preview monitor",
+          "description": "Choose where device connection cards and battery glows appear. Low-battery warnings and hover details remain on every Island."
         },
         "track_preview_seconds": {
           "label": "Track preview (seconds)",
-          "description": "How long a new track title stays visible. Set to 0 to disable title previews."
+          "description": "How long a new track title and artist stay visible. Set to 0 to disable track previews."
         },
         "paused_media_seconds": {
           "label": "Hide paused media after (seconds)",
           "description": "Keep the compact indicator briefly after pausing. Set to 0 to hide it immediately; hover controls remain available."
         },
         "bluetooth_preview_seconds": {
-          "label": "Bluetooth battery preview (seconds)",
-          "description": "Show the battery ring briefly after connection. Set to 0 for hover only; low batteries stay visible."
+          "label": "Device connection preview (seconds)",
+          "description": "Briefly show a connected device's name and battery level. Set to 0 to disable connection cards; battery glows keep their ten-second lifetime."
         },
         "reveal_on_track_change": {
           "label": "Reveal on track changes",
@@ -4872,6 +4999,14 @@
         "volume_show_percentage": {
           "label": "Show volume percentage",
           "description": "Display the volume value above the bar."
+        },
+        "network_preview_seconds": {
+          "label": "Network connection preview (seconds)",
+          "description": "Show confirmed network connections and sustained connection losses. Brief dropouts stay quiet. Set to 0 to disable these cards."
+        },
+        "network_preview_monitor": {
+          "label": "Network connection preview monitor",
+          "description": "Choose where network connection cards appear. Focused monitor uses the display focused when the network changes."
         }
       }
     },
@@ -7137,5 +7272,72 @@
     "empty": "No open windows",
     "hint": "Tab · Shift+Tab · Arrow keys · Release Alt to switch · Esc to cancel",
     "title": "Windows"
+  },
+  "utilities": {
+    "text": {
+      "reading": "Reading text…",
+      "copied": "Text copied",
+      "empty": "No text found",
+      "failed": "Could not read text. Check recognition language data.",
+      "copy-failed": "Could not copy text",
+      "missing-engine": "Install Tesseract to read text",
+      "languages-label": "Text recognition languages",
+      "languages-detail": "Installed language codes, separated by +. For example: eng+deu.",
+      "data-label": "Text recognition data folder",
+      "data-detail": "Leave empty to use the system language files."
+    },
+    "keep-awake": {
+      "title": "Keep Awake",
+      "minutes": "{minutes} min",
+      "indefinite": "Until off",
+      "off": "Off",
+      "inactive": "Display and sleep follow your normal settings.",
+      "remaining": "{minutes} min remaining",
+      "until-off": "On until you turn it off"
+    },
+    "privacy": {
+      "empty": "No capture detected",
+      "empty-detail": "No microphone, camera or screen captures are currently reported.",
+      "open-app": "Open App",
+      "detail": "Stop sharing or recording in the app using it. Background services may not have a window to open.",
+      "no-window": "This app has no window to open."
+    },
+    "focus": {
+      "off": "Off",
+      "recording": "Recording",
+      "while-recording": "Focus while recording",
+      "recording-detail": "Silence ordinary notifications during shell recordings. Urgent alerts remain visible. Your Focus returns afterward; manual choices take precedence.",
+      "work": "Work",
+      "gaming": "Gaming",
+      "sleep": "Sleep",
+      "dnd": "Do Not Disturb",
+      "off-feedback": "Focus off",
+      "follow-schedules": "Follow schedules",
+      "manual-detail": "Manual choices last until the next scheduled change. Silenced notifications stay in Notification Centre.",
+      "configure": "Configure a Focus",
+      "allowed-apps": "Allowed apps",
+      "apps-example": "Firefox, Discord",
+      "apps-detail": "Separate app names with commas. These apps can notify you during this Focus.",
+      "allow-critical": "Allow critical notifications",
+      "schedule": "Schedule automatically",
+      "from": "From",
+      "until": "Until",
+      "schedule-detail": "Use local time (24-hour). Overnight schedules start on the selected day. Overlaps prefer Sleep, then Gaming, then Work.",
+      "save": "Save Focus",
+      "saved": "Focus settings saved",
+      "save-failed": "Could not save Focus settings",
+      "invalid-schedule": "Use valid HH:MM times, different start and end times, and at least one day.",
+      "automatic": "Automatic",
+      "manual": "Manual",
+      "days": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      }
+    }
   }
 }

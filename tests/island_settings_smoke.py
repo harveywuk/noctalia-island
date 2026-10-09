@@ -358,7 +358,8 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             run(['notify-send','-a','Media priority','-u','critical','-t','0','Urgent notification','Keep this above the track preview.'])
             time.sleep(.8);urgent=shot('urgent')
             media('Next');time.sleep(.7)
-            assert ImageChops.difference(urgent.crop((400,5,880,175)),shot('urgent-track-change').crop((400,5,880,175))).getbbox() is None,'Track change replaced an urgent notification'
+            # Compare the alert text inside the card; the critical-alert halo intentionally pulses.
+            assert ImageChops.difference(urgent.crop((452,46,825,95)),shot('urgent-track-change').crop((452,46,825,95))).getbbox() is None,'Track change replaced an urgent notification'
             msg('notification-clear-active');msg('notification-clear-history');time.sleep(.6)
             assert width(shot('preview-after-urgent'))>380,'Remaining track preview did not return after notification dismissal'
             path.write_text(path.read_text().replace('auto_hide=true','auto_hide=false'))

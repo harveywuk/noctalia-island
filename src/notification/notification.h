@@ -38,6 +38,7 @@ using WallTimePoint = WallClock::time_point;
 
 // Category of the shell's "Screenshot saved" notification; the Island shows its image as a thumbnail.
 inline constexpr std::string_view kScreenshotNotificationCategory = "x-noctalia.screenshot";
+inline constexpr std::string_view kRecordingNotificationCategory = "x-noctalia.recording";
 
 struct NotificationImageData {
   std::int32_t width = 0;

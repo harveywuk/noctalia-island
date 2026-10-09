@@ -2,6 +2,7 @@
 #include "config/config_service.h"
 #include "render/render_context.h"
 #include "shell/island/island.h"
+#include "shell/island/island_capture_glow.h"
 #include "shell/island/island_style.h"
 #include "shell/panel/panel.h"
 #include "shell/panel/panel_manager.h"
@@ -89,6 +90,8 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
     m_selectPopup->setShadowConfig(m_config->config().shell.shadow);
     m_selectPopup->setParent(m_layerSurface->layerSurface(), m_wlSurface, m_output);
     m_sceneRoot->setPopupContext(m_selectPopup.get());
+    m_islandCaptureGlow =
+        static_cast<island::CaptureGlow*>(m_sceneRoot->addChild(std::make_unique<island::CaptureGlow>()));
     auto capsule = std::make_unique<Box>();
     capsule->setFill(colorSpecFromRole(ColorRole::Surface));
     capsule->setClipChildren(true);
@@ -195,6 +198,10 @@ void PanelManager::applyIslandReveal(float progress) {
   auto* capsule = static_cast<Box*>(m_bgNode);
   const float radius = island::surfaceRadius(m_islandHeight, scale);
   capsule->setRadius(radius);
+  if (m_islandCaptureGlow) {
+    m_islandCaptureGlow->setGeometry(x, y, m_islandWidth, m_islandHeight, radius, scale);
+    m_islandCaptureGlow->update(m_islandHost->desktopShared(), island::CaptureGlow::sharingColor(), true);
+  }
   if (auto* flow = static_cast<Image*>(m_islandFlow)) {
     flow->setPosition(0, 0);
     flow->setSize(m_islandWidth, m_islandHeight);

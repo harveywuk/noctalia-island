@@ -93,7 +93,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             assert sum(max(pixel) > 12 for pixel in interior.getdata()) > 640, (name, index, 'Artwork flashed black')
         return event_time
 
-    def green(image, crop=(505, 22, 550, 60), threshold=70):
+    # The centred icon moves with the measured width of each result label.
+    def green(image, crop=(515, 22, 615, 60), threshold=70):
         return sum(g > threshold and g > r+15 and g > b+15
                    for r, g, b in image.crop(crop).getdata())
 
@@ -105,7 +106,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
     def absent(name):
         assert green(shot(name)) < 10, (name, 'Completion checkmark remained or replayed')
 
-    def red(image, crop=(505, 22, 550, 60), threshold=70):
+    def red(image, crop=(515, 22, 615, 60), threshold=70):
         # The translucent halo blends with the blue desktop, so allow the same
         # channel separation as the green halo instead of requiring opaque red.
         return sum(r > threshold and r > g+15 and r > b+15

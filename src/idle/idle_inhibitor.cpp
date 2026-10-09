@@ -7,6 +7,8 @@
 #include "wayland/wayland_connection.h"
 
 #include <algorithm>
+#include <charconv>
+#include <nlohmann/json.hpp>
 
 namespace {
 
@@ -45,7 +47,12 @@ bool IdleInhibitor::available() const noexcept {
 void IdleInhibitor::toggle() { setEnabled(!m_enabled); }
 
 void IdleInhibitor::setEnabled(bool enabled) {
+  const bool wasTimed = m_deadline.has_value();
+  m_deadline.reset();
+  m_expiryTimer.stop();
   if (m_enabled == enabled) {
+    if (wasTimed)
+      notifyChanged();
     return;
   }
 
@@ -61,6 +68,37 @@ void IdleInhibitor::setEnabled(bool enabled) {
     kLog.info("idle inhibitor disabled");
   }
   notifyChanged();
+}
+
+void IdleInhibitor::setEnabledFor(std::chrono::milliseconds duration) {
+  if (duration <= std::chrono::milliseconds::zero()) {
+    setEnabled(false);
+    return;
+  }
+  m_enabled = true;
+  m_deadline = std::chrono::steady_clock::now() + duration;
+  m_expiryTimer.start(duration, [this] { setEnabled(false); });
+  syncInhibitor(true);
+  notifyChanged();
+}
+
+std::optional<std::chrono::seconds> IdleInhibitor::remaining() const {
+  if (!m_deadline)
+    return std::nullopt;
+  return std::max(
+      std::chrono::seconds::zero(),
+      std::chrono::ceil<std::chrono::seconds>(*m_deadline - std::chrono::steady_clock::now())
+  );
+}
+
+bool IdleInhibitor::extendTimed(std::chrono::milliseconds duration) {
+  const auto now = std::chrono::steady_clock::now();
+  if (!m_enabled || !m_deadline || *m_deadline <= now || duration <= std::chrono::milliseconds::zero())
+    return false;
+  *m_deadline += duration;
+  m_expiryTimer.start(std::chrono::ceil<std::chrono::milliseconds>(*m_deadline - now), [this] { setEnabled(false); });
+  notifyChanged();
+  return true;
 }
 
 void IdleInhibitor::setChangeCallback(ChangeCallback callback) { m_changeCallback = std::move(callback); }
@@ -173,10 +211,28 @@ void IdleInhibitor::resyncAnchorSurfaces() {
 }
 
 void IdleInhibitor::registerIpc(IpcService& ipc, StateFeedbackCallback stateFeedback) {
+  ipc.bind(noctalia::cli::msg::caffeineFor, [this](const std::string& args) -> std::string {
+    int minutes = 0;
+    const auto [end, error] = std::from_chars(args.data(), args.data() + args.size(), minutes);
+    if (error != std::errc{} || end != args.data() + args.size() || minutes < 1 || minutes > 1440)
+      return "error: caffeine-for requires minutes from 1 to 1440\n";
+    if (!available())
+      return "error: caffeine protocol unavailable\n";
+    setEnabledFor(std::chrono::minutes(minutes));
+    return "ok\n";
+  });
+  ipc.bind(noctalia::cli::msg::caffeineStatus, [this](const std::string&) {
+    const auto left = remaining();
+    return nlohmann::json{
+               {"enabled", enabled()},
+               {"remaining_seconds", left ? nlohmann::json(left->count()) : nlohmann::json(nullptr)}
+           }.dump()
+        + "\n";
+  });
   ipc.bind(noctalia::cli::msg::caffeineEnable, [this, stateFeedback](const std::string&) -> std::string {
     if (!available())
       return "error: caffeine protocol unavailable\n";
-    if (m_enabled) {
+    if (m_enabled && !m_deadline) {
       return "ok\n";
     }
     setEnabled(true);

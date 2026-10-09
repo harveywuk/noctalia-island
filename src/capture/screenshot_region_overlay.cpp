@@ -2,6 +2,7 @@
 
 #include "config/config_types.h"
 #include "core/deferred_call.h"
+#include "core/input/key_modifiers.h"
 #include "core/input/key_symbols.h"
 #include "core/input/keybind_matcher.h"
 #include "core/log.h"
@@ -241,6 +242,7 @@ namespace capture {
     Label* dimensionsLabel = nullptr;
     Flex* confirmHint = nullptr;
     Label* confirmHintLabel = nullptr;
+    Label* windowTitleLabel = nullptr;
     AnimationManager animations;
     InputDispatcher inputDispatcher;
     bool pointerInside = false;
@@ -258,6 +260,64 @@ namespace capture {
   void ScreenshotRegionOverlay::setCompleteCallback(CompleteCallback callback) { m_onComplete = std::move(callback); }
 
   void ScreenshotRegionOverlay::setFailureCallback(FailureCallback callback) { m_onFailure = std::move(callback); }
+
+  void ScreenshotRegionOverlay::setWindowCompleteCallback(std::function<void(WindowTarget)> callback) {
+    m_onWindowComplete = std::move(callback);
+  }
+
+  void ScreenshotRegionOverlay::selectWindow(const WindowTarget* window) {
+    m_selectedWindow = window ? window->id : std::string{};
+    m_selectedWindowTitle = window ? window->title : std::string{};
+    m_confirming = window != nullptr;
+    if (window) {
+      m_startGlobalX = window->bounds.x;
+      m_startGlobalY = window->bounds.y;
+      m_currentGlobalX = window->bounds.x + window->bounds.width;
+      m_currentGlobalY = window->bounds.y + window->bounds.height;
+    }
+    updateSelectionVisuals();
+    for (auto& inst : m_instances)
+      if (inst->surface)
+        inst->surface->requestRedraw();
+  }
+
+  void ScreenshotRegionOverlay::setWindowTargets(std::vector<WindowTarget> windows) {
+    if (!m_active || !m_windowPick)
+      return;
+    m_windows = std::move(windows);
+    m_windowTargetsReady = true;
+    if (m_windowKeyboard) {
+      const auto current = std::ranges::find(m_windows, m_selectedWindow, &WindowTarget::id);
+      selectWindow(current != m_windows.end() ? &*current : m_windows.empty() ? nullptr : &m_windows.front());
+    } else {
+      selectWindow(windowAt(m_windows, m_cursorGlobalX, m_cursorGlobalY));
+    }
+  }
+
+  void ScreenshotRegionOverlay::cycleWindow(bool backwards) {
+    m_windowKeyboard = true;
+    const auto current = std::ranges::find(m_windows, m_selectedWindow, &WindowTarget::id);
+    if (m_windows.empty())
+      return;
+    const auto index = current == m_windows.end()
+        ? (backwards ? m_windows.size() - 1 : 0)
+        : (static_cast<std::size_t>(current - m_windows.begin()) + (backwards ? m_windows.size() - 1 : 1))
+            % m_windows.size();
+    selectWindow(&m_windows[index]);
+  }
+
+  void ScreenshotRegionOverlay::completeWindowSelection() {
+    const auto selected = std::ranges::find(m_windows, m_selectedWindow, &WindowTarget::id);
+    if (!m_active || !m_windowPick || selected == m_windows.end())
+      return;
+    DeferredCall::callLater([this, target = *selected] {
+      if (!m_active || !m_windowPick)
+        return;
+      cancel();
+      if (m_onWindowComplete)
+        m_onWindowComplete(target);
+    });
+  }
 
   void ScreenshotRegionOverlay::setConfirmKeybindLabels(
       std::string copyLabel, std::string saveLabel, std::string cancelLabel
@@ -278,7 +338,8 @@ namespace capture {
   }
 
   void ScreenshotRegionOverlay::begin(
-      bool freezeScreen, bool fullscreenPick, bool confirmRegion, std::optional<LogicalRect> initialRegion
+      bool freezeScreen, bool fullscreenPick, bool confirmRegion, std::optional<LogicalRect> initialRegion,
+      bool windowPick
   ) {
     if (m_wayland == nullptr || m_renderContext == nullptr) {
       return;
@@ -287,6 +348,12 @@ namespace capture {
     m_abandonedRegion.reset();
     m_freezeScreen = freezeScreen;
     m_fullscreenPick = fullscreenPick;
+    m_windowPick = windowPick;
+    m_windowKeyboard = true;
+    m_windowTargetsReady = false;
+    m_windows.clear();
+    m_selectedWindow.clear();
+    m_selectedWindowTitle.clear();
     m_confirmRegion = confirmRegion && !fullscreenPick;
     m_confirming = false;
     m_active = true;
@@ -317,6 +384,10 @@ namespace capture {
     m_freezeScreen = false;
     m_fullscreenPick = false;
     m_confirmRegion = false;
+    m_windowPick = false;
+    m_windows.clear();
+    m_selectedWindow.clear();
+    m_selectedWindowTitle.clear();
     m_frozenScreenshots.clear();
     destroySurfaces();
   }
@@ -342,7 +413,7 @@ namespace capture {
   }
 
   std::optional<LogicalRect> ScreenshotRegionOverlay::selectionRectIfValid() const {
-    if (m_fullscreenPick) {
+    if (m_fullscreenPick || m_windowPick) {
       return std::nullopt;
     }
     const int globalX0 = static_cast<int>(std::floor(std::min(m_startGlobalX, m_currentGlobalX)));
@@ -489,9 +560,18 @@ namespace capture {
         .acceptedButtons = InputArea::buttonMask(BTN_LEFT),
         .cursorShape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR,
         .focusable = true,
+        // Background monitor clicks must release inside a real hit area, not just its dimming children.
+        .width = w,
+        .height = h,
     });
 
-    if (m_fullscreenPick) {
+    if (m_windowPick) {
+      input->setCursorShape(WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER);
+      input->setOnClick([this](const InputArea::PointerData& data) {
+        if (!data.pressed && data.button == BTN_LEFT)
+          completeWindowSelection();
+      });
+    } else if (m_fullscreenPick) {
       input->setOnClick([this, surfaceOutput = inst.output](const InputArea::PointerData& data) {
         if (data.pressed || data.button != BTN_LEFT) {
           return;
@@ -725,6 +805,13 @@ namespace capture {
         .visible = false,
         .configure = [border](Box& box) { box.setBorder(fixedColorSpec(border), kSelectionBorderWidth); },
     });
+    if (m_windowPick) {
+      // Native window capture excludes this overlay, so a tint also identifies
+      // edge-to-edge windows whose outline lies outside the output.
+      Color tint = border;
+      tint.a = 0.14F;
+      selection->setFill(tint);
+    }
 
     Color badgeFill = colorForRole(ColorRole::Surface);
     badgeFill.a = 0.94F;
@@ -757,6 +844,33 @@ namespace capture {
       inst.sceneRoot->addChild(std::move(pickerBar));
       pickerBarPtr->layout(renderer);
       pickerBarPtr->setPosition((w - pickerBarPtr->width()) * 0.5F, Style::spaceMd);
+    } else if (m_windowPick) {
+      auto hintBar = ui::column(
+          {.align = FlexAlign::Center,
+           .gap = 5,
+           .paddingV = 12,
+           .paddingH = 16,
+           .configure =
+               [](Flex& control) {
+                 control.setCardStyle(1.0F, 0.96F, true);
+                 control.setRadius(20);
+               }},
+          ui::label(
+              {.out = &inst.windowTitleLabel,
+               .fontSize = 13,
+               .fontWeight = FontWeight::SemiBold,
+               .color = colorSpecFromRole(ColorRole::OnSurface)}
+          ),
+          ui::label(
+              {.out = &inst.confirmHintLabel, .fontSize = 12, .color = colorSpecFromRole(ColorRole::OnSurfaceVariant)}
+          )
+      );
+      inst.windowTitleLabel->setTextAlign(TextAlign::Center);
+      inst.windowTitleLabel->setMaxLines(1);
+      inst.confirmHintLabel->setTextAlign(TextAlign::Center);
+      inst.confirmHintLabel->setMaxLines(2);
+      inst.confirmHint = hintBar.get();
+      inst.sceneRoot->addChild(std::move(hintBar));
     } else if (m_confirmRegion) {
       auto hintBar = buildConfirmHintBar(inst.confirmHintLabel);
       inst.confirmHint = hintBar.get();
@@ -807,6 +921,17 @@ namespace capture {
 
     const bool onTarget =
         event.surface != nullptr && target->surface != nullptr && event.surface == target->surface->wlSurface();
+
+    if (m_windowPick
+        && onTarget
+        && (event.type == PointerEvent::Type::Enter || event.type == PointerEvent::Type::Motion)) {
+      if (const auto* output = findOutput(*m_wayland, target->output)) {
+        m_cursorGlobalX = output->logicalX + event.sx;
+        m_cursorGlobalY = output->logicalY + event.sy;
+        m_windowKeyboard = false;
+        selectWindow(windowAt(m_windows, m_cursorGlobalX, m_cursorGlobalY));
+      }
+    }
 
     switch (event.type) {
     case PointerEvent::Type::Enter:
@@ -874,6 +999,17 @@ namespace capture {
     }
 
     if (!KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
+      if (m_windowPick) {
+        if (KeySymbol::isTab(event.sym) || KeySymbol::isLeft(event.sym) || KeySymbol::isRight(event.sym)) {
+          cycleWindow((event.modifiers & KeyMod::Shift) != 0 || KeySymbol::isLeft(event.sym));
+          return true;
+        }
+        if (KeySymbol::isEnterOrSpace(event.sym)) {
+          completeWindowSelection();
+          return true;
+        }
+        return false;
+      }
       if (m_confirming) {
         if (KeybindMatcher::matches(KeybindAction::Copy, event.sym, event.modifiers)) {
           confirmPendingSelection(ConfirmAction::ForceClipboard);
@@ -912,6 +1048,38 @@ namespace capture {
   }
 
   void ScreenshotRegionOverlay::updateSelectionVisuals() {
+    if (m_windowPick && m_renderContext) {
+      for (auto& inst : m_instances) {
+        if (!inst->surface || !inst->confirmHint || !inst->confirmHintLabel)
+          continue;
+        inst->confirmHint->setVisible(true);
+        const float width = std::min(560.0F, std::max(1.0F, static_cast<float>(inst->surface->width()) - 48));
+        inst->confirmHint->setMinWidth(width);
+        inst->confirmHint->setMaxWidth(width);
+        inst->confirmHintLabel->setMaxWidth(std::max(1.0F, width - 32));
+        if (inst->windowTitleLabel) {
+          inst->windowTitleLabel->setMaxWidth(std::max(1.0F, width - 32));
+          inst->windowTitleLabel->setText(
+              m_selectedWindowTitle.empty() ? i18n::tr("island.capture-menu.select-window") : m_selectedWindowTitle
+          );
+        }
+        inst->confirmHintLabel->setText(
+            i18n::tr(
+                !m_windowTargetsReady   ? "island.capture-menu.loading-windows"
+                    : m_windows.empty() ? "island.capture-menu.no-windows"
+                                        : "island.capture-menu.window-hint"
+            )
+        );
+        inst->confirmHint->layout(inst->surface->renderTarget().renderer());
+        inst->confirmHint->setPosition(
+            (static_cast<float>(inst->surface->width()) - inst->confirmHint->width()) / 2,
+            std::max(
+                Style::spaceMd,
+                static_cast<float>(inst->surface->height()) - inst->confirmHint->height() - Style::spaceMd
+            )
+        );
+      }
+    }
     // Lay out the four dim strips so they cover the surface except for the hole
     // rect (surface-local). An empty hole dims the whole surface.
     const auto layoutDimFrame = [](Instance& inst, float surfaceW, float surfaceH, float hx0, float hy0, float hx1,
@@ -955,7 +1123,7 @@ namespace capture {
         if (inst->dimensionsBadge != nullptr) {
           inst->dimensionsBadge->setVisible(false);
         }
-        if (inst->confirmHint != nullptr) {
+        if (inst->confirmHint != nullptr && !m_windowPick) {
           inst->confirmHint->setVisible(false);
         }
       }
@@ -1062,7 +1230,7 @@ namespace capture {
 
     if (m_renderContext != nullptr) {
       for (auto& inst : m_instances) {
-        if (inst->confirmHint == nullptr || inst->surface == nullptr) {
+        if (inst->confirmHint == nullptr || inst->surface == nullptr || m_windowPick) {
           continue;
         }
         inst->confirmHint->setVisible(m_confirming);

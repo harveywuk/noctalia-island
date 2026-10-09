@@ -20,6 +20,9 @@
 #include <unordered_set>
 
 class Island;
+namespace island {
+  class CaptureGlow;
+}
 class ConfigService;
 class CompositorPlatform;
 class ContextMenuPopup;
@@ -270,6 +273,7 @@ private:
   Node* m_bgNode = nullptr;
   // The Island's artwork gradient behind an Island-hosted panel's card; see applyIslandReveal.
   Node* m_islandFlow = nullptr;
+  island::CaptureGlow* m_islandCaptureGlow = nullptr;
   Node* m_contentNode = nullptr;
   Node* m_detachedRevealClipNode = nullptr;
   Node* m_detachedRevealContentNode = nullptr;

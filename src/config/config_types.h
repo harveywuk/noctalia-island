@@ -97,7 +97,7 @@ struct IslandConfig {
   IslandAppearance appearance = IslandAppearance::Cupertino;
   // Translucent capsule and hosted panels over the compositor's blur (hyprglass on Hyprland).
   bool glass = false;
-  // Progress (timers, downloads, battery) traces the capsule's edge rather than ringing its icon.
+  // Timer/download progress traces the capsule's edge; battery connections glow around it.
   bool outerProgressRing = true;
   float mediaArtworkSize = 56.0F;
   IslandActivityPriority activityPriority = IslandActivityPriority::TimersDownloadsMedia;
@@ -110,11 +110,13 @@ struct IslandConfig {
   int trackPreviewSeconds = 5;
   int pausedMediaSeconds = 3;
   int bluetoothPreviewSeconds = 5;
+  int networkPreviewSeconds = 5;
   bool revealOnTrackChange = true;
   // Minutes before a calendar event starts that its countdown appears; 0 turns it off.
   int upNextMinutes = 10;
   std::string trackPreviewMonitor = "all";
   std::string bluetoothPreviewMonitor = "all";
+  std::string networkPreviewMonitor = "all";
   float volumeBarHeight = 18.0F;
   bool volumeShowPercentage = false;
   bool operator==(const IslandConfig&) const = default;
@@ -151,9 +153,11 @@ struct IslandMonitorOverride {
   std::optional<int> trackPreviewSeconds;
   std::optional<int> pausedMediaSeconds;
   std::optional<int> bluetoothPreviewSeconds;
+  std::optional<int> networkPreviewSeconds;
   std::optional<bool> revealOnTrackChange;
   std::optional<std::string> trackPreviewMonitor;
   std::optional<std::string> bluetoothPreviewMonitor;
+  std::optional<std::string> networkPreviewMonitor;
   std::optional<float> volumeBarHeight;
   std::optional<bool> volumeShowPercentage;
   bool operator==(const IslandMonitorOverride&) const = default;
@@ -217,12 +221,16 @@ inline IslandConfig applyIslandOverride(IslandConfig base, const IslandMonitorOv
     base.pausedMediaSeconds = *override.pausedMediaSeconds;
   if (override.bluetoothPreviewSeconds)
     base.bluetoothPreviewSeconds = *override.bluetoothPreviewSeconds;
+  if (override.networkPreviewSeconds)
+    base.networkPreviewSeconds = *override.networkPreviewSeconds;
   if (override.revealOnTrackChange)
     base.revealOnTrackChange = *override.revealOnTrackChange;
   if (override.trackPreviewMonitor)
     base.trackPreviewMonitor = *override.trackPreviewMonitor;
   if (override.bluetoothPreviewMonitor)
     base.bluetoothPreviewMonitor = *override.bluetoothPreviewMonitor;
+  if (override.networkPreviewMonitor)
+    base.networkPreviewMonitor = *override.networkPreviewMonitor;
   if (override.volumeBarHeight)
     base.volumeBarHeight = *override.volumeBarHeight;
   if (override.volumeShowPercentage)
@@ -979,6 +987,24 @@ struct OsdConfig {
   bool operator==(const OsdConfig&) const = default;
 };
 
+struct FocusProfileConfig {
+  std::vector<std::string> allowedApps;
+  bool allowCritical = false;
+  bool scheduleEnabled = false;
+  int startMinute = 540;
+  int endMinute = 1020;
+  int days = 31; // Monday is bit 0, Sunday is bit 6. An overnight range belongs to its start day.
+  bool operator==(const FocusProfileConfig&) const = default;
+};
+
+struct FocusConfig {
+  bool whileRecording = false;
+  FocusProfileConfig work;
+  FocusProfileConfig gaming{.startMinute = 1080, .endMinute = 1380, .days = 127};
+  FocusProfileConfig sleep{.startMinute = 1320, .endMinute = 420, .days = 127};
+  bool operator==(const FocusConfig&) const = default;
+};
+
 struct NotificationConfig {
   bool enableDaemon = true;
   bool showAppName = true;
@@ -997,6 +1023,7 @@ struct NotificationConfig {
   int maxVisible = 0; // 0 = unlimited (space-based only)
 
   std::vector<NotificationFilterConfig> filters;
+  FocusConfig focus;
 
   bool operator==(const NotificationConfig&) const = default;
 };
@@ -1804,6 +1831,8 @@ struct ShellConfig {
     std::string pipeCommand;
     std::string directory;       // empty = XDG Pictures directory
     std::string filenamePattern; // empty = screenshot_%Y%m%d_%H%M%S
+    std::string textLanguages = "eng";
+    std::string textDataDirectory;
 
     bool operator==(const ScreenshotConfig&) const = default;
   };

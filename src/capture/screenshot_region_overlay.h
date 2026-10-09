@@ -1,6 +1,7 @@
 #pragma once
 
 #include "capture/screenshot_image.h"
+#include "capture/window_capture.h"
 
 #include <functional>
 #include <memory>
@@ -40,12 +41,14 @@ namespace capture {
     void initialize(WaylandConnection& wayland, RenderContext* renderContext);
     void setCompleteCallback(CompleteCallback callback);
     void setFailureCallback(FailureCallback callback);
+    void setWindowCompleteCallback(std::function<void(WindowTarget)> callback);
+    void setWindowTargets(std::vector<WindowTarget> windows);
     void setConfirmKeybindLabels(std::string copyLabel, std::string saveLabel, std::string cancelLabel);
     void setFrozenScreenshots(std::vector<FrozenScreenshot> screenshots);
     [[nodiscard]] std::vector<FrozenScreenshot> takeFrozenScreenshots();
     void begin(
         bool freezeScreen, bool fullscreenPick = false, bool confirmRegion = false,
-        std::optional<LogicalRect> initialRegion = std::nullopt
+        std::optional<LogicalRect> initialRegion = std::nullopt, bool windowPick = false
     );
     void cancel();
     void cancelSelection();
@@ -76,12 +79,22 @@ namespace capture {
     void completeSelection();
     void confirmPendingSelection(ConfirmAction action = ConfirmAction::None);
     void completeFullscreenPick(wl_output* output);
+    void selectWindow(const WindowTarget* window);
+    void completeWindowSelection();
+    void cycleWindow(bool backwards);
     [[nodiscard]] std::optional<LogicalRect> selectionRectIfValid() const;
 
     WaylandConnection* m_wayland = nullptr;
     RenderContext* m_renderContext = nullptr;
     CompleteCallback m_onComplete;
     FailureCallback m_onFailure;
+    std::function<void(WindowTarget)> m_onWindowComplete;
+    std::vector<WindowTarget> m_windows;
+    std::string m_selectedWindow;
+    std::string m_selectedWindowTitle;
+    bool m_windowPick = false;
+    bool m_windowKeyboard = true;
+    bool m_windowTargetsReady = false;
     std::vector<std::unique_ptr<Instance>> m_instances;
     std::vector<FrozenScreenshot> m_frozenScreenshots;
     std::optional<LogicalRect> m_abandonedRegion;

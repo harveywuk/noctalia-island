@@ -57,20 +57,31 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
 
     def media_tray(name):
         picture = Image.open(shot(name)).convert('RGB')
-        # Limit the scan to the footer, above the white details in the desktop wallpaper.
-        for y in range(200, 250):
-            for x in range(560, 720):
-                if all(min(picture.getpixel((x+dx, y+dy))) > 230
-                       for dx in range(0, 12, 3) for dy in range(0, 12, 3)):
-                    return x+6, y+6
+        # Activity tabs change the footer height. Identify the solid fixture square by
+        # its whole connected shape so the wallpaper beneath a short card cannot match.
+        pixels={(x,y) for x in range(560,720) for y in range(200,320) if min(picture.getpixel((x,y)))>230}
+        while pixels:
+            pending=[pixels.pop()]; component=[]
+            while pending:
+                x,y=pending.pop(); component.append((x,y))
+                for other in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
+                    if other in pixels:
+                        pixels.remove(other); pending.append(other)
+            left,right=min(x for x,y in component),max(x for x,y in component)
+            top,bottom=min(y for x,y in component),max(y for x,y in component)
+            width,height=right-left+1,bottom-top+1
+            if 14<=width<=18 and 14<=height<=18 and len(component)>.9*width*height:
+                return round((left+right)/2),round((top+bottom)/2)
         return None
 
     def status_row(name, count):
         # Paused media has a black background, so all three icon types can be located together.
+        tray = media_tray(name+'-locate')
+        assert tray, (name, 'Tray fixture missing')
         picture = Image.open(shot(name)).convert('RGB')
         columns = {}
         for x in range(560, 720):
-            ys = [y for y in range(200, 240) if max(picture.getpixel((x, y))) > 100]
+            ys = [y for y in range(tray[1]-12, tray[1]+13) if max(picture.getpixel((x, y))) > 100]
             if ys:
                 columns[x] = ys
         groups = []
@@ -195,13 +206,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert events().count('Activate') == before+1, 'Tray click missed after sharing the status row'
         move(*icons[0]); click()
         panel_status = json.loads(msg('status'))
-        if panel_status['activePanelId'] != 'control-center':
-            shot('media-tray-microphone-miss')
-        assert panel_status['activePanelId'] == 'control-center', ('Microphone button missed its panel', icons, panel_status)
-        move(1100, 600); click()
-        assert not json.loads(msg('status'))['panelOpen'], 'Control Centre did not dismiss on an outside click'
-        move(580, 40); time.sleep(.5)
-        icons = status_row('media-tray-status-row-panel-return', 3)
+        content=run(['tesseract',str(shot('media-tray-microphone')),'stdout','--tessdata-dir',tessdata,'--psm','11'])
+        assert not panel_status['panelOpen'] and 'Microphone' in content, ('Microphone button missed its Live Activity', content, panel_status)
+        move(550, 40); click(); time.sleep(.5)
+        icons = status_row('media-tray-status-row-activity-return', 3)
         move(*icons[1]); click()
         assert json.loads(msg('status'))['activePanelId'] == 'notification-center', 'Unread button missed its panel'
         msg('panel-close')
@@ -226,7 +234,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         print('PASS: idle and media trays activate, hold the Island for menus, dispatch menu actions, '
               'survive playback updates, preserve playback controls, respect the tray preference, '
               'and hide removed items; media status icons share a centered row with the tray, '
-              'recenter on item changes and open their panels; menu-only items open on left click', flush=True)
+              'recenter on item changes and open their activities or panels; menu-only items open on left click', flush=True)
     finally:
         if capture:
             capture.terminate(); capture.wait(timeout=5)

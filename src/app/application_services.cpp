@@ -981,6 +981,7 @@ void Application::initWaylandCallbacks() {
       m_osdOverlay.show(caffeineOsdContent(m_idleInhibitor.enabled()));
     }
     m_bar.refresh();
+    m_island.refresh();
     if (shouldRefreshControlCenter()) {
       m_panelManager.refresh();
     }

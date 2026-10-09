@@ -72,17 +72,19 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         run(['pactl','load-module','module-null-sink','sink_name=hyprland-test'])
         wait(lambda:any(sink['name']=='hyprland-test' for sink in json.loads(run(['pactl','--format=json','list','sinks']))), 'Private audio sink did not appear')
         run(['pactl','set-default-sink','hyprland-test'])
-        if any(flag in sys.argv for flag in ('--island-routing-only', '--island-cupertino-only', '--island-battery-glow-only')):
+        if any(flag in sys.argv for flag in ('--island-routing-only', '--island-cupertino-only', '--island-battery-glow-only', '--island-connection-only', '--island-card-motion-only')):
             bluetooth=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_bluetooth.py')],env=env,
                                        stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
             processes.append(bluetooth)
             assert bluetooth.stdout.readline().strip()=='ok'
-        if '--island-cupertino-only' in sys.argv or '--island-battery-glow-only' in sys.argv:
+        if any(flag in sys.argv for flag in ('--island-cupertino-only', '--island-battery-glow-only', '--island-connection-only')):
             battery=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_battery.py')],env=env,
                                      stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
             processes.append(battery)
             assert battery.stdout.readline().strip()=='ok'
-            if '--island-battery-glow-only' in sys.argv:
+            if '--island-connection-only' in sys.argv:
+                from island_connection_smoke import prepare
+            elif '--island-battery-glow-only' in sys.argv:
                 from island_battery_glow_smoke import prepare
             else:
                 from island_cupertino_smoke import prepare
@@ -120,10 +122,43 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-privacy-only' in sys.argv:
             from island_privacy_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-microphone-only' in sys.argv:
+            from island_microphone_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-capture-menu-only' in sys.argv:
+            from island_capture_menu_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-window-capture-only' in sys.argv:
+            from island_window_capture_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-recording-result-only' in sys.argv:
+            from island_recording_result_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-recording-focus-only' in sys.argv:
+            from island_recording_focus_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-capture-only' in sys.argv:
+            from island_capture_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-awake-only' in sys.argv:
+            from island_awake_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-split-only' in sys.argv or '--island-split-motion-only' in sys.argv:
+            from island_split_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-track-only' in sys.argv:
+            from island_track_smoke import prepare
+            prepare(base,cfg,env)
+        if '--utilities-only' in sys.argv:
+            from utilities_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-sharing-only' in sys.argv:
+            from island_sharing_smoke import prepare
+            prepare(base,cfg,env)
         if '--island-notifications-only' in sys.argv:
             from island_notifications_smoke import prepare
             prepare(base,cfg,env)
-        if '--island-camera-only' in sys.argv:
+        if '--island-camera-only' in sys.argv or '--island-privacy-rotation-only' in sys.argv:
             from island_camera_smoke import prepare
             prepare(base,cfg,env)
         if '--island-tray-only' in sys.argv or '--island-tray-overflow-only' in sys.argv:
@@ -138,6 +173,16 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-transfer-actions-only' in sys.argv:
             from island_transfer_actions_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-network-only' in sys.argv or '--island-card-motion-only' in sys.argv:
+            network=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_network.py')],env=env,
+                                     stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            processes.append(network)
+            assert network.stdout.readline().strip()=='ok'
+            if '--island-card-motion-only' in sys.argv:
+                from island_card_motion_smoke import prepare
+            else:
+                from island_network_smoke import prepare
+            prepare(base,cfg,env)
         binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia'))
         if '--performance-only' in sys.argv:
             import shutil
@@ -151,6 +196,30 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             assert not reply.startswith('error'),reply
             return reply
         wait(lambda:msg('record-status')=='idle','Noctalia IPC')
+        if '--island-card-motion-only' in sys.argv:
+            from island_card_motion_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,bluetooth,network)
+            raise SystemExit(0)
+        if '--island-track-only' in sys.argv:
+            from island_track_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--utilities-only' in sys.argv:
+            from utilities_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-sharing-only' in sys.argv:
+            from island_sharing_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-network-only' in sys.argv:
+            from island_network_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,network)
+            raise SystemExit(0)
+        if '--island-connection-only' in sys.argv:
+            from island_connection_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,bluetooth,battery)
+            raise SystemExit(0)
         if '--island-battery-glow-only' in sys.argv:
             from island_battery_glow_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,bluetooth,battery)
@@ -210,12 +279,40 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
                 from island_tray_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
-        if '--island-camera-only' in sys.argv:
+        if '--island-camera-only' in sys.argv or '--island-privacy-rotation-only' in sys.argv:
             from island_camera_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-privacy-only' in sys.argv:
             from island_privacy_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-microphone-only' in sys.argv:
+            from island_microphone_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-capture-menu-only' in sys.argv:
+            from island_capture_menu_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-window-capture-only' in sys.argv:
+            from island_window_capture_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-recording-result-only' in sys.argv:
+            from island_recording_result_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-recording-focus-only' in sys.argv:
+            from island_recording_focus_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-capture-only' in sys.argv:
+            from island_capture_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-awake-only' in sys.argv:
+            from island_awake_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-notifications-only' in sys.argv:
@@ -268,6 +365,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--island-activity-cycle-only' in sys.argv:
             from island_activity_cycle_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-split-only' in sys.argv or '--island-split-motion-only' in sys.argv:
+            from island_split_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-hover-timing-only' in sys.argv:

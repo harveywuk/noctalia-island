@@ -41,7 +41,8 @@ struct AudioNode {
   bool muted = false;
   std::uint32_t channelCount = 0;
   bool isDefault = false;
-  bool available = true; // false for a device whose active route is unavailable (e.g. unplugged HDMI)
+  bool available = true;        // false for a device whose active route is unavailable (e.g. unplugged HDMI)
+  std::string bluetoothAddress; // BlueZ machine identity, independent of the user-facing label.
 
   bool operator==(const AudioNode&) const = default;
 };
@@ -72,6 +73,8 @@ struct PrivacyCapture {
   std::string appName;
   // Lower-case executable name of the capturing app, for finding its windows (may be empty).
   std::string binary;
+  // Actual linked inputs, never inferred from the system default. Several streams can share an app.
+  std::vector<std::uint32_t> sourceIds;
 
   bool operator==(const PrivacyCapture&) const = default;
 };
@@ -165,10 +168,12 @@ public:
     std::string mediaName;
     std::string iconName;
     std::string mediaClass;
+    std::string bluetoothAddress;
     std::string linkGroup;
     std::string targetObject;
     bool nodePassive = false;
     bool streamCaptureSink = false;
+    bool streamMonitor = false;
     bool streamClassificationReady = false;
     bool hasReadablePropsParam = false;
     bool hasReadableRouteParam = false;

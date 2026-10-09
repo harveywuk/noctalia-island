@@ -85,6 +85,13 @@ namespace noctalia::cli {
   inline constexpr std::array kMsgAnnotatePositionals{
       Positional{"path", "Image file to annotate instead of the live screen", {}, false, false, false},
   };
+  inline constexpr std::array kMsgCaffeineForPositionals{
+      Positional{"minutes", "Keep awake for 1 to 1440 minutes", {}, true, false, false},
+  };
+  inline constexpr std::array<std::string_view, 5> kFocusChoices{"off", "auto", "work", "gaming", "sleep"};
+  inline constexpr std::array kMsgFocusSetPositionals{
+      Positional{"mode", "Focus preset or automatic schedules", kFocusChoices, true, false, false},
+  };
   inline constexpr std::array kMsgBarAutoHideSetPositionals{
       Positional{"state", {}, kMsgBarAutoHideSetStateChoices, true, false, false},
       Positional{"bar-name", {}, {}, false, false, false},
@@ -365,6 +372,15 @@ namespace noctalia::cli {
     inline constexpr Command caffeineToggle{
         "caffeine-toggle", "Toggle caffeine (idle inhibitor)", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command caffeineFor{
+        "caffeine-for", "Keep awake for a fixed number of minutes", {}, {}, {}, kMsgCaffeineForPositionals, {}, false
+    };
+    inline constexpr Command caffeineStatus{
+        "caffeine-status", "Show Keep Awake state and remaining seconds", {}, {}, {}, {}, {}, false
+    };
+    inline constexpr Command focusSet{"focus-set", "Select a Focus preset", {}, {},
+                                      {},          kMsgFocusSetPositionals, {}, false};
+    inline constexpr Command focusStatus{"focus-status", "Show Focus and scheduling state", {}, {}, {}, {}, {}, false};
     inline constexpr Command clipboardClear{"clipboard-clear", "Clear clipboard history", {}, {}, {}, {}, {}, false};
     inline constexpr Command clipboardCopy{
         "clipboard-copy", "Copy text to the clipboard", {}, {}, {}, kMsgClipboardCopyPositionals, {}, false
@@ -702,6 +718,9 @@ namespace noctalia::cli {
     inline constexpr Command screenshotAnnotate{
         "screenshot-annotate", "Freeze the screen and annotate it, then copy or save", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command captureMenu{
+        "capture-menu", "Open screenshot and recording controls in the Island", {}, {}, {}, {}, {}, false
+    };
     inline constexpr Command screenshotFullscreen{
         "screenshot-fullscreen",
         "Capture the focused monitor by default, pick interactively with pick, or all outputs with all",
@@ -723,6 +742,7 @@ namespace noctalia::cli {
     inline constexpr Command screenshotRegion{
         "screenshot-region", "Start an interactive region screenshot", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command textCapture{"text-capture", "Select an area and copy its text", {}, {}, {}, {}, {}, false};
     inline constexpr Command session{"session", "Run a built-in session action", {}, {},
                                      {},        kMsgSessionPositionals,          {}, false};
     inline constexpr Command settingsClose{"settings-close", "Close the settings window", {}, {}, {}, {}, {}, false};
@@ -926,6 +946,10 @@ namespace noctalia::cli {
       msg::brightnessUp,
       msg::caffeineDisable,
       msg::caffeineEnable,
+      msg::caffeineFor,
+      msg::caffeineStatus,
+      msg::focusSet,
+      msg::focusStatus,
       msg::caffeineToggle,
       msg::clipboardClear,
       msg::clipboardCopy,
@@ -993,8 +1017,10 @@ namespace noctalia::cli {
       msg::powerCycle,
       msg::powerSet,
       msg::screenshotAnnotate,
+      msg::captureMenu,
       msg::screenshotFullscreen,
       msg::screenshotRegion,
+      msg::textCapture,
       msg::recordRegion,
       msg::recordMonitor,
       msg::recordStop,

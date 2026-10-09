@@ -10,6 +10,8 @@
 #include "render/core/renderer.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
+#include "shell/control_center/tabs/focus_tab.h"
+#include "shell/control_center/tabs/privacy_tab.h"
 #include "shell/control_center/tabs/screen_time_tab.h"
 #include "shell/panel/panel_button_style.h"
 #include "shell/panel/panel_content_height.h"
@@ -54,7 +56,8 @@ namespace {
 } // namespace
 
 ControlCenterPanel::ControlCenterPanel(const ControlCenterServices& services) {
-  m_hasPowerServices = services.upower != nullptr || services.powerProfiles != nullptr;
+  m_hasPowerServices =
+      services.upower != nullptr || services.powerProfiles != nullptr || services.idleInhibitor != nullptr;
   WaylandConnection* wayland = services.platform != nullptr ? &services.platform->wayland() : nullptr;
   m_config = services.config;
   m_mpris = services.mpris;
@@ -78,7 +81,10 @@ ControlCenterPanel::ControlCenterPanel(const ControlCenterServices& services) {
   m_tabs[tabIndex(TabId::Monitor)] = std::make_unique<MonitorTab>(services.brightness, services.config);
   m_tabs[tabIndex(TabId::System)] = std::make_unique<SystemTab>(services.sysmon);
   m_tabs[tabIndex(TabId::ScreenTime)] = std::make_unique<ScreenTimeTab>(services.screenTime);
-  m_tabs[tabIndex(TabId::Power)] = std::make_unique<PowerTab>(services.upower, services.powerProfiles);
+  m_tabs[tabIndex(TabId::Power)] =
+      std::make_unique<PowerTab>(services.upower, services.powerProfiles, services.idleInhibitor);
+  m_tabs[tabIndex(TabId::Privacy)] = std::make_unique<PrivacyTab>(services.audio, services.config, services.platform);
+  m_tabs[tabIndex(TabId::Focus)] = std::make_unique<FocusTab>(services.notifications, services.config);
   m_tabButtons.fill(nullptr);
   m_tabContainers.fill(nullptr);
   m_tabHeaderActions.fill(nullptr);

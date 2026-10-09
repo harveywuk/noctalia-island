@@ -23,12 +23,19 @@ namespace {
   // Long enough for the launcher's close animation to finish.
   constexpr auto kAfterCloseDelay = std::chrono::milliseconds(260);
 
-  constexpr std::array<SystemProvider::Command, 23> kCommands = {{
+  constexpr std::array<SystemProvider::Command, 32> kCommands = {{
       {.id = "toggle-dark-mode", .glyph = "moon", .ipc = "theme-mode-toggle"},
       {.id = "toggle-dnd", .glyph = "bell-off", .ipc = "notification-dnd-toggle"},
       {.id = "toggle-wifi", .glyph = "wifi", .ipc = "wifi-toggle"},
       {.id = "toggle-bluetooth", .glyph = "bluetooth", .ipc = "bluetooth-toggle"},
       {.id = "toggle-keep-awake", .glyph = "coffee", .ipc = "caffeine-toggle"},
+      {.id = "keep-awake-15", .glyph = "coffee", .ipc = "caffeine-for 15"},
+      {.id = "keep-awake-30", .glyph = "coffee", .ipc = "caffeine-for 30"},
+      {.id = "keep-awake-60", .glyph = "coffee", .ipc = "caffeine-for 60"},
+      {.id = "focus-work", .glyph = "focus-on", .ipc = "focus-set work"},
+      {.id = "focus-gaming", .glyph = "focus-on", .ipc = "focus-set gaming"},
+      {.id = "focus-sleep", .glyph = "focus-on", .ipc = "focus-set sleep"},
+      {.id = "focus-off", .glyph = "focus-on", .ipc = "focus-set off"},
       {.id = "toggle-night-light", .glyph = "sun-moon", .ipc = "nightlight-force-toggle"},
       {.id = "toggle-mute", .glyph = "volume-3", .ipc = "volume-mute"},
       {.id = "volume-up", .glyph = "volume", .ipc = "volume-up"},
@@ -37,6 +44,8 @@ namespace {
       {.id = "brightness-up", .glyph = "brightness-up", .ipc = "brightness-up"},
       {.id = "brightness-down", .glyph = "brightness-down", .ipc = "brightness-down"},
       {.id = "screenshot", .glyph = "screenshot", .ipc = "screenshot-region", .afterClose = true},
+      {.id = "capture-menu", .glyph = "screenshot", .ipc = "capture-menu", .afterClose = true},
+      {.id = "text-capture", .glyph = "text-recognition", .ipc = "text-capture", .afterClose = true},
       {.id = "annotate", .glyph = "pencil", .ipc = "screenshot-annotate", .afterClose = true},
       {.id = "record", .glyph = "video", .ipc = "record-region", .afterClose = true},
       {.id = "pick-color", .glyph = "color-picker", .ipc = {}, .afterClose = true},

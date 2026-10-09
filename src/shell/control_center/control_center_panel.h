@@ -120,6 +120,8 @@ private:
     Notifications,
     ScreenTime,
     Power,
+    Privacy,
+    Focus,
     Count,
   };
 
@@ -138,6 +140,8 @@ private:
       {TabId::Monitor, "monitor", "control-center.tabs.monitor", "device-desktop"},
       {TabId::System, "system", "control-center.tabs.system", "activity"},
       {TabId::Power, "power", "control-center.tabs.power", "battery-4"},
+      {TabId::Privacy, "privacy", "control-center.tabs.privacy", "shield-check"},
+      {TabId::Focus, "focus", "control-center.tabs.focus", "focus-on"},
       {TabId::Network, "network", "control-center.tabs.network", "wifi"},
       {TabId::Bluetooth, "bluetooth", "control-center.tabs.bluetooth", "bluetooth"},
       {TabId::Weather, "weather", "control-center.tabs.weather", "weather-cloud-sun"},

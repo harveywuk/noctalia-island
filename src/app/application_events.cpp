@@ -139,6 +139,7 @@ void Application::onUpowerStateChangedForHooks() {
 }
 
 void Application::onNetworkStateChangedForEvents(const NetworkState& state, NetworkChangeOrigin origin) {
+  m_island.onNetworkStateChanged(state);
   if (!m_prevWirelessEnabledForEvents.has_value()) {
     m_prevWirelessEnabledForEvents = state.wirelessEnabled;
     return;
