@@ -1262,7 +1262,7 @@ std::unique_ptr<Flex> SettingsWindow::buildHeaderRow(float scale) {
       ui::button({
           .glyph = "close",
           .glyphSize = Style::fontSizeBody * scale,
-          .variant = ButtonVariant::Default,
+          .variant = ButtonVariant::Ghost,
           .tooltip = i18n::tr("settings.window.close"),
           .minWidth = Style::controlHeightSm * scale,
           .minHeight = Style::controlHeightSm * scale,

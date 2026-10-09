@@ -2,6 +2,7 @@
 
 #include "render/backend/render_backend.h"
 #include "render/core/texture_manager.h"
+#include "render/text/glyph_font.h"
 
 #include <cairo-ft.h>
 #include <cairo.h>
@@ -84,23 +85,29 @@ std::size_t CairoGlyphRenderer::CacheKeyHash::operator()(const CacheKey& k) cons
 CairoGlyphRenderer::CairoGlyphRenderer() = default;
 CairoGlyphRenderer::~CairoGlyphRenderer() { cleanup(); }
 
-void CairoGlyphRenderer::initialize(const std::string& fontPath, RenderBackend* backend, TextureManager* textures) {
+void CairoGlyphRenderer::initialize(
+    const std::string& tablerPath, const std::string& cupertinoPath, RenderBackend* backend, TextureManager* textures
+) {
+  cleanup();
   m_backend = backend;
   m_textureManager = textures;
 
   if (FT_Init_FreeType(&m_ftLibrary) != 0) {
     throw std::runtime_error("CairoGlyphRenderer: FT_Init_FreeType failed");
   }
-  if (FT_New_Face(m_ftLibrary, fontPath.c_str(), 0, &m_face) != 0) {
-    cleanup();
-    throw std::runtime_error("CairoGlyphRenderer: failed to load icon font: " + fontPath);
-  }
-
-  m_cairoFace = cairo_ft_font_face_create_for_ft_face(m_face, 0);
-  if (m_cairoFace == nullptr || cairo_font_face_status(m_cairoFace) != CAIRO_STATUS_SUCCESS) {
-    cleanup();
-    throw std::runtime_error("CairoGlyphRenderer: cairo_ft_font_face_create_for_ft_face failed");
-  }
+  const auto load = [&](const std::string& path, FT_Face& face, cairo_font_face_t*& cairoFace) {
+    if (FT_New_Face(m_ftLibrary, path.c_str(), 0, &face) != 0) {
+      cleanup();
+      throw std::runtime_error("CairoGlyphRenderer: failed to load icon font: " + path);
+    }
+    cairoFace = cairo_ft_font_face_create_for_ft_face(face, 0);
+    if (cairoFace == nullptr || cairo_font_face_status(cairoFace) != CAIRO_STATUS_SUCCESS) {
+      cleanup();
+      throw std::runtime_error("CairoGlyphRenderer: cairo_ft_font_face_create_for_ft_face failed: " + path);
+    }
+  };
+  load(tablerPath, m_face, m_cairoFace);
+  load(cupertinoPath, m_cupertinoFace, m_cupertinoCairoFace);
 
   m_fontOptions = cairo_font_options_create();
   cairo_font_options_set_antialias(m_fontOptions, CAIRO_ANTIALIAS_GRAY);
@@ -150,6 +157,14 @@ void CairoGlyphRenderer::cleanup() {
     FT_Done_Face(m_face);
     m_face = nullptr;
   }
+  if (m_cupertinoCairoFace != nullptr) {
+    cairo_font_face_destroy(m_cupertinoCairoFace);
+    m_cupertinoCairoFace = nullptr;
+  }
+  if (m_cupertinoFace != nullptr) {
+    FT_Done_Face(m_cupertinoFace);
+    m_cupertinoFace = nullptr;
+  }
   if (m_ftLibrary != nullptr) {
     FT_Done_FreeType(m_ftLibrary);
     m_ftLibrary = nullptr;
@@ -190,12 +205,15 @@ CairoGlyphRenderer::measureGlyph(float contentScale, char32_t codepoint, float f
   const float rasterSize = std::max(1.0F, fontSize * contentScale);
   const float invScale = 1.0F / contentScale;
 
-  const FT_UInt glyphIndex = FT_Get_Char_Index(m_face, codepoint);
+  const bool cupertino = GlyphFont::isCupertino(codepoint);
+  FT_Face face = cupertino ? m_cupertinoFace : m_face;
+  const FT_UInt glyphIndex = FT_Get_Char_Index(face, GlyphFont::nativeCodepoint(codepoint));
   if (glyphIndex == 0) {
     return {};
   }
 
-  cairo_scaled_font_t* scaledFont = create_scaled_font(m_cairoFace, m_fontOptions, rasterSize);
+  cairo_scaled_font_t* scaledFont =
+      create_scaled_font(cupertino ? m_cupertinoCairoFace : m_cairoFace, m_fontOptions, rasterSize);
   if (scaledFont == nullptr || cairo_scaled_font_status(scaledFont) != CAIRO_STATUS_SUCCESS) {
     if (scaledFont != nullptr) {
       cairo_scaled_font_destroy(scaledFont);
@@ -229,14 +247,17 @@ CairoGlyphRenderer::lookupOrRasterize(float contentScale, char32_t codepoint, fl
   }
 
   const float rasterSize = std::max(1.0F, fontSize * contentScale);
-  FT_Set_Pixel_Sizes(m_face, 0, static_cast<FT_UInt>(std::round(rasterSize)));
+  const bool cupertino = GlyphFont::isCupertino(codepoint);
+  FT_Face face = cupertino ? m_cupertinoFace : m_face;
+  FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(std::round(rasterSize)));
 
-  const FT_UInt glyphIndex = FT_Get_Char_Index(m_face, codepoint);
+  const FT_UInt glyphIndex = FT_Get_Char_Index(face, GlyphFont::nativeCodepoint(codepoint));
   if (glyphIndex == 0) {
     return nullptr;
   }
 
-  cairo_scaled_font_t* scaledFont = create_scaled_font(m_cairoFace, m_fontOptions, rasterSize);
+  cairo_scaled_font_t* scaledFont =
+      create_scaled_font(cupertino ? m_cupertinoCairoFace : m_cairoFace, m_fontOptions, rasterSize);
   if (scaledFont == nullptr || cairo_scaled_font_status(scaledFont) != CAIRO_STATUS_SUCCESS) {
     if (scaledFont != nullptr) {
       cairo_scaled_font_destroy(scaledFont);

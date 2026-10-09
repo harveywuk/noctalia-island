@@ -11,7 +11,7 @@ namespace control_center {
     card.setDirection(FlexDirection::Vertical);
     card.setAlign(FlexAlign::Stretch);
     card.setGap(Style::spaceSm * scale);
-    card.setPadding(Style::spaceMd * scale);
+    card.setPadding(Style::spaceLg * scale);
   }
 
   Label* addTitle(Flex& parent, const std::string& text, float scale) {
@@ -19,8 +19,8 @@ namespace control_center {
     auto label = ui::label({
         .out = &ptr,
         .text = text,
-        .fontSize = Style::fontSizeTitle * scale,
-        .fontWeight = FontWeight::Bold,
+        .fontSize = Style::fontSizeBody * scale,
+        .fontWeight = FontWeight::SemiBold,
         .color = colorSpecFromRole(ColorRole::OnSurface),
     });
     parent.addChild(std::move(label));
@@ -45,26 +45,33 @@ namespace control_center {
       section.setAlign(FlexAlign::Center);
       section.setPadding(Style::spaceLg * scale);
     }});
-    card->addChild(ui::glyph({
-        .glyph = glyph,
-        .glyphSize = 32.0F * scale,
-        .color = colorSpecFromRole(ColorRole::OnSurfaceVariant, 0.7F),
-    }));
-    card->addChild(ui::label({
-        .text = title,
-        .fontSize = Style::fontSizeBody * scale,
-        .fontWeight = FontWeight::SemiBold,
-        .color = colorSpecFromRole(ColorRole::OnSurface),
-        .textAlign = TextAlign::Center,
-    }));
+    card->addChild(
+        ui::glyph({
+            .glyph = glyph,
+            .glyphSize = 32.0F * scale,
+            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant, 0.7F),
+        })
+    );
+    card->addChild(
+        ui::label({
+            .text = title,
+            .fontSize = Style::fontSizeBody * scale,
+            .fontWeight = FontWeight::SemiBold,
+            .color = colorSpecFromRole(ColorRole::OnSurface),
+            .maxLines = 2,
+            .textAlign = TextAlign::Center,
+        })
+    );
     if (!detail.empty()) {
-      card->addChild(ui::label({
-          .text = detail,
-          .fontSize = Style::fontSizeCaption * scale,
-          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-          .maxLines = 3,
-          .textAlign = TextAlign::Center,
-      }));
+      card->addChild(
+          ui::label({
+              .text = detail,
+              .fontSize = Style::fontSizeCaption * scale,
+              .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .maxLines = 3,
+              .textAlign = TextAlign::Center,
+          })
+      );
     }
     return card;
   }
@@ -75,7 +82,7 @@ namespace control_center {
         ui::label({
             .text = title,
             .fontSize = Style::fontSizeBody * scale,
-            .fontWeight = FontWeight::Bold,
+            .fontWeight = FontWeight::SemiBold,
             .color = colorSpecFromRole(ColorRole::OnSurface),
             .flexGrow = 1.0F,
         })

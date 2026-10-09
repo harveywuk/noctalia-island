@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Noctalia Island · Assistant concept</title>
+<style>
+@font-face { font-family: Cupertino; src: url(../../assets/fonts/noctalia-cupertino.ttf) format('truetype'); }
+* { box-sizing: border-box; }
+:root { color-scheme: dark; font: 14px/1.5 "Noto Sans", sans-serif; background: #111319; color: #f4f4f6; }
+body { margin: 0; }
+main { max-width: 900px; padding: 44px 36px; margin: auto; }
+.eyebrow { color: #a6a8b6; font-size: 11px; letter-spacing: .13em; text-transform: uppercase; }
+h1 { font-size: 34px; letter-spacing: -.04em; line-height: 1.2; font-weight: 650; margin: 10px 0 12px; }
+p { margin: 0; color: #adafbd; max-width: 640px; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; }
+button:focus-visible, input:focus-visible { outline: 2px solid #82acff; outline-offset: 4px; }
+button:active { opacity: .6; }
+.glyph { font: 20px/1 Cupertino; display: inline-block; }
+.tools { display: flex; flex-wrap: wrap; gap: 9px; margin: 26px 0 18px; align-items: center; }
+.tools button { font-size: 12px; background: #232630; padding: 7px 12px; border-radius: 9px; }
+.tools button[aria-pressed=true] { background: #363b4e; }
+.tools .spacer { flex: 1; }
+.stage { padding: 35px 28px 30px; min-height: 460px; border-radius: 28px; position: relative; overflow: hidden;
+  background: radial-gradient(ellipse at 80% 110%, #334855 0, transparent 55%), radial-gradient(ellipse at 8% 10%, #2c294c 0, transparent 70%), #1a1e29; }
+.desktop-hint { color: #a0a3b5; position: absolute; bottom: 19px; left: 28px; font-size: 11px; }
+.lane { display: flex; align-items: flex-start; justify-content: center; gap: 8px; }
+.assistant { position: relative; width: 520px; max-width: 100%; background: #050506; border-radius: 32px; padding: 24px;
+  box-shadow: 0 14px 32px #0003; isolation: isolate; overflow: hidden; }
+.assistant.ready, .assistant.thinking { border-radius: 32px; padding: 14px 18px; width: 380px; }
+.assistant::before { content: ''; pointer-events: none; position: absolute; inset: -1px; border-radius: inherit;
+  background: conic-gradient(from 120deg, #a27cff40, #66b8ff85, #b87cff90, #ff7fac60, #a27cff40);
+  padding: 1px; mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude; opacity: .65; }
+.assistant.answer::before, .assistant.unavailable::before { opacity: .18; }
+.head { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.head .identity { font-size: 13px; color: #dddce6; font-weight: 600; flex: 1; }
+.head .status { flex: 1; min-width: 0; }
+.status strong { font-size: 13px; font-weight: 550; display: block; }
+.status span { font-size: 11px; color: #a8a5b5; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-button { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: #c1bfcb; }
+.orb { position: relative; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; overflow: hidden;
+  background: #252247; box-shadow: 0 0 10px #7774ff40, inset 0 0 1px #d8d6ff; }
+.orb::before { content: ''; position: absolute; inset: -15%; border-radius: inherit; filter: blur(2px);
+  background: radial-gradient(ellipse at 38% 18%, #eaefff 0, #78dbff 19%, transparent 44%),
+    radial-gradient(ellipse at 84% 58%, #ebecff 0, #ba84ff 22%, transparent 51%),
+    radial-gradient(ellipse at 28% 82%, #ffbdc8 0, #f66bba 25%, transparent 55%), #292950;
+  animation: orbit 7s linear infinite; }
+.orb::after { content: ''; position: absolute; inset: 4px; border-radius: inherit;
+  background: radial-gradient(ellipse at 36% 28%, #fff9, transparent 46%); box-shadow: inset -2px -3px 7px #08071e80; }
+.thinking .orb::before { animation-duration: 2.8s; }
+@keyframes orbit { to { transform: rotate(360deg); } }
+.ask { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.ask input { background: none; border: 0; width: 100%; min-width: 0; padding: 2px 0; font-size: 14px; caret-color: #b3c5ff; }
+.ask input::placeholder { color: #b4b1c1; opacity: 1; }
+.ask input:focus-visible { outline: none; }
+.assistant:has(input:focus-visible)::before { opacity: 1; }
+.send { background: #e5e7f1; color: #141622; width: 28px; height: 28px; border-radius: 50%; }
+.send .glyph { font-size: 16px; }
+.question { margin: 22px 0 12px; color: #a5a2b2; font-size: 12px; overflow-wrap: anywhere; }
+.response { color: #f0eff5; font-size: 15px; line-height: 1.65; margin: 0; }
+.actions { display: flex; gap: 18px; margin-top: 18px; }
+.actions button { color: #b8b5c6; font-size: 12px; padding: 0; display: flex; align-items: center; gap: 7px; }
+.actions .glyph { font-size: 16px; }
+.followup { background: #ffffff0c; border-radius: 17px; padding: 12px 14px; margin-top: 22px; }
+.followup input { font-size: 13px; }
+.media { position: relative; isolation: isolate; overflow: hidden; border-radius: 18px; margin-top: 20px; padding: 12px;
+  display: flex; align-items: center; gap: 11px; background: #111523; }
+.media::before, .sidecar::before { content: ''; position: absolute; z-index: -1; inset: -20px;
+  background: url(../../assets/noctalia-wallpaper.png) center/cover; filter: blur(20px); opacity: .35; animation: artwork 10s ease-in-out infinite alternate; }
+@keyframes artwork { to { transform: translateX(15px) scale(1.15); } }
+.art { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
+.track { flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; }
+.track strong { font-weight: 550; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track span { font-size: 10px; color: #a9a8b9; }
+.wave { display: flex; gap: 3px; height: 24px; align-items: center; color: #d8cffa; flex: 0 0 auto; }
+.wave i { display: block; width: 3px; height: 10px; border-radius: 2px; background: currentColor; animation: wave .85s ease-in-out infinite alternate; }
+.wave i:nth-child(2) { height: 19px; animation-delay: -.3s; }
+.wave i:nth-child(3) { height: 24px; animation-delay: -.6s; }
+.wave i:nth-child(4) { height: 15px; animation-delay: -.15s; }
+.wave i:nth-child(5) { height: 8px; animation-delay: -.5s; }
+@keyframes wave { to { transform: scaleY(.45); } }
+.sidecar { width: 94px; height: 58px; padding: 13px 12px; border-radius: 29px; display: flex; gap: 9px; align-items: center;
+  background: #050506; position: relative; isolation: isolate; overflow: hidden; flex: 0 0 auto; }
+.sidecar .art { width: 28px; height: 28px; }
+.sidecar .wave { gap: 2px; }
+.sidecar .wave i { width: 2px; }
+.closed { padding: 16px 25px; width: 150px; background: #050506; border-radius: 32px; text-align: center; font-size: 21px; }
+.compact .assistant { width: 400px; padding: 20px; border-radius: 28px; }
+.compact .assistant.ready, .compact .assistant.thinking { width: 300px; padding: 12px 16px; }
+.compact .sidecar { height: 54px; }
+.compact .response { font-size: 14px; }
+.note { font-size: 12px; margin-top: 18px; }
+.principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin: 25px 0; }
+.principles strong { font-size: 12px; font-weight: 600; display: block; margin-bottom: 5px; }
+.principles p { font-size: 12px; color: #999dab; }
+footer { margin-top: 26px; font-size: 11px; color: #8f93a2; }
+a { color: #b5beec; text-underline-offset: 3px; }
+.story { display: none; }
+.story-step { margin: 27px 0 10px; font-size: 12px; color: #b5b8c7; }
+.story .stage { min-height: 0; padding: 28px; }
+.story-mode .interactive, .story-mode .principles { display: none; }
+.story-mode .story { display: block; }
+.story-mode main { max-width: 780px; }
+.story .assistant, .story .sidecar { pointer-events: none; }
+.story input { pointer-events: none; }
+.reduced *, .reduced *::before, .reduced *::after { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+@media (max-width: 600px) {
+  main { padding: 28px 18px; } h1 { font-size: 29px; }
+  .stage { padding: 24px 14px; } .desktop-hint { left: 16px; }
+  .assistant { padding: 24px; } .sidecar { width: 60px; justify-content: center; }
+  .sidecar .art { display: none; } .principles { grid-template-columns: 1fr; gap: 15px; }
+  .story .stage { padding: 24px 14px; }
+}
+</style>
+<main>
+  <div class="eyebrow">Noctalia Island · Assistant concept</div>
+  <h1>A little help, right here.</h1>
+  <p>A keyboard-first assistant in the Island. A quiet presence while it works, with room for an answer when you need it.</p>
+  <div class="interactive">
+    <div class="tools" aria-label="Prototype controls">
+      <button data-preview="ready">Ready</button><button data-preview="thinking">Thinking</button>
+      <button data-preview="answer">Answer</button><button data-preview="unavailable">Unavailable</button>
+      <span class="spacer"></span><button id="density" aria-pressed="false">Compact</button>
+      <button id="motion" aria-pressed="false">Reduce motion</button>
+    </div>
+    <div class="stage"><div class="lane" id="demo" aria-label="Assistant visual prototype"></div>
+      <div class="desktop-hint">Ctrl+Space opens this demo · Enter submits · Escape dismisses</div>
+    </div>
+    <p class="note">Visual prototype with a scripted answer. No AI service, microphone or desktop action is connected.</p>
+    <div class="principles">
+      <div><strong>Only when invited</strong><p>Open with a configured shortcut. No permanent assistant button or unsolicited prompts.</p></div>
+      <div><strong>Keep your place</strong><p>Music remains visible and animated. Dismiss the assistant to return to your activity.</p></div>
+      <div><strong>Comfortable by default</strong><p>24px inner padding, or 20px in Compact. Colour and motion stay around the small orb.</p></div>
+    </div>
+  </div>
+  <div class="story">
+    <div class="story-step">01 · Invoke and type <span style="float:right">Comfortable</span></div>
+    <div class="stage"><div class="lane" id="story-ready"></div></div>
+    <div class="story-step">02 · Working, with music alongside</div>
+    <div class="stage"><div class="lane" id="story-thinking"></div></div>
+    <div class="story-step">03 · Read, copy or follow up</div>
+    <div class="stage"><div class="lane" id="story-answer"></div></div>
+    <p class="note">Design mockup only. The answer is scripted; no AI or microphone is connected. A future voice mode would show orange only during real microphone capture.</p>
+  </div>
+  <footer>References: <a href="https://support.apple.com/en-gb/guide/iphone/iphv6zwrg8jvfgr/ios">Siri AI</a>,
+    <a href="https://developer.apple.com/design/human-interface-guidelines/motion">motion</a> and
+    <a href="https://developer.apple.com/design/human-interface-guidelines/generative-ai">generative AI</a>.
+    Noctalia would use its configured AI provider.</footer>
+</main>
+<script>
+const promptExample = 'What does Focus do?';
+const exampleAnswer = 'Focus keeps notifications quiet while you work, play or sleep. Choose the apps that can interrupt you, allow critical alerts, and set a schedule in Settings.';
+const symbols = {close:'\uf404', send:'\uf366', stop:'\uf82b', copy:'\uf634', retry:'\uf21c'};
+const glyph = name => `<span class="glyph" aria-hidden="true">${symbols[name]}</span>`;
+const orb = '<span class="orb" aria-hidden="true"></span>';
+const wave = '<span class="wave" role="img" aria-label="Media playing"><i></i><i></i><i></i><i></i><i></i></span>';
+const art = '<img class="art" src="../../assets/noctalia-wallpaper.png" alt="">';
+const esc = text => text.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let state='ready', compact=false, timer=null, question=promptExample, answer=exampleAnswer;
+function form(followup=false) {
+  return `<form class="ask ${followup?'followup':''}" aria-label="Ask Noctalia"><input aria-label="${followup?'Ask a follow-up':'Ask Noctalia'}" placeholder="${followup?'Ask a follow-up…':'Ask Noctalia…'}" autocomplete="off"><button class="icon-button send" type="submit" aria-label="Send question">${glyph('send')}</button></form>`;
+}
+function media(sidecar=false) {
+  return sidecar ? `<div class="sidecar" aria-label="Music continues">${art}${wave}</div>` :
+    `<div class="media">${art}<div class="track"><strong>A little closer to home</strong><span>Orbit · Playing</span></div>${wave}</div>`;
+}
+function markup(value) {
+  if(value==='closed') return '<div class="closed">21:41</div>'+media(true);
+  let content;
+  if(value==='ready') content=`<div class="head">${orb}${form()}</div>`;
+  if(value==='thinking') content=`<div class="head">${orb}<div class="status"><strong>Thinking…</strong><span>${esc(question)}</span></div><button class="icon-button" data-action="stop" aria-label="Stop request">${glyph('stop')}</button></div>`;
+  if(value==='answer'||value==='unavailable') content=`<div class="head">${orb}<span class="identity">Noctalia</span><button class="icon-button" data-action="close" aria-label="Dismiss assistant">${glyph('close')}</button></div>
+    <div class="question">${esc(question)}</div><p class="response" role="status">${value==='answer'?esc(answer):'Couldn’t reach your assistant. Your question is still here.'}</p>
+    <div class="actions">${value==='answer'?`<button data-action="copy">${glyph('copy')}<span>Copy</span></button>`:`<button data-action="retry">${glyph('retry')}Try again</button><button data-action="edit">Edit question</button>`}</div>
+    ${value==='answer'?form(true):''}${media()}`;
+  return `<section class="assistant ${value}" aria-label="Noctalia assistant">${content}</section>`+(['ready','thinking'].includes(value)?media(true):'');
+}
+function render(focus=false) {
+  const old=document.querySelector('#demo .assistant');
+  const before=old?.getBoundingClientRect(), radius=old?getComputedStyle(old).borderRadius:null;
+  document.querySelector('#demo').innerHTML=markup(state);
+  document.querySelector('#demo').classList.toggle('compact',compact);
+  const next=document.querySelector('#demo .assistant');
+  if(before&&next&&!document.body.classList.contains('reduced')&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    const after=next.getBoundingClientRect();
+    next.animate([{width:before.width+'px',height:before.height+'px',borderRadius:radius},
+      {width:after.width+'px',height:after.height+'px',borderRadius:getComputedStyle(next).borderRadius}],
+      {duration:300,easing:'cubic-bezier(.2,.8,.2,1)'});
+  }
+  document.querySelectorAll('[data-preview]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.preview===state)));
+  if(focus) document.querySelector('#demo input')?.focus();
+}
+function setState(value, focus=false) { clearTimeout(timer); timer=null; state=value; render(focus); }
+function ask(text) {
+  question=text.trim()||promptExample;
+  answer=question===promptExample?exampleAnswer:'This is a visual preview. A connected assistant would answer your question here.';
+  setState('thinking'); timer=setTimeout(()=>setState('answer',true),1800);
+}
+document.querySelector('#demo').addEventListener('submit',e=>{e.preventDefault(); ask(e.target.querySelector('input').value)});
+document.querySelector('#demo').addEventListener('click',async e=>{
+  const action=e.target.closest('[data-action]')?.dataset.action;
+  if(action==='close')setState('closed');
+  if(action==='stop'||action==='edit'){setState('ready',true);document.querySelector('#demo input').value=question;}
+  if(action==='retry')ask(question);
+  if(action==='copy'){
+    try { await navigator.clipboard.writeText(answer); e.target.closest('button').querySelector('span:last-child').textContent='Copied'; }
+    catch { e.target.closest('button').querySelector('span:last-child').textContent='Select text to copy'; }
+  }
+});
+document.querySelectorAll('[data-preview]').forEach(b=>b.addEventListener('click',()=>setState(b.dataset.preview)));
+document.querySelector('#density').addEventListener('click',e=>{compact=!compact;e.target.setAttribute('aria-pressed',String(compact));render()});
+document.querySelector('#motion').addEventListener('click',e=>{
+  const reduced=document.body.classList.toggle('reduced');e.target.setAttribute('aria-pressed',String(reduced));
+  if(reduced)document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).forEach(a=>a.finish());
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){e.preventDefault();setState('closed');}
+  if(e.ctrlKey&&e.code==='Space'){e.preventDefault();setState('ready',true);}
+});
+render();
+if(new URLSearchParams(location.search).has('story')){
+  document.body.classList.add('story-mode');
+  for(const value of ['ready','thinking','answer'])document.querySelector('#story-'+value).innerHTML=markup(value);
+}
+</script>
+</html>

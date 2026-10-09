@@ -628,6 +628,7 @@ std::unique_ptr<Flex> NetworkTab::create() {
 
   auto currentCard = ui::column({
       .out = &m_currentCard,
+      .visible = m_network != nullptr,
       .configure = [scale, opacity = panelCardOpacity()](Flex& card) { applySectionCardStyle(card, scale, opacity); },
   });
   addTitle(*currentCard, i18n::tr("control-center.network.current-connection"), scale);
@@ -637,7 +638,7 @@ std::unique_ptr<Flex> NetworkTab::create() {
       ui::label({
           .out = &m_currentTitle,
           .fontSize = Style::fontSizeBody * scale,
-          .fontWeight = FontWeight::Bold,
+          .fontWeight = FontWeight::SemiBold,
           .color = colorSpecFromRole(ColorRole::OnSurface),
       }),
       ui::label({
@@ -1373,10 +1374,12 @@ void NetworkTab::rebuildApList(Renderer& renderer) {
   }
 
   if (m_network == nullptr) {
-    m_list->addChild(control_center::makeEmptyState(
-        "world-off", i18n::tr("control-center.network.unavailable-title"),
-        i18n::tr("control-center.network.unavailable-detail"), scale, panelCardOpacity()
-    ));
+    m_list->addChild(
+        control_center::makeEmptyState(
+            "world-off", i18n::tr("control-center.network.unavailable-title"),
+            i18n::tr("control-center.network.unavailable-detail"), scale, panelCardOpacity()
+        )
+    );
   } else {
     const float opacity = panelCardOpacity();
 

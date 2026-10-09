@@ -174,7 +174,22 @@ a single activity has a plain title. There are no navigation pills or arrows in 
 activity header. Recent transfers do not enter the live cycle and are available
 through a secondary history action. Escape or leaving the card dismisses it.
 
+The full Control Centre, when hosted in the Island, also uses a single title.
+Click it or focus it with Tab and press Enter/Space to replace the body with a
+section overview inside the same Island. The icon-and-label grid respects hidden
+sections, marks the current view and supports arrow keys. Choosing a section
+crossfades its content into place. Escape, the title or Close returns to the previous
+view without dismissing the panel. A live media row keeps the artwork, title, artist
+and waveform visible while choosing; paused media uses a pause symbol. Ctrl+Tab and
+Ctrl+Shift+Tab switch sections directly. Reduced motion changes views immediately.
+Relevant actions stay at the right of the header, and disappear while choosing.
+Now Playing places its player selector there, so the media card does not repeat its
+heading. Standalone Control Centre keeps its sidebar.
+
 Media retains the artwork background and waveform with status indicators present.
+The cover and waveform move with the capsule through expansion and collapse while
+labels and controls fade separately. Reversing the transition continues from the
+current position; reduced motion goes straight to the final layout.
 The header's media dot uses a readable gradient derived from the artwork accent.
 Microphone-only capture is orange; camera capture is green, also when a microphone
 is active. Microphone details remain a separate active card. A red header dot requires
@@ -182,9 +197,17 @@ an active native screen recording. External desktop sharing keeps its purple scr
 symbol. Compact indicators retain their rotation.
 
 Timers emphasize remaining time with pause/resume and cancel, and recording emphasizes
-elapsed time with Stop. Hover controls recheck the live timer state so a queued resume
+elapsed time with Stop. Timer and recording symbols share ring sizing and weight.
+Recording uses the header as its single activity label; mixed sharing sessions also
+identify the recorder's row. Hover controls recheck the live timer state so a queued resume
 cannot start an idle or finished countdown. Timer creation stays in the full Timer
 panel; screenshot and recording initiation stay keyboard driven.
+Keep Awake follows the same live-value layout, with add-time and end controls;
+clicking the value opens the full Power section. Microphone cards put capturing apps
+above their routed devices and mute controls, with the app summary opening Audio.
+Camera and sharing cards lead with the capturing app and elapsed time instead of
+a repeated explanation. Transfers use clearer names and the media card's lighter
+progress stroke. Both card sizes keep their outer insets.
 
 Native validation on isolated GPU-backed Hyprland outputs passed for light/dark
 cards, both densities, pointer title switching, Enter/Space focus retention, media
@@ -242,6 +265,42 @@ devices should form a consistent family. Keep the bell balanced with neighbourin
 symbols. Show statuses supported by the desktop services, with labels that describe
 the actual activity.
 
+The shared symbol registry now uses Cupertino Icons for common shell controls,
+including media, audio, navigation, Focus, privacy details and notifications.
+The Noctalia companion set fills missing device, battery, sharing, networking and
+system symbols with matching vector drawings. Brand identities and existing custom
+icons retain access to Tabler.
+The bell, home, Wi-Fi and transport symbols have optical size adjustments within
+their existing hit targets; both Comfortable and Compact keep the same padding.
+The symbols use open-source Cupertino Icons and the project's companion artwork,
+following the SF-style reference.
+See [font provenance and maintenance](../assets/fonts/README.md) for licensing,
+qualified icon names and the offline asset bundle.
+
+The same design direction continues through the wider shell. All built-in Settings
+section and desktop-gallery identities use Cupertino or a companion symbol,
+including the horizontal Island capsule, desktop/device group, Dock and tiling
+layouts. Launcher utility actions use the same semantic symbols as their panel
+equivalents, including the setting sun for Night Light.
+
+Following Apple's [Mac design guidance](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos/)
+and [layout guidance](https://developer.apple.com/design/human-interface-guidelines/layout),
+desktop panels retain their keyboard navigation and comfortable information
+density. Control Centre section cards use 16 logical pixels of inner padding and
+body-sized semibold headings beneath the larger page title. Notification height
+and display-label measurements use the same inset. Empty Audio messages sit
+directly inside their group, and an unavailable network service shows one empty
+state without an unused connection heading. Privacy shows stopping advice only
+while capture is active, with orange microphone, green camera and purple sharing
+symbols matching the Island. Settings and shared picker close
+buttons use quiet header chrome with their existing hit regions and focus states.
+
+Review native surfaces in both themes with `tests/hyprland_smoke.py --cupertino-only`;
+it captures every Control Centre section, the launcher, clipboard, wallpaper,
+session actions, notification history, Settings picker and fractional-scale Audio.
+`glyph_registry_test` also checks the symbol family for every registered Settings
+section and gallery widget. Keep actual application and tray artwork intact.
+
 | Activity | Indicator in the proposed header |
 | --- | --- |
 | Microphone without camera | Orange dot |
@@ -272,6 +331,42 @@ brightness OSDs retain their uncluttered layouts. Focus configuration belongs in
 Settings, with quick Focus selection in Control Centre. Battery connection pulses,
 transfer progress, and completion feedback retain their established meanings and
 timings. Review any broader layout changes in a mockup before implementation.
+
+### Interaction consistency and assistant concept
+
+Apple's [motion guidance](https://developer.apple.com/design/human-interface-guidelines/motion)
+and [button guidance](https://developer.apple.com/design/human-interface-guidelines/buttons)
+inform the interaction pass. Shared switches reverse from their displayed position;
+pointer entry, exit and focus changes do not jump the thumb to its destination.
+Immediate configuration updates finish any outstanding switch animation, including
+when the requested value already matches. Disabled sliders leave the keyboard
+focus order. Island status controls, the expanded title and section choices use
+brief foreground press feedback while retaining their clean backgrounds.
+
+The native expanded-view checks include long track and artist names in both
+densities. Motion regression checks cover reversal, reduced motion, disabled
+controls, and return focus after closing a Settings dialog. Existing Escape and
+section-navigation behavior remains the keyboard model.
+
+The [assistant prototype](references/island-assistant-mockup.html) is a separate
+visual concept based on [Siri AI](https://support.apple.com/en-gb/guide/iphone/iphv6zwrg8jvfgr/ios)
+and Apple's [generative AI guidance](https://developer.apple.com/design/human-interface-guidelines/generative-ai).
+The [PNG storyboard](assets/island-assistant-review/assistant-storyboard.png) and
+[animated preview](assets/island-assistant-review/assistant-preview.gif) can be
+viewed without opening the interactive HTML.
+It shows a keyboard-invoked field, a small animated orb, a cancellable working
+state, and an expanded response with copy and follow-up controls. Music remains
+visible alongside the compact request and in the expanded card. Comfortable uses
+24-pixel content insets; Compact uses 20. Reduced motion keeps the orb still and
+settles size changes immediately. The preview includes an unavailable-service state
+that preserves the question.
+
+This prototype uses scripted text, does not capture audio, and does not connect to
+an AI service or execute desktop actions. Its Ctrl+Space shortcut belongs only to
+the preview page. A working implementation can reuse the existing launcher AI
+provider and would need an explicit choice of text or voice scope. Future capture
+indicators must represent actual microphone activity, never a simulated listening
+state. The prototype is not an integration with Apple's Siri service.
 
 ### Refinement review, 9 October 2026
 
@@ -541,7 +636,8 @@ object, which is the way to pick an icon or report a status:
 noctalia msg island-activity-start '{"id":"build","title":"Building","icon":"hammer","progress":75}'
 ```
 
-Icons are the shell's Tabler glyph names. Starting an id that already exists
+Icons use the shared shell glyph names or qualified `cupertino:`/`tabler:` names.
+Existing Tabler names remain accepted. Starting an id that already exists
 restarts it. An activity nobody updates for an hour is dropped, so a script that
 dies doesn't leave it behind. Script activities share the downloads slot in the
 activity priority setting, and the card's heading reads "In Progress" when one is
@@ -578,7 +674,7 @@ noctalia msg osd-show clipboard-check Copied
 noctalia msg osd-show shield-lock "VPN connected"
 ```
 
-The icon is a Tabler glyph name. The pill fades after a moment. With the Island off
+The icon uses the same shared glyph registry. The pill fades after a moment. With the Island off
 it shows as a regular OSD, and it shows even when `[osd.kinds]` hides the built-in
 OSDs.
 

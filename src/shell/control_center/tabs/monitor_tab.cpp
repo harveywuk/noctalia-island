@@ -184,7 +184,7 @@ void MonitorTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeig
   const float scale = contentScale();
   const float cardWidth =
       std::max(1.0F, m_cardsScroll != nullptr ? m_cardsScroll->contentViewportWidth() : contentWidth);
-  const float cardInnerWidth = std::max(1.0F, cardWidth - Style::spaceMd * scale * 2.0F);
+  const float cardInnerWidth = std::max(1.0F, cardWidth - Style::spaceLg * scale * 2.0F);
   const float headerTextMaxWidth =
       std::max(1.0F, cardInnerWidth - Style::fontSizeTitle * scale - Style::spaceSm * scale);
   for (auto& card : m_cards) {

@@ -85,15 +85,35 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
     def tab(label):
         # A single title cycles live activities; inactive panels have no launcher here.
         expected = 'Now Playing' if label == 'Media' else label
-        for _ in range(4):
+        headings = []
+        for attempt in range(4):
             hover()
-            heading = ' '.join(w.get('text') or '' for w in text('title-switch')
-                               if int(w.get('top') or 0) < 65)
-            if expected.lower() in heading.lower():
-                return
+            path = shot(f'title-switch-{label}-{attempt}')
+            header = out/f'title-header-{label}-{attempt}.png'
+            # Read only the muted heading. A contrast pass separates its letters
+            # from artwork highlights that sparse OCR otherwise treats as text.
+            crop = Image.open(path).crop((406, 31, 590, 62)).resize((1104, 186))
+            for sample in (crop, crop.convert('L').point(lambda p: 255 if p > 120 else 0)):
+                sample.save(header)
+                heading = run(['tesseract', str(header), 'stdout', '--tessdata-dir',
+                               os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata')),
+                               '--psm', '7']).strip()
+                headings.append(heading)
+                if expected.lower() in heading.lower():
+                    return
             click(455, 42)
-        raise AssertionError('Contextual title did not reach '+expected+': '+heading)
+        raise AssertionError('Contextual title did not reach '+expected+': '+repr(headings))
     def events(): return (out/'player-actions.log').read_text() if (out/'player-actions.log').exists() else ''
+    def media_ready(name):
+        # Sparse whole-screen OCR can merge the bright track title into animated
+        # artwork. Read the title itself before exercising its playback controls.
+        image = shot(name)
+        title = out/(name+'-title.png')
+        Image.open(image).crop((493, 94, 800, 124)).resize((1228, 120)).save(title)
+        words = run(['tesseract', str(title), 'stdout', '--tessdata-dir',
+                     os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata')),
+                     '--psm', '7'])
+        return 'closer to home' in words.lower()
     env['ISLAND_TEST_ART'] = (repo/'assets/noctalia-wallpaper.png').as_uri()
     env['ISLAND_TEST_EVENTS'] = str(out/'player-actions.log')
     env['ISLAND_TEST_TITLE'] = 'A little closer to home'
@@ -114,6 +134,18 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             shot(mode+'-charging-batteries')
             leave(); properties(bluetooth, Percentage=5); shot(mode+'-low-battery')
 
+            # Exercise companion device glyphs through real BlueZ state updates,
+            # including the small connection capsule and its hover target.
+            for icon, title, slug in [('input-mouse', 'Studio mouse', 'mouse'),
+                                      ('audio-headset', 'Studio headset', 'headset')]:
+                leave(); properties(bluetooth, Connected=False)
+                properties(bluetooth, Icon=icon, Alias=title, Percentage=75, Connected=True)
+                words = ' '.join(word.get('text') or '' for word in text(mode+'-'+slug+'-connected'))
+                assert title.lower() in words.lower(), 'Companion device connection label missing: '+words
+                hover(); shot(mode+'-'+slug+'-connection-hover')
+            leave(); properties(bluetooth, Connected=False)
+            properties(bluetooth, Icon='audio-headphones', Alias='Test headphones', Percentage=75, Connected=True)
+
             capture = subprocess.Popen(['parec', '--device=island-style-mic', '--client-name=Island privacy test',
                                         '--stream-name=Island capture'], env=env, stdout=subprocess.DEVNULL,
                                        stderr=subprocess.DEVNULL)
@@ -128,11 +160,9 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             time.sleep(.8); hover()
             # Capture ending briefly owns the Island with a "Microphone Stopped" OSD.
             # Wait for the actual media controls before exercising their hit targets.
-            wait(lambda: any('home' in (word.get('text') or '').lower()
-                             for word in text(mode+'-media-ready')), 'Media controls did not appear')
+            wait(lambda: media_ready(mode+'-media-ready'), 'Media controls did not appear')
             leave(); shot(mode+'-media-compact'); hover()
-            wait(lambda: any('home' in (word.get('text') or '').lower()
-                             for word in text(mode+'-media-expanded')), 'Media did not expand again after leaving')
+            wait(lambda: media_ready(mode+'-media-expanded'), 'Media did not expand again after leaving')
             before = events().count('PlayPause')
             click(640, 233)
             assert events().count('PlayPause') == before+1, 'Styled playback button did not activate'
@@ -147,7 +177,15 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             shot(mode+'-keyboard-focus'); command(keyboard, 28); time.sleep(.3)
             assert any('style-download' in (word.get('text') or '') for word in text(mode+'-keyboard-title-enter')), 'Enter did not switch the focused title'
             command(keyboard, 57); time.sleep(.3)
-            assert any('1:15' in (word.get('text') or '') for word in text(mode+'-keyboard-title-space')), 'Space did not preserve title focus and switch again'
+            # Isolate the time so sparse whole-screen OCR does not merge its
+            # orange digits with the timer ring or moving artwork behind them.
+            timer_shot = shot(mode+'-keyboard-title-space')
+            timer_value = out/(mode+'-keyboard-timer-value.png')
+            Image.open(timer_shot).crop((465, 85, 620, 125)).resize((620, 160)).save(timer_value)
+            timer_text = run(['tesseract', str(timer_value), 'stdout', '--tessdata-dir',
+                             os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata')),
+                             '--psm', '7']).strip()
+            assert timer_text == '1:15', 'Space did not preserve title focus and switch again: '+timer_text
             command(keyboard, 1)
             # Density is a presentation preference and keeps active activities intact.
             config = cfg/'config.toml'
@@ -175,8 +213,14 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell,
             msg('record-region'); time.sleep(.5)
             move(100, 250); command(pointer, 'press'); move(500, 500); command(pointer, 'release')
             wait(lambda: msg('record-status').startswith('REC'), 'Private recording did not start')
-            leave(); time.sleep(1.1); shot(mode+'-recording'); hover(); shot(mode+'-recording-hover'); msg('record-stop')
+            leave(); time.sleep(1.1); shot(mode+'-recording'); hover(); shot(mode+'-recording-hover')
+            config.write_text(config.read_text().replace('track_preview_seconds=0',
+                                                         'compact_layout=true\ntrack_preview_seconds=0'))
+            msg('config-reload'); time.sleep(.6); leave(); hover(); shot(mode+'-compact-recording-hover')
+            click(747, 104)
             wait(lambda: msg('record-status') == 'idle', 'Private recording did not stop')
+            config.write_text(config.read_text().replace('compact_layout=true\n', ''))
+            msg('config-reload'); time.sleep(.6)
             msg('notification-clear-active'); msg('notification-clear-history')
             msg('capture-menu'); time.sleep(.3); shot(mode+'-capture-menu'); command(keyboard, 1)
             msg('panel-open', 'control-center', 'home'); time.sleep(.5); shot(mode+'-hosted-panel')

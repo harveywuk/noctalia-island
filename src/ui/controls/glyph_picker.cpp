@@ -33,17 +33,23 @@ public:
     for (const auto& [name, target] : aliases) {
       if (seen.insert(name).second) {
         if (const auto it = tabler.find(std::string(target)); it != tabler.end()) {
-          m_master.push_back({name, it->second.codepoint, it->second.category});
+          m_master.push_back({name, GlyphRegistry::lookup(name), it->second.category});
           categories.insert(it->second.category);
         }
       }
     }
     for (const auto& [name, metadata] : tabler) {
       if (seen.insert(name).second) {
-        m_master.push_back({name, metadata.codepoint, metadata.category});
+        m_master.push_back({name, GlyphRegistry::lookup(name), metadata.category});
         categories.insert(metadata.category);
       }
     }
+    for (const auto& [name, cp] : GlyphRegistry::cupertinoIcons())
+      m_master.push_back({"cupertino:" + name, cp, "Cupertino"});
+    categories.insert("Cupertino");
+    for (const auto& [name, cp] : GlyphRegistry::noctaliaIcons())
+      m_master.push_back({"noctalia:" + name, cp, "Noctalia"});
+    categories.insert("Noctalia");
     std::ranges::sort(m_master, {}, &Entry::name);
     m_categories.assign(categories.begin(), categories.end());
 
@@ -163,7 +169,7 @@ GlyphPicker::GlyphPicker(float chromeScale) : m_chromeScale(std::max(0.1F, chrom
           ui::button({
               .glyph = "close",
               .glyphSize = Style::fontSizeBody * m_chromeScale,
-              .variant = ButtonVariant::Default,
+              .variant = ButtonVariant::Ghost,
               .minWidth = Style::controlHeightSm * m_chromeScale,
               .minHeight = Style::controlHeightSm * m_chromeScale,
               .padding = Style::spaceXs * m_chromeScale,

@@ -13,9 +13,9 @@
 #include "shell/control_center/tab.h"
 #include "shell/panel/panel_manager.h"
 #include "ui/builders.h"
-#include "ui/motion.h"
 #include "ui/controls/context_menu.h"
 #include "ui/controls/context_menu_popup.h"
+#include "ui/motion.h"
 
 #include <algorithm>
 #include <chrono>
@@ -63,7 +63,6 @@ namespace {
     return static_cast<int>(std::round(kMediaUnit * 11.0F * scale));
   }
 
-
   // Hover-revealed transport controls linger briefly after the pointer leaves, then fade out.
   constexpr auto kControlsHideDelay = std::chrono::milliseconds(300);
   constexpr float kControlsFadeOutMs = 500.0F;
@@ -92,11 +91,10 @@ namespace {
 } // namespace
 
 MediaTab::MediaTab(
-    MprisService* mpris, HttpClient* httpClient, ConfigService* config,
-    WaylandConnection* wayland, RenderContext* renderContext
+    MprisService* mpris, HttpClient* httpClient, ConfigService* config, WaylandConnection* wayland,
+    RenderContext* renderContext
 )
-    : m_mpris(mpris), m_httpClient(httpClient), m_config(config), m_wayland(wayland),
-      m_renderContext(renderContext) {}
+    : m_mpris(mpris), m_httpClient(httpClient), m_config(config), m_wayland(wayland), m_renderContext(renderContext) {}
 
 MediaTab::~MediaTab() { m_aliveGuard.reset(); }
 
@@ -189,6 +187,13 @@ void MediaTab::openPlayerMenu() {
   m_playerMenuOpen = true;
 }
 
+std::unique_ptr<Flex> MediaTab::createHeaderActions() {
+  m_islandHeaderActions = nullptr;
+  if (!PanelManager::instance().isIslandOpen())
+    return nullptr;
+  return ui::row({.out = &m_islandHeaderActions, .align = FlexAlign::Center});
+}
+
 std::unique_ptr<Flex> MediaTab::create() {
   const float scale = contentScale();
 
@@ -253,7 +258,13 @@ std::unique_ptr<Flex> MediaTab::create() {
   backdrop->setParticipatesInLayout(false);
   backdrop->setHitTestVisible(false);
   nowCard->addChild(std::move(backdrop));
-  nowCard->addChild(std::move(nowHeader));
+  if (m_islandHeaderActions) {
+    m_playerMenuButton->setGlyphSize(21.0F * scale);
+    m_islandHeaderActions->addChild(nowHeader->removeChild(m_playerMenuButton));
+    m_nowLabel = nullptr;
+  } else {
+    nowCard->addChild(std::move(nowHeader));
+  }
 
   auto mediaStack = ui::column({
       .out = &m_mediaStack,
@@ -689,6 +700,7 @@ void MediaTab::onClose() {
   m_trackText = nullptr;
   m_controlsRow = nullptr;
   m_nowLabel = nullptr;
+  m_islandHeaderActions = nullptr;
   m_flowLayer.release();
   m_overlay = false;
   m_artworkRow = nullptr;
@@ -807,9 +819,14 @@ void MediaTab::applyOverlay(bool overlay) {
   colour(m_trackTitle, 1.0F, colorSpecFromRole(ColorRole::OnSurface));
   colour(m_trackArtist, 0.72F, colorSpecFromRole(ColorRole::OnSurfaceVariant));
   colour(m_trackAlbum, 0.55F, colorSpecFromRole(ColorRole::OnSurfaceVariant));
-  for (auto* button : {m_playerMenuButton, m_repeatButton, m_prevButton, m_playPauseButton, m_nextButton, m_shuffleButton}) {
+  for (auto* button :
+       {m_playerMenuButton, m_repeatButton, m_prevButton, m_playPauseButton, m_nextButton, m_shuffleButton}) {
     if (button == nullptr)
       continue;
+    if (button == m_playerMenuButton && m_islandHeaderActions) {
+      button->clearCustomPalette();
+      continue;
+    }
     if (overlay)
       button->setCustomPalette(overlayPalette(button->variant() == ButtonVariant::Primary));
     else

@@ -212,7 +212,7 @@ namespace settings {
                   container.setCardStyle(scale, cardFillOpacity());
                 },
         },
-        makeLabel(title, Style::fontSizeTitle * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Bold),
+        makeLabel(title, Style::fontSizeTitle * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::SemiBold),
         ui::column({
             .out = &bodyRaw,
             .align = FlexAlign::Stretch,
@@ -245,7 +245,7 @@ namespace settings {
     collapsible->setScale(props.scale);
     collapsible->setHeaderPadding(Style::spaceXs, 0.0F);
     collapsible->setHeader(makeLabel(
-        props.title, Style::fontSizeTitle * props.scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Bold
+        props.title, Style::fontSizeTitle * props.scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::SemiBold
     ));
     collapsible->setBody(std::move(body));
     collapsible->setExpandedImmediate(props.expandedGroups.contains(props.group));

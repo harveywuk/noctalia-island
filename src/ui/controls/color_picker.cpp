@@ -520,7 +520,7 @@ ColorPickerSheet::ColorPickerSheet(float chromeScale) : m_chromeScale(std::max(0
           ui::button({
               .glyph = "close",
               .glyphSize = Style::fontSizeBody * m_chromeScale,
-              .variant = ButtonVariant::Default,
+              .variant = ButtonVariant::Ghost,
               .minWidth = Style::controlHeightSm * m_chromeScale,
               .minHeight = Style::controlHeightSm * m_chromeScale,
               .padding = Style::spaceXs * m_chromeScale,

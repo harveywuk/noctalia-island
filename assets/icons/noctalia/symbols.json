@@ -1,0 +1,300 @@
+{
+  "battery": {
+    "codepoint": "U+F000",
+    "aliases": [
+      "battery-0"
+    ]
+  },
+  "battery-1-filled": {
+    "codepoint": "U+F001",
+    "aliases": [
+      "battery-1"
+    ]
+  },
+  "battery-2-filled": {
+    "codepoint": "U+F002",
+    "aliases": [
+      "battery-2"
+    ]
+  },
+  "battery-3-filled": {
+    "codepoint": "U+F003",
+    "aliases": [
+      "battery-3"
+    ]
+  },
+  "battery-4-filled": {
+    "codepoint": "U+F004",
+    "aliases": [
+      "battery-4"
+    ]
+  },
+  "battery-charging": {
+    "codepoint": "U+F005",
+    "aliases": [
+      "battery-charging-2",
+      "battery-plugged"
+    ]
+  },
+  "battery-exclamation": {
+    "codepoint": "U+F006",
+    "aliases": []
+  },
+  "bluetooth-connected": {
+    "codepoint": "U+F007",
+    "aliases": []
+  },
+  "bluetooth-off": {
+    "codepoint": "U+F008",
+    "aliases": []
+  },
+  "camera-off": {
+    "codepoint": "U+F009",
+    "aliases": []
+  },
+  "cell-signal-1": {
+    "codepoint": "U+F00A",
+    "aliases": []
+  },
+  "cell-signal-2": {
+    "codepoint": "U+F00B",
+    "aliases": []
+  },
+  "cell-signal-3": {
+    "codepoint": "U+F00C",
+    "aliases": []
+  },
+  "cell-signal-4": {
+    "codepoint": "U+F00D",
+    "aliases": []
+  },
+  "cell-signal-5": {
+    "codepoint": "U+F00E",
+    "aliases": []
+  },
+  "cell-signal-off": {
+    "codepoint": "U+F00F",
+    "aliases": []
+  },
+  "cloud-off": {
+    "codepoint": "U+F010",
+    "aliases": []
+  },
+  "cpu": {
+    "codepoint": "U+F011",
+    "aliases": []
+  },
+  "database": {
+    "codepoint": "U+F012",
+    "aliases": []
+  },
+  "device-airpods": {
+    "codepoint": "U+F013",
+    "aliases": []
+  },
+  "device-tablet": {
+    "codepoint": "U+F014",
+    "aliases": []
+  },
+  "device-tablet-filled": {
+    "codepoint": "U+F015",
+    "aliases": []
+  },
+  "device-watch": {
+    "codepoint": "U+F016",
+    "aliases": []
+  },
+  "device-watch-filled": {
+    "codepoint": "U+F017",
+    "aliases": []
+  },
+  "disc": {
+    "codepoint": "U+F018",
+    "aliases": []
+  },
+  "ethernet": {
+    "codepoint": "U+F019",
+    "aliases": []
+  },
+  "ethernet-off": {
+    "codepoint": "U+F01A",
+    "aliases": []
+  },
+  "flask": {
+    "codepoint": "U+F01B",
+    "aliases": []
+  },
+  "grip-vertical": {
+    "codepoint": "U+F01C",
+    "aliases": []
+  },
+  "headset": {
+    "codepoint": "U+F01D",
+    "aliases": [
+      "headset-filled"
+    ]
+  },
+  "key": {
+    "codepoint": "U+F01E",
+    "aliases": []
+  },
+  "leaf": {
+    "codepoint": "U+F01F",
+    "aliases": []
+  },
+  "leaf-filled": {
+    "codepoint": "U+F020",
+    "aliases": []
+  },
+  "mouse": {
+    "codepoint": "U+F021",
+    "aliases": []
+  },
+  "mouse-filled": {
+    "codepoint": "U+F022",
+    "aliases": []
+  },
+  "mug": {
+    "codepoint": "U+F023",
+    "aliases": [
+      "coffee"
+    ]
+  },
+  "mug-filled": {
+    "codepoint": "U+F024",
+    "aliases": []
+  },
+  "music-off": {
+    "codepoint": "U+F025",
+    "aliases": []
+  },
+  "plug": {
+    "codepoint": "U+F026",
+    "aliases": [
+      "plug-filled",
+      "plug-connected"
+    ]
+  },
+  "plug-off": {
+    "codepoint": "U+F027",
+    "aliases": [
+      "plug-connected-x"
+    ]
+  },
+  "puzzle": {
+    "codepoint": "U+F028",
+    "aliases": []
+  },
+  "puzzle-filled": {
+    "codepoint": "U+F029",
+    "aliases": []
+  },
+  "scale": {
+    "codepoint": "U+F02A",
+    "aliases": []
+  },
+  "screen-share": {
+    "codepoint": "U+F02B",
+    "aliases": [
+      "cast"
+    ]
+  },
+  "screen-share-off": {
+    "codepoint": "U+F02C",
+    "aliases": []
+  },
+  "server": {
+    "codepoint": "U+F02D",
+    "aliases": []
+  },
+  "sun-off": {
+    "codepoint": "U+F02E",
+    "aliases": []
+  },
+  "terminal-2": {
+    "codepoint": "U+F02F",
+    "aliases": [
+      "terminal"
+    ]
+  },
+  "wifi-0": {
+    "codepoint": "U+F030",
+    "aliases": []
+  },
+  "wifi-1": {
+    "codepoint": "U+F031",
+    "aliases": []
+  },
+  "wifi-2": {
+    "codepoint": "U+F032",
+    "aliases": []
+  },
+  "wifi-3": {
+    "codepoint": "U+F033",
+    "aliases": []
+  },
+  "wifi-question": {
+    "codepoint": "U+F034",
+    "aliases": []
+  },
+  "capsule": {
+    "codepoint": "U+F035",
+    "aliases": []
+  },
+  "capsule-filled": {
+    "codepoint": "U+F036",
+    "aliases": []
+  },
+  "layout-navbar": {
+    "codepoint": "U+F037",
+    "aliases": []
+  },
+  "world-off": {
+    "codepoint": "U+F038",
+    "aliases": []
+  },
+  "keyboard-off": {
+    "codepoint": "U+F039",
+    "aliases": []
+  },
+  "calendar-off": {
+    "codepoint": "U+F03A",
+    "aliases": []
+  },
+  "photo-off": {
+    "codepoint": "U+F03B",
+    "aliases": []
+  },
+  "device-desktop-off": {
+    "codepoint": "U+F03C",
+    "aliases": []
+  },
+  "devices": {
+    "codepoint": "U+F03D",
+    "aliases": []
+  },
+  "calculator": {
+    "codepoint": "U+F03E",
+    "aliases": []
+  },
+  "key-off": {
+    "codepoint": "U+F03F",
+    "aliases": []
+  },
+  "calendar-cog": {
+    "codepoint": "U+F040",
+    "aliases": []
+  },
+  "clipboard-x": {
+    "codepoint": "U+F041",
+    "aliases": []
+  },
+  "link-plus": {
+    "codepoint": "U+F042",
+    "aliases": []
+  },
+  "paint-off": {
+    "codepoint": "U+F043",
+    "aliases": []
+  }
+}

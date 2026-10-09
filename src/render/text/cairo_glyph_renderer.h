@@ -20,9 +20,8 @@ class TextureManager;
 struct Color;
 struct Mat3;
 
-// Direct FreeType + Cairo renderer for single codepoints in a dedicated font
-// (noctalia-tabler.ttf icon font). No Pango, no shaping, no fallback — the icon font
-// MUST be used, never substituted.
+// Direct FreeType + Cairo renderer for the bundled Tabler and Cupertino fonts.
+// GlyphFont's private-use IDs select the face without system-font substitution.
 class CairoGlyphRenderer {
 public:
   struct TextMetrics {
@@ -39,7 +38,9 @@ public:
   CairoGlyphRenderer(const CairoGlyphRenderer&) = delete;
   CairoGlyphRenderer& operator=(const CairoGlyphRenderer&) = delete;
 
-  void initialize(const std::string& fontPath, RenderBackend* backend, TextureManager* textures);
+  void initialize(
+      const std::string& tablerPath, const std::string& cupertinoPath, RenderBackend* backend, TextureManager* textures
+  );
   void cleanup();
 
   // Drops the uploaded icon-glyph textures so they are re-rasterized on the next
@@ -92,6 +93,8 @@ private:
   FT_Library m_ftLibrary = nullptr;
   FT_Face m_face = nullptr;
   cairo_font_face_t* m_cairoFace = nullptr;
+  FT_Face m_cupertinoFace = nullptr;
+  cairo_font_face_t* m_cupertinoCairoFace = nullptr;
   cairo_font_options_t* m_fontOptions = nullptr;
   RenderBackend* m_backend = nullptr;
   TextureManager* m_textureManager = nullptr;

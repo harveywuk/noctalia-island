@@ -156,7 +156,7 @@ void FileDialogView::create() {
           ui::button({
               .glyph = "close",
               .glyphSize = Style::fontSizeBody * scale,
-              .variant = ButtonVariant::Default,
+              .variant = ButtonVariant::Ghost,
               .minWidth = Style::controlHeightSm * scale,
               .minHeight = Style::controlHeightSm * scale,
               .padding = Style::spaceXs * scale,

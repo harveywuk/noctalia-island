@@ -31,6 +31,7 @@ bool PrivacyTab::rebuild() {
   m_built = true;
   m_state = state;
   m_filters = filters;
+  m_feedback = nullptr;
   while (!m_list->children().empty())
     m_list->removeChild(m_list->children().back().get());
   const auto groups = m_summary.snapshot(state, filters);
@@ -41,14 +42,20 @@ bool PrivacyTab::rebuild() {
             contentScale(), panelCardOpacity()
         )
     );
+    return true;
   }
   for (const auto& group : groups) {
+    // Match the Island's capture semantics. Screen sharing alone is not proof
+    // of a saved recording, so it keeps purple rather than the recording red.
+    const Color tint = group.kind == PrivacyCaptureKind::Microphone ? rgba(1.0F, 0.624F, 0.039F)
+        : group.kind == PrivacyCaptureKind::Camera                  ? rgba(0.188F, 0.82F, 0.345F)
+                                                                    : rgba(0.749F, 0.353F, 0.949F);
     auto card = ui::column({.gap = scaled(10)});
     control_center::applySectionCardStyle(*card, contentScale(), panelCardOpacity());
     card->addChild(
         ui::row(
             {.align = FlexAlign::Center, .gap = scaled(10)},
-            ui::glyph({.glyph = group.icon(), .glyphSize = scaled(22), .color = colorSpecFromRole(ColorRole::Primary)}),
+            ui::glyph({.glyph = group.icon(), .glyphSize = scaled(22), .color = fixedColorSpec(tint)}),
             ui::label({.text = i18n::tr(group.labelKey()), .fontSize = scaled(15), .fontWeight = FontWeight::SemiBold})
         )
     );

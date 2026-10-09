@@ -2,6 +2,7 @@
 
 #include "core/files/resource_paths.h"
 #include "core/log.h"
+#include "render/text/glyph_font.h"
 
 #include <charconv>
 #include <cstdint>
@@ -169,6 +170,158 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
 };
   // clang-format on
 
+  // Cupertino replacements for shared shell names. The companion set supplies
+  // additional devices and states; Tabler remains available for custom glyphs.
+  // clang-format off
+  const std::unordered_map<std::string, std::string_view> kCupertinoSymbols = {
+      {"x", "xmark"}, {"plus", "plus"}, {"minus", "minus"},
+      {"check", "checkmark"}, {"search", "search"},
+      {"dots", "ellipsis"}, {"dots-vertical", "ellipsis_vertical"},
+      {"menu-2", "line_horizontal_3"}, {"user", "person"},
+      {"info-circle", "info_circle"}, {"help-circle", "question_circle"},
+      {"pencil", "pencil"}, {"trash", "trash"}, {"trash-filled", "trash_fill"},
+      {"pin", "pin"}, {"pin-filled", "pin_fill"}, {"pinned-off", "pin_slash"},
+      {"photo", "photo"}, {"photo-filled", "photo_fill"},
+      {"library-photo", "photo_on_rectangle"},
+      {"folder", "folder"}, {"folder-filled", "folder_fill"},
+      {"file", "doc"}, {"file-text", "doc_text"},
+      {"clipboard", "doc_on_clipboard"}, {"clipboard-filled", "doc_on_clipboard_fill"},
+      {"copy", "doc_on_doc"}, {"device-floppy", "floppy_disk"},
+      {"link", "link"}, {"external-link", "arrow_up_right_square"},
+      {"send", "paperplane"}, {"world", "globe"},
+      {"eye", "eye"}, {"eye-off", "eye_slash"},
+      {"chevron-left", "chevron_left"}, {"chevron-right", "chevron_right"},
+      {"chevron-up", "chevron_up"}, {"chevron-down", "chevron_down"},
+      {"arrow-left", "arrow_left"}, {"arrow-right", "arrow_right"},
+      {"arrow-up", "arrow_up"}, {"arrow-down", "arrow_down"},
+      {"arrow-back-up", "arrow_uturn_left"}, {"arrow-forward-up", "arrow_uturn_right"},
+      {"arrows-horizontal", "arrow_left_right"},
+      {"refresh", "arrow_clockwise"}, {"reload", "arrow_clockwise"},
+      {"rotate-clockwise", "rotate_right"}, {"rotate", "rotate_left"},
+      {"zoom-in", "zoom_in"}, {"zoom-out", "zoom_out"},
+      {"home", "house"}, {"home-filled", "house_fill"},
+      {"settings", "gear_alt"}, {"settings-filled", "gear_alt_fill"},
+      {"adjustments-horizontal", "slider_horizontal_3"},
+      {"layout-grid", "square_grid_2x2"}, {"layout-grid-filled", "square_grid_2x2_fill"},
+      {"grid-dots", "circle_grid_3x3_fill"},
+      {"app-window", "macwindow"}, {"stack", "square_stack"},
+      {"stack-2", "square_stack_3d_up"},
+      {"star", "star"}, {"star-filled", "star_fill"},
+      {"heart", "heart"}, {"heart-filled", "heart_fill"},
+      {"bell", "bell"}, {"bell-filled", "bell_fill"}, {"bell-off", "bell_slash"},
+      {"moon", "moon"}, {"moon-filled", "moon_fill"}, {"moon-stars", "moon_stars"},
+      {"sun", "sun_max"}, {"sun-filled", "sun_max_fill"},
+      {"brightness-down", "sun_min"}, {"contrast-filled", "circle_lefthalf_fill"},
+      {"sunrise", "sunrise"}, {"sunrise-filled", "sunrise_fill"},
+      {"sunset", "sunset"}, {"sunset-filled", "sunset_fill"},
+      {"cloud", "cloud"}, {"cloud-filled", "cloud_fill"},
+      {"cloud-fog", "cloud_fog"}, {"cloud-bolt", "cloud_bolt"},
+      {"cloud-rain", "cloud_rain"}, {"cloud-snow", "cloud_snow"},
+      {"cloud-sun", "cloud_sun"}, {"wind", "wind"}, {"snowflake", "snow"},
+      {"thermometer", "thermometer"},
+      {"circle-check", "checkmark_circle"}, {"circle-check-filled", "checkmark_circle_fill"},
+      {"circle-x", "xmark_circle"}, {"circle-x-filled", "xmark_circle_fill"},
+      {"alert-circle", "exclamationmark_circle"}, {"alert-circle-filled", "exclamationmark_circle_fill"},
+      {"alert-triangle", "exclamationmark_triangle"}, {"alert-triangle-filled", "exclamationmark_triangle_fill"},
+      {"alert-octagon", "exclamationmark_octagon"},
+      {"shield", "shield"}, {"shield-filled", "shield_fill"},
+      {"shield-check", "checkmark_shield"}, {"shield-lock", "lock_shield"},
+      {"lock", "lock"}, {"lock-filled", "lock_fill"}, {"lock-open", "lock_open"},
+      {"music", "music_note_2"},
+      {"player-play", "play"}, {"player-play-filled", "play_fill"},
+      {"player-pause", "pause"}, {"player-pause-filled", "pause_fill"},
+      {"player-stop", "stop"}, {"player-stop-filled", "stop_fill"},
+      {"player-track-next", "forward_end"}, {"player-track-next-filled", "forward_end_fill"},
+      {"player-track-prev", "backward_end"}, {"player-track-prev-filled", "backward_end_fill"},
+      {"player-skip-forward", "forward"}, {"player-skip-back", "backward"},
+      {"arrows-shuffle", "shuffle"}, {"repeat", "repeat"}, {"repeat-once", "repeat_1"},
+      {"volume", "speaker_2_fill"}, {"volume-2", "speaker_1_fill"},
+      {"volume-3", "speaker_fill"}, {"volume-off", "speaker_slash_fill"},
+      {"microphone", "mic"}, {"microphone-filled", "mic_fill"}, {"microphone-off", "mic_slash"},
+      {"camera", "camera"}, {"camera-filled", "camera_fill"},
+      {"video", "videocam"}, {"video-filled", "videocam_fill"},
+      {"screenshot", "camera_viewfinder"}, {"crop", "crop"}, {"scissors", "scissors"},
+      {"circle", "circle"}, {"circle-filled", "circle_fill"},
+      {"square", "square"}, {"square-filled", "square_fill"},
+      {"wifi", "wifi"}, {"wifi-off", "wifi_slash"}, {"bluetooth", "bluetooth"},
+      {"download", "arrow_down_to_line"}, {"upload", "arrow_up_to_line"},
+      {"clock", "clock"}, {"clock-filled", "clock_fill"},
+      {"hourglass", "hourglass"}, {"hourglass-filled", "hourglass"}, {"hourglass-empty", "hourglass"},
+      {"stopwatch", "stopwatch"}, {"alarm", "alarm"}, {"alarm-filled", "alarm_fill"},
+      {"calendar", "calendar"}, {"calendar-event", "calendar"},
+      {"device-desktop", "desktopcomputer"}, {"device-laptop", "device_laptop"},
+      {"device-mobile", "device_phone_portrait"}, {"device-mobile-filled", "device_phone_portrait"},
+      {"device-tv", "tv"}, {"device-tv-filled", "tv_fill"},
+      {"device-speaker", "hifispeaker"}, {"device-speaker-filled", "hifispeaker_fill"},
+      {"headphones", "headphones"}, {"headphones-filled", "headphones"},
+      {"keyboard", "keyboard"}, {"keyboard-filled", "keyboard"},
+      {"device-gamepad-2", "gamecontroller"}, {"device-gamepad-2-filled", "gamecontroller_fill"},
+      {"power", "power"}, {"zzz", "zzz"},
+      {"gauge", "gauge"}, {"gauge-filled", "gauge"}, {"brand-speedtest", "speedometer"},
+      {"flame", "flame"}, {"flame-filled", "flame_fill"},
+      {"bolt", "bolt"}, {"bolt-filled", "bolt_fill"},
+      {"wave-sine", "waveform"},
+      {"note", "doc_text"}, {"book", "book"}, {"bookmarks", "bookmark"},
+      {"list-check", "text_badge_checkmark"}, {"list", "list_bullet"},
+      {"address-book", "person_crop_rectangle"},
+      {"bulb", "lightbulb"}, {"bulb-filled", "lightbulb_fill"},
+      {"news", "doc_richtext"}, {"broadcast", "antenna_radiowaves_left_right"},
+      {"chart-line", "graph_square"}, {"radar", "scope"}, {"movie", "film"},
+      {"map", "map"}, {"map-pin", "map_pin"}, {"map-pin-off", "map_pin_slash"},
+      {"color-picker", "eyedropper"}, {"brush", "paintbrush"}, {"box", "cube_box"},
+      {"activity", "waveform_path_ecg"}, {"temperature", "thermometer"},
+      {"notification", "bell"}, {"wallpaper", "photo_on_rectangle"},
+      {"wifi-exclamation", "wifi_exclamationmark"},
+      {"file-check", "doc_checkmark"}, {"copy-plus", "plus_square_on_square"},
+      {"flip-horizontal", "arrow_left_right"}, {"flip-vertical", "arrow_up_down"},
+      {"stack-back", "square_fill_on_square_fill"}, {"stack-front", "square_on_square"},
+      {"bug", "ant"}, {"brightness-up", "sun_max"},
+      {"logout", "square_arrow_right"}, {"history", "gobackward"},
+      {"filter", "line_horizontal_3_decrease"}, {"adjustments", "slider_horizontal_3"},
+      {"share", "square_arrow_up"}, {"briefcase", "briefcase"},
+      {"sparkles", "sparkles"}, {"wand", "wand_stars"},
+      {"clipboard-text", "doc_on_clipboard"}, {"clipboard-copy", "doc_on_doc"},
+      {"list-details", "list_bullet"}, {"messages", "bubble_left_bubble_right"},
+      {"mood-smile", "smiley"}, {"arrows-maximize", "arrow_up_left_arrow_down_right"},
+      {"arrows-minimize", "arrow_down_right_arrow_up_left"},
+      {"arrow-big-up", "shift"}, {"pinned", "pin"},
+      // Settings, pickers, launcher providers and utility surfaces share the same
+      // symbol family as the Island. Keep brand marks and custom Tabler choices.
+      {"palette", "color_filter"}, {"location", "location"},
+      {"layout-bottombar", "rectangle_dock"},
+      {"layout-sidebar", "sidebar_left"}, {"layout-sidebar-right", "sidebar_right"},
+      {"layout-board", "rectangle_split_3x1"}, {"layout-dashboard", "rectangle_grid_2x2"},
+      {"columns-3", "rectangle_split_3x1"},
+      {"dots-circle-horizontal", "ellipsis_circle"},
+      {"circle-dot", "smallcircle_circle"}, {"checkbox", "checkmark_square"},
+      {"typography", "textformat"}, {"typeface", "textformat"}, {"letter-t", "textformat"},
+      {"sticker", "square_on_circle"}, {"hand-click", "hand_point_left"},
+      {"sort-a-z", "sort_down"}, {"sort-z-a", "sort_up"},
+      {"sort-ascending-2", "sort_up"}, {"sort-descending-2", "sort_down"},
+      {"sort-ascending-2-filled", "sort_up"}, {"sort-descending-2-filled", "sort_down"},
+      {"arrows-random", "shuffle"}, {"arrows-exchange", "arrow_right_arrow_left"},
+      {"arrow-up-right", "arrow_up_right"}, {"arrows-move", "move"},
+      {"arrows-diagonal", "arrow_up_left_arrow_down_right"},
+      {"arrows-diagonal-minimize-2", "arrow_down_right_arrow_up_left"},
+      {"maximize", "arrow_up_left_arrow_down_right"}, {"focus-centered", "viewfinder"},
+      {"layers-intersect", "square_on_square"},
+      {"droplet", "drop"}, {"temperature-sun", "thermometer_sun"},
+      {"antenna-bars-5", "antenna_radiowaves_left_right"},
+      {"bolt-off", "bolt_slash"}, {"bell-x", "bell_slash"},
+      {"login", "square_arrow_left"}, {"phone", "phone"}, {"player-eject", "eject"},
+      {"command", "command"}, {"code", "chevron_left_slash_chevron_right"},
+      {"script", "doc_text"}, {"quotes", "text_quote"}, {"file-plus", "doc_append"},
+      {"file-type-pdf", "doc_richtext"}, {"file-zip", "archivebox"},
+      {"text-recognition", "doc_text_viewfinder"}, {"text-grammar", "textformat_abc_dottedunderline"},
+      {"mood-smile-beam", "smiley"}, {"world-search", "globe"},
+      {"tag", "tag"}, {"tags", "tags"}, {"flag", "flag"}, {"paw", "paw"},
+      {"school", "book"}, {"tool", "wrench"}, {"restore", "arrow_counterclockwise"},
+      {"notes", "doc_text"}, {"rectangle", "rectangle"}, {"pointer", "cursor_rays"},
+      {"language", "globe"}, {"circuit-pushbutton", "hand_point_left"},
+      {"stack-pop", "square_stack_3d_up"},
+  };
+  // clang-format on
+
   [[nodiscard]] std::optional<char32_t> parseCodepointLiteral(std::string_view value) {
     if (value.size() < 3) {
       return std::nullopt;
@@ -262,43 +415,69 @@ const std::unordered_map<std::string, std::string_view> kAliases = {
     return icons;
   }
 
+  [[nodiscard]] std::unordered_map<std::string, char32_t> loadCupertinoIcons(std::string_view asset) {
+    std::unordered_map<std::string, char32_t> icons;
+    const auto path = paths::assetPath(asset);
+    std::ifstream file(path);
+    if (!file.is_open()) {
+      kLog.warn("failed to open Cupertino glyph metadata: {}", path.string());
+      return icons;
+    }
+    try {
+      const auto root = nlohmann::json::parse(file);
+      if (!root.is_object())
+        return icons;
+      for (const auto& [name, value] : root.items()) {
+        if (!value.is_string())
+          continue;
+        if (const auto cp = parseCodepointLiteral(value.get<std::string>()); cp && *cp >= 0xF000 && *cp <= 0xFFFF)
+          icons.emplace(name, GlyphFont::cupertino(*cp));
+      }
+    } catch (const nlohmann::json::exception& e) {
+      kLog.warn("failed to parse Cupertino glyph metadata '{}': {}", path.string(), e.what());
+    }
+    return icons;
+  }
+
+  [[nodiscard]] std::optional<char32_t> resolve(std::string_view name) {
+    if (const auto cp = parseCodepointLiteral(name))
+      return cp;
+    const auto& tabler = tablerIcons();
+    const auto& cupertino = GlyphRegistry::cupertinoIcons();
+    const auto& companion = GlyphRegistry::noctaliaIcons();
+    if (name.starts_with("tabler:")) {
+      const auto it = tabler.find(std::string(name.substr(7)));
+      return it == tabler.end() ? std::nullopt : std::optional{it->second};
+    }
+    if (name.starts_with("cupertino:")) {
+      const auto it = cupertino.find(std::string(name.substr(10)));
+      return it == cupertino.end() ? std::nullopt : std::optional{it->second};
+    }
+    if (name.starts_with("noctalia:")) {
+      const auto it = companion.find(std::string(name.substr(9)));
+      return it == companion.end() ? std::nullopt : std::optional{it->second};
+    }
+    std::string key{name};
+    if (const auto alias = kAliases.find(key); alias != kAliases.end())
+      key = alias->second;
+    if (const auto it = companion.find(key); it != companion.end())
+      return it->second;
+    if (const auto symbol = kCupertinoSymbols.find(key); symbol != kCupertinoSymbols.end()) {
+      if (const auto it = cupertino.find(std::string(symbol->second)); it != cupertino.end())
+        return it->second;
+    }
+    const auto it = tabler.find(key);
+    return it == tabler.end() ? std::nullopt : std::optional{it->second};
+  }
+
 } // namespace
 
-bool GlyphRegistry::contains(std::string_view name) {
-  if (parseCodepointLiteral(name).has_value()) {
-    return true;
-  }
-
-  const auto& tabler = tablerIcons();
-  const std::string key{name};
-  if (const auto alias = kAliases.find(key); alias != kAliases.end()) {
-    return tabler.contains(std::string(alias->second));
-  }
-  return tabler.contains(key);
-}
+bool GlyphRegistry::contains(std::string_view name) { return resolve(name).has_value(); }
 
 char32_t GlyphRegistry::lookup(std::string_view name) {
-  if (auto codepoint = parseCodepointLiteral(name)) {
+  if (auto codepoint = resolve(name)) {
     return *codepoint;
   }
-
-  const auto& tabler = tablerIcons();
-  const std::string key{name};
-  if (const auto alias = kAliases.find(key); alias != kAliases.end()) {
-    const auto it = tabler.find(std::string(alias->second));
-    if (it != tabler.end()) {
-      return it->second;
-    }
-
-    kLog.warn("missing Tabler glyph '{}' for alias '{}'", alias->second, name);
-    return kMissingGlyph;
-  }
-
-  const auto it = tabler.find(key);
-  if (it != tabler.end()) {
-    return it->second;
-  }
-
   kLog.warn("missing glyph: {}", name);
   return kMissingGlyph;
 }
@@ -309,6 +488,14 @@ char32_t GlyphRegistry::emphasized(char32_t codepoint) {
     const auto& icons = tablerIcons();
     for (const auto& [name, cp] : icons)
       if (const auto it = icons.find(name + "-filled"); it != icons.end())
+        result.emplace(cp, it->second);
+    const auto& cupertino = cupertinoIcons();
+    for (const auto& [name, cp] : cupertino)
+      if (const auto it = cupertino.find(name + "_fill"); it != cupertino.end())
+        result.emplace(cp, it->second);
+    const auto& companion = noctaliaIcons();
+    for (const auto& [name, cp] : companion)
+      if (const auto it = companion.find(name + "-filled"); it != companion.end())
         result.emplace(cp, it->second);
     return result;
   }();
@@ -337,10 +524,23 @@ GlyphRegistry::OpticalAdjustment GlyphRegistry::opticalAdjustment(char32_t codep
     add("player-stop-filled", {.scale = .88F});
     add("player-track-next-filled", {.scale = .94F, .x = .02F});
     add("player-track-prev-filled", {.scale = .94F, .x = -.02F});
+    const auto addCupertino = [&](std::string_view name, OpticalAdjustment adjustment) {
+      if (const auto it = cupertinoIcons().find(std::string(name)); it != cupertinoIcons().end())
+        result.emplace(it->second, adjustment);
+    };
+    for (const auto name : {"bell", "bell_fill", "house", "house_fill", "wifi", "wifi_slash"})
+      addCupertino(name, {.scale = .88F});
+    addCupertino("xmark", {.scale = .85F});
+    addCupertino("play_fill", {.scale = .98F, .x = .035F});
+    addCupertino("pause_fill", {.scale = 1.0F});
+    addCupertino("stop_fill", {.scale = .9F});
+    addCupertino("forward_end_fill", {.scale = .94F, .x = .02F});
+    addCupertino("backward_end_fill", {.scale = .94F, .x = -.02F});
     return result;
   }();
   const auto it = adjustments.find(codepoint);
-  return it == adjustments.end() ? OpticalAdjustment{} : it->second;
+  return it == adjustments.end() ? OpticalAdjustment{.scale = GlyphFont::isCupertino(codepoint) ? .94F : 1.0F}
+                                 : it->second;
 }
 
 const std::unordered_map<std::string, GlyphRegistry::TablerGlyphMetadata>& GlyphRegistry::tablerGlyphMetadata() {
@@ -349,7 +549,23 @@ const std::unordered_map<std::string, GlyphRegistry::TablerGlyphMetadata>& Glyph
 
 const std::unordered_map<std::string, char32_t>& GlyphRegistry::tablerIcons() { return ::tablerIcons(); }
 
+const std::unordered_map<std::string, char32_t>& GlyphRegistry::cupertinoIcons() {
+  static const auto icons = loadCupertinoIcons("fonts/cupertino.json");
+  return icons;
+}
+
+const std::unordered_map<std::string, char32_t>& GlyphRegistry::noctaliaIcons() {
+  static const auto icons = loadCupertinoIcons("fonts/noctalia-symbols.json");
+  return icons;
+}
+
 std::optional<std::string_view> GlyphRegistry::categoryFor(std::string_view name) {
+  if (name.starts_with("noctalia:"))
+    return contains(name) ? std::optional<std::string_view>{"Noctalia"} : std::nullopt;
+  if (name.starts_with("cupertino:"))
+    return contains(name) ? std::optional<std::string_view>{"Cupertino"} : std::nullopt;
+  if (name.starts_with("tabler:"))
+    name.remove_prefix(7);
   const auto& metadata = tablerGlyphMetadata();
   const std::string key{name};
   if (const auto alias = kAliases.find(key); alias != kAliases.end()) {

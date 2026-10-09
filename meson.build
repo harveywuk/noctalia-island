@@ -694,6 +694,7 @@ _noctalia_sources = files(
   'src/shell/control_center/tabs/audio_tab.cpp',
   'src/shell/control_center/tabs/bluetooth_tab.cpp',
   'src/shell/control_center/control_center_panel.cpp',
+  'src/shell/control_center/section_overview.cpp',
   'src/shell/control_center/tabs/monitor_tab.cpp',
   'src/shell/control_center/tabs/media_tab.cpp',
   'src/shell/control_center/tabs/network_tab.cpp',

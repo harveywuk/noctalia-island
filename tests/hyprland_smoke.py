@@ -99,6 +99,12 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--cupertino-only' in sys.argv:
             from cupertino_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-media-motion-only' in sys.argv:
+            from island_media_motion_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-expanded-only' in sys.argv:
+            from island_expanded_smoke import prepare
+            prepare(base,cfg,env)
         if '--dock-preview-only' in sys.argv:
             from dock_preview_smoke import prepare
             prepare(base,cfg,env)
@@ -203,6 +209,14 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             assert not reply.startswith('error'),reply
             return reply
         wait(lambda:msg('record-status')=='idle','Noctalia IPC')
+        if '--island-expanded-only' in sys.argv:
+            from island_expanded_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-media-motion-only' in sys.argv:
+            from island_media_motion_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
         if '--island-card-motion-only' in sys.argv:
             from island_card_motion_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,bluetooth,network)

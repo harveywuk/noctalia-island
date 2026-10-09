@@ -124,7 +124,7 @@ namespace settings {
                 ui::button({
                     .glyph = "close",
                     .glyphSize = Style::fontSizeBody * m_scale,
-                    .variant = ButtonVariant::Default,
+                    .variant = ButtonVariant::Ghost,
                     .minWidth = Style::controlHeightSm * m_scale,
                     .minHeight = Style::controlHeightSm * m_scale,
                     .padding = Style::spaceXs * m_scale,

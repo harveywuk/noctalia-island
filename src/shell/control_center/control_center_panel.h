@@ -66,9 +66,14 @@ namespace scripting {
 class AccountsService;
 class ThumbnailService;
 
+namespace control_center {
+  class SectionOverview;
+}
+
 class ControlCenterPanel : public Panel {
 public:
   explicit ControlCenterPanel(const ControlCenterServices& services);
+  ~ControlCenterPanel() override;
 
   // Tabs the user may hide from the Settings GUI (every tab except Home).
   // Keys match the [control_center] hidden_tabs entries.
@@ -151,6 +156,7 @@ private:
   }};
 
   void selectTab(TabId tab, bool animated = false);
+  void showSectionOverview();
   void selectAdjacentVisibleTab(int direction);
   void wireSidebarScroll(InputArea* area);
   void scrollFocusedInputIntoView(InputArea* area) override;
@@ -161,7 +167,7 @@ private:
   void layoutTabContainers(float bodyWidth, float bodyHeight);
   void layoutFullSidebarWidth(Renderer& renderer);
   void resetTabContainerTransforms();
-  void startTabTransition(TabId from, TabId to);
+  void startTabTransition(TabId from, TabId to, bool fromOverview = false);
   void finishTabTransition();
   void applyTabTransitionLayout();
   [[nodiscard]] int visibleTabOrdinal(TabId tab) const;
@@ -191,6 +197,10 @@ private:
   Flex* m_contentHeader = nullptr;
   Flex* m_contentHeaderActions = nullptr;
   Label* m_contentTitle = nullptr;
+  Button* m_sectionButton = nullptr;
+  std::unique_ptr<control_center::SectionOverview> m_sectionOverview;
+  Flex* m_overviewContainer = nullptr;
+  bool m_showOverview = false;
   Button* m_closeButton = nullptr;
   Flex* m_tabBodies = nullptr;
   std::array<Button*, kTabCount> m_tabButtons{};
@@ -202,7 +212,7 @@ private:
   MprisService* m_mpris = nullptr;
   NotificationManager* m_notificationManager = nullptr;
   DependencyService* m_dependencies = nullptr;
-  bool m_horizontalNavigation = false;
+  bool m_islandPresentation = false;
   bool m_compact = false;
   bool m_showSidebar = true;
   bool m_hasPowerServices = false;

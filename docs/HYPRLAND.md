@@ -100,6 +100,20 @@ checks rapid replacements, steady metadata and identical completion messages,
 live artwork, interrupted fades, expiry, reduced motion, reload and 150% scaling.
 The fixture slows animations to make intermediate frames measurable.
 
+For continuous media artwork, run
+`python3 tests/hyprland_smoke.py --island-media-motion-only`. Native GPU captures
+follow a distinctive cover through expansion, collapse and reversal in both card
+sizes, checking that it stays visible and moves through intermediate positions.
+The check also covers playback changes, hosted panel return, notification
+interruption, reduced motion and fractional scaling on private outputs.
+
+For expanded headers and hover actions, run
+`python3 tests/hyprland_smoke.py --island-expanded-only`. The private desktop checks
+the in-place section overview, hidden sections, keyboard focus and navigation, both densities
+and themes, timed Keep Awake controls, routed microphone mute/unmute, camera app
+feedback and fractional panel layout. The camera fixture uses a private fake `/proc`
+tree and does not access host camera hardware.
+
 For the desktop sharing indicator, run
 `python3 tests/hyprland_smoke.py --island-sharing-only`. Private PipeWire capture
 links check idle sources, concurrent captures and removal of the last capture.

@@ -9,6 +9,8 @@
 #include "shell/settings/settings_modal_host.h"
 #include "tests/test_check.h"
 #include "ui/controls/button.h"
+#include "ui/controls/slider.h"
+#include "ui/controls/toggle.h"
 #include "ui/node_motion.h"
 
 #include <chrono>
@@ -41,6 +43,14 @@ namespace {
     TEST_CHECK(false);
     return {};
   }
+
+  InputArea* inputArea(Node& node) {
+    for (const auto& child : node.children())
+      if (auto* area = dynamic_cast<InputArea*>(child.get()))
+        return area;
+    TEST_CHECK(false);
+    return nullptr;
+  }
 } // namespace
 
 int main() {
@@ -51,6 +61,64 @@ int main() {
   motion.setEnabled(true);
   motion.setSpeed(1);
   AnimationManager animations;
+  {
+    Toggle toggle;
+    toggle.setAnimationManager(&animations);
+    auto* area = inputArea(toggle);
+    const auto position = [&] { return toggle.children()[1]->x(); };
+    const float off = position();
+    toggle.setCheckedImmediate(true);
+    const float on = position();
+    toggle.setCheckedImmediate(false);
+    toggle.setChecked(true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    animations.tick(0);
+    const float displayed = position();
+    TEST_CHECK(displayed > off && displayed < on);
+    area->dispatchEnter(1, 1);
+    area->dispatchFocusGain();
+    area->dispatchLeave();
+    area->dispatchFocusLoss();
+    TEST_CHECK(position() == displayed);
+    toggle.setChecked(false);
+    animations.tick(0);
+    TEST_CHECK(std::abs(position() - displayed) < .1F);
+    motion.setEnabled(false);
+    TEST_CHECK(position() == off);
+    animations.tick(0);
+    TEST_CHECK(!animations.hasActive());
+    motion.setEnabled(true);
+    toggle.setChecked(true);
+    toggle.setCheckedImmediate(true);
+    TEST_CHECK(position() == on && !animations.hasActive());
+    toggle.setChecked(false);
+  }
+  TEST_CHECK(!animations.hasActive());
+  {
+    Node scene;
+    auto slider = std::make_unique<Slider>();
+    auto* control = slider.get();
+    auto* area = inputArea(*slider);
+    scene.addChild(std::move(slider));
+    auto button = std::make_unique<Button>();
+    button->setOnClick([] {});
+    auto* next = button->inputArea();
+    scene.addChild(std::move(button));
+    InputDispatcher input;
+    input.setSceneRoot(&scene);
+    input.setFocus(area);
+    area->dispatchKey(XKB_KEY_Home, 0, 0, true);
+    TEST_CHECK(control->value() == control->minValue());
+    area->dispatchKey(XKB_KEY_End, 0, 0, true);
+    TEST_CHECK(control->value() == control->maxValue());
+    control->setEnabled(false);
+    TEST_CHECK(input.firstTabFocusUnder(&scene) == next);
+    area->dispatchKey(XKB_KEY_Home, 0, 0, true);
+    TEST_CHECK(control->value() == control->maxValue());
+    control->setEnabled(true);
+    TEST_CHECK(input.firstTabFocusUnder(&scene) == area);
+    input.setSceneRoot(nullptr);
+  }
   {
     Node card;
     card.setAnimationManager(&animations);
@@ -173,6 +241,18 @@ int main() {
     animations.tick(0);
     TEST_CHECK(attempts == 2);
     host.closeAll();
+
+    auto opener = std::make_unique<Button>();
+    opener->setOnClick([] {});
+    auto* returnFocus = opener->inputArea();
+    returnFocus->setTabFocusKey("settings.picker.opener");
+    scene.addChild(std::move(opener));
+    input.setFocus(returnFocus);
+    TEST_CHECK(host.push({.build = build, .requestClose = [&] { host.pop(); }}));
+    host.requestCloseTop();
+    animations.tick(0);
+    TEST_CHECK(!host.isOpen() && input.focusedArea() == returnFocus);
+    input.setSceneRoot(nullptr);
   }
   TEST_CHECK(!animations.hasActive());
   motion.setEnabled(true);

@@ -106,8 +106,18 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             command(pointer, 'right-press'); time.sleep(.1); command(pointer, 'right-release'); time.sleep(.6)
             shot(mode+'-dock-menu'); command(keyboard, 1); move(1100, 580)
             panel('launcher', 'Cupertino', mode+'-launcher')
-            for tab in ('home', 'audio', 'network', 'bluetooth', 'calendar', 'notifications'):
+            for tab in ('home', 'audio', 'network', 'bluetooth', 'calendar', 'notifications',
+                        'media', 'monitor', 'system', 'power', 'privacy', 'focus', 'weather', 'screen-time'):
                 panel('control-center', tab, mode+'-control-center-'+tab)
+                if tab == 'network':
+                    text = ' '.join(r['text'] for r in words()).lower()
+                    assert 'network service unavailable' in text, text
+                    assert 'current connection' not in text, 'Empty connection card is still visible: '+text
+                elif tab == 'privacy':
+                    text = ' '.join(r['text'] for r in words()).lower()
+                    assert 'no capture detected' in text, text
+                    assert 'stop sharing' not in text, 'Inactive privacy view still offers sharing advice: '+text
+            panel('wallpaper', capture=mode+'-wallpaper')
             panel('session', capture=mode+'-session')  # No session action is activated.
             panel('clipboard', capture=mode+'-clipboard')
             close(); msg('volume-osd', '65'); time.sleep(.35); shot(mode+'-volume')

@@ -403,6 +403,8 @@
     }
   },
   "control-center": {
+    "choose-section": "Choose section",
+    "return-to-section": "Return to current view",
     "audio": {
       "application-volumes": "Application Volumes",
       "choose-effects-profile": "Choose a profile",

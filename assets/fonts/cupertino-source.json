@@ -1,0 +1,8 @@
+{
+  "package_revision": "d8d9e97d2d02bf785084e7dc9409a79a49e75967",
+  "map_revision": "01d3eecf3e5de0eb6cdf6a28a71d4139842c0179",
+  "font_url": "https://raw.githubusercontent.com/flutter/packages/d8d9e97d2d02bf785084e7dc9409a79a49e75967/third_party/packages/cupertino_icons/assets/CupertinoIcons.ttf",
+  "map_url": "https://raw.githubusercontent.com/flutter/flutter/01d3eecf3e5de0eb6cdf6a28a71d4139842c0179/packages/flutter/lib/src/cupertino/icons.dart",
+  "font_sha256": "67c44fe9183b002e79dde7f6977e2988661c9a3e4a3c5fce968787efdbed823c",
+  "map_source_sha256": "903e47d2459d68350a5298a57c35a122c43bf07f116e5faba562e1a384cb90a2"
+}

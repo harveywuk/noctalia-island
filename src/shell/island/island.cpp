@@ -178,6 +178,16 @@ struct Island::Instance {
   bool flowShown = false;
   std::string flowArt;
   Node* content = nullptr;
+  // Artwork and the waveform share the capsule's motion instead of fading with its controls.
+  // Bounds are logical pixels relative to the capsule, including the expanded card's insets.
+  struct MediaAnchor {
+    Node* node = nullptr;
+    LayoutRect from, to, current;
+  };
+  Node* mediaVisuals = nullptr;
+  std::array<MediaAnchor, 2> mediaAnchors;
+  float mediaStartWidth = 0, mediaStartHeight = 0;
+  bool mediaContinuous = false;
   // View and status-card crossfades share one outgoing layer and one incoming fade.
   Node* outgoing = nullptr;
   float contentFade = 1.0F;
@@ -497,6 +507,7 @@ namespace {
     // Status colours stay visible through pointer interaction, without a background highlight.
     const Button::ButtonStateColors status{.bg = clearColorSpec(), .border = clearColorSpec(), .label = tint};
     palette.normal = palette.hover = palette.pressed = status;
+    palette.pressed.label = scaleAlpha(tint, 0.6F);
     button->setCustomPalette(std::move(palette));
   }
 
@@ -1576,6 +1587,25 @@ void Island::geometry(Instance& inst) {
     inst.content->setOpacity(room * inst.contentFade * (1 - inst.outgoingFade));
     inst.content->setHitTestVisible(inst.content->opacity() > 0.1F);
   }
+  if (inst.mediaVisuals) {
+    const float heightTravel = inst.targetHeight - inst.mediaStartHeight;
+    const float widthTravel = inst.targetWidth - inst.mediaStartWidth;
+    const float travel = std::abs(heightTravel) > 1 ? heightTravel : widthTravel;
+    const float covered =
+        std::abs(heightTravel) > 1 ? inst.height - inst.mediaStartHeight : inst.width - inst.mediaStartWidth;
+    const float t = std::abs(travel) > 1 ? std::clamp(covered / travel, 0.0F, 1.0F) : 1.0F;
+    for (auto& anchor : inst.mediaAnchors) {
+      if (!anchor.node)
+        continue;
+      anchor.current = {
+          std::lerp(anchor.from.x, anchor.to.x, t), std::lerp(anchor.from.y, anchor.to.y, t),
+          std::lerp(anchor.from.width, anchor.to.width, t), std::lerp(anchor.from.height, anchor.to.height, t)
+      };
+      anchor.node->setPosition(anchor.current.x * s, anchor.current.y * s);
+      anchor.node->setScale(anchor.current.width / anchor.to.width, anchor.current.height / anchor.to.height);
+    }
+    inst.mediaVisuals->setOpacity(inst.mediaContinuous ? 1.0F : inst.content->opacity());
+  }
   const std::array<int, 4> inputRegion{
       static_cast<int>(std::floor(x)), 0, static_cast<int>(std::ceil((inst.width + splitWidth) * s)),
       inst.wantsVisible ? static_cast<int>(std::ceil((inst.height + 8) * s)) : 3
@@ -2483,14 +2513,35 @@ void Island::prepare(Instance& inst) {
   const bool showMediaStatus =
       view == island::View::Activity && (gCupertino || (!showUnread && !showBattery && privacyList.empty()));
   const bool showVisualizer = playing && (showMediaStatus || (gCupertino && view == island::View::Media));
+  const bool mediaView = gCupertino && (view == island::View::Activity || view == island::View::Media);
+  const auto previousAnchors = inst.mediaAnchors;
+  const bool continueMedia = mediaView && inst.mediaVisuals && !inst.skipCrossfade;
+  const bool keepMediaVisible = continueMedia && inst.mediaVisuals->opacity() > 0.99F;
   std::unique_ptr<Node> retainedWidgets;
   if (expandedView && inst.hoverWidgets && inst.hoverWidgets->trayOnlyMode() == !showExtras)
     retainedWidgets = inst.hoverWidgets->parent()->removeChild(inst.hoverWidgets);
   inst.hoverWidgets = nullptr;
   std::unique_ptr<Node> retainedVisualizer;
   if (inst.visualizer && showVisualizer)
-    retainedVisualizer = inst.content->removeChild(inst.visualizer);
+    retainedVisualizer = inst.visualizer->parent()->removeChild(inst.visualizer);
   inst.visualizer = nullptr;
+  if (inst.mediaVisuals) {
+    auto visuals = inst.background->removeChild(inst.mediaVisuals);
+    if (!continueMedia) {
+      // Preserve the independently visible artwork if a notification interrupts expansion.
+      // The old controls retain their current opacity inside the outgoing group.
+      auto previous = inst.background->removeChild(inst.content);
+      visuals->setPosition(-previous->x(), 0);
+      previous->setPosition(0, 0);
+      auto group = std::make_unique<Node>();
+      group->setSize(inst.targetWidth * s, inst.targetHeight * s);
+      group->addChild(std::move(previous));
+      group->addChild(std::move(visuals));
+      inst.content = inst.background->addChild(std::move(group));
+    }
+    inst.mediaVisuals = nullptr;
+    inst.mediaAnchors = {};
+  }
   for (auto* meter : inst.microphoneMeters)
     meter->stop();
   inst.microphoneMeters.clear();
@@ -2521,6 +2572,7 @@ void Island::prepare(Instance& inst) {
   inst.recentTransferUi.clear();
   inst.downloadLedRing = nullptr;
   Node* canvas = inst.content;
+  Node* mediaArtwork = nullptr;
 
   const auto label = [&](std::string text, float x, float y, float width, float size,
                          ColorSpec color = islandRole(ColorRole::OnSurface), bool center = false, int lines = 1,
@@ -2552,7 +2604,9 @@ void Island::prepare(Instance& inst) {
     node->setColor(color);
     node->measure(renderer);
     node->setPosition(x * s, y * s);
+    auto* result = node.get();
     canvas->addChild(std::move(node));
+    return result;
   };
   constexpr float statusIconSize = 32;
   // Measure the whole status group so short titles and translated labels share
@@ -2758,11 +2812,11 @@ void Island::prepare(Instance& inst) {
     image->setPosition(x * s, y * s);
     // Crop before downsampling so wide thumbnails retain a full-resolution
     // square. Keep extra detail for fractional scaling; Image applies buffer scale.
-    const int decodeSize = static_cast<int>(std::ceil(size * s * 2.0F));
+    const int decodeSize = static_cast<int>(std::ceil(std::max(size, cfg.mediaArtworkSize) * s * 2.0F));
     if (!artPath.empty() && image->setSourceFile(renderer, artPath, decodeSize, true, true))
-      inst.content->addChild(std::move(image));
+      mediaArtwork = inst.content->addChild(std::move(image));
     else
-      glyph("disc", x + 4, y + 4, size - 8);
+      mediaArtwork = glyph("disc", x + 4, y + 4, size - 8);
   };
 
   if (view == island::View::CaptureMenu) {
@@ -2940,10 +2994,11 @@ void Island::prepare(Instance& inst) {
         && capsuleDownloads.size() == 1
         && !capsuleDownloads.front().icon.empty()
         && !capsuleDownloads.front().name.empty();
-    glyph(
+    auto* activityGlyph = glyph(
         timerView ? timers.front().icon : downloadIcon, 23, (cfg.height - 18) / 2, 18,
         paused ? islandFixed(kAppleOrange, 1.0F) : islandRole(ColorRole::Primary)
     );
+    activityGlyph->setEmphasized(gCupertino && timerView);
     const float inset = (showUnread ? 95.0F : 70.0F) + privacyWidth;
     const float available = std::max(1.0F, w - 2 * inset);
     const auto clockText = timerView ? countdownTime(timers.front())
@@ -3005,7 +3060,7 @@ void Island::prepare(Instance& inst) {
     }
     const auto rows = downloadRows;
     for (std::size_t i = 0; i < rows; ++i) {
-      const float y = (gCupertino ? 18.0F : 57.0F) + static_cast<float>(i) * 55;
+      const float y = (gCupertino ? 18.0F : 57.0F) + static_cast<float>(i) * (gCupertino ? 64.0F : 55.0F);
       sectionCard(y - 6, y + 45);
       const auto& download = downloads[i];
       // Cupertino leads each row with a round badge; paused transfers use amber.
@@ -3016,7 +3071,10 @@ void Island::prepare(Instance& inst) {
             ColorRole::Primary
         );
       const float titleEnd = download.determinate ? 88 : 22;
-      label(download.name, textX, y, w - textX - titleEnd, 13, foreground, false, 1, FontWeight::Normal, true);
+      label(
+          download.name, textX, y, w - textX - titleEnd, gCupertino ? (cfg.compactLayout ? 15 : 16) : 13, foreground,
+          false, 1, gCupertino ? FontWeight::SemiBold : FontWeight::Normal, true
+      );
       if (download.paused()) {
         label(i18n::tr("island.downloads.paused"), textX, y + 24, w - textX - 22, 12, islandFixed(kAppleOrange, 1.0F));
         if (download.determinate) {
@@ -3029,22 +3087,24 @@ void Island::prepare(Instance& inst) {
         auto* percentage =
             label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
         percentage->setTextAlign(TextAlign::End);
-        auto* bar = progress(static_cast<float>(download.progress), textX, y + 26, w - textX - 22, 7);
+        auto* bar = progress(
+            static_cast<float>(download.progress), textX, y + (gCupertino ? 31 : 26), w - textX - 22, gCupertino ? 4 : 7
+        );
         inst.downloadUi.push_back({download.key, percentage, bar});
       } else {
         label(i18n::tr("island.downloads." + download.phase), textX, y + 24, w - textX - 22, 12, muted);
       }
       if (downloadActions[i]) {
-        auto* button =
-            control(12, y - 4, w - 24, 49, "", "", download.name, 0, true, [this, &inst, key = download.key] {
-              activateTransfer(inst, key);
-            });
+        auto* button = control(
+            12, y - 4, w - 24, gCupertino ? 58 : 49, "", "", download.name, 0, true,
+            [this, &inst, key = download.key] { activateTransfer(inst, key); }
+        );
         button->setRadius(Style::scaledRadiusXl(s));
         setIslandActionStyle(button);
         button->inputArea()->setTabFocusKey("download:" + download.key);
       }
     }
-    h = (gCupertino ? 22.0F : 60.0F) + static_cast<float>(rows) * 55;
+    h = (gCupertino ? 22.0F : 60.0F) + static_cast<float>(rows) * (gCupertino ? 64.0F : 55.0F);
     if (downloads.size() > rows) {
       label(i18n::trp("island.downloads.more", downloads.size() - rows), 22, h, w - 44, 12, muted);
       h += 28;
@@ -3185,7 +3245,7 @@ void Island::prepare(Instance& inst) {
     action(0, 0, w, cfg.height, "capture-open", openCapture);
   } else if (view == island::View::Capture || cameraView) {
     const bool onlyRecording = !cameraView && recording && m_screenSessions.sessions().empty();
-    if (gCupertino && onlyRecording) {
+    if (gCupertino) {
       h = 12;
     } else {
       const auto tint = cameraView ? kAppleGreen : onlyRecording ? kAppleRed : kApplePurple;
@@ -3223,6 +3283,44 @@ void Island::prepare(Instance& inst) {
     const float top = (cfg.height * s - title->height() - inst.awakeLabel->height() - 2 * s) / 2;
     title->setPosition(title->x(), top);
     inst.awakeLabel->setPosition(inst.awakeLabel->x(), top + title->height() + 2 * s);
+  } else if (view == island::View::Awake && awake && gCupertino) {
+    const float diameter = cfg.compactLayout ? 38.0F : 44.0F;
+    const float buttonSize = cfg.compactLayout ? 36.0F : 42.0F;
+    const float controlsX = w - 24 - 2 * buttonSize - 10;
+    const float textX = 24 + diameter + 18;
+    const float textWidth = std::max(1.0F, controlsX - textX - 12);
+    glyph("caffeine-on", 24 + (diameter - 28) / 2, 13 + (diameter - 28) / 2, 28, islandFixed(kAppleOrange, 1))
+        ->setEmphasized(true);
+    inst.awakeLabel = label(
+        activityTime(*awake), textX, 4, textWidth, cfg.compactLayout ? 28 : 34, foreground, false, 1,
+        FontWeight::SemiBold
+    );
+    label(i18n::tr("island.awake.remaining"), textX, 46, textWidth, 13, muted);
+    auto* power = control(22, 6, controlsX - 34, 66, "", "", i18n::tr("island.awake.settings"), 0, true, [panel] {
+      panel("power");
+    });
+    power->inputArea()->setTabFocusKey("awake-power");
+    setIslandStatusStyle(power, foreground);
+    auto* extend = control(
+        controlsX, 16, buttonSize, buttonSize, "+15", "", i18n::tr("island.awake.extend"), 0, true,
+        [this] {
+          if (m_idle && awakeRemaining())
+            m_idle->extendTimed(15min);
+        },
+        12, 0
+    );
+    extend->inputArea()->setTabFocusKey("awake-extend");
+    roundButton(extend);
+    auto* end = control(
+        controlsX + buttonSize + 10, 16, buttonSize, buttonSize, "", "x", i18n::tr("island.awake.end"), 18, true,
+        [this] {
+          if (awakeRemaining())
+            m_idle->setEnabled(false);
+        }
+    );
+    end->inputArea()->setTabFocusKey("awake-end");
+    roundButton(end);
+    h = 86;
   } else if (view == island::View::Awake && awake) {
     leadingBadge("caffeine-on", 22, 18, 40, kAppleOrange, ColorRole::Primary);
     if (!gCupertino)
@@ -3258,18 +3356,27 @@ void Island::prepare(Instance& inst) {
     pill(end);
   } else if (view == island::View::Microphone && microphone) {
     leadingBadge("microphone", 22, 20, 40, kAppleOrange, ColorRole::Primary);
-    if (gCupertino)
-      label(microphone->appNames(), 74, 29, w - 130, 17, foreground, false, 1, FontWeight::SemiBold, true);
-    else {
+    if (gCupertino) {
+      label(
+          microphone->appNames(), 74, 29, w - 96, cfg.compactLayout ? 16 : 19, foreground, false, 1,
+          FontWeight::SemiBold, true
+      );
+      h = 72;
+    } else {
       label(i18n::tr("island.microphone.title"), 74, 17, w - 130, 17, foreground, false, 1, FontWeight::SemiBold);
       label(microphone->appNames(), 74, 43, w - 96, 12, muted, false, 1, FontWeight::Normal, true);
     }
-    auto* audio =
-        control(w - 50, 18, 28, 28, "", "settings", i18n::tr("island.privacy.audio-controls"), 16, true, [panel] {
-          panel("audio");
-        });
+    auto* audio = control(
+        gCupertino ? 22 : w - 50, 18, gCupertino ? w - 44 : 28, gCupertino ? 48 : 28, "", gCupertino ? "" : "settings",
+        i18n::tr("island.privacy.audio-controls"), 16, true, [panel] { panel("audio"); }
+    );
     audio->inputArea()->setAcceptedButtons(0);
-    action(w - 50, 18, 28, 28, "microphone-audio", [panel] { panel("audio"); });
+    audio->inputArea()->setTabFocusKey("microphone-audio");
+    if (gCupertino)
+      setIslandStatusStyle(audio, foreground);
+    action(gCupertino ? 22 : w - 50, 18, gCupertino ? w - 44 : 28, gCupertino ? 48 : 28, "microphone-audio", [panel] {
+      panel("audio");
+    });
   } else if (view == island::View::Media && player) {
     const float artworkSize =
         gCupertino ? std::max(cfg.mediaArtworkSize, cfg.compactLayout ? 50.0F : 64.0F) : cfg.mediaArtworkSize;
@@ -3904,25 +4011,37 @@ void Island::prepare(Instance& inst) {
   if (view == island::View::Capture || cameraView) {
     if (recording && !cameraView) {
       if (gCupertino) {
+        const float diameter = cfg.compactLayout ? 38.0F : 44.0F;
+        const float centerY = h + 13 + diameter / 2;
         auto symbol = std::make_unique<Box>();
         symbol->setFill(rgba(0, 0, 0, 0));
-        symbol->setBorder(islandFixed(kAppleRed, 1), 3 * s);
-        symbol->setSize(42 * s, 42 * s);
-        symbol->setRadius(21 * s);
-        symbol->setPosition(24 * s, (h + 12) * s);
+        symbol->setBorder(islandFixed(kAppleRed, 1), 2.5F * s);
+        symbol->setSize(diameter * s, diameter * s);
+        symbol->setRadius(diameter * s / 2);
+        symbol->setPosition(24 * s, (h + 13) * s);
+        auto dot = std::make_unique<Box>();
+        dot->setFill(islandFixed(kAppleRed, 1));
+        dot->setSize(18 * s, 18 * s);
+        dot->setRadius(9 * s);
+        dot->setPosition((diameter - 18) * s / 2, (diameter - 18) * s / 2);
+        symbol->addChild(std::move(dot));
         canvas->addChild(std::move(symbol));
-        glyph("circle-filled", 34, h + 22, 22, islandFixed(kAppleRed, 1));
         inst.recordingLabel = label(
-            recordingTime, 86, h + 2, w - 264, cfg.compactLayout ? 28 : 34, foreground, false, 1, FontWeight::SemiBold
+            recordingTime, 24 + diameter + 18, 0, w - diameter - 208, cfg.compactLayout ? 28 : 34, foreground, false, 1,
+            FontWeight::SemiBold
         );
-        label(i18n::tr("island.capture.recording"), 86, h + 46, w - 264, 13, muted);
+        inst.recordingLabel->setPosition(inst.recordingLabel->x(), centerY * s - inst.recordingLabel->height() / 2);
+        // Mixed capture sessions still need to distinguish the native recorder from shared apps.
+        if (!m_screenSessions.sessions().empty())
+          label(i18n::tr("island.capture.recording"), 24 + diameter + 18, h + 60, w - diameter - 208, 13, muted);
       } else {
         label("Noctalia", 22, h + 4, w - 178, 14, foreground, false, 1, FontWeight::SemiBold);
         inst.recordingLabel = label(recordingTime, 22, h + 29, w - 178, 12, islandTint(kAppleRed, ColorRole::Error));
       }
       const auto session = ScreenRecorder::instance().sessionId();
       auto* stop = control(
-          w - 148, h + 10, 126, 34, i18n::tr("island.capture.stop"), "", "", 0, !ScreenRecorder::instance().stopping(),
+          w - 148, h + (gCupertino ? (cfg.compactLayout ? 15 : 18) : 10), 126, 34, i18n::tr("island.capture.stop"), "",
+          "", 0, !ScreenRecorder::instance().stopping(),
           [this, session] {
             auto& recorder = ScreenRecorder::instance();
             if (recorder.sessionId() == session) {
@@ -3934,18 +4053,28 @@ void Island::prepare(Instance& inst) {
       );
       stop->inputArea()->setTabFocusKey("capture-stop");
       pill(stop);
-      h += gCupertino ? 86 : 66;
+      h += gCupertino ? (m_screenSessions.sessions().empty() ? 74.0F : 94.0F) : 66.0F;
     }
     for (const auto& [app, started] : appSessions.sessions()) {
-      label(app, 22, h + 4, w - 178, 14, foreground, false, 1, FontWeight::SemiBold, true);
+      const float textX = gCupertino ? 80 : 22;
+      if (gCupertino)
+        glyph(
+            cameraView ? "privacy-camera" : "privacy-screen", 28, h + 20, 28,
+            islandTint(cameraView ? kAppleGreen : kApplePurple, ColorRole::Primary)
+        )
+            ->setEmphasized(true);
+      label(
+          app, textX, h + (gCupertino ? 12 : 4), w - textX - 156, gCupertino ? (cfg.compactLayout ? 16 : 19) : 14,
+          foreground, false, 1, FontWeight::SemiBold, true
+      );
       const auto elapsed = *appSessions.elapsed(app, island::CaptureSessions::Clock::now());
       auto* elapsedLabel = label(
-          i18n::tr("island.capture.elapsed", "time", activityTime(elapsed)), 22, h + 29, w - 178, 12,
-          islandTint(cameraView ? kAppleGreen : kApplePurple, ColorRole::Primary)
+          i18n::tr("island.capture.elapsed", "time", activityTime(elapsed)), textX, h + (gCupertino ? 38 : 29),
+          w - textX - 156, 12, islandTint(cameraView ? kAppleGreen : kApplePurple, ColorRole::Primary)
       );
       inst.captureLabels.emplace_back(app, elapsedLabel);
       auto* open = control(
-          w - 148, h + 10, 126, 34, i18n::tr("utilities.privacy.open-app"), "", "", 0, true,
+          w - 148, h + (gCupertino ? 19 : 10), 126, 34, i18n::tr("utilities.privacy.open-app"), "", "", 0, true,
           [this, &inst, app, kind = cameraView ? PrivacyCaptureKind::Camera : PrivacyCaptureKind::Screen] {
             const bool camera = kind == PrivacyCaptureKind::Camera;
             const auto& sessions = camera ? m_cameraSessions : m_screenSessions;
@@ -3971,7 +4100,7 @@ void Island::prepare(Instance& inst) {
       );
       open->inputArea()->setTabFocusKey(std::string(cameraView ? "camera-open-" : "capture-open-") + app);
       pill(open);
-      h += 66;
+      h += gCupertino ? 78.0F : 66.0F;
       if (captureFeedback == app) {
         label(i18n::tr("utilities.privacy.no-window"), 22, h - 4, w - 44, 11, muted);
         h += 24;
@@ -4040,7 +4169,8 @@ void Island::prepare(Instance& inst) {
         canvas->addChild(std::move(ring));
         glyph(
             timer.icon, 24 + (diameter - 22) / 2, h + 13 + (diameter - 22) / 2, 22, islandTint(tint, ColorRole::Primary)
-        );
+        )
+            ->setEmphasized(true);
         const float timeX = 24 + diameter + 18;
         const float buttonSize = cfg.compactLayout ? 36.0F : 42.0F;
         const float controlsX = w - 24 - 2 * buttonSize - 10;
@@ -4754,6 +4884,27 @@ void Island::prepare(Instance& inst) {
   }
   inst.content->setSize(w * s, h * s);
   inst.content->layout(renderer);
+  if (mediaView) {
+    auto visuals = std::make_unique<Node>();
+    visuals->setSize(w * s, h * s);
+    visuals->setHitTestVisible(false);
+    const std::array<Node*, 2> nodes{mediaArtwork, inst.visualizer};
+    for (std::size_t i = 0; i < nodes.size(); ++i) {
+      auto* node = nodes[i];
+      if (!node)
+        continue;
+      const LayoutRect target{node->x() / s, node->y() / s, node->width() / s, node->height() / s};
+      const auto from = continueMedia && previousAnchors[i].node ? previousAnchors[i].current : target;
+      inst.mediaAnchors[i] = {node, from, target, from};
+      node->setTransformOrigin(0, 0);
+      node->setScale(1);
+      visuals->addChild(node->parent()->removeChild(node));
+    }
+    inst.mediaVisuals = inst.background->addChild(std::move(visuals));
+    inst.mediaStartWidth = inst.width;
+    inst.mediaStartHeight = inst.height;
+    inst.mediaContinuous = keepMediaVisible;
+  }
   if (inst.activityScroll)
     inst.activityScroll->setScrollOffset(activityOffset);
   if (inst.keyboardMode) {
@@ -5390,8 +5541,9 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
   inst.visibility = 1;
   inst.wantsVisible = true;
   if (inst.visualizer) {
-    inst.content->removeChild(inst.visualizer);
+    inst.visualizer->parent()->removeChild(inst.visualizer);
     inst.visualizer = nullptr;
+    inst.mediaAnchors[1] = {};
   }
   inst.input.pointerLeave();
   TooltipManager::instance().forceDestroy();

@@ -201,6 +201,7 @@ void Slider::setEnabled(bool enabled) {
     return;
   }
   m_enabled = enabled;
+  m_inputArea->setEnabled(enabled);
   applyVisualState();
   markPaintDirty();
 }
@@ -299,7 +300,7 @@ void Slider::setColorOverride(std::optional<Color> track, std::optional<Color> f
 }
 
 void Slider::applyVisualState() {
-  const bool focused = m_inputArea != nullptr && m_inputArea->focused();
+  const bool focused = m_enabled && m_inputArea != nullptr && m_inputArea->focused();
 
   Color trackColor = resolved(ColorRole::OnSurface, 0.16F);
   Color fillColor = resolved(ColorRole::Primary);

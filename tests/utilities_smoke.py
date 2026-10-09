@@ -43,10 +43,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert proc.stdout.readline().strip() == 'ok'
 
     def move(x, y):
-        send(pointer, f'move {x} {y}'); time.sleep(.12)
+        dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})')
+        send(pointer, 'relative 1 0'); send(pointer, 'relative -1 0'); time.sleep(.12)
 
     def click(x, y):
-        move(x, y); send(pointer, 'press'); send(pointer, 'release'); time.sleep(.35)
+        move(x, y); send(pointer, 'press'); time.sleep(.08); send(pointer, 'release'); time.sleep(.35)
 
     def key(command):
         send(keyboard, str(command)); time.sleep(.2)
@@ -83,7 +84,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         msg('panel-open','control-center',tab); time.sleep(.8)
 
     def close():
-        msg('panel-close'); move(1100,600); time.sleep(.7)
+        msg('panel-close'); msg('settings-close'); move(1100,600); time.sleep(.7)
 
     def select(x0,y0,x1,y1):
         msg('text-capture'); time.sleep(.4)
@@ -106,17 +107,19 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert json.loads(msg('focus-status'))['mode']=='gaming'
         click_word('Off','focus-off-button'); assert json.loads(msg('focus-status'))['mode']=='off'
         click_word('Follow','focus-auto-button'); assert json.loads(msg('focus-status'))['automatic']
+        close(); msg('settings-open', 'notifications/focus'); time.sleep(.9)
         click_word('AllowedApp','focus-app-input'); key('chord 2 30')
         msg('clipboard-copy','AllowedApp, AdditionalApp'); key('chord 2 47')
-        click_word('09:00','focus-start-input'); key('chord 2 30')
+        shot('focus-apps-edited')
+        # Settings uses Tab between panes and Down between content controls,
+        # scrolling focused controls into view on a shorter output.
+        key(108); key(108); key(57)  # critical, schedule, toggle schedule
+        key(108); key('chord 2 30')
         msg('clipboard-copy','23:00'); key('chord 2 47')
-        click_word('17:00','focus-end-input'); key('chord 2 30')
+        key(108); key('chord 2 30')
         msg('clipboard-copy','07:00'); key('chord 2 47')
-        # The switch is at the trailing edge of the row labelled Schedule automatically.
-        schedule_y=next(y for w,x,y in words('focus-schedule-label') if w=='automatically')
-        click(876,round(schedule_y))
-        move(800,470); send(pointer,'scroll 9'); time.sleep(.7)
-        click_word('Save','focus-save-button'); time.sleep(.7)
+        for _ in range(8): key(108)  # seven weekday buttons, then Save
+        shot('focus-save-button'); key(57); time.sleep(.7)
         saved=tomllib.loads((base/'state/noctalia/settings.toml').read_text())['notification']['focus']['work']
         assert saved['allowed_apps']==['AllowedApp','AdditionalApp'], saved
         assert (saved['start_minute'],saved['end_minute'],saved['schedule_enabled'])==(1380,420,True),saved

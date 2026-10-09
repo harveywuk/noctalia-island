@@ -1417,26 +1417,22 @@ namespace {
     parent.addChild(
         ui::column(
             {
-                .align = FlexAlign::Start,
+                .align = FlexAlign::Stretch,
                 .gap = Style::spaceXs * scale,
-                .padding = Style::spaceMd * scale,
-                .configure =
-                    [scale](Flex& card) {
-                      card.setRadius(Style::scaledRadiusMd(scale));
-                      card.setFill(colorSpecFromRole(ColorRole::Surface));
-                      card.clearBorder();
-                    },
+                .paddingV = Style::spaceXs * scale,
             },
             ui::label({
                 .text = title,
                 .fontSize = Style::fontSizeBody * scale,
-                .fontWeight = FontWeight::Bold,
+                .fontWeight = FontWeight::Medium,
                 .color = colorSpecFromRole(ColorRole::OnSurface),
+                .maxLines = 2,
             }),
             ui::label({
                 .text = body,
                 .fontSize = Style::fontSizeCaption * scale,
                 .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+                .maxLines = 3,
             })
         )
     );

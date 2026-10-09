@@ -243,7 +243,7 @@ namespace {
   ) {
     NotificationCardMetrics metrics;
     const float cardWidth = std::max(0.0F, width);
-    const float cardHorizontalPadding = Style::spaceMd * scale * 2.0F;
+    const float cardHorizontalPadding = Style::spaceLg * scale * 2.0F;
     metrics.cardTextWidth = std::max(0.0F, cardWidth - cardHorizontalPadding);
     const std::string summaryText = StringUtils::trimLeadingBlankLines(
         entry.notification.summary.empty() ? i18n::tr("control-center.notifications.untitled")
@@ -299,7 +299,7 @@ namespace {
         ? measureHistoryActionsRowHeight(renderer, entry.notification.actions, metrics.cardTextWidth, scale)
         : 0.0F;
 
-    const float paddingY = (Style::spaceSm + Style::spaceXs) * scale * 2.0F;
+    const float paddingY = Style::spaceLg * scale * 2.0F;
     int visibleSegments = 2;
     if (!metrics.bodyText.empty()) {
       ++visibleSegments;
@@ -929,13 +929,17 @@ std::unique_ptr<Flex> NotificationsTab::create() {
           ui::label({
               .out = &m_emptyTitle,
               .fontSize = Style::fontSizeBody * scale,
-              .fontWeight = FontWeight::Bold,
+              .fontWeight = FontWeight::SemiBold,
               .color = colorSpecFromRole(ColorRole::OnSurface),
+              .maxLines = 2,
+              .textAlign = TextAlign::Center,
           }),
           ui::label({
               .out = &m_emptyBody,
-              .fontSize = Style::fontSizeBody * scale,
+              .fontSize = Style::fontSizeCaption * scale,
               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
+              .maxLines = 3,
+              .textAlign = TextAlign::Center,
           })
       )
   );

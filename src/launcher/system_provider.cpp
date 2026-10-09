@@ -36,7 +36,7 @@ namespace {
       {.id = "focus-gaming", .glyph = "focus-on", .ipc = "focus-set gaming"},
       {.id = "focus-sleep", .glyph = "focus-on", .ipc = "focus-set sleep"},
       {.id = "focus-off", .glyph = "focus-on", .ipc = "focus-set off"},
-      {.id = "toggle-night-light", .glyph = "sun-moon", .ipc = "nightlight-force-toggle"},
+      {.id = "toggle-night-light", .glyph = "nightlight-on", .ipc = "nightlight-force-toggle"},
       {.id = "toggle-mute", .glyph = "volume-3", .ipc = "volume-mute"},
       {.id = "volume-up", .glyph = "volume", .ipc = "volume-up"},
       {.id = "volume-down", .glyph = "volume-2", .ipc = "volume-down"},

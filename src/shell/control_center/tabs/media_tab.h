@@ -28,12 +28,13 @@ class WaylandConnection;
 class MediaTab : public Tab {
 public:
   MediaTab(
-      MprisService* mpris, HttpClient* httpClient, ConfigService* config,
-      WaylandConnection* wayland, RenderContext* renderContext
+      MprisService* mpris, HttpClient* httpClient, ConfigService* config, WaylandConnection* wayland,
+      RenderContext* renderContext
   );
   ~MediaTab() override;
 
   std::unique_ptr<Flex> create() override;
+  std::unique_ptr<Flex> createHeaderActions() override;
   void setActive(bool active) override;
   void onClose() override;
   bool dismissTransientUi() override;
@@ -71,6 +72,7 @@ private:
   // The flowing artwork gradient, filling the Now Playing card behind its content.
   Image* m_backdrop = nullptr;
   Label* m_nowLabel = nullptr;
+  Flex* m_islandHeaderActions = nullptr;
   // Track text under the progress bar, with the transport controls overlaid and revealed on hover.
   Flex* m_footer = nullptr;
   InputArea* m_footerHover = nullptr;

@@ -40,7 +40,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert proc.stdout.readline().strip() == 'ok'
 
     def move(x=1100, y=600):
-        dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})'); time.sleep(.15)
+        dispatch(f'hl.dsp.cursor.move({{x={x},y={y}}})')
+        command(pointer, 'relative 1 0'); command(pointer, 'relative -1 0'); time.sleep(.15)
 
     def click(x, y):
         move(x, y); command(pointer, 'press'); time.sleep(.08); command(pointer, 'release'); time.sleep(.5)
@@ -57,11 +58,18 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
             run(['grim', '-g', geometry, str(path)])
         else:
             shot(name)
-        data = run(['tesseract', str(path), 'stdout', '--tessdata-dir',
+        enlarged = out/(name+'-ocr.png')
+        frame = Image.open(path)
+        frame.resize((frame.width*2, frame.height*2), Image.LANCZOS).save(enlarged)
+        data = run(['tesseract', str(enlarged), 'stdout', '--tessdata-dir',
                     os.environ.get('NOCTALIA_TEST_TESSDATA', str(repo/'build-rishot/test-data/tessdata')),
                     '--psm', psm, '-c', 'tessedit_create_tsv=1', '-c', 'user_defined_dpi=96'])
-        return [w for w in csv.DictReader(io.StringIO(data), delimiter='\t', quoting=csv.QUOTE_NONE)
+        rows = [w for w in csv.DictReader(io.StringIO(data), delimiter='\t', quoting=csv.QUOTE_NONE)
                 if (w.get('text') or '').strip()]
+        for row in rows:
+            for key in ('left', 'top', 'width', 'height'):
+                row[key] = str(int(row[key])//2)
+        return rows
 
     def texts(name):
         return ' '.join(w['text'] for w in words(name))
@@ -127,7 +135,11 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert 'Third' in text and 'First' not in text and 'Second' not in text, text
         click_word('Third', 'expand-stack')
         text = texts('expanded-history')
-        assert 'First' in text and 'Second' in text and 'Third' in text, text
+        assert 'Second' in text and 'Third' in text, text
+        # The expanded stack scrolls at desktop card spacing on a 720px output.
+        move(760, 480); command(pointer, 'scroll 4'); time.sleep(.4)
+        assert 'First' in texts('expanded-history-bottom'), 'Oldest notification is not reachable'
+        command(pointer, 'scroll -20'); time.sleep(.4)
         click_word('Less', 'collapse-stack')
         assert 'First' not in texts('collapsed-history')
         key(1); move(); time.sleep(.4)
@@ -148,12 +160,12 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         open_history(); key(15); key(28)
         assert 'Older' in texts('keyboard-expanded-stack')
         time_word = next(w for w in words('individual-dismiss') if w['text'] == 'now')
-        click(812, int(time_word['top'])+int(time_word['height'])//2)
+        click(int(time_word['left'])+40, int(time_word['top'])+int(time_word['height'])//2)
         text = texts('individual-dismissed')
         assert 'Latest' not in text and 'Older' in text, text
         notify('Calendar', 'First reminder'); notify('Calendar', 'Second reminder'); time.sleep(.3)
         time_word = next(w for w in words('group-dismiss') if w['text'] == 'now')
-        click(812, int(time_word['top'])+int(time_word['height'])//2)
+        click(int(time_word['left'])+40, int(time_word['top'])+int(time_word['height'])//2)
         text = texts('group-dismissed')
         assert 'reminder' not in text and 'Older' in text, text
         # Clear all returns to a compact empty state inside the Island.

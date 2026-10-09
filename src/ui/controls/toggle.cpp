@@ -65,8 +65,8 @@ void Toggle::setChecked(bool checked) {
     if (m_animId != 0) {
       animationManager()->cancel(m_animId);
     }
-    float from = m_checked ? 0.0F : 1.0F;
-    float to = m_checked ? 1.0F : 0.0F;
+    const float from = m_animationProgress;
+    const float to = m_checked ? 1.0F : 0.0F;
     m_animId = animationManager()->animate(
         from, to, Style::animNormal, Easing::EaseOutCubic, [this](float t) { applyAnimatedState(t); },
         [this]() { m_animId = 0; }, this
@@ -79,7 +79,7 @@ void Toggle::setChecked(bool checked) {
 }
 
 void Toggle::setCheckedImmediate(bool checked) {
-  if (m_checked == checked) {
+  if (m_checked == checked && m_animId == 0) {
     return;
   }
   m_checked = checked;
@@ -177,7 +177,10 @@ void Toggle::applySize() {
   setRadius((m_thumbSize + (m_inset * 2.0F)) * 0.5F);
 }
 
-void Toggle::applyState() { applyAnimatedState(m_checked ? 1.0F : 0.0F); }
+void Toggle::applyState() {
+  // Pointer and focus feedback must not finish an in-flight thumb movement.
+  applyAnimatedState(m_animId != 0 ? m_animationProgress : (m_checked ? 1.0F : 0.0F));
+}
 
 void Toggle::applyAnimatedState(float t) {
   m_animationProgress = t;
