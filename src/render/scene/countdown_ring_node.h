@@ -45,6 +45,12 @@ public:
     m_style.startOffset = offset;
     markPaintDirty();
   }
+  void setColors(const std::optional<RingColors>& colors) {
+    if (m_style.colors == colors)
+      return;
+    m_style.colors = colors;
+    markPaintDirty();
+  }
 
   [[nodiscard]] const CountdownRingStyle& style() const noexcept { return m_style; }
 

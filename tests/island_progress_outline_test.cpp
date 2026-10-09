@@ -16,7 +16,7 @@ int main() {
     assert(fill.width() == 300 && fill.height() == 64);
     assert(fill.style().cornerRadius == 30 && fill.style().progress == 0.75F);
     outline.setGeometry(360, 280, 42, 1.4F);
-    assert(fill.width() == 360 && fill.height() == 280 && fill.style().thickness == 3.5F);
+    assert(fill.width() == 360 && fill.height() == 280 && fill.style().thickness == 2.1F);
     outline.update(true, std::nullopt, colorSpecFromRole(ColorRole::Primary));
     assert(animations.hasActive());
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -24,7 +24,21 @@ int main() {
     assert(fill.style().startOffset > 0 && fill.style().startOffset < 1);
     outline.update(true, 0.25F, colorSpecFromRole(ColorRole::Primary));
     assert(!animations.hasActive() && fill.style().startOffset == 0);
+    RingColors colors;
+    colors.fill(rgba(0, 0.35F, 1, 0.22F));
+    outline.update(
+        true, std::nullopt, colorSpecFromRole(ColorRole::Primary), false,
+        colorSpecFromRole(ColorRole::OnSurface, 0.16F), colors
+    );
+    assert(!animations.hasActive() && fill.style().colors == colors);
+    colors[4] = rgba(0, 0, 0, 0);
+    outline.update(
+        true, std::nullopt, colorSpecFromRole(ColorRole::Primary), false,
+        colorSpecFromRole(ColorRole::OnSurface, 0.16F), colors
+    );
+    assert(fill.style().colors == colors && !animations.hasActive());
     outline.update(true, 0.25F, colorSpecFromRole(ColorRole::Primary), true);
+    assert(!fill.style().colors);
     assert(animations.hasActive());
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     animations.tick(0);

@@ -40,6 +40,8 @@ uniform float u_thickness;
 uniform float u_progress;
 uniform float u_corner_radius;
 uniform float u_start_offset;
+uniform bool u_has_colors;
+uniform vec4 u_colors[17];
 varying vec2 v_pixel;
 
 const float PI = 3.14159265359;
@@ -57,6 +59,7 @@ void main() {
     float theta = atan(p.y, p.x);
     float start = -PI * 0.5;
     float rel = mod(theta - start + 2.0 * PI, 2.0 * PI);
+    float along = rel / (2.0 * PI);
     float arcLen = 2.0 * PI * clamp(u_progress, 0.0, 1.0);
     float arcMask = 1.0 - smoothstep(arcLen - 0.06, arcLen + 0.06, rel);
 
@@ -77,18 +80,28 @@ void main() {
         if (p.y >= 0.0) distance = 2.0 * quarter - distance;
         if (p.x < 0.0) distance = 4.0 * quarter - distance;
         float perimeter = 4.0 * quarter;
-        float along = mod(distance / perimeter - u_start_offset + 1.0, 1.0);
+        along = mod(distance / perimeter - u_start_offset + 1.0, 1.0);
         float feather = 0.75 / perimeter;
         arcMask = u_progress >= 1.0 ? 1.0 : u_progress <= 0.0 ? 0.0
             : 1.0 - smoothstep(u_progress - feather, u_progress + feather, along);
     }
 
+    vec4 tint = vec4(u_color.rgb, 1.0);
+    if (u_has_colors) {
+        // Blend adjacent lights along the perimeter, without inventing a total
+        // or creating an animation separate from the publisher's pattern.
+        float position = clamp(along * 17.0 - 0.5, 0.0, 16.0);
+        tint = vec4(0.0);
+        for (int i = 0; i < 17; ++i)
+            tint += u_colors[i] * max(0.0, 1.0 - abs(position - float(i)));
+        arcMask = 1.0;
+    }
     float alpha = ringMask * arcMask * u_color.a;
     if (alpha <= 0.0) {
         discard;
     }
 
-    gl_FragColor = vec4(u_color.rgb * alpha, alpha);
+    gl_FragColor = tint * alpha;
 }
 )";
 
@@ -111,6 +124,8 @@ void CountdownRingProgram::ensureInitialized() {
   m_cornerRadiusLocation = glGetUniformLocation(m_program.id(), "u_corner_radius");
   m_startOffsetLocation = glGetUniformLocation(m_program.id(), "u_start_offset");
   m_transformLocation = glGetUniformLocation(m_program.id(), "u_transform");
+  m_hasColorsLocation = glGetUniformLocation(m_program.id(), "u_has_colors");
+  m_colorsLocation = glGetUniformLocation(m_program.id(), "u_colors[0]");
 
   if (m_positionLocation < 0
       || m_surfaceSizeLocation < 0
@@ -122,6 +137,8 @@ void CountdownRingProgram::ensureInitialized() {
       || m_cornerRadiusLocation < 0
       || m_startOffsetLocation < 0
       || m_progressLocation < 0
+      || m_hasColorsLocation < 0
+      || m_colorsLocation < 0
       || m_transformLocation < 0) {
     throw std::runtime_error("failed to query countdown ring shader locations");
   }
@@ -140,6 +157,8 @@ void CountdownRingProgram::destroy() {
   m_cornerRadiusLocation = -1;
   m_startOffsetLocation = -1;
   m_transformLocation = -1;
+  m_hasColorsLocation = -1;
+  m_colorsLocation = -1;
 }
 
 void CountdownRingProgram::abandon() noexcept { m_program.abandon(); }
@@ -171,6 +190,18 @@ void CountdownRingProgram::draw(
   glUniform1f(m_progressLocation, style.progress);
   glUniform1f(m_cornerRadiusLocation, style.cornerRadius);
   glUniform1f(m_startOffsetLocation, style.startOffset);
+  glUniform1i(m_hasColorsLocation, style.colors.has_value());
+  if (style.colors) {
+    std::array<GLfloat, 17 * 4> colors{};
+    for (std::size_t i = 0; i < style.colors->size(); ++i) {
+      const auto& color = (*style.colors)[i];
+      colors[i * 4] = color.r * color.a;
+      colors[i * 4 + 1] = color.g * color.a;
+      colors[i * 4 + 2] = color.b * color.a;
+      colors[i * 4 + 3] = color.a;
+    }
+    glUniform4fv(m_colorsLocation, 17, colors.data());
+  }
   glUniformMatrix3fv(m_transformLocation, 1, GL_FALSE, quadTransform.m.data());
   const auto posAttr = static_cast<GLuint>(m_positionLocation);
   glVertexAttribPointer(posAttr, 2, GL_FLOAT, GL_FALSE, 0, vertices.data());

@@ -123,16 +123,40 @@ std::vector<SteamTransfer> SteamActivity::read() {
       continue;
     const auto canceled = line.find("update canceled : ");
     const auto finished = line.find("update finished : ");
+    std::string_view reason;
+    bool terminal = false, success = false, suspended = false;
     if (canceled != std::string::npos || finished != std::string::npos) {
       const auto marker = canceled != std::string::npos ? canceled : finished;
-      const auto reason = std::string_view(line).substr(marker + 18);
+      reason = std::string_view(line).substr(marker + 18);
+      terminal = true;
+      success = finished != std::string::npos && reason.starts_with("No Error");
+      suspended = canceled != std::string::npos && reason.ends_with("(Suspended)");
+    } else {
+      // Current clients finish game and shader updates through the scheduler,
+      // often after the activity has already changed to None.
+      constexpr std::string_view marker = "scheduler finished : removed from schedule (result ";
+      const auto scheduler = line.find(marker);
+      if (scheduler != std::string::npos) {
+        auto result = std::string_view(line).substr(scheduler + marker.size());
+        while (!result.empty() && (result.back() == ' ' || result.back() == '\t'))
+          result.remove_suffix(1);
+        const auto end = result.find(", state ");
+        if (end != std::string_view::npos && result.ends_with(")")) {
+          reason = result.substr(0, end);
+          terminal = true;
+          success = reason == "No Error";
+          suspended = reason == "Suspended";
+        }
+      }
+    }
+    if (terminal) {
       const bool observed = m_observedTransfers.contains(id);
-      if (canceled != std::string::npos && observed && reason.ends_with("(Suspended)")) {
+      if (observed && suspended) {
         if (m_phases.contains(id) || m_phases.size() < 32)
           m_phases[id] = "paused";
       } else {
         if (observed && !replay) {
-          if (finished != std::string::npos && reason.starts_with("No Error"))
+          if (success)
             m_completed = true;
           else if (failedUpdate(reason))
             m_failed = true;
@@ -142,10 +166,16 @@ std::vector<SteamTransfer> SteamActivity::read() {
       }
       continue;
     }
-    const auto changed = line.find("App update changed : ");
+    constexpr std::string_view appMarker = "App update changed : ", shaderMarker = "Shader update changed : ";
+    auto changed = line.find(appMarker);
+    auto markerLength = appMarker.size();
+    if (changed == std::string::npos) {
+      changed = line.find(shaderMarker);
+      markerLength = shaderMarker.size();
+    }
     if (changed == std::string::npos)
       continue;
-    const auto state = line.substr(changed + 21);
+    const auto state = line.substr(changed + markerLength);
     if (state.find("Stopping") != std::string::npos || state.starts_with("None")) {
       // Steam follows a suspension with None. Keep the explicitly paused row
       // until it resumes, is cancelled, completes, or the client exits.

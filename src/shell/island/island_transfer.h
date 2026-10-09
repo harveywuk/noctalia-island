@@ -1,13 +1,54 @@
 #pragma once
 
 #include "dbus/downloads/download_progress.h"
+#include "render/core/render_styles.h"
 
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace island {
+  inline std::optional<RingColors> transferColors(std::span<const DownloadProgress> transfers, bool motion) {
+    if (!motion || transfers.size() != 1 || transfers.front().paused() || !transfers.front().leds)
+      return std::nullopt;
+    const auto& frame = *transfers.front().leds;
+    RingColors colors;
+    for (std::size_t i = 0; i < colors.size(); ++i) {
+      // Steam fills its bar from pixel 16 towards 0. Start that end at the top
+      // of our ring and preserve the colour and brightness of every light.
+      const auto& pixel = frame.pixels[colors.size() - 1 - i];
+      const auto level = std::max({pixel[0], pixel[1], pixel[2]});
+      colors[i] = level == 0 ? rgba(0, 0, 0, 0)
+                             : rgba(
+                                   static_cast<float>(pixel[0]) / level, static_cast<float>(pixel[1]) / level,
+                                   static_cast<float>(pixel[2]) / level,
+                                   colorByte(level) * colorByte(pixel[3]) * colorByte(frame.brightness)
+                               );
+    }
+    return colors;
+  }
+
+  inline std::string transferGlyph(const DownloadProgress& transfer) {
+    if (transfer.paused())
+      return "media-pause";
+    if (!transfer.icon.empty())
+      return transfer.icon;
+    if (transfer.phase == "installing")
+      return "package";
+    if (transfer.phase == "verifying")
+      return "file-check";
+    return "download";
+  }
+
+  inline std::string transferGlyph(std::span<const DownloadProgress> transfers) {
+    if (transfers.size() == 1)
+      return transferGlyph(transfers.front());
+    return downloadsPaused(transfers) ? "media-pause" : "download";
+  }
+
   // Jobs from one app still have distinct identities. Forget a finished lead so
   // a later job cannot inherit a choice made for an earlier transfer.
   inline void orderTransfers(std::vector<DownloadProgress>& transfers, std::string& leadKey) {

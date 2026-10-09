@@ -121,7 +121,10 @@ for each entry. An unknown total uses the shell's themed spinner. App names appe
 only in the expanded view, keeping the compact activity indicator minimal. Hovering shows
 separate application bars or Steam's current phase. With several entries the
 compact number is the number of active entries, not a combined percentage.
-The expanded card shows up to four rows and a remaining-item count. Notifications
+The expanded card shows up to four rows and a remaining-item count. Rows have a
+small gap, percentages align at the trailing edge, and entries without a reported
+percentage give their title the full available width. The outer progress ring uses
+a fine line with a faint coloured halo; its unfilled track stays subdued. Notifications
 and OSDs retain priority, and the media panel remains accessible from the download
 card. Hidden progress and disconnected apps disappear without assuming that a
 cancelled download succeeded. Count/badge messages alone never create a download.
@@ -184,25 +187,66 @@ protocol is documented in the [Unity Launcher API](https://wiki.ubuntu.com/Unity
 Steam also has a built-in read-only activity reader. Every two seconds it checks
 the running client's content log and resolves game names from its library
 manifests, including external libraries. The island shows preparing, downloading,
-installing and verifying states. An explicit suspension keeps an amber paused row
+installing and verifying states. The compact capsule, split bubble and expanded
+rows use a download arrow, package or checked file to reflect the current stage.
+Groups keep the download arrow, and script activities retain their custom symbol.
+An explicit suspension keeps an amber paused row
 until it resumes, is cancelled, completes, or the client exits. Explicit update
 errors produce the failure notice. Other stopped updates clear the indicator;
 log entries from earlier client sessions are ignored and replayed errors do not
 produce new notices. This does
 not modify Steam, install a plugin, or enable remote debugging. Steam's saved
 byte counts are not reliable live percentages, so this reader shows activity
-instead of an estimated percentage. Native desktop progress, if Steam publishes
+instead of an estimated percentage. Shader-cache downloads use the same phase
+tracking. A successful scheduler removal after observed work also confirms
+completion, including when Steam has already cleared its visible phase. Pauses,
+cancellations and scheduler entries without observed work never imply success.
+Native desktop progress, if Steam publishes
 it, takes precedence over the log reader.
 
-For investigation of Steam's LED output, `python3 scripts/steam-led-probe.py`
-reads the version 1 snapshots exposed by the optional
-[leds-valve-shim](https://github.com/anna-oake/leds-valve-shim) virtual driver and
-prints changed snapshots as JSON for two minutes. `--seconds` adjusts the duration.
-This diagnostic reads LED colours, brightness and effects only. It cannot identify
-which process wrote them or treat them as confirmed download percentages. Noctalia
-does not install or load the kernel module, and this probe is not connected to the
-Island's progress display. A live Steam capture is needed before defining that
-mapping; the existing Steam log and native desktop progress readers remain in use.
+When the optional [leds-valve-shim](https://github.com/anna-oake/leds-valve-shim)
+virtual driver is available, Noctalia reads `/dev/valve-leds-shim` directly and
+mirrors its 17 RGB lights around the download ring with the same subtle halo.
+Steam's moving highlight and partially lit edge come from the device's colours;
+they are not converted into a numeric percentage or a completion event. Game
+names, phases and confirmed completion still come from the log reader. Native
+desktop percentages retain priority.
+
+The LED pattern is used for a single actively downloading Steam game, including
+its split bubble and inner ring when the outer ring is disabled. Other phases,
+ambiguous groups and reduced motion keep the existing indicators. Snapshot
+sampling is capped at 20 Hz, with repainting only when colours change. Missing,
+disabled, malformed or more than five-second-old frames fall back automatically;
+the slower Steam poll retries the device so reloading it needs no shell restart.
+Noctalia opens it read-only and closes it after each sample, allowing module unload.
+
+For investigation, `python3 scripts/steam-led-probe.py` prints changed version 1
+snapshots as JSON for two minutes. `--seconds` adjusts the duration.
+If the snapshot stays unchanged during a download, check that the desktop user
+can write the driver's LED attributes under `/sys/class/leds/valve-leds[N]`.
+Load the driver before starting Steam. If Steam was already running, restart the
+client after loading the driver so it can discover the new LEDs.
+The device reports colours, brightness and effects without identifying the writer
+or active game. Noctalia does not install or load the kernel module. The standalone
+probe is optional; the shell does not launch it. Tests can point the reader at a
+private snapshot file using `NOCTALIA_STEAM_LED_DEVICE`.
+
+For a persistent setup, register the driver with DKMS and `AUTOINSTALL="yes"`,
+keeping headers installed for each kernel you boot. Add `leds-valve-shim` to
+`/etc/modules-load.d/noctalia-steam-leds.conf` so it loads before Steam starts.
+Desktop write permissions need to be reapplied whenever the device is created.
+The udev rule should match the shim's `misc` device: it is registered after all
+17 LEDs and their custom attribute groups exist. The local permission helper at
+`/usr/local/libexec/noctalia-steam-led-permissions` reads the desktop account from
+`/etc/noctalia-steam-led-user` and grants ownership of the shim's writable LED
+attributes to that account. The snapshot device stays read-only.
+
+Check a persistent installation with `dkms status -m leds-valve-shim` and
+`modinfo -F filename leds-valve-shim`. The installed source and DKMS configuration
+live under `/usr/src/leds-valve-shim-<version>`; kernel updates rebuild that source
+through the distribution's DKMS hooks. This setup is separate from the shell's
+local installer and does not require restarting the shell or Steam if the working
+driver is already loaded.
 
 ## Script activities
 

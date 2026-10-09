@@ -8,7 +8,11 @@
 #include <glib.h>
 #include <string_view>
 
-DownloadProgressService::DownloadProgressService(SessionBus& bus) : m_bus(bus), m_steam(g_get_home_dir()) {
+DownloadProgressService::DownloadProgressService(SessionBus& bus)
+    : m_bus(bus), m_steam(g_get_home_dir()),
+      m_steamLeds(
+          g_getenv("NOCTALIA_STEAM_LED_DEVICE") ? g_getenv("NOCTALIA_STEAM_LED_DEVICE") : "/dev/valve-leds-shim"
+      ) {
   m_steamPoll.startRepeating(std::chrono::seconds(2), [this] {
     auto transfers = m_steam.read();
     const bool finished = m_steam.takeCompletion();
@@ -18,10 +22,10 @@ DownloadProgressService::DownloadProgressService(SessionBus& bus) : m_bus(bus), 
     // An error wins when several transfers finish in the same poll.
     if (failure && failed)
       failed(downloadSource("steam.desktop", desktopEntries()));
-    if (transfers == m_steamTransfers)
-      return;
+    const bool different = transfers != m_steamTransfers;
     m_steamTransfers = std::move(transfers);
-    if (changed)
+    updateLeds();
+    if (different && changed)
       changed();
   });
   m_updateSlot = bus.connection().addMatch(
@@ -95,6 +99,29 @@ DownloadProgressService::~DownloadProgressService() {
   }
 }
 
+void DownloadProgressService::updateLeds() {
+  // The LED device has no app identity. Attach it only when one game is
+  // downloading; ambiguous groups and other phases retain the normal indicator.
+  const bool eligible =
+      std::ranges::count_if(m_steamTransfers, [](const auto& transfer) { return transfer.phase != "paused"; }) == 1
+      && std::ranges::any_of(m_steamTransfers, [](const auto& transfer) { return transfer.phase == "downloading"; })
+      && std::ranges::none_of(m_entries, [](const auto& item) {
+           return item.second.desktopId == "steam.desktop" && item.second.state.active();
+         });
+  auto frame = eligible ? m_steamLeds.read() : std::nullopt;
+  // Steam can write hundreds of times a second. Sample at 20 Hz, and retry at
+  // the ordinary log polling rate while absent, stale, paused or disconnected.
+  if (frame && !m_ledPoll.active())
+    m_ledPoll.startRepeating(std::chrono::milliseconds(50), [this] { updateLeds(); });
+  else if (!frame)
+    m_ledPoll.stop();
+  if (frame == m_ledFrame)
+    return;
+  m_ledFrame = std::move(frame);
+  if (changed)
+    changed();
+}
+
 std::vector<DownloadProgress> DownloadProgressService::active() const {
   std::vector<DownloadProgress> result;
   for (const auto& [key, entry] : m_entries) {
@@ -118,6 +145,7 @@ std::vector<DownloadProgress> DownloadProgressService::active() const {
           .phase = transfer.phase,
           .key = "steam:" + transfer.appId,
           .source = downloadSource("steam.desktop", desktopEntries()),
+          .leds = transfer.phase == "downloading" ? m_ledFrame : std::nullopt,
       });
   return result;
 }

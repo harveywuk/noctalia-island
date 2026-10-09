@@ -479,6 +479,9 @@ void RenderContext::renderNode(
     auto style = ring->style();
     style.color.a *= effectiveOpacity;
     style.color = withSaturation(style.color, saturation);
+    if (style.colors)
+      for (auto& color : *style.colors)
+        color = withSaturation(color, saturation);
     m_backend->drawCountdownRing(sw, sh, node->width(), node->height(), style, worldTransform);
     break;
   }

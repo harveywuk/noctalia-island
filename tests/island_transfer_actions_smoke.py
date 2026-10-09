@@ -94,8 +94,8 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
     def no_notice(name):
         # Window activation can complete before the island's closing spring.
         time.sleep(.6)
-        image = shot(name).crop((505, 22, 550, 60))
-        assert sum(g > 70 and g > r+15 and g > b+15 for r, g, b in image.getdata()) < 10
+        image = shot(name).crop((540, 22, 590, 60))
+        assert sum(g > 150 and g > r+60 and g > b+40 for r, g, b in image.getdata()) < 10
 
     def key_count():
         return len((out/'other-keys').read_bytes()) if (out/'other-keys').exists() else 0
@@ -262,6 +262,9 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         # An isolated process/log supplies a real Steam reader failure event.
         # The current desktop's Steam client and files are never used.
         root = pathlib.Path(env['HOME'])/'.steam/steam/logs'; root.mkdir(parents=True)
+        manifests=root.parent/'steamapps'; manifests.mkdir()
+        (manifests/'appmanifest_42.acf').write_text('"AppState" { "name" "A Long Adventure: Definitive Edition" }')
+        (manifests/'appmanifest_43.acf').write_text('"AppState" { "name" "Another Adventure" }')
         steam = subprocess.Popen([sys.executable, '-c',
             "import ctypes,os,pathlib,time; ctypes.CDLL(None).prctl(15,b'steam',0,0,0); "
             "pathlib.Path(os.environ['HOME']+'/.steam/steam.pid').write_text(str(os.getpid())); time.sleep(300)"], env=env)
@@ -277,17 +280,34 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         steam_event('update canceled : Priority (Suspended)'); time.sleep(2.5)
         focus('transfer-other'); focus_rows(); focus_outline('steam-paused-row', 0)
         artwork('steam-paused-row-background', (560, 148, 720, 152))
-        # Both games share an app and fallback display name. Focus must follow
+        # Both games share an app. Focus must follow
         # the game id when a running job moves ahead of the paused selection.
-        steam_event('App update changed : Running Update,Downloading,', 43); time.sleep(2.5)
+        steam_event('Shader update changed : Running Update,Downloading,', 43); time.sleep(2.5)
         focus_outline('steam-paused-row-moved', 1)
+        run(['grim','-o','TEST-2',str(out/'steam-download-rows-scaled.png')])
         command(keyboard, 28)
         wait(lambda: active_class() == 'transfer-steam', 'Paused Steam row activates Steam')
         steam_event('update canceled : User canceled', 43); time.sleep(2.5)
         hover_rows('steam-paused-open')
         click(); wait(lambda: active_class() == 'transfer-steam', 'Pointer activates paused Steam row')
+
+        # Real clients clear their phase before announcing success through the scheduler.
+        # The green result must still appear and retain the Steam activation target.
+        steam_event('Shader update changed : Running Update,Committing,'); time.sleep(2.5)
         focus('transfer-other')
-        steam_event('update canceled : Failed updating depot 42 (No connection to content servers)')
+        steam_event('Shader update changed : None')
+        steam_event('scheduler finished : removed from schedule (result No Error, state 0xc) \r')
+        time.sleep(2.3)
+        result=shot('steam-scheduler-finished').crop((540,22,590,60))
+        assert sum(g>150 and g>r+60 and g>b+40 for r,g,b in result.getdata())>10, 'Steam scheduler success was not announced'
+        assert 'steamfixture' in tooltip('steam-scheduler-source')
+        click(); wait(lambda: active_class() == 'transfer-steam', 'Scheduler completion returns to Steam')
+        no_notice('steam-scheduler-opened')
+
+        steam_event('App update changed : Running Update,Downloading,'); time.sleep(2.5)
+        focus('transfer-other')
+        steam_event('App update changed : None')
+        steam_event('scheduler finished : removed from schedule (result Disk write failure, state 0x6)')
         time.sleep(2.3)
         assert 'steamfixture' in tooltip('failure-source-tooltip')
         click()
@@ -295,7 +315,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         assert steam_window.poll() is None and shell.poll() is None
         print('PASS: running/paused rows, Tab/Shift+Tab and Enter/Space, progress/reorder focus, removed rows, '
               'artwork, source tooltips, desktop/WM-class matching, notice actions, expiry, replacement gestures, '
-              'closed apps, script titles and Steam failure actions', flush=True)
+              'closed apps, script titles, Steam shader updates and scheduler completion/failure actions', flush=True)
     finally:
         for process in helpers:
             if process.poll() is None:

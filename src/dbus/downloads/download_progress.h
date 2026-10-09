@@ -1,6 +1,7 @@
 #pragma once
 
 #include "system/desktop_entry.h"
+#include "system/steam_leds.h"
 
 #include <algorithm>
 #include <optional>
@@ -35,6 +36,7 @@ struct DownloadProgress {
   // Distinguish publishers and Steam games even when they share an app.
   std::string key;
   DownloadSource source;
+  std::optional<SteamLedFrame> leds;
   bool paused() const { return phase == "paused"; }
 };
 

@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 
 enum class FillMode {
   None,
@@ -140,6 +141,8 @@ struct SpinnerStyle {
   float thickness = 2.0F;
 };
 
+using RingColors = std::array<Color, 17>;
+
 struct CountdownRingStyle {
   Color color{};
   float thickness = 6.0F;
@@ -147,6 +150,7 @@ struct CountdownRingStyle {
   // Negative keeps the original circular renderer. Otherwise trace a rounded rectangle.
   float cornerRadius = -1.0F;
   float startOffset = 0.0F;
+  std::optional<RingColors> colors;
 };
 
 enum class ScreenCornerPosition : std::uint8_t {

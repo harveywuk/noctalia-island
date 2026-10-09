@@ -36,4 +36,8 @@ private:
   SteamActivity m_steam;
   std::vector<SteamTransfer> m_steamTransfers;
   Timer m_steamPoll;
+  SteamLeds m_steamLeds;
+  std::optional<SteamLedFrame> m_ledFrame;
+  Timer m_ledPoll;
+  void updateLeds();
 };

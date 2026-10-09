@@ -32,7 +32,10 @@ int main() {
     char timestamp[32];
     std::strftime(timestamp, sizeof(timestamp), "[%Y-%m-%d %H:%M:%S]", &tm);
     std::ofstream file(log, append ? std::ios::app : std::ios::trunc);
-    file << timestamp << " AppID 42 " << (state.starts_with("update ") ? "" : "App update changed : ") << state << "\n";
+    const bool event = state.starts_with("update ")
+        || state.starts_with("scheduler finished : ")
+        || state.starts_with("Shader update changed : ");
+    file << timestamp << " AppID 42 " << (event ? "" : "App update changed : ") << state << "\n";
   };
   SteamActivity activity(home);
   write("Running Update,Downloading,", false, true);
@@ -125,6 +128,60 @@ int main() {
   assert(!activity.read().empty());
   write("update canceled : Shader Priority (Suspended)");
   assert(activity.read()[0].phase == "paused");
+
+  // Current Steam logs use scheduler completion rather than update finished.
+  // None ends the visible phase, but only the explicit success announces it.
+  write("Running Update,Downloading,");
+  assert(activity.read()[0].phase == "downloading");
+  write("None");
+  write("scheduler finished : removed from schedule (result No Error, state 0xc) \r");
+  assert(activity.read().empty() && activity.takeCompletion() && !activity.takeFailure());
+  write("scheduler finished : removed from schedule (result No Error, state 0xc)");
+  assert(activity.read().empty() && !activity.takeCompletion());
+  SteamActivity afterSchedulerFinish(home);
+  assert(afterSchedulerFinish.read().empty() && !afterSchedulerFinish.takeCompletion());
+
+  // Shader cache downloads use the same scheduler, with a different phase marker.
+  write("Shader update changed : Running Update,Preallocating,");
+  assert(activity.read()[0].phase == "preparing");
+  write("Shader update changed : Running Update,Downloading,Staging,");
+  assert(activity.read()[0].phase == "downloading");
+  write("update canceled : Shader Priority (Suspended)");
+  write("Shader update changed : None");
+  write("scheduler finished : staying in schedule (result Suspended, state 0x40e) ");
+  assert(activity.read()[0].phase == "paused");
+  assert(!activity.takeCompletion() && !activity.takeFailure());
+  SteamActivity afterShaderPause(home);
+  assert(afterShaderPause.read()[0].phase == "paused" && !afterShaderPause.takeCompletion());
+  write("Shader update changed : Running Update,Committing,");
+  assert(activity.read()[0].phase == "installing");
+  write("Shader update changed : None");
+  write("scheduler finished : removed from schedule (result No Error, state 0xc)\t");
+  assert(activity.read().empty() && activity.takeCompletion() && !activity.takeFailure());
+
+  // A scheduler event without observed work, or after cancellation, stays quiet.
+  write("scheduler finished : removed from schedule (result No Error, state 0xc)");
+  assert(activity.read().empty() && !activity.takeCompletion());
+  write("Shader update changed : Running Update,Downloading,");
+  assert(!activity.read().empty());
+  write("update canceled : User canceled");
+  write("scheduler finished : removed from schedule (result No Error, state 0xc)");
+  assert(activity.read().empty() && !activity.takeCompletion() && !activity.takeFailure());
+
+  write("Running Update,Downloading,");
+  assert(!activity.read().empty());
+  write("scheduler finished : staying in schedule (result No Error, state 0xc)");
+  assert(!activity.read().empty() && !activity.takeCompletion());
+  write("None");
+  write("scheduler finished : removed from schedule (result Disk write failure, state 0x6)");
+  assert(activity.read().empty() && activity.takeFailure() && !activity.takeCompletion());
+  SteamActivity afterSchedulerFailure(home);
+  assert(afterSchedulerFailure.read().empty() && !afterSchedulerFailure.takeFailure());
+  write("Running Update,Downloading,");
+  assert(!activity.read().empty());
+  write("scheduler finished : removed from schedule (result Unfamiliar reason, state 0x6)");
+  assert(activity.read().empty() && !activity.takeFailure() && !activity.takeCompletion());
+
   std::ofstream(home / ".steam/steam.pid", std::ios::trunc) << "2147483647";
   assert(activity.read().empty()); // A crashed/exited client leaves no activity.
   assert(!activity.takeCompletion());

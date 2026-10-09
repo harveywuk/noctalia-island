@@ -62,6 +62,7 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         cfg=base/'config/noctalia';cfg.mkdir()
         # Keep the host's webcam users out of privacy indicators; camera tests supply a fake /proc.
         (base/'emptyproc').mkdir();env['NOCTALIA_PRIVACY_PROC_ROOT']=str(base/'emptyproc')
+        env['NOCTALIA_STEAM_LED_DEVICE']=str(base/'missing-steam-leds')
         (cfg/'config.toml').write_text('[island]\nenabled=true\nhover_widgets=["workspaces","taskbar"]\n[bar.default]\nenabled=false\n[dock]\nenabled=false\n[shell]\nsetup_wizard_enabled=false\npolkit_agent=false\n[shell.screenshot]\ndirectory="'+str(out)+'"\n[osd.kinds]\nlock_keys=false\n[plugins]\nauto_update="none"\n[[plugins.source]]\nname="test"\nkind="path"\nlocation="/nonexistent"\nenabled=false\n')
         (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
         wp=base/'config/wireplumber/wireplumber.conf.d';wp.mkdir(parents=True)
@@ -173,6 +174,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--island-transfer-actions-only' in sys.argv:
             from island_transfer_actions_smoke import prepare
             prepare(base,cfg,env)
+        if '--island-steam-leds-only' in sys.argv:
+            from island_steam_leds_smoke import prepare
+            prepare(base,cfg,env)
         if '--island-network-only' in sys.argv or '--island-card-motion-only' in sys.argv:
             network=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_network.py')],env=env,
                                      stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
@@ -234,6 +238,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--island-transfer-actions-only' in sys.argv:
             from island_transfer_actions_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--island-steam-leds-only' in sys.argv:
+            from island_steam_leds_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--island-cupertino-only' in sys.argv:

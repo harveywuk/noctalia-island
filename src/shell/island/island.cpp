@@ -224,6 +224,7 @@ struct Island::Instance {
     std::string target;
     std::string pressedTarget;
     std::function<void(float)> progress;
+    island::ProgressOutline* ledRing = nullptr;
     // 0 tucked under its neighbour, 1 fully apart.
     float reveal = 0;
     AnimationManager::Id morph = 0;
@@ -299,6 +300,7 @@ struct Island::Instance {
     ProgressBar* progress;
   };
   std::vector<DownloadUi> downloadUi;
+  island::ProgressOutline* downloadLedRing = nullptr;
   bool seeking = false;
   std::int64_t seekLengthUs = 0;
   std::string seekTrackSignature;
@@ -1977,6 +1979,9 @@ void Island::prepare(Instance& inst) {
       && !outlineTimer
       && (view == island::View::DownloadActivity || view == island::View::Downloads)
       && !downloads.empty();
+  const auto capsuleColors = island::transferColors(capsuleDownloads, MotionService::instance().enabled());
+  if (view == island::View::DownloadActivity)
+    signature += std::format("|led:{}", capsuleColors.has_value());
   const auto updateOutline = [&] {
     if (!inst.progressOutline)
       return;
@@ -1991,7 +1996,8 @@ void Island::prepare(Instance& inst) {
       fraction = downloadFraction(capsuleDownloads);
     }
     inst.progressOutline->update(
-        outlineTimer || outlineDownload, fraction, fill, false, islandRole(ColorRole::OnSurface, 0.16F)
+        outlineTimer || outlineDownload, fraction, fill, false, islandRole(ColorRole::OnSurface, 0.16F),
+        outlineDownload ? capsuleColors : std::nullopt
     );
   };
   updateOutline();
@@ -2051,10 +2057,11 @@ void Island::prepare(Instance& inst) {
     else if (splitActivity == island::Activity::Downloads)
       fraction = downloadFraction(bubbleDownloads);
     const bool paused = splitActivity == island::Activity::Downloads && downloadsPaused(bubbleDownloads);
+    const auto colors = splitActivity == island::Activity::Downloads
+        ? island::transferColors(bubbleDownloads, MotionService::instance().enabled())
+        : std::nullopt;
     // A lone job in the bubble shows its own symbol; a group shows the download arrow.
-    const std::string bubbleIcon = paused                                      ? "media-pause"
-        : bubbleDownloads.size() == 1 && !bubbleDownloads.front().icon.empty() ? bubbleDownloads.front().icon
-                                                                               : "download";
+    const auto bubbleIcon = island::transferGlyph(bubbleDownloads);
     if (index == 0) {
       inst.splitLane = laneSplit;
       inst.splitNext = laneSplit ? bubbleDownloads.front().key : "";
@@ -2076,12 +2083,15 @@ void Island::prepare(Instance& inst) {
       else if (splitActivity == island::Activity::Awake)
         bubbleSignature += "|awake";
       else
-        bubbleSignature +=
-            std::format("|{}|{}|{}|{}", fraction.has_value(), bubbleIcon, laneSplit ? inst.splitNext : "", paused);
+        bubbleSignature += std::format(
+            "|{}|{}|{}|{}|{}", fraction.has_value(), bubbleIcon, laneSplit ? inst.splitNext : "", paused,
+            colors.has_value()
+        );
       if (bubbleSignature != split.signature) {
         m_renderContext->makeCurrent(inst.surface->renderTarget());
         split.signature = bubbleSignature;
         split.progress = {};
+        split.ledRing = nullptr;
         inst.animations.cancel(split.fade);
         split.fade = 0;
         if (split.outgoing)
@@ -2133,11 +2143,18 @@ void Island::prepare(Instance& inst) {
           const auto tint = paused ? islandFixed(kAppleOrange, 1.0F)
               : timer              ? islandTint(kAppleOrange, ColorRole::Primary)
                                    : islandTint(kAppleBlue, ColorRole::Primary);
-          auto ring = std::make_unique<DownloadRing>(d * s, 3.0F * s, fraction, tint);
-          auto* ringPtr = ring.get();
-          centred(std::move(ring));
-          if (fraction)
-            split.progress = [ringPtr](float value) { ringPtr->setProgress(value); };
+          if (colors) {
+            auto ring = std::make_unique<island::ProgressOutline>();
+            ring->setGeometry(d * s, d * s, d * s / 2, s);
+            split.ledRing = ring.get();
+            centred(std::move(ring));
+          } else {
+            auto ring = std::make_unique<DownloadRing>(d * s, 3.0F * s, fraction, tint);
+            auto* ringPtr = ring.get();
+            centred(std::move(ring));
+            if (fraction)
+              split.progress = [ringPtr](float value) { ringPtr->setProgress(value); };
+          }
           symbol(timer ? timers.front().icon : bubbleIcon, tint, 0.34F);
         }
         split.content = split.area->addChild(std::move(content));
@@ -2168,6 +2185,11 @@ void Island::prepare(Instance& inst) {
       }
       if (split.progress && fraction)
         split.progress(*fraction);
+      if (split.ledRing)
+        split.ledRing->update(
+            true, 1.0F, islandTint(kAppleBlue, ColorRole::Primary), false, islandRole(ColorRole::OnSurface, 0.16F),
+            colors
+        );
     }
     const bool shown = splitActivity != island::Activity::None;
     const bool wasShown = split.activity != island::Activity::None;
@@ -2201,6 +2223,11 @@ void Island::prepare(Instance& inst) {
   // their buttons, focus or notification contents.
   updateFlow(inst, flowArt);
   if (signature == inst.signature && inst.root) {
+    if (inst.downloadLedRing)
+      inst.downloadLedRing->update(
+          true, 1.0F, islandTint(kAppleBlue, ColorRole::Primary), false, islandRole(ColorRole::OnSurface, 0.16F),
+          capsuleColors
+      );
     if (inst.captureCountdownLabel)
       inst.captureCountdownLabel->setText(
           i18n::tr("island.capture-menu.countdown", "seconds", std::to_string(inst.captureRemaining))
@@ -2401,6 +2428,7 @@ void Island::prepare(Instance& inst) {
   inst.awakeLabel = nullptr;
   inst.timerUi.clear();
   inst.downloadUi.clear();
+  inst.downloadLedRing = nullptr;
   Node* canvas = inst.content;
 
   const auto label = [&](std::string text, float x, float y, float width, float size,
@@ -2796,7 +2824,17 @@ void Island::prepare(Instance& inst) {
     const bool paused = !timerView && downloadsPaused(capsuleDownloads);
     const auto fraction = timerView ? std::optional{timers.front().fraction()} : downloadFraction(capsuleDownloads);
     DownloadRing* ringPtr = nullptr;
-    if (!(outlineTimer || outlineDownload)) {
+    if (!(outlineTimer || outlineDownload) && !timerView && capsuleColors) {
+      auto ring = std::make_unique<island::ProgressOutline>();
+      ring->setGeometry(36 * s, 36 * s, 18 * s, s);
+      ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
+      ring->update(
+          true, 1.0F, islandTint(kAppleBlue, ColorRole::Primary), false, islandRole(ColorRole::OnSurface, 0.16F),
+          capsuleColors
+      );
+      inst.downloadLedRing = ring.get();
+      canvas->addChild(std::move(ring));
+    } else if (!(outlineTimer || outlineDownload)) {
       auto ring = std::make_unique<DownloadRing>(
           36 * s, 2.5F * s, fraction,
           paused ? islandFixed(kAppleOrange, 1.0F) : islandTint(kAppleBlue, ColorRole::Primary)
@@ -2805,9 +2843,7 @@ void Island::prepare(Instance& inst) {
       ring->setPosition(14 * s, (cfg.height - 36) * s / 2);
       canvas->addChild(std::move(ring));
     }
-    const auto downloadIcon = paused                                             ? "media-pause"
-        : capsuleDownloads.size() == 1 && !capsuleDownloads.front().icon.empty() ? capsuleDownloads.front().icon
-                                                                                 : "download";
+    const auto downloadIcon = island::transferGlyph(capsuleDownloads);
     // A lone script activity names itself where the clock would be, like a Live Activity.
     const bool scriptTitle = !timerView
         && capsuleDownloads.size() == 1
@@ -2877,28 +2913,29 @@ void Island::prepare(Instance& inst) {
     const auto rows = downloadRows;
     for (std::size_t i = 0; i < rows; ++i) {
       const float y = 57 + static_cast<float>(i) * 55;
-      sectionCard(y - 6, y + 49);
+      sectionCard(y - 6, y + 45);
       const auto& download = downloads[i];
       // Cupertino leads each row with a round badge; paused transfers use amber.
       const float textX = gCupertino ? 62 : 22;
       if (gCupertino)
         leadingBadge(
-            download.paused()           ? "media-pause"
-                : download.icon.empty() ? "download"
-                                        : download.icon,
-            22, y + 4, 30, download.paused() ? kAppleOrange : kAppleBlue, ColorRole::Primary
+            island::transferGlyph(download), 22, y + 4, 30, download.paused() ? kAppleOrange : kAppleBlue,
+            ColorRole::Primary
         );
-      label(download.name, textX, y, w - textX - 88, 13, foreground, false, 1, FontWeight::Normal, true);
+      const float titleEnd = download.determinate ? 88 : 22;
+      label(download.name, textX, y, w - textX - titleEnd, 13, foreground, false, 1, FontWeight::Normal, true);
       if (download.paused()) {
         label(i18n::tr("island.downloads.paused"), textX, y + 24, w - textX - 22, 12, islandFixed(kAppleOrange, 1.0F));
         if (download.determinate) {
           auto* percentage =
               label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
+          percentage->setTextAlign(TextAlign::End);
           inst.downloadUi.push_back({download.key, percentage, nullptr});
         }
       } else if (download.determinate) {
         auto* percentage =
             label(std::format("{}%", std::lround(download.progress * 100)), w - 76, y, 54, 13, muted, true);
+        percentage->setTextAlign(TextAlign::End);
         auto* bar = progress(static_cast<float>(download.progress), textX, y + 26, w - textX - 22, 7);
         inst.downloadUi.push_back({download.key, percentage, bar});
       } else {
