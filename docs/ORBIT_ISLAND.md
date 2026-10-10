@@ -114,6 +114,20 @@ the newest as its own card (app icon, app name and time, title and two lines of 
 with up to two older cards peeking out beneath and an "N more" count. Clicking the stack
 opens the notification history.
 
+Ordinary Cupertino arrivals start as a two-line capsule. Hovering, clicking the capsule,
+or using the Island keyboard view opens the full preview and its actions. Critical alerts
+and saved capture results still show their full preview immediately. With split activities
+enabled, playing media retains a separate waveform bubble during a notification; clicking
+it returns to playback, and the artwork gradient keeps animating underneath the preview.
+
+Notification history uses a single text column beside the app icon, with comfortable and
+compact spacing. Collapsed groups show one count and understated stack edges. Clicking a
+card reveals its available actions; hovering or keyboard focus reveals dismissal in place
+of the timestamp. Tab/Enter navigate and open cards, Delete dismisses the focused card,
+and a leftward drag dismisses a card or collapsed group. Escape closes history while keeping
+its entries. The approved visual reference is
+[`notification-refinement-mockup.html`](references/notification-refinement-mockup.html).
+
 ## Apple Dynamic Island design reference
 
 The design target is a faithful desktop adaptation of Apple's Dynamic Island,
@@ -1331,3 +1345,230 @@ outline. Expanded rows retain their individual progress indicators.
 [island]
 outer_progress_ring = false   # the small icon ring instead
 ```
+
+## Keyboard assistant
+
+`noctalia msg panel-toggle assistant` opens a text assistant in the Island on the
+current monitor. Bind this command to your preferred compositor shortcut. There
+is no permanent assistant button in the idle or hover Island. You can also find
+Assistant through the launcher's panel search.
+
+Type a question and press Enter. Answers stream into a scrollable card; follow-up
+questions include the recent completed conversation. Copy copies only the answer.
+Ctrl+period stops a request, Ctrl+Shift+C copies the answer, Ctrl+N starts a fresh
+conversation, and Escape closes
+the panel and stops any running request. Drafts and answers remain in memory when
+the panel is reopened; nothing is saved as conversation history. An optional
+context passed to `panel-open assistant` fills the question without submitting it.
+
+The assistant shares the existing `[shell.launcher.ai]` provider, URL, model, and
+credential settings. Configure those in Settings, Launcher, AI. Opening the panel
+makes no AI request; questions are sent only when submitted. The default provider
+is local Ollama. Configure a model or select one using `/ai model` in the launcher.
+No application contents, clipboard contents, or media metadata are automatically
+included in a request. Changing the endpoint or model starts a new context.
+
+The card shows one answer and a single input row, without repeating the submitted
+question or keeping keyboard instructions on screen. A centred orb replaces the
+branding header. It grows while listening, stays prominent through voice playback,
+and settles smaller when a text answer needs the space. These size changes ease
+with the card; reduced motion applies them immediately. Comfortable and compact
+modes both retain generous padding. Idle shows only the orb and input, with a
+small close control. Activity text appears beneath the orb only while needed,
+with a Finish Dictation checkmark while listening. Escape cancels the current
+request, recording or spoken reply and closes the card; no Stop icon sits beside
+the activity label. Copy and Read Aloud sit beneath a completed
+answer. The input's trailing action changes from dictation to Send when text is
+entered. Listening and transcription hide the inactive composer. Failed or stopped
+questions return to the input for editing, without overwriting a new draft.
+
+The assistant uses a dark glass sphere with soft, layered multicolour smoke and a small expressive
+face with tall rounded eyes and no mouth, inspired by
+[SmoothUI's orb face](https://smoothui.dev/docs/components/ai-orb-face).
+Listening widens the eyes with cyan light, thinking shifts toward violet, speaking
+mixes pink and cyan, and a completed reply has happy arc eyes with a mint accent.
+On errors, the eyes draw together into one larger, centred question mark with an
+amber-violet gradient. Activity text sits below the orb and errors remain readable
+in the answer area, so meaning never relies on colour alone.
+
+The smoke drifts continuously while the assistant is open. At idle, its palette
+cycles gently through the gradient. A feathered gradient glow travels around the
+Island's perimeter, sharing the orb's current colours. Ambient updates use a
+30 fps timer that stops when the panel closes.
+During dictation and spoken replies, the smoke's energy follows the speech level;
+the eyes gently open with spoken replies. Speech movement settles during silence
+and after Stop, while the ambient drift continues. The meter uses the existing
+microphone capture and the reply's audio envelope, independently of desktop music.
+At idle, occasional glances, double blinks, curious wider eyes and a small tilt
+accompany a gentle breath of light. These eye gestures finish and pause between
+appearances. Starting another activity cancels the
+idle gesture, keeping listening and speaking tied to their own audio.
+Reduced motion disables idle gestures, blinking, smoke flow, colour cycling,
+perimeter movement and speech movement while retaining
+the static expression and state palette. The sphere is drawn as one GLES2 effect.
+Playing media retains the Island's artwork background and a compact media
+row with playback controls. Comfortable and compact Island sizing both apply.
+Long answers scroll while the question field stays accessible. Connection failures
+keep the question visible with Retry and Settings actions.
+
+### Local shell actions
+
+Submitting a clear English command runs the corresponding shell control locally,
+before the AI provider is contacted. The initial actions are:
+
+- `Set a timer for ten minutes` or `Start a 25 minute timer` (1 second to 24 hours).
+- `How long is left?`, `Pause the timer`, `Resume the timer`, or `Cancel the timer`
+  for the Timer plugin's countdown.
+- `Pause the music`, `Resume the music`, or `Play media` for the active player.
+- `What's playing?` for the current title and artist, or `Skip this track`.
+- `Set volume to 30%` (0 to 100 percent, also accepting spoken numbers).
+- `Enable Focus` for Work, `Turn on gaming focus`, `Turn on sleep focus`,
+  `Disable Focus`, or `Set focus to auto` to restore automatic selection.
+- `Which Focus is active?` for the current mode and whether automatic selection is on.
+- `What's my battery level?` for the system battery percentage and charging state.
+
+Typed commands and reviewed dictation use the same path. They execute only after
+Enter; opening the assistant or transcribing speech never starts an action. No
+model runs for recognized commands, and model responses cannot execute controls.
+Questions such as “How do I set a timer?” remain ordinary chat. Invalid values or
+extra clauses in recognized commands show a brief error and keep the draft for
+editing. Local confirmations do not enter the model's conversation history.
+
+Timers use the enabled `noctalia/timer` service and its existing Island controls.
+An active or completed timer is preserved until the user clears it. Pause and
+resume preserve its original duration and remaining time; repeated commands do
+not restart it. A finished timer cannot be resumed, and Cancel also clears a
+finished timer. Status replies read the current remaining time when submitted,
+distinguish paused and finished timers, and leave the assistant open for follow-ups.
+A confirmed start, pause or resume briefly shows its result, then closes the assistant to reveal the Live
+Activity. A dictated confirmation is spoken first when spoken replies are enabled.
+Typing another question cancels this automatic dismissal. Playback and volume
+confirmations wait for service state to reflect the requested value. Missing
+players, outputs or timer plugins report a clear error. Escape cancels pending
+feedback and dismisses the card; it does not undo an action already applied.
+
+Status questions read the current shell services without contacting the model or
+adding device or track data to its conversation. Track titles remain plain text,
+including punctuation that could otherwise be interpreted as Markdown. A paused
+track is identified as paused. Skipping waits for that player's track to change
+before reporting success. Battery queries use the system battery, not a mouse or
+headset; a desktop without one reports that no system battery is available.
+
+### Fully local voice
+
+Local speech uses `pw-record`, [whisper.cpp](https://github.com/ggml-org/whisper.cpp),
+[Piper](https://github.com/OHF-Voice/piper1-gpl), and `pw-play`. Install these tools
+and download a Whisper ggml model plus a Piper ONNX voice with its matching JSON
+file. Models are downloaded separately, never by opening the panel. Speech tools
+run only during use. Whisper runs on four CPU threads, with GPU use disabled.
+
+Set the paths in Settings, Launcher, AI voice, or configure. This example shares
+an existing local Strata server for answers:
+
+```toml
+[shell.launcher.ai]
+provider = "openai"
+url = "http://127.0.0.1:8080/v1"
+model = "qwen3.8-flash-next-iq2_xs"
+# Placeholder for an unauthenticated local server, not a cloud credential.
+api_key = "strata-local"
+
+[shell.launcher.ai.voice]
+enabled = true
+spoken_replies = true
+whisper_command = "whisper-cli"
+whisper_model = "~/.local/share/noctalia/assistant/ggml-base.en.bin"
+piper_command = "piper"
+piper_model = "~/.local/share/noctalia/assistant/en_GB-alba-medium.onnx"
+```
+
+Here `openai` selects the compatible API format; the loopback URL sends questions
+to Strata on this computer. Match the model name to the server's `/v1/models`
+response. If the server requires authentication, use its actual key. Sharing
+Strata avoids loading a second language model alongside it. Questions may wait
+behind other Strata requests, and the first answer after an idle unload includes
+the model's loading time. Whisper and Piper run on the CPU only while needed.
+For local compatible servers, a brief status check recognizes Strata and shows
+`Loading model…` while it loads. If Strata was already occupied, `Waiting for
+Strata…` remains until this request starts producing reasoning or answer text,
+then changes to `Thinking…`. Status checks stop when the request ends or is
+cancelled, and a missing or slow status endpoint falls back to ordinary chat.
+Opening the panel does not poll or load the model.
+
+Executable settings accept executable names or paths, without shell arguments.
+Use an English Whisper model for English dictation, or a multilingual model for
+other languages. Piper voice licenses vary; review the selected voice's model card.
+
+Ctrl+D starts dictation inside the assistant; pressing it again finishes recording.
+A press binding can use `noctalia msg assistant-voice start`, paired with
+`noctalia msg assistant-voice finish` on release, for hold-to-talk. Repeated presses
+do not restart capture, and releasing after Escape never reopens the assistant.
+Very short taps are discarded. Text still waits for Enter before submission.
+A compositor shortcut can invoke `noctalia msg panel-open assistant /dictate` to
+open the assistant and toggle dictation directly. This reserves `/dictate` as an
+action context. Recording stops automatically after 60 seconds. The microphone
+control turns orange while recording. Transcribed text is added to the draft for
+review; only Enter or Send submits it. Answers to dictated questions are spoken
+when `spoken_replies` is enabled. Read Aloud also speaks a typed answer.
+
+Ctrl+period cancels recording, transcription, generation or playback. Escape closes
+the assistant and cancels the current activity. New dictation stops an existing
+answer or playback. Private temporary audio and transcript files are removed when
+the operation finishes or is cancelled. The selected default PipeWire microphone
+and output are used. There is no background listening or automatic voice upload.
+Spoken replies are limited to 4,000 bytes; the complete answer remains on screen.
+
+Alternatively, use a downloaded Ollama model with `provider = "ollama"`,
+`url = "http://127.0.0.1:11434"`, and its model name. Run that server with
+`OLLAMA_HOST=127.0.0.1:11434` and `OLLAMA_NO_CLOUD=1`. Setting
+`OLLAMA_KEEP_ALIVE=30s` releases its model memory after a short idle period. This
+trades a reload delay on the next question for more free memory between uses.
+Speech recognition and synthesis use local files and do not need API credentials.
+
+The optional `duck_media = true` voice setting, also available as **Lower music
+during voice** in Launcher settings, fades playing media streams to 45% of their
+current volume while recording or preparing/playing a spoken reply. It restores
+the previous volume afterward, on cancellation, or when the card closes. Only
+streams identified with a playing MPRIS player's application id or executable
+are adjusted. Master volume, other applications and the assistant's output are
+independent. Manual stream-volume changes relinquish the temporary adjustment,
+and a replaced or disconnected stream is never restored using an old node id.
+Temporary adjustments do not change remembered per-application volume settings.
+
+
+## Dock refinement
+
+The dock keeps native app artwork within a consistent inset and uses a quieter
+Cupertino grid on the launcher tile. Its floating surface has a softer hairline
+and larger inner margins. Small icon sizes remain available as the compact option.
+The design study is [dock-refinement-mockup.html](references/dock-refinement-mockup.html).
+
+Shared context menus use 28 px rows inside a 7 px inset, scaled by their host's
+content scale. Tooltips use 10 px horizontal and 6 px vertical padding. Dock app
+menus anchor to the selected icon rather than the last pointer location, and
+respect UI text scaling. Clicks and Escape dismiss shell tooltips.
+
+Dock keyboard navigation, drag arrangement and hover timing are documented in
+[the Hyprland guide](HYPRLAND.md#dock-keyboard-and-arrangement). These changes follow
+Apple's [Dock interaction guidance](https://support.apple.com/en-gb/guide/mac-help/mh35859/mac)
+and [Dock menu guidance](https://developer.apple.com/design/human-interface-guidelines/dock-menus),
+adapted to the shell's keyboard-first workflow.
+
+## Menus and tooltips
+
+Settings, audio routing, player selection and bar menus follow the UI size setting
+for text, checks and row spacing. A shared check column keeps action labels aligned;
+selected radio choices use one checkmark. Scrolling retains the card's top and
+bottom inset, and menus fit the logical display size while keeping every entry
+reachable. Tray submenus account for the parent menu's scroll position.
+
+Tray menus support Up/Down, Home/End and Enter. Right opens a selected submenu,
+Left returns to its parent, and Escape closes the menu. Tooltips clear when menus
+open, follow transformed control bounds, and can flip away from display edges.
+Their text and table widths scale with the UI while staying within the display.
+
+These refinements follow Apple's [menu guidance](https://developer.apple.com/design/human-interface-guidelines/menus)
+and [help guidance](https://developer.apple.com/design/human-interface-guidelines/offering-help).
+`python3 tests/hyprland_smoke.py --menus-only` checks native dark/light menus,
+normal and enlarged UI sizes, a fractional output, tooltip dismissal, nested tray
+menus and keyboard scrolling through a menu longer than the display.

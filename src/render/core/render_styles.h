@@ -236,13 +236,26 @@ constexpr bool operator==(const FancyAudioVisualizerStyle& lhs, const FancyAudio
       && lhs.cornerRadius == rhs.cornerRadius;
 }
 
-enum class EffectType : std::uint8_t { None, Sun, Snow, Rain, Cloud, Fog, Stars };
+enum class EffectType : std::uint8_t { None, Sun, Snow, Rain, Cloud, Fog, Stars, AssistantOrb };
+
+struct OrbFaceStyle {
+  std::array<Color, 4> colors{};
+  float energy = 0;
+  float eyeOpen = 1;
+  float blink = 1;
+  float gazeX = 0;
+  float gazeY = 0;
+  float smile = 0.2F;
+  float puzzled = 0;
+  bool operator==(const OrbFaceStyle&) const = default;
+};
 
 struct EffectStyle {
   EffectType type = EffectType::None;
   float time = 0.0F;
   float radius = 0.0F;
   Color bgColor{};
+  OrbFaceStyle orbFace;
 };
 
 struct GraphStyle {

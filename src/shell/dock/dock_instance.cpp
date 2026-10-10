@@ -368,7 +368,7 @@ namespace shell::dock {
     } else {
       // Same hairline as the shell's glass panels, faded with the tint.
       instance.panel->setBorder(
-          colorSpecFromRole(ColorRole::Outline, opacity * Style::hairlineAlpha), Style::borderWidth
+          colorSpecFromRole(ColorRole::Outline, opacity * Style::hairlineAlpha * 0.65F), Style::borderWidth
       );
     }
   }

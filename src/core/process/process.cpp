@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <sys/poll.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <system_error>
 #include <thread>
@@ -387,6 +388,7 @@ namespace {
       return {-1, {}, {}};
     }
 
+    const pid_t parent = ::getpid();
     const pid_t pid = ::fork();
     if (pid < 0) {
       closePipe(outPipe);
@@ -395,6 +397,10 @@ namespace {
     }
 
     if (pid == 0) {
+      if (options.terminateWithParent) {
+        if (::prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || ::getppid() != parent)
+          ::_exit(127);
+      }
       // Lead a new process group so a timeout can signal the whole tree
       // (e.g. checkupdates spawning pacman -Sy), not just the top-level shell.
       ::setpgid(0, 0);

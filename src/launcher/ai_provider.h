@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/config_types.h"
+#include "core/timer_manager.h"
 #include "launcher/launcher_provider.h"
 #include "net/http_client.h"
 
@@ -79,6 +80,33 @@ public:
   [[nodiscard]] static HttpRequest chatRequest(
       Kind kind, std::string_view baseUrl, std::string_view apiKey, std::string_view model, std::string_view prompt
   );
+  struct Message {
+    std::string role;
+    std::string content;
+  };
+  [[nodiscard]] static HttpRequest chatRequest(
+      Kind kind, std::string_view baseUrl, std::string_view apiKey, std::string_view model,
+      const std::vector<Message>& conversation
+  );
+
+  // An independent, in-memory conversation for the Island. Opening the panel never submits a request.
+  bool submitQuestion(std::string question);
+  void stopConversation();
+  void clearConversation();
+  void retryConversation();
+  [[nodiscard]] std::string_view question() const;
+  [[nodiscard]] std::string_view answer() const;
+  [[nodiscard]] std::string_view error() const;
+  [[nodiscard]] bool streaming() const;
+  [[nodiscard]] bool interrupted() const;
+  enum class GenerationStage { Thinking, LoadingModel, Waiting };
+  [[nodiscard]] GenerationStage generationStage() const;
+  struct LocalStatus {
+    bool loaded = true;
+    bool busy = false;
+  };
+  [[nodiscard]] static std::string localStatusUrl(Kind kind, std::string_view endpoint);
+  [[nodiscard]] static std::optional<LocalStatus> parseLocalStatus(std::string_view body);
   // Model names from the service's list response; exposed for tests.
   [[nodiscard]] static std::vector<std::string> parseModels(Kind kind, std::string_view json);
   // One line of the service's stream (NDJSON for Ollama, SSE "data:" lines for the others), and
@@ -87,6 +115,7 @@ public:
     std::string content;
     std::string error;
     bool done = false;
+    bool processing = false;
   };
   [[nodiscard]] static std::optional<StreamLine> parseStreamLine(Kind kind, std::string_view line);
 
@@ -107,13 +136,24 @@ private:
     std::string lineBuffer;
     bool streaming = false;
     HttpClient::StreamId stream = 0;
+    std::vector<Message> messages;
+    std::string endpoint;
+    Kind kind = Kind::Ollama;
+    bool interrupted = false;
+    bool receivedDone = false;
+    bool processing = false;
+    bool waiting = false;
+    GenerationStage stage = GenerationStage::Thinking;
   };
 
   [[nodiscard]] std::string apiKey() const;
   [[nodiscard]] bool needsKey() const;
   void refreshModels(bool force) const;
-  void ask(std::string view, std::string heading, std::string prompt);
+  void ask(std::string view, std::string heading, std::string prompt, std::vector<Message> messages = {});
   void stopStream();
+  void startSessionStream();
+  void probeLocalStatus(bool beforeSubmit);
+  void stopStatusProbe();
   void savePick(const std::string& name);
   void loadPicks() const;
   [[nodiscard]] std::string clipboardInput() const;
@@ -140,4 +180,9 @@ private:
   mutable std::optional<std::string> m_commandKey;                   // api_key_command's output, once
   mutable std::string m_commandKeySource;
   std::optional<Session> m_session;
+  std::uint64_t m_requestGeneration = 0;
+  HttpClient::StreamId m_statusStream = 0;
+  Timer m_statusDeadline;
+  Timer m_statusRefresh;
+  std::shared_ptr<void> m_alive = std::make_shared<int>(0);
 };

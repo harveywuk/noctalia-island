@@ -23,6 +23,7 @@ class LauncherBadgeService;
 class RenderContext;
 class SessionBus;
 struct PointerEvent;
+struct KeyboardEvent;
 struct WaylandOutput;
 struct wl_surface;
 struct zwlr_foreign_toplevel_handle_v1;
@@ -56,10 +57,14 @@ public:
   void requestLayout();
   void requestRedraw();
   bool onPointerEvent(const PointerEvent& event);
+  bool onKeyboardEvent(const KeyboardEvent& event);
+  bool focusKeyboard();
 
   void registerIpc(IpcService& ipc);
 
 private:
+  void leaveKeyboard();
+  void updateKeyboardFocus();
   // Returns true if the item list was modified (triggers a rebuild).
   bool refreshPinnedAppsIfNeeded();
   void pruneCachedToplevelHandles();
@@ -115,6 +120,8 @@ private:
   std::vector<std::unique_ptr<shell::dock::DockInstance>> m_instances;
   std::unordered_map<wl_surface*, shell::dock::DockInstance*> m_surfaceMap;
   shell::dock::DockInstance* m_hoveredInstance = nullptr;
+  shell::dock::DockInstance* m_keyboardInstance = nullptr;
+  std::size_t m_keyboardIndex = 0;
   shell::dock::DockInstance* m_popupOwnerInstance = nullptr; // instance that owns the current open popup
   std::unique_ptr<shell::dock::DockPopup> m_itemMenu;        // right-click context menu
   std::unique_ptr<shell::dock::DockPreview> m_preview;

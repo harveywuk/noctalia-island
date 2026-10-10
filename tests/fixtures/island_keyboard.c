@@ -46,18 +46,22 @@ int main(void) {
   char line[64];
   while (fgets(line, sizeof(line), stdin)) {
     uint32_t modifiers = 0;
+    int hold = !strncmp(line, "hold ", 5);
+    int release = !strncmp(line, "release ", 8);
     if (!strncmp(line, "shift-tab", 9)) { key = 15; modifiers = shift; }
-    else if (!strncmp(line, "chord ", 6)) {
+    else if (!strncmp(line, "chord ", 6) || hold || release) {
       unsigned mask;
-      if (sscanf(line, "chord %u %u", &mask, &key) != 2) return 4;
+      if (sscanf(strchr(line, ' ')+1, "%u %u", &mask, &key) != 2) return 4;
       modifiers = ((mask & 1) ? shift : 0) | ((mask & 2) ? ctrl : 0) | ((mask & 4) ? alt : 0) | ((mask & 8) ? logo : 0);
     } else if (sscanf(line, "%u", &key) != 1) return 4;
     struct timespec now; clock_gettime(CLOCK_MONOTONIC, &now);
     uint32_t stamp = (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000);
     zwp_virtual_keyboard_v1_modifiers(keyboard, modifiers, 0, 0, 0);
-    zwp_virtual_keyboard_v1_key(keyboard, stamp, key, WL_KEYBOARD_KEY_STATE_PRESSED);
-    zwp_virtual_keyboard_v1_key(keyboard, stamp + 1, key, WL_KEYBOARD_KEY_STATE_RELEASED);
-    zwp_virtual_keyboard_v1_modifiers(keyboard, 0, 0, 0, 0);
+    if (!release) zwp_virtual_keyboard_v1_key(keyboard, stamp, key, WL_KEYBOARD_KEY_STATE_PRESSED);
+    if (!hold) {
+      zwp_virtual_keyboard_v1_key(keyboard, stamp + 1, key, WL_KEYBOARD_KEY_STATE_RELEASED);
+      zwp_virtual_keyboard_v1_modifiers(keyboard, 0, 0, 0, 0);
+    }
     wl_display_roundtrip(display);
     puts("ok"); fflush(stdout);
   }

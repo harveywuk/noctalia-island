@@ -147,7 +147,8 @@ namespace shell::dock {
   std::unique_ptr<DockPopup> createItemMenu(
       CompositorPlatform& platform, ConfigService& config, RenderContext& renderContext,
       zwlr_layer_surface_v1* parentLayerSurface, wl_output* output, const DockConfig& dockConfig,
-      const DesktopEntry& entry, const std::vector<ToplevelInfo>& windows, const DockMenuCallbacks& callbacks
+      const DesktopEntry& entry, const std::vector<ToplevelInfo>& windows, const DockMenuCallbacks& callbacks,
+      PopupAnchorRect appAnchor
   ) {
     auto menu = std::make_unique<DockPopup>();
 
@@ -263,14 +264,17 @@ namespace shell::dock {
     }
 
     // Compute popup geometry; width grows past the base width to fit long window titles.
-    const float menuHeight = ContextMenuControl::preferredHeight(entries, entries.size());
+    const float contentScale = std::max(0.1F, config.config().accessibility.uiScale);
+    const float menuHeight = ContextMenuControl::preferredHeight(entries, entries.size(), contentScale);
     float measureScale = 1.0F;
     if (const WaylandOutput* menuOutput = platform.wayland().findOutputByWl(output); menuOutput != nullptr) {
       measureScale = menuOutput->configuredScale();
     }
     ScaledRenderer measureRenderer(renderContext, measureScale);
-    const float menuWidth =
-        std::clamp(ContextMenuControl::preferredWidth(measureRenderer, entries), kMenuWidth, Style::menuAutoMaxWidth);
+    const float menuWidth = std::clamp(
+        ContextMenuControl::preferredWidth(measureRenderer, entries, contentScale), kMenuWidth * contentScale,
+        Style::menuAutoMaxWidth * contentScale
+    );
 
     // Determine anchor / gravity + gap based on dock position.
     const DockEdge edge = dockConfig.position;
@@ -283,7 +287,7 @@ namespace shell::dock {
     std::int32_t offsetX = 0;
     std::int32_t offsetY = 0;
     // Clearance past the icon/tooltip; chrome Bottom attachment folds bleed into offset.
-    const std::int32_t kGap = std::max(2, static_cast<std::int32_t>(Style::spaceLg + Style::spaceMd));
+    const std::int32_t kGap = std::max(2, static_cast<std::int32_t>(Style::spaceSm));
 
     if (isBottom) {
       anchor = XDG_POSITIONER_ANCHOR_TOP;
@@ -303,24 +307,14 @@ namespace shell::dock {
       offsetX = kGap;
     }
 
-    const auto ptrX = static_cast<std::int32_t>(platform.lastPointerX());
-    const auto ptrY = static_cast<std::int32_t>(platform.lastPointerY());
-    const std::int32_t halfCell = std::max(1, dockConfig.iconSize / 2);
-
-    // Pointer-centred cell (tray-style); panel-face anchors miss hover-zoom padding.
-    const std::int32_t aX = ptrX - halfCell;
-    const std::int32_t aY = ptrY - halfCell;
-    const std::int32_t aW = halfCell * 2;
-    const std::int32_t aH = halfCell * 2;
-
     const auto menuChrome = popup_chrome::computeGeometry(
         menuWidth, menuHeight, config.config().shell.shadow, Style::popupShadowsEnabled()
     );
     PopupSurfaceConfig popupCfg{
-        .anchorX = aX,
-        .anchorY = aY,
-        .anchorWidth = std::max(1, aW),
-        .anchorHeight = std::max(1, aH),
+        .anchorX = appAnchor.x,
+        .anchorY = appAnchor.y,
+        .anchorWidth = std::max(1, appAnchor.width),
+        .anchorHeight = std::max(1, appAnchor.height),
         .width = menuChrome.surfaceWidth,
         .height = menuChrome.surfaceHeight,
         .anchor = anchor,
@@ -350,7 +344,7 @@ namespace shell::dock {
       menuPtr->surface->requestLayout();
     });
     menu->surface->setPrepareFrameCallback([&platform, &config, &renderContext, menuPtr, entries, entryActions,
-                                            callbacks, isPinned,
+                                            callbacks, isPinned, contentScale,
                                             closableWindowIndices](bool /*needsUpdate*/, bool needsLayout) {
       if (menuPtr->surface == nullptr) {
         return;
@@ -397,6 +391,7 @@ namespace shell::dock {
       // The icon's tooltip would sit over the menu.
       TooltipManager::instance().forceDestroy();
       auto ctrl = std::make_unique<ContextMenuControl>();
+      ctrl->setContentScale(contentScale);
       ctrl->setMenuWidth(menuPtr->chrome.contentWidth);
       ctrl->setMaxVisible(entries.size());
       ctrl->setEntries(entries);
@@ -446,6 +441,7 @@ namespace shell::dock {
       ctrl->setSize(menuPtr->chrome.contentWidth, menuPtr->chrome.contentHeight);
       ctrl->layout(menuPtr->surface->renderTarget().renderer());
 
+      menuPtr->control = ctrl.get();
       menuPtr->sceneRoot->addChild(std::move(ctrl));
       menuPtr->inputDispatcher.setSceneRoot(menuPtr->sceneRoot.get());
       menuPtr->inputDispatcher.setCursorShapeCallback([&platform](std::uint32_t serial, std::uint32_t shape) {

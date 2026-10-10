@@ -13,9 +13,9 @@
 
 namespace {
 
-  // macOS menus: a 5px inset around 22px rows, a touch taller here for the shell's text sizes.
-  constexpr float kMenuPadding = 5.0F;
-  constexpr float kItemHeight = 24.0F;
+  // Keep selection backgrounds comfortably inset at every content scale.
+  constexpr float kMenuPadding = ContextMenuControl::kEdgePadding;
+  constexpr float kItemHeight = ContextMenuControl::kRowHeight;
   constexpr float kSeparatorHeight = 10.0F;
   constexpr float kItemGap = 0.0F;
   // macOS menus set their items at body size (13px).
@@ -58,9 +58,6 @@ namespace {
     if (entry.toggleState == 2) {
       return "minus";
     }
-    if (entry.radio) {
-      return entry.toggleState == 1 ? "circle-dot" : "circle";
-    }
     return entry.toggleState == 1 ? "check" : "";
   }
 
@@ -99,6 +96,15 @@ void ContextMenuControl::setContentScale(float scale) {
 
 void ContextMenuControl::setSubmenuDirection(ContextSubmenuDirection direction) {
   m_submenuDirection = direction;
+  m_needsRebuild = true;
+  markLayoutDirty();
+}
+
+void ContextMenuControl::setVerticalPadding(float padding) {
+  const float clamped = std::max(0.0F, padding);
+  if (m_verticalPadding == clamped)
+    return;
+  m_verticalPadding = clamped;
   m_needsRebuild = true;
   markLayoutDirty();
 }
@@ -190,15 +196,22 @@ bool ContextMenuControl::activateHighlighted() {
     return false;
   }
   if (entry.hasSubmenu) {
-    if (m_onSubmenuOpen) {
-      const float centerY = m_rows[m_highlightedIndex].y + m_rows[m_highlightedIndex].height * 0.5F;
-      m_onSubmenuOpen(entry, centerY);
-    }
-    return true;
+    return openHighlightedSubmenu();
   }
   if (m_onActivate) {
     m_onActivate(entry);
   }
+  return true;
+}
+
+bool ContextMenuControl::openHighlightedSubmenu() {
+  if (m_highlightedIndex >= m_entries.size() || m_highlightedIndex >= m_rows.size())
+    return false;
+  const auto& entry = m_entries[m_highlightedIndex];
+  if (!isInteractive(entry) || !entry.hasSubmenu || !m_onSubmenuOpen)
+    return false;
+  const auto& row = m_rows[m_highlightedIndex];
+  m_onSubmenuOpen(entry, row.y + row.height * 0.5F);
   return true;
 }
 
@@ -213,18 +226,21 @@ float ContextMenuControl::rowBottom(std::size_t index) const noexcept {
   return m_rows[index].y + m_rows[index].height;
 }
 
-float ContextMenuControl::preferredHeight() const { return preferredHeight(m_entries, m_maxVisible, m_contentScale); }
+float ContextMenuControl::preferredHeight() const {
+  return preferredHeight(m_entries, m_maxVisible, m_contentScale)
+      + 2.0F * (m_verticalPadding - kMenuPadding) * m_contentScale;
+}
 
 float ContextMenuControl::preferredWidth(
     Renderer& renderer, const std::vector<ContextMenuControlEntry>& entries, float scale
 ) {
   scale = safeScale(scale);
   float maxRowWidth = 0.0F;
+  const float toggleSlot = std::ranges::any_of(entries, hasToggle) ? kToggleSlot * scale : 0.0F;
   for (const ContextMenuControlEntry& entry : entries) {
     if (entry.separator || entry.label.empty()) {
       continue;
     }
-    const float toggleSlot = hasToggle(entry) ? kToggleSlot * scale : 0.0F;
     const FontWeight weight = entry.header ? FontWeight::Bold : FontWeight::Normal;
     const float textWidth = std::ceil(renderer.measureText(entry.label, kMenuFontSize * scale, weight).width);
     // Mirrors rebuildRows: 8px label inset each side, 30px right when a chevron is drawn.
@@ -285,7 +301,8 @@ void ContextMenuControl::rebuildRows(Renderer& renderer) {
   // Concentric with the container: the highlight is inset by menuPadding, so its
   // radius tracks the container radius minus that inset at any corner roundness.
   const float highlightRadius = std::max(0.0F, Style::scaledRadiusLg(scale) - menuPadding);
-  float currentY = menuPadding;
+  float currentY = m_verticalPadding * scale;
+  const float toggleSlot = std::ranges::any_of(m_entries, hasToggle) ? kToggleSlot * scale : 0.0F;
   m_rows.clear();
   m_rows.reserve(visibleItems);
 
@@ -332,10 +349,8 @@ void ContextMenuControl::rebuildRows(Renderer& renderer) {
           })
       );
 
-      const bool toggleVisible = hasToggle(entry);
-      const float toggleSlot = toggleVisible ? kToggleSlot * scale : 0.0F;
       const float indent = entryIndent(entry, scale);
-      const std::string toggleGlyph = toggleGlyphName(entry);
+      const std::string toggleGlyph = hasToggle(entry) ? toggleGlyphName(entry) : "";
       if (!toggleGlyph.empty()) {
         auto glyph = ui::glyph({
             .out = &togglePtr,

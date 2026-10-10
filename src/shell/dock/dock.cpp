@@ -6,7 +6,9 @@
 #include "core/deferred_call.h"
 #include "core/log.h"
 #include "dbus/launcher/launcher_badge_service.h"
+#include "i18n/i18n.h"
 #include "ipc/ipc_service.h"
+#include "render/scene/input_area.h"
 #include "render/scene/node.h"
 #include "shell/dock/dock_context_menu.h"
 #include "shell/dock/dock_geometry.h"
@@ -16,9 +18,12 @@
 #include "shell/dock/dock_preview.h"
 #include "shell/dock/pinned_apps.h"
 #include "shell/panel/panel_manager.h"
+#include "shell/tooltip/tooltip_manager.h"
 #include "system/desktop_entry.h"
 #include "system/desktop_entry_launch.h"
 #include "ui/app_icon_colorization.h"
+#include "ui/controls/glyph.h"
+#include "ui/controls/image.h"
 #include "ui/style.h"
 #include "wayland/layer_surface.h"
 #include "wayland/surface.h"
@@ -28,6 +33,7 @@
 #include <cassert>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <format>
 #include <optional>
 #include <wayland-client-core.h>
@@ -394,6 +400,7 @@ void Dock::show() {
 }
 
 void Dock::closeAllInstances() {
+  leaveKeyboard();
   m_previewTimer.stop();
   m_previewDismissTimer.stop();
   m_previewHoverOwner = nullptr;
@@ -439,6 +446,8 @@ void Dock::pruneCachedToplevelHandles() {
 }
 
 void Dock::detachInstanceState(shell::dock::DockInstance& inst) {
+  if (m_keyboardInstance == &inst)
+    leaveKeyboard();
   if (m_previewHoverOwner == &inst) {
     m_previewTimer.stop();
     m_previewHoverOwner = nullptr;
@@ -519,6 +528,8 @@ void Dock::requestLayout() {
 // ── Input ─────────────────────────────────────────────────────────────────────
 
 bool Dock::onPointerEvent(const PointerEvent& event) {
+  if (m_keyboardInstance && event.type == PointerEvent::Type::Button && event.pressed && !m_itemMenu)
+    leaveKeyboard();
   if (m_preview) {
     const bool onPreview = event.surface && event.surface == m_preview->wlSurface;
     const bool consumed = shell::dock::routePopupEvent(*m_preview, event);
@@ -561,6 +572,8 @@ bool Dock::onPointerEvent(const PointerEvent& event) {
     }
     m_hoveredInstance = it->second;
     shell::dock::DockInstance* const entered = m_hoveredInstance;
+    if (m_keyboardInstance != entered && !m_itemMenu)
+      entered->surface->setKeyboardInteractivity(LayerShellKeyboard::OnDemand);
     entered->hideTimer.stop();
     entered->pointerInside = true;
     entered->inputDispatcher.pointerEnter(static_cast<float>(event.sx), static_cast<float>(event.sy), event.serial);
@@ -610,6 +623,8 @@ bool Dock::onPointerEvent(const PointerEvent& event) {
       shell::dock::revealAutoHideDock(*m_hoveredInstance, *m_config);
     }
     shell::dock::DockInstance* const hovered = m_hoveredInstance;
+    if (m_keyboardInstance != hovered && !m_itemMenu && !hovered->inputDispatcher.pointerCaptured())
+      hovered->surface->setKeyboardInteractivity(LayerShellKeyboard::OnDemand);
     hovered->inputDispatcher.pointerMotion(static_cast<float>(event.sx), static_cast<float>(event.sy), 0);
     // pointerMotion can re-enter the Wayland event loop (tooltip popup creation),
     // which may clear or change m_hoveredInstance before we dereference it.
@@ -685,6 +700,7 @@ void Dock::hoverPreview(shell::dock::DockInstance& instance, const shell::dock::
   m_previewTimer.start(
       std::chrono::milliseconds(m_config->config().dock.previewDelayMs), [this, owner = &instance, action] {
         if (m_previewHoverOwner == owner
+            && m_keyboardInstance != owner
             && m_previewHoverId == action.idLower
             && owner->pointerInside
             && !owner->drag.active
@@ -742,7 +758,7 @@ void Dock::openPreview(shell::dock::DockInstance& instance, const shell::dock::D
   kLog.debug("opening {} window previews for {}", windows.size(), action.idLower);
   if (windows.empty())
     return;
-  shell::dock::dismissDockTooltip();
+  TooltipManager::instance().forceDestroy();
   instance.hideTimer.stop();
   shell::dock::revealAutoHideDock(instance, *m_config);
   auto preview = std::make_unique<shell::dock::DockPreview>(*m_platform, *m_config, *m_renderContext);
@@ -932,7 +948,12 @@ void Dock::reevaluateSmartAutoHide() {
         shell::dock::revealAutoHideDock(*instance, *m_config);
         needsRedraw = true;
       }
-    } else if (!instance->pointerInside && m_popupOwnerInstance == nullptr) {
+    } else if (
+        !instance->pointerInside
+        && m_popupOwnerInstance == nullptr
+        && m_keyboardInstance != instance
+        && !instance->drag.active
+    ) {
       if ((instance->hideOpacity > 0.0F && !instance->hideTimer.active()) || pinnedChanged) {
         shell::dock::startHideFadeOut(*instance, *m_config);
         needsRedraw = true;
@@ -998,12 +1019,17 @@ void Dock::createInstance(const WaylandOutput& output) {
     if (m_platform->hasPointerPosition() && m_platform->lastPointerSurface() == inst->surface->wlSurface()) {
       const auto x = static_cast<float>(m_platform->lastPointerX());
       const auto y = static_cast<float>(m_platform->lastPointerY());
-      if (!inst->inputDispatcher.pointerCaptured()
+      if (m_keyboardInstance != inst
+          && !inst->inputDispatcher.pointerCaptured()
           && inst->inputDispatcher.inputAreaAt(x, y) != inst->inputDispatcher.hoveredArea()) {
         inst->inputDispatcher.pointerEnter(x, y, m_platform->lastInputSerial());
         if (!std::ranges::any_of(m_instances, [inst](const auto& live) { return live.get() == inst; }))
           return;
       }
+    }
+    if (m_keyboardInstance == inst) {
+      updateKeyboardFocus();
+      return;
     }
     if (!m_config->config().dock.magnification)
       return;
@@ -1082,6 +1108,9 @@ bool Dock::syncInstanceModel(shell::dock::DockInstance& instance) {
 // ── Private: item population ──────────────────────────────────────────────────
 
 void Dock::rebuildItems(shell::dock::DockInstance& instance) {
+  if (instance.drag.active || instance.drag.armed)
+    endDrag(instance, false);
+  shell::dock::dismissDockTooltip();
   assertDockCoreInitialized(m_platform, m_config);
   if (m_renderContext == nullptr) {
     return;
@@ -1191,7 +1220,7 @@ void Dock::beginDrag(shell::dock::DockInstance& instance, std::size_t index, flo
   }
 
   const auto& cfg = m_config->config().dock;
-  if (index >= cfg.pinned.size()) {
+  if (index >= instance.snapshot.items.size()) {
     return;
   }
 
@@ -1201,10 +1230,7 @@ void Dock::beginDrag(shell::dock::DockInstance& instance, std::size_t index, flo
   instance.drag.targetIndex = shell::dock::computeDragTargetIndex(instance, cfg, mainPos);
 
   shell::dock::dismissDockTooltip();
-  shell::dock::applyDragVisuals(instance, cfg);
-  if (instance.surface != nullptr) {
-    instance.surface->requestRedraw();
-  }
+  updateDrag(instance, mainPos);
 }
 
 void Dock::updateDrag(shell::dock::DockInstance& instance, float mainPos) {
@@ -1214,6 +1240,31 @@ void Dock::updateDrag(shell::dock::DockInstance& instance, float mainPos) {
 
   const auto& cfg = m_config->config().dock;
   instance.drag.currentMain = mainPos;
+  const auto pinCount = instance.snapshot.pinnedCount;
+  const float cell = static_cast<float>(cfg.iconSize) + 12;
+  const float removalDistance = std::max(48.0F, static_cast<float>(cfg.iconSize));
+  const bool outsideEnds = mainPos < instance.items.front().restMainPos - removalDistance
+      || mainPos > instance.items.back().restMainPos + cell + removalDistance;
+  const bool removing =
+      instance.drag.pinned && (std::abs(instance.drag.crossDistance) > removalDistance || outsideEnds);
+  const float boundary = pinCount > 0
+      ? instance.items[pinCount - 1].restMainPos + cell + static_cast<float>(cfg.itemSpacing)
+      : instance.items.front().restMainPos + cell * .5F;
+  const bool pinTarget = !removing
+      && std::abs(instance.drag.crossDistance) < cell
+      && mainPos >= instance.items.front().restMainPos - cell * .5F
+      && mainPos <= boundary;
+  if (removing != instance.drag.remove || pinTarget != instance.drag.pinTarget) {
+    instance.drag.remove = removing;
+    instance.drag.pinTarget = pinTarget;
+    auto* area = instance.items[instance.drag.sourceIndex].area;
+    area->setTooltip(
+        i18n::tr(
+            removing ? "dock.drag.remove" : (!instance.drag.pinned && pinTarget ? "dock.drag.pin" : "dock.drag.arrange")
+        )
+    );
+    TooltipManager::instance().showImmediately(area, instance.surface->layerSurface(), instance.output);
+  }
   const std::size_t nextTarget = shell::dock::computeDragTargetIndex(instance, cfg, mainPos);
   if (nextTarget != instance.drag.targetIndex) {
     instance.drag.targetIndex = nextTarget;
@@ -1226,50 +1277,48 @@ void Dock::updateDrag(shell::dock::DockInstance& instance, float mainPos) {
 }
 
 void Dock::endDrag(shell::dock::DockInstance& instance, bool commit) {
-  if (!instance.drag.active && !instance.drag.armed) {
+  if (!instance.drag.active && !instance.drag.armed)
     return;
-  }
-
   instance.drag.holdTimer.stop();
-  const bool wasActive = instance.drag.active;
-  const bool wasArmed = instance.drag.armed;
-  const std::size_t sourceIndex = instance.drag.sourceIndex;
-  const std::size_t targetIndex = instance.drag.targetIndex;
+  const bool active = instance.drag.active;
+  const bool removing = instance.drag.remove;
+  const bool canPin = instance.drag.pinTarget;
+  const bool pinned = instance.drag.pinned;
+  const auto source = instance.drag.sourceIndex;
+  const auto target = instance.drag.targetIndex;
+  kLog.debug(
+      "dock drag ended: commit={} active={} source={} target={} pinned={} remove={} pin_target={}", commit, active,
+      source, target, pinned, removing, canPin
+  );
+  instance.suppressItemClick = true;
   instance.drag = {};
-
-  if (wasActive || wasArmed) {
-    instance.suppressItemClick = true;
-  }
-
-  if (m_config == nullptr) {
+  shell::dock::dismissDockTooltip();
+  if (instance.surface)
+    instance.surface->setKeyboardInteractivity(LayerShellKeyboard::None);
+  if (!m_config)
     return;
-  }
-
   const auto& cfg = m_config->config().dock;
-  if (wasActive) {
-    shell::dock::clearDragVisuals(instance, cfg);
-  }
-
-  if (!commit || !wasActive || sourceIndex == targetIndex || sourceIndex >= cfg.pinned.size()) {
-    if (instance.surface != nullptr) {
-      instance.surface->requestRedraw();
-    }
+  shell::dock::clearDragVisuals(instance, cfg);
+  if (source < instance.items.size() && source < instance.snapshot.items.size())
+    instance.items[source].area->setTooltip(instance.snapshot.items[source].entry.name);
+  if (instance.surface)
+    instance.surface->requestRedraw();
+  if (!commit || !active || source >= instance.snapshot.items.size() || (!pinned && !canPin))
     return;
+  auto pins = cfg.pinned;
+  const auto& entry = instance.snapshot.items[source].entry;
+  if (pinned && removing) {
+    shell::dock::pinned_apps::removeEntry(pins, entry);
+  } else if (!removing) {
+    const DesktopEntry* before =
+        target < instance.snapshot.pinnedCount ? &instance.snapshot.items[target].entry : nullptr;
+    shell::dock::pinned_apps::placeEntry(pins, entry, before);
   }
-
-  std::vector<std::string> pinnedList = cfg.pinned;
-  std::size_t insertAt = std::min(targetIndex, pinnedList.size());
-  std::string moved = std::move(pinnedList[sourceIndex]);
-  pinnedList.erase(pinnedList.begin() + static_cast<std::ptrdiff_t>(sourceIndex));
-  if (insertAt > sourceIndex) {
-    --insertAt;
-  }
-  pinnedList.insert(pinnedList.begin() + static_cast<std::ptrdiff_t>(insertAt), std::move(moved));
+  if (pins == cfg.pinned)
+    return;
   ConfigService* config = m_config;
-  DeferredCall::callLater([config, pinnedList = std::move(pinnedList)]() mutable {
-    if (config != nullptr) {
-      (void)config->setOverride({"dock", "pinned"}, std::move(pinnedList));
-    }
+  DeferredCall::callLater([config, pins = std::move(pins)]() mutable {
+    (void)config->setOverride({"dock", "pinned"}, std::move(pins));
   });
 }
 
@@ -1279,6 +1328,10 @@ void Dock::closeItemMenu() {
   shell::dock::DockInstance* owner = m_popupOwnerInstance;
   m_popupOwnerInstance = nullptr;
   m_itemMenu.reset();
+  if (owner && owner->surface)
+    owner->surface->setKeyboardInteractivity(
+        m_keyboardInstance == owner ? LayerShellKeyboard::Exclusive : LayerShellKeyboard::None
+    );
   if (owner == nullptr) {
     return;
   }
@@ -1318,9 +1371,13 @@ void Dock::closeItemMenu() {
 }
 
 void Dock::scheduleHide(shell::dock::DockInstance& instance) {
+  if (m_keyboardInstance == &instance || instance.drag.active)
+    return;
   instance.hideTimer.stop();
   const auto hide = [this, &instance] {
     if (!instance.pointerInside
+        && m_keyboardInstance != &instance
+        && !instance.drag.active
         && m_popupOwnerInstance != &instance
         && dockPointerHideAllowed(m_config->config().dock, instance))
       shell::dock::startHideFadeOut(instance, *m_config);
@@ -1454,6 +1511,7 @@ void Dock::openItemMenu(shell::dock::DockInstance& instance, const shell::dock::
   shell::dock::DockMenuCallbacks callbacks{
       .activateWindow =
           [this, windows](std::size_t windowIndex) {
+            leaveKeyboard();
             if (windowIndex < windows.size()) {
               m_platform->activateToplevelInfo(windows[windowIndex]);
             }
@@ -1467,6 +1525,7 @@ void Dock::openItemMenu(shell::dock::DockInstance& instance, const shell::dock::
       .launchAction =
           [this, entryId, entryWorkingDir, entryTerminal, entryForPin,
            output = instance.output](const DesktopAction& desktopAction) {
+            leaveKeyboard();
             m_platform->prepareAppLaunchOnOutput(output);
             (void)desktop_entry_launch::launchAction(
                 desktopAction, entryId, entryWorkingDir, entryTerminal,
@@ -1494,16 +1553,41 @@ void Dock::openItemMenu(shell::dock::DockInstance& instance, const shell::dock::
 
   auto* layerSurface =
       instance.surface != nullptr ? m_platform->layerSurfaceFor(instance.surface->wlSurface()) : nullptr;
+  if (instance.surface && m_keyboardInstance != &instance)
+    instance.surface->setKeyboardInteractivity(LayerShellKeyboard::OnDemand);
+  PopupAnchorRect appAnchor;
+  for (std::size_t i = 0; i < instance.snapshot.items.size(); ++i) {
+    if (instance.snapshot.items[i].idLower != action.idLower || i >= instance.items.size())
+      continue;
+    const auto& item = instance.items[i];
+    const Node* icon = item.iconImage ? static_cast<Node*>(item.iconImage) : static_cast<Node*>(item.iconGlyph);
+    if (!icon)
+      icon = item.area;
+    float left = 0, top = 0, right = 0, bottom = 0;
+    Node::transformedBounds(icon, left, top, right, bottom);
+    appAnchor = {
+        .x = static_cast<int>(std::floor(left)),
+        .y = static_cast<int>(std::floor(top)),
+        .width = std::max(1, static_cast<int>(std::ceil(right) - std::floor(left))),
+        .height = std::max(1, static_cast<int>(std::ceil(bottom) - std::floor(top)))
+    };
+    break;
+  }
   m_itemMenu = shell::dock::createItemMenu(
       *m_platform, *m_config, *m_renderContext, layerSurface, instance.output, m_config->config().dock, action.entry,
-      windows, callbacks
+      windows, callbacks, appAnchor
   );
   if (m_itemMenu == nullptr) {
+    if (instance.surface && m_keyboardInstance != &instance)
+      instance.surface->setKeyboardInteractivity(LayerShellKeyboard::None);
     m_popupOwnerInstance = nullptr;
   }
 }
 
 void Dock::registerIpc(IpcService& ipc) {
+  ipc.bind(noctalia::cli::msg::dockFocus, [this](const std::string&) -> std::string {
+    return focusKeyboard() ? "ok\n" : "error: no visible dock is available\n";
+  });
   ipc.bind(noctalia::cli::msg::dockShow, [this](const std::string&) -> std::string {
     if (m_config)
       m_config->setDockEnabled(true);

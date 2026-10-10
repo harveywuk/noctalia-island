@@ -1,8 +1,10 @@
 #include "compositors/compositor_platform.h"
 #include "config/config_service.h"
 #include "render/render_context.h"
+#include "shell/control_center/artwork_flow_layer.h"
 #include "shell/island/island.h"
 #include "shell/island/island_capture_glow.h"
+#include "shell/island/island_panel_accent.h"
 #include "shell/island/island_state.h"
 #include "shell/island/island_style.h"
 #include "shell/panel/panel.h"
@@ -78,6 +80,10 @@ bool PanelManager::openIslandPanel(wl_output* output, std::string_view sourceBar
   m_surface->setFrameTickCallback([this](float dt) {
     if (m_activePanel)
       m_activePanel->onFrameTick(dt);
+    if (m_activePanel && m_islandAccent) {
+      if (const auto colors = m_activePanel->islandAccentColors())
+        static_cast<island::PanelAccent*>(m_islandAccent)->advance(dt, *colors, MotionService::instance().enabled());
+    }
   });
   m_surface->requestUpdate();
   if (keyboard && m_activePanel->dismissOnOutsideClick()) {
@@ -111,17 +117,27 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
     m_sceneRoot->setPopupContext(m_selectPopup.get());
     m_islandCaptureGlow =
         static_cast<island::CaptureGlow*>(m_sceneRoot->addChild(std::make_unique<island::CaptureGlow>()));
+    if (const auto colors = m_activePanel->islandAccentColors()) {
+      auto accent = std::make_unique<island::PanelAccent>();
+      accent->advance(0, *colors, false);
+      m_islandAccent = m_sceneRoot->addChild(std::move(accent));
+    }
     auto capsule = std::make_unique<Box>();
     capsule->setFill(colorSpecFromRole(ColorRole::Surface));
     capsule->setClipChildren(true);
     m_bgNode = m_sceneRoot->addChild(std::move(capsule));
     // While media plays the capsule shows the artwork gradient; keep it behind the card so opening
     // and closing don't flash a plain capsule.
-    if (m_islandSurface->flow.id != 0) {
+    if (m_islandSurface->flow.id != 0 || (m_activePanel->retainsIslandArtwork() && m_islandSurface->mediaGradient)) {
       auto flow = std::make_unique<Image>();
       flow->setFit(ImageFit::Cover);
       flow->setHitTestVisible(false);
-      flow->setExternalTexture(renderer, m_islandSurface->flow);
+      if (m_islandSurface->flow.id != 0)
+        flow->setExternalTexture(renderer, m_islandSurface->flow);
+      if (m_activePanel->retainsIslandArtwork() && m_islandSurface->mediaGradient) {
+        m_islandFlowLayer = std::make_unique<control_center::ArtworkFlowLayer>();
+        m_islandFlowLayer->attach(flow.get());
+      }
       m_islandFlow = m_bgNode->addChild(std::move(flow));
     }
     auto content = std::make_unique<Node>();
@@ -159,6 +175,17 @@ void PanelManager::buildIslandScene(std::uint32_t width, std::uint32_t height) {
   m_contentHeight = std::max(1.0F, static_cast<float>(m_panelVisualHeight) - 2 * padding);
   m_contentNode->setSize(m_contentWidth, m_contentHeight);
   m_activePanel->update(renderer);
+  if (m_islandFlowLayer) {
+    const auto path = m_activePanel->islandArtworkSource();
+    if (path != m_islandArtworkPath) {
+      m_islandArtworkPath = path;
+      if (path.empty())
+        m_islandFlowLayer->clear();
+      else
+        (void)m_islandFlowLayer->load(renderer, path);
+    }
+    m_islandFlowLayer->setAnimating(!path.empty());
+  }
   m_activePanel->layout(renderer, m_contentWidth, m_contentHeight);
   if (!m_closing) {
     // Bounded by the output, not the surface: the Island grows its surface to full height for a
@@ -221,6 +248,12 @@ void PanelManager::applyIslandReveal(float progress) {
   auto* capsule = static_cast<Box*>(m_bgNode);
   const float radius = island::surfaceRadius(m_islandHeight, scale, m_islandSurface->cupertino);
   capsule->setRadius(radius);
+  if (auto* accent = static_cast<island::PanelAccent*>(m_islandAccent)) {
+    accent->setGeometry(x, y, m_islandWidth, m_islandHeight, radius, scale);
+    accent->setOpacity(std::clamp(progress, 0.0F, 1.0F));
+    if (const auto colors = m_activePanel->islandAccentColors())
+      accent->advance(0, *colors, MotionService::instance().enabled());
+  }
   if (m_islandCaptureGlow) {
     m_islandCaptureGlow->setGeometry(x, y, m_islandWidth, m_islandHeight, radius, scale);
     m_islandCaptureGlow->update(m_islandHost->desktopShared(), island::CaptureGlow::sharingColor(), true);
@@ -262,6 +295,9 @@ void PanelManager::applyIslandReveal(float progress) {
             static_cast<int>(std::lround(m_islandWidth)), static_cast<int>(std::lround(m_islandHeight)), radius
         )
     );
+  if (m_activePanel && m_activePanel->retainsIslandArtwork() && m_islandFlow)
+    // Keep a moving artwork wash while preserving text contrast in either theme.
+    m_islandFlow->setOpacity(colorForRole(ColorRole::Surface).r > 0.5F ? 0.14F : 0.65F);
   const float padding = islandPanelPadding(*m_islandSurface);
   m_contentNode->setPosition((m_islandWidth - static_cast<float>(m_panelVisualWidth)) / 2 + padding, padding);
   if (!m_closing)

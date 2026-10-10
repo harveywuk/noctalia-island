@@ -48,6 +48,8 @@ namespace process {
     std::shared_ptr<std::atomic<bool>> cancel;
     // Child-only environment changes. `nullopt` unsets the variable.
     std::vector<EnvOverride> env;
+    // Stop a directly owned helper if its parent exits, including a shell crash.
+    bool terminateWithParent = false;
   };
 
   [[nodiscard]] bool commandExists(const char* name);

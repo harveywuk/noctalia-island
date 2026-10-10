@@ -47,8 +47,8 @@ namespace {
   constexpr std::size_t kGlobalOptInMinChars = 2;
   constexpr float kIconSizeDefault = 40.0F;
   constexpr float kIconSizeCompact = 28.0F;
-  constexpr float kListIconSizeDefault = 22.0F;
-  constexpr float kListIconSizeCompact = 22.0F;
+  constexpr float kListIconSizeDefault = 30.0F;
+  constexpr float kListIconSizeCompact = 26.0F;
   constexpr std::size_t kAppGridColumns = 5;
   constexpr std::string_view kApplicationsProviderId = "Applications";
   constexpr double kUsageScorePerCount = 0.1;
@@ -61,9 +61,6 @@ namespace {
   // How many recently run results lead the root search as Suggestions.
   constexpr std::size_t kSuggestionCount = 5;
   constexpr double kFallbackScore = -1e6;
-  // Rows the action panel keeps ready; longer action lists scroll through the keyboard.
-  constexpr std::size_t kActionPanelRows = 14;
-  constexpr float kActionPanelWidth = 340.0F;
 
   // Multiline form values are shown and typed in the single-line field with "\n" for a newline.
   [[nodiscard]] std::string escapeNewlines(std::string_view text) {
@@ -171,7 +168,7 @@ namespace {
     return (style.compact ? kIconSizeCompact : kIconSizeDefault) * style.scale;
   }
 
-  // Raycast rows are a single line with a small icon.
+  // Comfortable and Compact retain the same title/subtitle hierarchy.
   [[nodiscard]] float launcherListIconSize(const LauncherListStyle& style) {
     return (style.compact ? kListIconSizeCompact : kListIconSizeDefault) * style.scale;
   }
@@ -188,26 +185,43 @@ namespace {
   [[nodiscard]] float stableLabelHeight(const TextMetrics& metrics) { return std::round(metrics.bottom - metrics.top); }
 
   [[nodiscard]] float launcherTextStackHeight(Renderer& renderer, const LauncherListStyle& style) {
-    const float bodySize = Style::fontSizeBody * style.scale;
-    return stableLabelHeight(renderer.measureFont(bodySize, FontWeight::Medium));
+    return stableLabelHeight(renderer.measureFont(Style::fontSizeBody * style.scale, FontWeight::Medium))
+        + stableLabelHeight(renderer.measureFont(Style::fontSizeCaption * style.scale, FontWeight::Normal))
+        + 3.0F * style.scale;
   }
 
   [[nodiscard]] float launcherRowHeight(Renderer& renderer, const LauncherListStyle& style) {
-    const float paddingY = launcherListPaddingY(style);
-    const float textHeight = launcherTextStackHeight(renderer, style);
-    if (!style.showIcons) {
-      return std::ceil(textHeight + paddingY * 2.0F);
-    }
-    return std::ceil(std::max(launcherListIconSize(style), textHeight) + paddingY * 2.0F);
+    return std::ceil(
+        std::max(
+            (style.compact ? 48.0F : 58.0F) * style.scale,
+            launcherTextStackHeight(renderer, style) + launcherListPaddingY(style) * 2.0F
+        )
+    );
   }
 
   [[nodiscard]] float launcherRowHeightEstimate(const LauncherListStyle& style) {
-    const float paddingY = launcherListPaddingY(style);
-    const float textHeight = Style::fontSizeBody * style.scale * 1.25F;
-    if (!style.showIcons) {
-      return std::ceil(textHeight + paddingY * 2.0F);
-    }
-    return std::ceil(std::max(launcherListIconSize(style), textHeight) + paddingY * 2.0F);
+    return (style.compact ? 48.0F : 58.0F) * style.scale;
+  }
+
+  // Action ids are stable across translations; unfamiliar plugin actions use a neutral symbol.
+  [[nodiscard]] std::string actionGlyph(std::string_view id) {
+    if (id.find("copy") != std::string_view::npos)
+      return "copy";
+    if (id.find("paste") != std::string_view::npos)
+      return "clipboard";
+    if (id.find("private") != std::string_view::npos || id.find("Private") != std::string_view::npos)
+      return "moon";
+    if (id.find("delete") != std::string_view::npos || id.find("trash") != std::string_view::npos)
+      return "trash";
+    if (id.find("edit") != std::string_view::npos)
+      return "pencil";
+    if (id.find("folder") != std::string_view::npos)
+      return "folder";
+    if (id.find("window") != std::string_view::npos || id.find("Window") != std::string_view::npos)
+      return "app-window";
+    if (id.find("pin") != std::string_view::npos)
+      return "pin";
+    return "arrow-up-right";
   }
 
   [[nodiscard]] float launcherAppGridLabelHeight(Renderer& renderer, const LauncherListStyle& style, float wrapWidth) {
@@ -318,13 +332,13 @@ namespace {
         m_glyph->setVisible(false);
       });
 
-      // One line, Raycast style: the title, then its subtitle in a quieter colour.
+      // A consistent text column keeps descriptions readable without competing with the title.
       m_row->addChild(
-          ui::row(
+          ui::column(
               {
                   .out = &m_textCol,
-                  .align = FlexAlign::Center,
-                  .gap = Style::spaceSm * m_style.scale,
+                  .align = FlexAlign::Stretch,
+                  .gap = 3.0F * m_style.scale,
                   .flexGrow = 1.0F,
               },
               ui::label({
@@ -394,6 +408,26 @@ namespace {
               .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
               .maxLines = 1,
               .visible = false,
+          })
+      );
+      m_row->addChild(
+          ui::glyph({
+              .out = &m_returnGlyph,
+              .glyph = "cupertino:return_icon",
+              .glyphSize = 16.0F * m_style.scale,
+              .color = colorSpecFromRole(ColorRole::OnSurface, 0.6F),
+              .visible = false,
+              .participatesInLayout = false,
+          })
+      );
+      m_row->addChild(
+          ui::glyph({
+              .out = &m_actionsGlyph,
+              .glyph = "dots",
+              .glyphSize = 18.0F * m_style.scale,
+              .color = colorSpecFromRole(ColorRole::OnSurface, 0.6F),
+              .visible = false,
+              .participatesInLayout = false,
           })
       );
     }
@@ -480,7 +514,7 @@ namespace {
       m_originGlyph->setParticipatesInLayout(hasOrigin);
       const float originWidth = hasOrigin ? Style::fontSizeBody * m_style.scale + gap : 0.0F;
       const float captionSize = Style::fontSizeCaption * m_style.scale;
-      const bool hasKind = !result.kind.empty();
+      const bool hasKind = result.providerId == kFormProviderId && !result.kind.empty();
       float kindWidth = 0.0F;
       if (hasKind) {
         m_kindLabel->setText(result.kind);
@@ -500,30 +534,30 @@ namespace {
       }
       m_aliasTag->setVisible(hasAlias);
       m_aliasTag->setParticipatesInLayout(hasAlias);
-      const float textWidth =
-          std::max(0.0F, width - leadingWidth - pinnedWidth - originWidth - kindWidth - aliasWidth - horizontalPad);
-      const std::string title = singleLinePreview(result.title);
-      const float titleWidth = std::min(
-          textWidth,
-          std::ceil(renderer.measureText(title, Style::fontSizeBody * m_style.scale, FontWeight::Medium).width)
+      const bool showReturn = selected;
+      const bool showActions = (selected || hovered)
+          && result.providerId != kProviderOverviewProviderId
+          && result.providerId != kFormProviderId
+          && result.providerId != kAliasEditorProviderId;
+      m_returnGlyph->setVisible(showReturn);
+      m_returnGlyph->setParticipatesInLayout(showReturn);
+      m_actionsGlyph->setVisible(showActions);
+      m_actionsGlyph->setParticipatesInLayout(showActions);
+      const float controlsWidth =
+          (showReturn ? 16.0F * m_style.scale + gap : 0.0F) + (showActions ? 18.0F * m_style.scale + gap : 0.0F);
+      const float textWidth = std::max(
+          0.0F,
+          width - leadingWidth - pinnedWidth - originWidth - kindWidth - aliasWidth - horizontalPad - controlsWidth
       );
-      m_title->setText(title);
+      m_title->setText(singleLinePreview(result.title));
       m_title->setMaxWidth(textWidth);
-
-      // The subtitle takes what the title leaves and drops out when that is too little to read.
-      const float subtitleWidth = textWidth - titleWidth - Style::spaceSm * m_style.scale;
-      const bool showSubtitle =
-          !m_style.compact && !result.subtitle.empty() && subtitleWidth >= Style::controlHeightLg * m_style.scale;
-      if (!showSubtitle) {
-        m_subtitle->setVisible(false);
-        m_subtitle->setParticipatesInLayout(false);
-        m_subtitle->setText("");
-      } else {
-        m_subtitle->setVisible(true);
-        m_subtitle->setParticipatesInLayout(true);
-        m_subtitle->setText(singleLinePreview(result.subtitle));
-        m_subtitle->setMaxWidth(subtitleWidth);
-      }
+      m_textCol->setMinWidth(textWidth);
+      m_textCol->setMaxWidth(textWidth);
+      const bool showSubtitle = !result.subtitle.empty();
+      m_subtitle->setVisible(showSubtitle);
+      m_subtitle->setParticipatesInLayout(showSubtitle);
+      m_subtitle->setText(showSubtitle ? singleLinePreview(result.subtitle) : "");
+      m_subtitle->setMaxWidth(textWidth);
 
       applyVisualState();
     }
@@ -603,6 +637,8 @@ namespace {
     Glyph* m_originGlyph = nullptr;
     Label* m_sectionLabel = nullptr;
     Label* m_kindLabel = nullptr;
+    Glyph* m_returnGlyph = nullptr;
+    Glyph* m_actionsGlyph = nullptr;
     Flex* m_aliasTag = nullptr;
     Label* m_aliasLabel = nullptr;
     AsyncTextureCache* m_asyncTextures = nullptr;
@@ -906,15 +942,19 @@ public:
   }
 
   [[nodiscard]] bool overlayHitTest(
-      std::size_t index, float /*cellLocalX*/, float /*cellLocalY*/, float /*cellWidth*/, float /*cellHeight*/
+      std::size_t index, float cellLocalX, float /*cellLocalY*/, float cellWidth, float /*cellHeight*/
   ) const override {
-    return isReorderable(index);
+    return isActionHit(index, cellLocalX, cellWidth) || isReorderable(index);
   }
 
   bool
   onPointerPress(std::size_t index, float cellLocalX, float cellLocalY, float cellWidth, float cellHeight) override {
     if (!overlayHitTest(index, cellLocalX, cellLocalY, cellWidth, cellHeight)) {
       return false;
+    }
+    if (isActionHit(index, cellLocalX, cellWidth)) {
+      m_actionPress = index;
+      return true;
     }
     m_dragSourceIndex = index;
     m_dropIndex.reset();
@@ -939,7 +979,14 @@ public:
     return true;
   }
 
-  bool onPointerRelease(std::optional<std::size_t> /*index*/) override {
+  bool onPointerRelease(std::optional<std::size_t> index) override {
+    if (m_actionPress.has_value()) {
+      const auto pressed = m_actionPress;
+      m_actionPress.reset();
+      if (pressed == index && m_onSecondaryActivate)
+        m_onSecondaryActivate(*pressed, 0.0F, 0.0F);
+      return true;
+    }
     const auto sourceIndex = m_dragSourceIndex;
     const auto targetIndex = m_dropIndex;
     const bool reordered = m_dragging && sourceIndex.has_value() && targetIndex.has_value() && m_onReorder;
@@ -956,6 +1003,7 @@ public:
   }
 
   void onPointerCancel() override {
+    m_actionPress.reset();
     m_dragSourceIndex.reset();
     m_dropIndex.reset();
     m_dragging = false;
@@ -974,6 +1022,18 @@ public:
   }
 
 private:
+  [[nodiscard]] bool isActionHit(std::size_t index, float x, float width) const {
+    if (m_results == nullptr || index >= m_results->size())
+      return false;
+    const auto& result = (*m_results)[index];
+    if (result.providerId == kProviderOverviewProviderId
+        || result.providerId == kFormProviderId
+        || result.providerId == kAliasEditorProviderId)
+      return false;
+    const float extent = 32.0F * m_style.scale;
+    return Style::rtl() ? x < extent : x >= width - extent;
+  }
+  std::optional<std::size_t> m_actionPress;
   [[nodiscard]] bool isReorderable(std::size_t index) const {
     return m_reorderEnabled && m_results != nullptr && index < m_results->size() && (*m_results)[index].pinned;
   }
@@ -1237,13 +1297,31 @@ void LauncherPanel::create() {
       .gap = Style::spaceSm * scale,
   });
 
-  // Raycast search bar: a large frameless field over a hairline.
+  // One search field becomes the selected result’s context while browsing actions.
   auto searchBar = ui::row({
       .align = FlexAlign::Center,
       .gap = Style::spaceSm * scale,
       .paddingH = Style::spaceXs * scale,
   });
   searchBar->addChild(
+      ui::image({
+          .out = &m_headerImage,
+          .width = 30.0F * scale,
+          .height = 30.0F * scale,
+          .visible = false,
+          .participatesInLayout = false,
+      })
+  );
+  searchBar->addChild(
+      ui::glyph({
+          .out = &m_headerGlyph,
+          .glyph = "search",
+          .glyphSize = 22.0F * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurface, 0.68F),
+      })
+  );
+  auto searchText = ui::column({.align = FlexAlign::Stretch, .flexGrow = 1.0F});
+  searchText->addChild(
       ui::input({
           .out = &m_input,
           .placeholder = m_scopedPlaceholder.empty() ? i18n::tr("launcher.search-placeholder") : m_scopedPlaceholder,
@@ -1268,6 +1346,31 @@ void LauncherPanel::create() {
               },
           .onSubmit = [this](const std::string& /*text*/) { activateSelected(); },
           .onKeyEvent = [this](std::uint32_t sym, std::uint32_t modifiers) { return handleKeyEvent(sym, modifiers); },
+      })
+  );
+  searchText->addChild(
+      ui::label({
+          .out = &m_actionTitle,
+          .fontSize = Style::fontSizeCaption * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurface, 0.68F),
+          .maxLines = 1,
+          .visible = false,
+          .participatesInLayout = false,
+      })
+  );
+  searchBar->addChild(std::move(searchText));
+  searchBar->addChild(
+      ui::button({
+          .out = &m_actionBack,
+          .glyph = "x",
+          .glyphSize = 16.0F * scale,
+          .controlHeight = 32.0F * scale,
+          .variant = ButtonVariant::Ghost,
+          .tooltip = i18n::tr("launcher.actionpanel.back"),
+          .width = 32.0F * scale,
+          .visible = false,
+          .participatesInLayout = false,
+          .onClick = [this]() { closeActionPanel(true); },
       })
   );
   container->addChild(std::move(searchBar));
@@ -1465,101 +1568,25 @@ void LauncherPanel::create() {
   body->addChild(buildPreviewPane(scale));
 
   container->addChild(std::move(body));
-  container->addChild(buildFooter(scale));
-
-  // The action panel floats over the results, bottom right, like Raycast's.
   auto actionPanel = ui::column({
       .out = &m_actionPanel,
       .align = FlexAlign::Stretch,
-      .gap = Style::spaceXs * scale,
-      .paddingV = Style::spaceSm * scale,
-      .paddingH = Style::spaceSm * scale,
-      .fill = colorSpecFromRole(ColorRole::Surface),
-      .radius = Style::scaledRadiusLg(scale),
-      .border = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+      .flexGrow = 1.0F,
       .visible = false,
       .participatesInLayout = false,
-      .configure = [](Flex& flex) { flex.setZIndex(20); },
   });
-  actionPanel->addChild(
-      ui::label({
-          .out = &m_actionTitle,
-          .fontSize = Style::fontSizeCaption * scale,
-          .fontWeight = FontWeight::SemiBold,
-          .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-          .maxLines = 1,
-          .ellipsize = TextEllipsize::End,
-      })
-  );
-  auto actionList = ui::column({.out = &m_actionList, .align = FlexAlign::Stretch, .gap = 1.0F * scale});
-  m_actionRows.clear();
-  for (std::size_t i = 0; i < kActionPanelRows; ++i) {
-    ActionRow slot;
-    auto row = ui::row({
-        .out = &slot.row,
-        .align = FlexAlign::Center,
-        .gap = Style::spaceSm * scale,
-        .paddingH = Style::spaceSm * scale,
-        .radius = Style::scaledRadiusSm(scale),
-        .height = Style::controlHeightSm * scale,
-        .visible = false,
-        .participatesInLayout = false,
-    });
-    row->addChild(
-        ui::label({
-            .out = &slot.label,
-            .fontSize = Style::fontSizeBody * scale,
-            .color = colorSpecFromRole(ColorRole::OnSurface),
-            .maxLines = 1,
-            .ellipsize = TextEllipsize::End,
-            .flexGrow = 1.0F,
-        })
-    );
-    auto cap = ui::row({
-        .out = &slot.hintCap,
-        .align = FlexAlign::Center,
-        .paddingV = 1.0F * scale,
-        .paddingH = Style::spaceXs * 1.5F * scale,
-        .fill = colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha * 1.5F),
-        .radius = Style::radiusSm * scale,
-    });
-    cap->addChild(
-        ui::label({
-            .out = &slot.hint,
-            .fontSize = Style::fontSizeMini * scale,
-            .fontWeight = FontWeight::Medium,
-            .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
-            .maxLines = 1,
-        })
-    );
-    row->addChild(std::move(cap));
-    auto area = ui::inputArea({
-        .out = &slot.area,
-        .cursorShape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER,
-        .participatesInLayout = false,
-        .onEnter =
-            [this, i](const InputArea::PointerData&) {
-              if (m_actionPanelOpen && i < m_actionVisible.size() && m_actionSelected != i) {
-                m_actionSelected = i;
-                refreshActionPanel();
-              }
-            },
-        .onClick =
-            [this, i](const InputArea::PointerData&) {
-              if (m_actionPanelOpen && i < m_actionVisible.size()) {
-                m_actionSelected = i;
-                runActionPanelSelection();
-              }
-            },
-    });
-    area->setFocusable(false);
-    area->setTabStop(false);
-    area->setZIndex(2);
-    row->addChild(std::move(area));
-    actionList->addChild(std::move(row));
-    m_actionRows.push_back(slot);
-  }
-  actionPanel->addChild(std::move(actionList));
+  auto actionScroll = ui::scrollView({
+      .out = &m_actionScroll,
+      .contentScale = scale,
+      .viewportPaddingH = 0.0F,
+      .viewportPaddingV = 4.0F * scale,
+      .flexGrow = 1.0F,
+  });
+  m_actionList = actionScroll->content();
+  m_actionList->setDirection(FlexDirection::Vertical);
+  m_actionList->setAlign(FlexAlign::Stretch);
+  m_actionList->setGap(2.0F * scale);
+  actionPanel->addChild(std::move(actionScroll));
   actionPanel->addChild(
       ui::label({
           .out = &m_actionEmpty,
@@ -1571,6 +1598,7 @@ void LauncherPanel::create() {
       })
   );
   container->addChild(std::move(actionPanel));
+  container->addChild(buildFooter(scale));
 
   setRoot(std::move(container));
 
@@ -1724,17 +1752,21 @@ void LauncherPanel::onPanelCardOpacityChanged(float opacity) {
   }
 }
 
+float LauncherPanel::preferredWidth() const {
+  return scaled(m_config != nullptr && m_config->config().shell.launcher.compact ? 520.0F : 640.0F);
+}
+
 float LauncherPanel::fittedHeight() const {
   return m_container
       ? std::max(scaled(150), panel_content::height(m_container) + 2 * Style::panelPadding * contentScale())
       : preferredHeight();
 }
 
-// Spotlight-like proportions in the Island: a share of the screen, never narrower than the
-// standalone launcher, and a height that follows the results up to a cap instead of
-// stretching a long list down the whole output.
+// Both densities have a stable reading width; preview providers get room for their second column.
 float LauncherPanel::islandWidth(float availableWidth) const {
-  return std::clamp(availableWidth * 0.42F, preferredWidth(), std::max(preferredWidth(), scaled(880.0F)));
+  return std::min(
+      availableWidth, preferredWidth() + (m_previewProvider != nullptr && !m_actionPanelOpen ? scaled(200.0F) : 0.0F)
+  );
 }
 
 float LauncherPanel::islandHeight(float availableHeight) const {
@@ -1775,9 +1807,26 @@ void LauncherPanel::doLayout(Renderer& renderer, float width, float height) {
     }
   }
 
+  const float inset = (m_launcherCompact ? 6.0F : 10.0F) * contentScale();
+  m_container->setPadding(inset);
+  if (m_actionPanelOpen) {
+    const float size = 30.0F * contentScale();
+    bool loaded = false;
+    if (!m_actionResult.iconPath.empty()) {
+      loaded = m_asyncTextures != nullptr
+          ? m_headerImage->setSourceFileAsync(
+                renderer, *m_asyncTextures, m_actionResult.iconPath, static_cast<int>(size), true
+            )
+          : m_headerImage->setSourceFile(renderer, m_actionResult.iconPath, static_cast<int>(size), true);
+    }
+    m_headerImage->setVisible(loaded);
+    m_headerImage->setParticipatesInLayout(loaded);
+    m_headerGlyph->setVisible(!loaded);
+    m_headerGlyph->setParticipatesInLayout(!loaded);
+  }
   m_container->setSize(width, height);
   m_container->layout(renderer);
-  layoutActionPanel(renderer, width, height);
+  layoutActionPanel(renderer);
 }
 
 void LauncherPanel::onOpen(std::string_view context) {
@@ -1841,6 +1890,9 @@ void LauncherPanel::onClose() {
   m_actionVisible.clear();
   m_actionRows.clear();
   m_actionPanel = nullptr;
+  m_actionScroll = nullptr;
+  m_actionBack = nullptr;
+  m_actionEnsureVisible = false;
   m_actionTitle = nullptr;
   m_actionList = nullptr;
   m_actionEmpty = nullptr;
@@ -1885,6 +1937,12 @@ void LauncherPanel::onClose() {
   // The scene tree (and all nodes) is destroyed by PanelManager after onClose().
   m_container = nullptr;
   m_input = nullptr;
+  m_headerImage = nullptr;
+  m_headerGlyph = nullptr;
+  m_footer = nullptr;
+  m_footerKind = nullptr;
+  m_footerBack = nullptr;
+  m_footerActionButton = nullptr;
   m_categoryFilter = nullptr;
   m_body = nullptr;
   m_listColumn = nullptr;
@@ -1961,7 +2019,7 @@ void LauncherPanel::setQuery(std::string query) {
 void LauncherPanel::onProviderResultsChanged() {
   // Only re-gather while the panel is open and built; after onClose the scene
   // nodes are gone and a refresh would touch null grid/label pointers.
-  if (m_input == nullptr) {
+  if (m_input == nullptr || m_actionPanelOpen) {
     return;
   }
   reapplyCurrentQuery();
@@ -1997,6 +2055,8 @@ void LauncherPanel::onInputChanged(const std::string& text) {
   if (m_actionPanelOpen) {
     m_actionFilter = text;
     m_actionSelected = 0;
+    m_actionEnsureVisible = true;
+    m_actionScroll->requestScrollToOffset(0.0F);
     refreshActionPanel();
     return;
   }
@@ -2591,7 +2651,8 @@ void LauncherPanel::refreshResults() {
     m_grid->setSelectedIndex(std::nullopt);
     m_grid->scrollView().setScrollOffset(0.0F);
   } else {
-    m_grid->setSelectedIndex(m_selectedIndex);
+    const bool idle = StringUtils::isBlank(m_query) && m_scopedProviderId.empty() && !m_form.has_value();
+    m_grid->setSelectedIndex(idle ? std::nullopt : std::optional{m_selectedIndex});
   }
   bindDetailResult();
   applyEmptyState();
@@ -2955,15 +3016,20 @@ std::vector<LauncherPanel::ActionEntry> LauncherPanel::actionEntriesFor(const La
 
   // The primary action first, then the result's own actions (the first of which Ctrl+Return runs),
   // its desktop actions, and the launcher's own: pin, alias, hotkey.
-  entries.push_back({primaryActionLabelFor(base), i18n::tr("launcher.actionpanel.return"), [activate, base]() {
-                       activate(base);
+  entries.push_back({primaryActionLabelFor(base), i18n::tr("launcher.actionpanel.return"), [this, base]() {
+                       if (needsArguments(base))
+                         beginArguments(base);
+                       else
+                         dispatchActivation(base);
                      }});
+  entries.back().glyph = provider->supportsAutoPaste() ? "clipboard" : "arrow-up-right";
   const std::vector<LauncherAction> providerActions = provider->actions(base);
   for (std::size_t i = 0; i < providerActions.size(); ++i) {
     entries.push_back(
         {providerActions[i].label, i == 0 ? i18n::tr("launcher.actionpanel.ctrl-return") : std::string(),
          [this, base, actionId = providerActions[i].id]() { runProviderAction(base, actionId); }}
     );
+    entries.back().glyph = actionGlyph(providerActions[i].id);
   }
   if (match != nullptr) {
     for (const DesktopAction& action : match->actions) {
@@ -2973,7 +3039,11 @@ std::vector<LauncherPanel::ActionEntry> LauncherPanel::actionEntriesFor(const La
                            result.desktopActionId = action.id;
                            activate(result);
                          }});
+      entries.back().glyph = actionGlyph(action.id);
     }
+  }
+  const auto launcherActionsStart = entries.size();
+  if (match != nullptr) {
     if (m_config != nullptr) {
       const bool pinned = shell::dock::pinned_apps::containsEntry(m_config->config().shell.launcher.pinned, *match);
       const DesktopEntry entry = *match;
@@ -2990,6 +3060,7 @@ std::vector<LauncherPanel::ActionEntry> LauncherPanel::actionEntriesFor(const La
              }
            }}
       );
+      entries.back().glyph = pinned ? "pinned-off" : "pin";
     }
   }
   if (provider->supportsAliases()) {
@@ -2998,12 +3069,14 @@ std::vector<LauncherPanel::ActionEntry> LauncherPanel::actionEntriesFor(const La
          {},
          [this, base]() { beginAliasEdit(base); }}
     );
+    entries.back().glyph = "keyboard";
     if (!base.alias.empty()) {
       entries.push_back({i18n::tr("launcher.actions.remove-alias"), {}, [this, base]() {
                            if (m_aliases.removeFor(base.providerId, base.id)) {
                              reapplyCurrentQuery();
                            }
                          }});
+      entries.back().glyph = "x";
     }
     if (m_copyText) {
       entries.push_back(
@@ -3013,8 +3086,11 @@ std::vector<LauncherPanel::ActionEntry> LauncherPanel::actionEntriesFor(const La
              PanelManager::instance().closePanel(false);
            }}
       );
+      entries.back().glyph = "copy";
     }
   }
+  if (launcherActionsStart < entries.size())
+    entries[launcherActionsStart].separatorBefore = true;
   return entries;
 }
 
@@ -3046,14 +3122,19 @@ bool LauncherPanel::openActionsMenu(std::size_t index, float /*anchorX*/, float 
   m_actionEntries = std::move(entries);
   m_actionReturnQuery = m_query;
   m_actionReturnIndex = index;
+  m_actionReturnScroll = m_grid != nullptr ? m_grid->scrollView().scrollOffset() : 0.0F;
   m_actionSelected = 0;
   m_actionFilter.clear();
   m_actionPanelOpen = true;
   if (m_input != nullptr) {
-    m_input->setPlaceholder(i18n::tr("launcher.actionpanel.placeholder"));
+    m_input->setPlaceholder(singleLinePreview(base.title));
+    m_input->setControlHeight(32.0F * contentScale());
     m_input->setValue("");
   }
+  buildActionRows();
+  m_actionScroll->requestScrollToOffset(0.0F);
   refreshActionPanel();
+  PanelManager::instance().inputDispatcher().setFocus(m_input->inputArea());
   return true;
 }
 
@@ -3066,7 +3147,21 @@ void LauncherPanel::closeActionPanel(bool restoreQuery) {
   m_actionVisible.clear();
   if (m_actionPanel != nullptr) {
     m_actionPanel->setVisible(false);
+    m_actionPanel->setParticipatesInLayout(false);
   }
+  m_body->setVisible(true);
+  m_body->setParticipatesInLayout(true);
+  m_actionTitle->setVisible(false);
+  m_actionTitle->setParticipatesInLayout(false);
+  m_actionBack->setVisible(false);
+  m_actionBack->setParticipatesInLayout(false);
+  m_headerImage->setVisible(false);
+  m_headerImage->setParticipatesInLayout(false);
+  m_headerGlyph->setGlyph("search");
+  m_headerGlyph->setVisible(true);
+  m_headerGlyph->setParticipatesInLayout(true);
+  if (m_input != nullptr)
+    m_input->setControlHeight((Style::controlHeightLg + Style::spaceSm) * contentScale());
   if (m_listColumn != nullptr) {
     m_listColumn->setMinHeight(0.0F);
   }
@@ -3078,14 +3173,20 @@ void LauncherPanel::closeActionPanel(bool restoreQuery) {
   if (restoreQuery) {
     setQuery(m_actionReturnQuery);
     if (!m_results.empty()) {
-      m_selectedIndex = std::min(m_actionReturnIndex, m_results.size() - 1);
+      const auto previous = std::ranges::find_if(m_results, [this](const LauncherResult& result) {
+        return result.providerId == m_actionResult.providerId && result.id == m_actionResult.id;
+      });
+      m_selectedIndex = previous != m_results.end() ? static_cast<std::size_t>(previous - m_results.begin())
+                                                    : std::min(m_actionReturnIndex, m_results.size() - 1);
       if (m_grid != nullptr) {
         m_grid->setSelectedIndex(m_selectedIndex);
+        m_grid->scrollView().requestScrollToOffset(m_actionReturnScroll);
       }
     }
   }
   syncFooter();
   syncPreview();
+  PanelManager::instance().inputDispatcher().setFocus(m_input->inputArea());
   if (m_container != nullptr) {
     m_container->markLayoutDirty();
   }
@@ -3333,18 +3434,88 @@ void LauncherPanel::dispatchActivation(const LauncherResult& result) {
   }
 }
 
-float LauncherPanel::actionPanelHeight(float scale) const {
-  const float rows = static_cast<float>(std::min(m_actionVisible.size(), kActionPanelRows));
-  const float rowHeight = Style::controlHeightSm * scale;
-  const float titleHeight = std::ceil(Style::fontSizeCaption * scale * 1.4F);
-  const float listHeight = rows > 0.0F ? rows * rowHeight + (rows - 1.0F) * 1.0F * scale : titleHeight;
-  return std::ceil(Style::spaceSm * scale * 2.0F + titleHeight + Style::spaceXs * scale + listHeight);
+void LauncherPanel::buildActionRows() {
+  while (!m_actionList->children().empty()) {
+    (void)m_actionList->removeChild(m_actionList->children().back().get());
+  }
+  m_actionRows.clear();
+  const float scale = contentScale();
+  for (std::size_t i = 0; i < m_actionEntries.size(); ++i) {
+    ActionRow slot;
+    m_actionList->addChild(
+        ui::separator({
+            .out = &slot.separator,
+            .color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
+            .thickness = 1.0F,
+            .spacing = 8.0F * scale,
+            .visible = false,
+            .participatesInLayout = false,
+        })
+    );
+    auto row = ui::row({
+        .out = &slot.row,
+        .align = FlexAlign::Center,
+        .gap = 14.0F * scale,
+        .paddingH = 12.0F * scale,
+        .radius = 10.0F * scale,
+        .height = (m_launcherCompact ? 38.0F : 44.0F) * scale,
+    });
+    row->addChild(
+        ui::glyph({
+            .out = &slot.glyph,
+            .glyphSize = 18.0F * scale,
+            .color = colorSpecFromRole(ColorRole::OnSurface, 0.68F),
+        })
+    );
+    row->addChild(
+        ui::label({
+            .out = &slot.label,
+            .fontSize = Style::fontSizeBody * scale,
+            .color = colorSpecFromRole(ColorRole::OnSurface),
+            .maxLines = 1,
+            .ellipsize = TextEllipsize::End,
+            .flexGrow = 1.0F,
+        })
+    );
+    row->addChild(
+        ui::glyph({
+            .out = &slot.returnGlyph,
+            .glyph = "cupertino:return_icon",
+            .glyphSize = 16.0F * scale,
+            .color = colorSpecFromRole(ColorRole::OnSurface, 0.6F),
+        })
+    );
+    auto area = ui::inputArea({
+        .out = &slot.area,
+        .cursorShape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER,
+        .participatesInLayout = false,
+        .onEnter =
+            [this, i](const InputArea::PointerData&) {
+              if (m_actionPanelOpen && i < m_actionVisible.size() && m_actionSelected != i) {
+                m_actionSelected = i;
+                refreshActionPanel();
+              }
+            },
+        .onClick =
+            [this, i](const InputArea::PointerData&) {
+              if (m_actionPanelOpen && i < m_actionVisible.size()) {
+                m_actionSelected = i;
+                runActionPanelSelection();
+              }
+            },
+    });
+    area->setFocusable(false);
+    area->setTabStop(false);
+    area->setZIndex(2);
+    row->addChild(std::move(area));
+    m_actionList->addChild(std::move(row));
+    m_actionRows.push_back(slot);
+  }
 }
 
 void LauncherPanel::refreshActionPanel() {
-  if (m_actionPanel == nullptr || !m_actionPanelOpen) {
+  if (m_actionPanel == nullptr || !m_actionPanelOpen)
     return;
-  }
   const std::string needle = StringUtils::toLower(StringUtils::trim(m_actionFilter));
   m_actionVisible.clear();
   for (std::size_t i = 0; i < m_actionEntries.size(); ++i) {
@@ -3354,81 +3525,70 @@ void LauncherPanel::refreshActionPanel() {
       m_actionVisible.push_back(i);
     }
   }
-  if (m_actionSelected >= m_actionVisible.size()) {
-    m_actionSelected = m_actionVisible.empty() ? 0 : m_actionVisible.size() - 1;
-  }
-  // A Markdown answer's title is the whole answer; its subtitle says what was asked.
-  m_actionTitle->setText(singleLinePreview(
-      m_actionResult.presentation == "markdown" && !m_actionResult.subtitle.empty() ? m_actionResult.subtitle
-                                                                                    : m_actionResult.title
-  ));
-  // Scroll the visible window so the selection always has a row.
-  const std::size_t windowStart = m_actionSelected >= kActionPanelRows ? m_actionSelected - kActionPanelRows + 1 : 0;
-  for (std::size_t slotIndex = 0; slotIndex < m_actionRows.size(); ++slotIndex) {
-    ActionRow& slot = m_actionRows[slotIndex];
-    const std::size_t visibleIndex = windowStart + slotIndex;
-    const bool shown = visibleIndex < m_actionVisible.size();
+  if (m_actionSelected >= m_actionVisible.size())
+    m_actionSelected = 0;
+  m_actionTitle->setText(
+      m_actionFilter.empty() ? i18n::tr("launcher.footer.actions") : singleLinePreview(m_actionResult.title)
+  );
+  m_actionTitle->setVisible(true);
+  m_actionTitle->setParticipatesInLayout(true);
+  m_actionBack->setVisible(true);
+  m_actionBack->setParticipatesInLayout(true);
+  m_headerGlyph->setGlyph(m_actionResult.glyphName.empty() ? "app-window" : m_actionResult.glyphName);
+  for (std::size_t i = 0; i < m_actionRows.size(); ++i) {
+    ActionRow& slot = m_actionRows[i];
+    const bool shown = i < m_actionVisible.size();
     slot.row->setVisible(shown);
     slot.row->setParticipatesInLayout(shown);
-    if (!shown) {
+    const bool separate = shown && i > 0 && needle.empty() && m_actionEntries[m_actionVisible[i]].separatorBefore;
+    slot.separator->setVisible(separate);
+    slot.separator->setParticipatesInLayout(separate);
+    if (!shown)
       continue;
-    }
-    const ActionEntry& entry = m_actionEntries[m_actionVisible[visibleIndex]];
-    const bool selected = visibleIndex == m_actionSelected;
+    const ActionEntry& entry = m_actionEntries[m_actionVisible[i]];
+    const bool selected = i == m_actionSelected;
     slot.label->setText(entry.label);
-    slot.hint->setText(entry.hint);
-    slot.hintCap->setVisible(!entry.hint.empty());
-    slot.hintCap->setParticipatesInLayout(!entry.hint.empty());
-    slot.row->setFill(selected ? colorSpecFromRole(ColorRole::Primary) : clearColorSpec());
-    slot.label->setColor(colorSpecFromRole(selected ? ColorRole::OnPrimary : ColorRole::OnSurface));
-    slot.hint->setColor(colorSpecFromRole(selected ? ColorRole::OnPrimary : ColorRole::OnSurfaceVariant));
-    slot.hintCap->setFill(
-        selected ? colorSpecFromRole(ColorRole::OnPrimary, 0.2F)
-                 : colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha * 1.5F)
-    );
+    slot.glyph->setGlyph(entry.glyph);
+    slot.returnGlyph->setVisible(selected);
+    slot.returnGlyph->setParticipatesInLayout(selected);
+    slot.row->setFill(selected ? colorSpecFromRole(ColorRole::OnSurface, Style::pressedFillAlpha) : clearColorSpec());
   }
   const bool empty = m_actionVisible.empty();
   m_actionEmpty->setText(i18n::tr("launcher.actionpanel.empty"));
   m_actionEmpty->setVisible(empty);
   m_actionEmpty->setParticipatesInLayout(empty);
+  m_actionScroll->setVisible(!empty);
+  m_actionScroll->setParticipatesInLayout(!empty);
+  m_body->setVisible(false);
+  m_body->setParticipatesInLayout(false);
+  m_categoryFilter->setVisible(false);
+  m_categoryFilter->setParticipatesInLayout(false);
   m_actionPanel->setVisible(true);
-  // Make sure the card is tall enough for the panel to sit above the action bar.
-  const float scale = contentScale();
-  if (m_listColumn != nullptr) {
-    m_listColumn->setMinHeight(actionPanelHeight(scale) + Style::spaceSm * scale);
-  }
-  if (m_footerKind != nullptr && m_footerPrimary != nullptr) {
-    m_footerKind->setText(singleLinePreview(m_actionResult.title));
-    m_footerPrimary->setText(i18n::tr("launcher.actions.run-action"));
-    m_footerActions->setVisible(false);
-    m_footerActions->setParticipatesInLayout(false);
-    m_footerActionsSeparator->setVisible(false);
-    m_footerActionsSeparator->setParticipatesInLayout(false);
-  }
-  if (m_container != nullptr) {
-    m_container->markLayoutDirty();
-  }
+  m_actionPanel->setParticipatesInLayout(true);
+  syncFooter();
+  m_container->markLayoutDirty();
 }
 
-void LauncherPanel::layoutActionPanel(Renderer& renderer, float width, float height) {
-  if (m_actionPanel == nullptr || !m_actionPanelOpen) {
+void LauncherPanel::layoutActionPanel(Renderer& renderer) {
+  if (m_actionPanel == nullptr || !m_actionPanelOpen)
     return;
-  }
-  const float scale = contentScale();
-  const float panelWidth = std::min(scaled(kActionPanelWidth), std::max(0.0F, width - Style::spaceSm * scale * 2.0F));
-  const float panelHeight = actionPanelHeight(scale);
-  const float footerHeight = m_footer != nullptr && m_footer->visible() ? m_footer->height() : 0.0F;
-  const float x = Style::rtl() ? Style::spaceSm * scale : width - panelWidth - Style::spaceSm * scale;
-  const float y = std::max(0.0F, height - footerHeight - panelHeight - Style::spaceXs * scale);
-  m_actionPanel->setPosition(std::round(x), std::round(y));
-  m_actionPanel->setSize(panelWidth, panelHeight);
-  m_actionPanel->layout(renderer);
   for (ActionRow& slot : m_actionRows) {
-    if (slot.area == nullptr || slot.row == nullptr || !slot.row->visible()) {
+    if (!slot.row->visible())
       continue;
-    }
     slot.area->setPosition(0.0F, 0.0F);
     slot.area->setFrameSize(slot.row->width(), slot.row->height());
+    slot.label->setMaxWidth(std::max(0.0F, slot.row->width() - 90.0F * contentScale()));
+  }
+  if (m_actionEnsureVisible && m_actionSelected < m_actionVisible.size()) {
+    m_actionEnsureVisible = false;
+    const auto* row = m_actionRows[m_actionSelected].row;
+    const float offset = m_actionScroll->scrollOffset();
+    const float viewport = m_actionScroll->contentViewportHeight();
+    if (row->y() < offset)
+      m_actionScroll->setScrollOffset(row->y());
+    else if (row->y() + row->height() > offset + viewport)
+      m_actionScroll->setScrollOffset(row->y() + row->height() - viewport);
+    m_actionScroll->layout(renderer);
   }
 }
 
@@ -3454,6 +3614,7 @@ bool LauncherPanel::actionPanelKey(std::uint32_t sym, std::uint32_t modifiers) {
       const std::size_t last = m_actionVisible.size() - 1;
       m_actionSelected = up ? (m_actionSelected == 0 ? last : m_actionSelected - 1)
                             : (m_actionSelected >= last ? 0 : m_actionSelected + 1);
+      m_actionEnsureVisible = true;
       refreshActionPanel();
     }
     return true;
@@ -3583,6 +3744,11 @@ bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
     if (m_results.empty()) {
       return;
     }
+    if (m_grid != nullptr && !m_grid->selectedIndex().has_value()) {
+      m_selectedIndex = 0;
+      m_grid->setSelectedIndex(m_selectedIndex);
+      return;
+    }
     const int last = static_cast<int>(m_results.size() - 1);
     const int next = std::clamp(static_cast<int>(m_selectedIndex) + delta, 0, last);
     if (next == static_cast<int>(m_selectedIndex)) {
@@ -3607,6 +3773,7 @@ bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
     m_categoryFilterVisible = true;
     setCategoryFilterVisible(true);
     if (!wasVisible) {
+      applyActiveCategory();
       return true;
     }
 
@@ -3729,44 +3896,10 @@ bool LauncherPanel::handleKeyEvent(std::uint32_t sym, std::uint32_t modifiers) {
 }
 
 std::unique_ptr<Node> LauncherPanel::buildFooter(float scale) {
-  const float captionSize = Style::fontSizeCaption * scale;
-  const ColorSpec muted = colorSpecFromRole(ColorRole::OnSurfaceVariant);
-  const auto keycap = [&](Label** out, std::string text) {
-    auto cap = ui::row({
-        .align = FlexAlign::Center,
-        .paddingV = 1.0F * scale,
-        .paddingH = Style::spaceXs * 1.5F * scale,
-        .fill = colorSpecFromRole(ColorRole::OnSurface, Style::hoverFillAlpha * 1.5F),
-        .radius = Style::radiusSm * scale,
-    });
-    cap->addChild(
-        ui::label({
-            .out = out,
-            .text = std::move(text),
-            .fontSize = Style::fontSizeMini * scale,
-            .fontWeight = FontWeight::Medium,
-            .color = muted,
-        })
-    );
-    return cap;
-  };
-  const auto hint = [&](Label** labelOut, std::string label) {
-    return ui::label({
-        .out = labelOut,
-        .text = std::move(label),
-        .fontSize = captionSize,
-        .fontWeight = FontWeight::Medium,
-        .color = colorSpecFromRole(ColorRole::OnSurface),
-    });
-  };
-
-  // Raycast-style action bar: what is selected on the left, its keys on the right.
   auto footer = ui::column({
       .out = &m_footer,
       .align = FlexAlign::Stretch,
-      .gap = Style::spaceXs * 1.5F * scale,
-      .visible = false,
-      .participatesInLayout = false,
+      .gap = 8.0F * scale,
   });
   footer->addChild(
       ui::separator({
@@ -3775,86 +3908,72 @@ std::unique_ptr<Node> LauncherPanel::buildFooter(float scale) {
           .spacing = 0.0F,
       })
   );
-  auto bar = ui::row({
-      .align = FlexAlign::Center,
-      .justify = FlexJustify::SpaceBetween,
-      .gap = Style::spaceSm * scale,
-      .paddingH = Style::spaceSm * scale,
-  });
+  auto bar = ui::row({.align = FlexAlign::Center, .gap = 8.0F * scale, .paddingH = 4.0F * scale});
+  bar->addChild(
+      ui::button({
+          .out = &m_footerBack,
+          .text = "Esc  " + i18n::tr("launcher.actionpanel.back"),
+          .fontSize = Style::fontSizeCaption * scale,
+          .controlHeight = 24.0F * scale,
+          .variant = ButtonVariant::Ghost,
+          .paddingH = 4.0F * scale,
+          .visible = false,
+          .participatesInLayout = false,
+          .onClick = [this]() { closeActionPanel(true); },
+      })
+  );
   bar->addChild(
       ui::label({
           .out = &m_footerKind,
-          .fontSize = captionSize,
-          .color = muted,
+          .fontSize = Style::fontSizeCaption * scale,
+          .color = colorSpecFromRole(ColorRole::OnSurface, 0.68F),
           .maxLines = 1,
           .flexGrow = 1.0F,
       })
   );
-  auto keys = ui::row({.align = FlexAlign::Center, .gap = Style::spaceXs * 1.5F * scale});
-  keys->addChild(hint(&m_footerPrimary, i18n::tr("launcher.footer.open")));
-  keys->addChild(keycap(nullptr, "↵"));
-  keys->addChild(
-      ui::separator({
-          .out = &m_footerActionsSeparator,
-          .color = colorSpecFromRole(ColorRole::Outline, Style::hairlineAlpha),
-          .thickness = 1.0F,
-          .spacing = Style::spaceXs * scale,
-          .height = captionSize,
+  bar->addChild(
+      ui::button({
+          .out = &m_footerActionButton,
+          .text = i18n::tr("launcher.footer.actions") + "  ⇧↵",
+          .fontSize = Style::fontSizeCaption * scale,
+          .controlHeight = 24.0F * scale,
+          .variant = ButtonVariant::Ghost,
+          .paddingH = 4.0F * scale,
+          .onClick = [this]() { (void)openSelectedActionsMenu(); },
       })
   );
-  auto actions = ui::row({.out = &m_footerActions, .align = FlexAlign::Center, .gap = Style::spaceXs * 1.5F * scale});
-  actions->addChild(hint(nullptr, i18n::tr("launcher.footer.actions")));
-  // Shift+Return rather than Raycast's Cmd/Ctrl+K, which the field keeps for kill-to-end-of-line.
-  actions->addChild(keycap(nullptr, "Shift"));
-  actions->addChild(keycap(nullptr, "↵"));
-  keys->addChild(std::move(actions));
-  bar->addChild(std::move(keys));
   footer->addChild(std::move(bar));
   return footer;
 }
 
 void LauncherPanel::syncFooter() {
-  if (m_footer == nullptr || m_footerKind == nullptr) {
+  if (m_footer == nullptr || m_footerKind == nullptr)
     return;
-  }
-  const bool show = !m_results.empty() && !shouldUseDetailPresentation();
+  const bool show = m_actionPanelOpen || (!m_results.empty() && !shouldUseDetailPresentation());
   m_footer->setVisible(show);
   m_footer->setParticipatesInLayout(show);
-  if (!show) {
+  if (!show)
     return;
+  m_footerBack->setVisible(m_actionPanelOpen);
+  m_footerBack->setParticipatesInLayout(m_actionPanelOpen);
+  bool actions = false;
+  std::string hint;
+  if (!m_actionPanelOpen && !m_results.empty()) {
+    const LauncherResult& selected = m_results[std::min(m_selectedIndex, m_results.size() - 1)];
+    if (m_argumentResult.has_value())
+      hint = i18n::tr("launcher.arguments.footer");
+    else if (m_aliasTarget.has_value())
+      hint = i18n::tr("launcher.aliases.footer");
+    else if (m_form.has_value())
+      hint = i18n::tr("launcher.forms.footer");
+    else if (StringUtils::isBlank(m_query) && m_grid != nullptr && !m_grid->selectedIndex().has_value())
+      hint = i18n::tr("launcher.footer.idle");
+    else
+      actions = hasActions(selected);
   }
-  const LauncherResult& selected = m_results[std::min(m_selectedIndex, m_results.size() - 1)];
-  if (m_argumentResult.has_value()) {
-    m_footerKind->setText(i18n::tr("launcher.arguments.footer"));
-    m_footerPrimary->setText(primaryActionLabelFor(*m_argumentResult));
-    m_footerActions->setVisible(false);
-    m_footerActions->setParticipatesInLayout(false);
-    m_footerActionsSeparator->setVisible(false);
-    m_footerActionsSeparator->setParticipatesInLayout(false);
-    return;
-  }
-  if (selected.providerId == kAliasEditorProviderId) {
-    m_footerKind->setText(i18n::tr("launcher.aliases.footer"));
-    m_footerPrimary->setText(i18n::tr("launcher.actions.save-alias"));
-  } else if (selected.providerId == kFormProviderId && m_form.has_value()) {
-    m_footerKind->setText(i18n::tr("launcher.forms.footer"));
-    m_footerPrimary->setText(
-        selected.id == kFormSubmitId ? m_form->submitLabel : i18n::tr("launcher.forms.next-field")
-    );
-  } else {
-    m_footerKind->setText(
-        selected.kind.empty() && selected.providerId != kProviderOverviewProviderId
-            ? sectionTitleFor(selected.providerId)
-            : selected.kind
-    );
-    m_footerPrimary->setText(primaryActionLabelFor(selected));
-  }
-  const bool actions =
-      selected.providerId != kAliasEditorProviderId && selected.providerId != kFormProviderId && hasActions(selected);
-  m_footerActions->setVisible(actions);
-  m_footerActions->setParticipatesInLayout(actions);
-  m_footerActionsSeparator->setVisible(actions);
-  m_footerActionsSeparator->setParticipatesInLayout(actions);
+  m_footerKind->setText(hint);
+  m_footerActionButton->setVisible(actions);
+  m_footerActionButton->setParticipatesInLayout(actions);
 }
 
 std::string LauncherPanel::sectionTitleFor(std::string_view providerId) const {
@@ -3908,9 +4027,7 @@ void LauncherPanel::assignSections() {
   }
 
   if (StringUtils::isBlank(m_query)) {
-    // Nothing typed, as in Raycast: pinned apps lead as Favourites, recently run results follow as
-    // Suggestions, then everything else as Applications. A suggestion that is already a favourite
-    // is not repeated.
+    // Root search leads with pinned and recent items. Grid/category browsing retains the full list.
     std::vector<LauncherResult> ordered;
     ordered.reserve(m_results.size());
     for (LauncherResult& result : m_results) {
@@ -3929,6 +4046,10 @@ void LauncherPanel::assignSections() {
       if (!result.pinned && !result.suggested) {
         ordered.push_back(std::move(result));
       }
+    }
+    const bool browsing = m_config != nullptr && (m_config->config().shell.launcher.appGrid || m_categoryFilterVisible);
+    if (!browsing) {
+      ordered.resize(restStart > 0 ? restStart : std::min<std::size_t>(5, ordered.size()));
     }
     if (suggestionStart > 0) {
       ordered.front().section = i18n::tr("launcher.sections.favourites");

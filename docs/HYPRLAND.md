@@ -218,3 +218,87 @@ The portal probe checks backend availability; it does not establish a browser
 screen-sharing stream. After logging into a real Hyprland session, check browser
 source selection and streaming, physical monitor placement, refresh rates/VRR,
 and suspend/resume. Virtual outputs cannot validate those hardware paths.
+
+The keyboard assistant can be bound with
+`hl.bind("CTRL + SPACE", hl.dsp.exec_cmd("noctalia msg panel-toggle assistant"))`.
+Choose another chord if that combination is already used by an input method or app.
+The shell does not replace existing compositor bindings automatically.
+
+`python3 tests/hyprland_smoke.py --island-assistant-only` checks the assistant with
+an isolated compositor and a loopback streaming AI fixture. It covers keyboard
+submission, draft restoration, follow-up context, copy, cancellation and stale
+responses, retries, empty/failed responses, long answers, both densities, light
+and dark themes, media artwork continuity, and fractional monitor placement.
+No external AI service or microphone is used by this check.
+
+For local dictation, enable AI voice in Settings, then optionally bind a second
+shortcut (choose keys that are free in your own configuration):
+
+```lua
+hl.bind("CTRL + ALT + SPACE", hl.dsp.exec_cmd("noctalia msg assistant-voice start"), {dont_inhibit=true})
+hl.bind("CTRL + ALT + SPACE", hl.dsp.exec_cmd("noctalia msg assistant-voice finish"), {release=true, dont_inhibit=true, ignore_mods=true, non_consuming=true})
+```
+
+Hold the shortcut while speaking, release it to transcribe, review the text, then
+press Enter. Finish only affects a held recording and never opens a closed panel;
+releasing after Escape is harmless. Very short taps cancel recording.
+Ctrl+D toggles dictation inside the assistant; Ctrl+period cancels and Escape closes.
+For a toggle shortcut instead, use `noctalia msg panel-open assistant /dictate`.
+
+`noctalia msg assistant-voice status` reports voice phase, hold state and whether a
+draft or answer is present, without exposing their contents.
+
+For a controlled shell resource and real local speech benchmark, set
+`NOCTALIA_ASSISTANT_PROFILE_ONLY=1` and `NOCTALIA_PROFILE_ASSISTANT_CONFIG` to a
+TOML file containing the local `[shell.launcher.ai]` and voice settings, then run
+the same assistant check. The benchmark uses a synthesized sentence on the
+private audio server and sends its greeting to the configured loopback Strata
+endpoint. `assistant-performance.json` records process memory, CPU, available DRM
+engine time, UI cycles, transcription, first text and speech startup. It measures
+the renderer selected by the test compositor, which can differ from the desktop.
+`NOCTALIA_PROFILE_STRATA_PID` optionally records the model process tree's peak PSS.
+
+`tools/shell_profile.py --process shell=PID --seconds 20 --nvidia --output sample.json`
+also samples a running desktop without changing it. CPU 100% means one logical
+core. PSS apportions shared memory; RSS counts all resident mappings. NVIDIA
+framebuffer allocation is separate from system RAM, and unavailable activity
+counters are reported as null rather than zero.
+
+
+## Dock keyboard and arrangement
+
+Bind the dock independently from the launcher:
+
+```lua
+hl.bind("SUPER + ALT + D", hl.dsp.exec_cmd("noctalia msg dock-focus"))
+```
+
+The shortcut reveals the enabled dock on the active output without changing its
+visibility setting. Arrows along the dock, Tab/Shift+Tab and Home/End select an
+item. Enter opens or activates it. Menu or Shift+F10 opens the app menu, where
+Up/Down and Enter select actions. Escape closes the menu first, then leaves the
+dock. Keyboard focus has a quiet outline that is absent during pointer use.
+
+Hold an app briefly and drag to arrange it. A running app dropped into the pinned
+group becomes a pin. Drag a pin away until **Remove from Dock** appears, then
+release to remove its shortcut. Returning to the dock or pressing Escape cancels
+removal. Unpinning never closes an app or removes its desktop entry.
+
+App names remain available when window previews are enabled. The default preview
+delay is 900 ms, giving the name tooltip time to appear first; `preview_delay_ms`
+remains configurable. Disable `window_previews` to keep names alone. A smaller
+`icon_size` retains the same layout and interaction model for a compact dock.
+
+`python3 tests/hyprland_smoke.py --dock-refinement-only` checks native keyboard
+activation, menus, drag pin/unpin/reorder, Escape and return cancellation,
+name-before-preview timing, compact/reduced motion and a fractional output.
+The existing `--dock-motion-only` and `--dock-preview-only` scenarios cover launch,
+auto-hide, magnification, live previews and window identity.
+
+## Launcher refinement checks
+
+`NOCTALIA_TEST_BINARY=build-release/noctalia python3 tests/hyprland_smoke.py --launcher-refinement-only`
+checks the native launcher on private GPU-backed outputs: recent items, contextual
+actions, filter and Escape restoration, pointer entry/back, long action lists,
+Compact/Comfortable spacing, light/dark appearance and fractional display scaling.
+Fixtures launch marker commands inside the private test directory.

@@ -44,6 +44,10 @@ public:
   void setMaxVisible(std::size_t maxVisible);
   void setMenuWidth(float width);
   void setContentScale(float scale);
+  // Scroll hosts keep this inset outside the viewport so highlighted rows stay away from the card edge.
+  static constexpr float kEdgePadding = 7.0F;
+  static constexpr float kRowHeight = 28.0F;
+  void setVerticalPadding(float padding);
   void setSubmenuDirection(ContextSubmenuDirection direction);
   void setOnActivate(std::function<void(const ContextMenuControlEntry&)> onActivate);
   void setOnSubmenuOpen(std::function<void(const ContextMenuControlEntry&, float rowCenterY)> onSubmenuOpen);
@@ -52,6 +56,7 @@ public:
   void setHighlightedIndex(std::size_t index);
   [[nodiscard]] bool moveHighlight(int delta);
   [[nodiscard]] bool activateHighlighted();
+  [[nodiscard]] bool openHighlightedSubmenu();
   // No row highlighted: a menu opened with the pointer starts this way, as on macOS, until the
   // pointer enters a row or the arrow keys move.
   static constexpr std::size_t kNoHighlight = static_cast<std::size_t>(-1);
@@ -87,6 +92,7 @@ private:
   std::size_t m_highlightedIndex = 0;
   float m_menuWidth = 246.0F;
   float m_contentScale = 1.0F;
+  float m_verticalPadding = kEdgePadding;
   ContextSubmenuDirection m_submenuDirection = ContextSubmenuDirection::Right;
   bool m_needsRebuild = true;
   std::function<void(const ContextMenuControlEntry&)> m_onActivate;

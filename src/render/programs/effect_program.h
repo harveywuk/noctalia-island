@@ -26,7 +26,7 @@ public:
   ) const;
 
 private:
-  static constexpr std::size_t kEffectCount = 5;
+  static constexpr std::size_t kEffectCount = 6;
 
   struct ProgramData {
     ShaderProgram program;
@@ -42,6 +42,9 @@ private:
     GLint bgColorLoc = -1;
     GLint radiusLoc = -1;
     GLint alternativeLoc = -1;
+    GLint orbFaceLoc = -1;
+    GLint orbMotionLoc = -1;
+    std::array<GLint, 4> orbColorLoc{-1, -1, -1, -1};
   };
 
   void initProgram(std::size_t index, const char* fragSource);

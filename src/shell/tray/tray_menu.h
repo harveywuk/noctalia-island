@@ -43,7 +43,7 @@ public:
   [[nodiscard]] bool isOpen() const noexcept { return m_visible; }
 
   [[nodiscard]] bool onPointerEvent(const PointerEvent& event);
-  // Consumes keys while the menu is open (modal grab); Cancel closes it.
+  // Keyboard navigation stays inside the open menu and its submenus.
   [[nodiscard]] bool onKeyboardEvent(const KeyboardEvent& event);
 
 private:
@@ -57,6 +57,8 @@ private:
     bool pointerInside = false;
     ContextSubmenuDirection submenuDirection = ContextSubmenuDirection::Right;
     ScrollViewState scrollState;
+    ScrollView* scrollView = nullptr;
+    ContextMenuControl* menu = nullptr;
   };
 
   void refreshEntries();
@@ -66,6 +68,7 @@ private:
   [[nodiscard]] bool ownsSurface(wl_surface* surface) const;
   [[nodiscard]] float contentScale() const noexcept;
   [[nodiscard]] float menuWidth() const noexcept;
+  [[nodiscard]] popup_chrome::Geometry menuGeometry(float height, wl_output* output) const;
   void ensureSurface();
   void resizeMainSurfaceToEntries();
   void destroySurface();

@@ -386,12 +386,14 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
                 return json.loads(path.read_text())['entries'] if path.exists() else []
             def entry(identifier):
                 return next((e for e in history() if e['notification']['id']==identifier),None)
+            def brief(image):
+                return max(image.getpixel((490,40)))<35 and not tall(image)
             def tall(image):
                 # Wallpaper at this location is much lighter than the Island card.
                 return max(image.getpixel((500,95)))<35
             move(1100,600);msg('notification-clear-active');msg('notification-clear-history')
             normal=send('Ordinary preview');start_time=time.monotonic();time.sleep(.8)
-            assert tall(shot('preview')),'New notification did not expand'
+            assert brief(shot('preview')),'Ordinary notification did not use the compact preview'
             time.sleep(1);send('Updated preview',replace=normal)
             time.sleep(max(0,start_time+5.8-time.monotonic()))
             assert not tall(shot('collapsed')),'Ordinary preview did not collapse after five seconds'
@@ -408,7 +410,7 @@ with tempfile.TemporaryDirectory(prefix='island-settings-smoke-') as tmp:
             assert tall(shot('urgent-identical-update')) and entry(urgent)['active'],'Identical urgent replacement lost its persistent display'
             first=shot('urgent-first')
             send('Ordinary while urgent',timeout=2000);time.sleep(.7)
-            assert ImageChops.difference(first.crop((420,35,860,160)),shot('urgent-uninterrupted').crop((420,35,860,160))).getbbox() is None,'Ordinary alert replaced an urgent alert'
+            assert ImageChops.difference(first.crop((450,50,820,80)),shot('urgent-uninterrupted').crop((450,50,820,80))).getbbox() is None,'Ordinary alert replaced an urgent alert'
             second=send('Second urgent',urgency='critical',timeout=1000);time.sleep(1.5)
             assert entry(second)['active'],'Queued urgent alert expired'
             close(urgent);shot('urgent-next');time.sleep(1.2)
@@ -437,7 +439,7 @@ play_sound=false
             quiet=send('Saved for later',app='history-app');time.sleep(.6)
             assert not tall(shot('history-app')) and entry(quiet),'History-only application displayed a preview or lost its history'
             silent=send('Silent preview',app='silent-app');time.sleep(.7)
-            assert tall(shot('silent-app')) and entry(silent),'Silent application lost its visual preview'
+            assert brief(shot('silent-app')) and entry(silent),'Silent application lost its visual preview'
             close(silent)
             msg('notification-dnd-set','on');suppressed=send('Respect DND',urgency='critical',timeout=1000);time.sleep(1.5)
             assert not tall(shot('urgent-dnd')),'Urgent alert bypassed Do Not Disturb'
@@ -447,8 +449,8 @@ play_sound=false
             move(*find_text('Filtering','notification-settings-groups.png',min_x=420));click();time.sleep(.5);shot('filtering')
             _,hidden_y=find_text('hidden-app','notification-filters.png',min_x=420)
             move(1042,hidden_y);click();time.sleep(.5);shot('delivery-editor')  # The row's settings gear.
-            move(630,370);click();time.sleep(.3);shot('delivery-options')
-            move(330,450);click();time.sleep(.6)
+            move(*find_text('Hidden','notification-delivery-field.png',min_x=270));click();time.sleep(.3);shot('delivery-options')
+            key(102);key(108);key(28);time.sleep(.6)
             saved=tomllib.loads((base/'state/noctalia/settings.toml').read_text())
             delivery=next(f for f in saved['notification']['filter'].values() if f['match']=='hidden-app')
             assert delivery['show_toast'] and delivery['save_history'] and not delivery['play_sound'],'Silent dropdown choice did not persist its delivery policy'
@@ -1193,10 +1195,10 @@ play_sound=false
             msg('panel-close');move(1100,600);time.sleep(.5)
             long_body='\n'.join(f'Line {i:02}: A complete notification stays readable when expanded.' for i in range(1,61))+'\nEND OF FULL MESSAGE'
             run(['notify-send','-a','Island test','-t','0','Long notification',long_body])
-            time.sleep(1)
+            time.sleep(.5);move(640,40);time.sleep(.8)
             run(['grim',str(out/'notification-collapsed.png')])
             # Let the pointer's arrival settle (hover enter) before clicking, as a person would.
-            move(600,120);time.sleep(.6);click();time.sleep(1)
+            move(*find_text('Read','notification-read-more.png'));click();time.sleep(1)
             run(['grim',str(out/'notification-expanded.png')])
             collapsed=Image.open(out/'notification-collapsed.png').convert('RGB')
             expanded=Image.open(out/'notification-expanded.png').convert('RGB')
@@ -1208,22 +1210,19 @@ play_sound=false
             wait(lambda: history.exists() and 'END OF FULL MESSAGE' in history.read_text(), 'Notification body retained in history')
             scrolled=Image.open(out/'notification-scrolled.png').convert('RGB')
             assert ImageChops.difference(expanded.crop((455,60,805,615)),scrolled.crop((455,60,805,615))).getbbox(), 'Full notification must scroll'
-            move(784,28);click();time.sleep(1)
+            move(*find_text('Show','notification-collapse-action.png'));click();time.sleep(1)
             run(['grim',str(out/'notification-recollapsed.png')])
             recollapsed=Image.open(out/'notification-recollapsed.png').convert('RGB')
             assert ImageChops.difference(collapsed.crop((440,400,840,620)),recollapsed.crop((440,400,840,620))).getbbox() is None, 'Collapse must restore compact height'
-            move(819,28);time.sleep(1)
-            run(['grim',str(out/'notification-dismiss-hover.png')])
-            click();time.sleep(.5)
+            msg('notification-clear-active');time.sleep(.5)
             move(1100,600)
             notification=start(['notify-send','-a','Island test','-t','0','--wait','--action=confirm=Mark as read','Short notification','Everything fits.'],'notification-action.log')
             time.sleep(1)
             run(['grim',str(out/'notification-short.png')])
-            # As on macOS, hovering the banner shows its single action as a pill in place of the
-            # time stamp, at the top right.
+            # Hover opens the full preview, with its action below the message.
             move(640,70);time.sleep(1)
             run(['grim',str(out/'notification-action-hover.png')])
-            move(770,31);time.sleep(.3);click()
+            move(*find_text('Mark','notification-contextual-action.png'));click()
             wait(lambda: 'confirm' in (out/'notification-action.log').read_text(),'Notification action invocation')
             move(1100,600)
             msg('notification-clear-active');msg('notification-clear-history')

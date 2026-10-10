@@ -46,6 +46,24 @@ menu_xml = '''<node><interface name="com.canonical.dbusmenu">
 </interface></node>'''
 entry = {'label': GLib.Variant('s', 'Fixture action'), 'enabled': GLib.Variant('b', True),
          'visible': GLib.Variant('b', True)}
+entries = {1: entry}
+if os.environ.get('ISLAND_TRAY_LONG_MENU') == '1':
+    entries = {i: dict(entry, label=GLib.Variant('s', f'Action {i:02d}')) for i in range(1, 36)}
+    entries[1].update({'label': GLib.Variant('s', 'Playback'),
+                       'children-display': GLib.Variant('s', 'submenu')})
+    entries[2].update({'toggle-type': GLib.Variant('s', 'checkmark'), 'toggle-state': GLib.Variant('i', 1)})
+    entries[3].update({'toggle-type': GLib.Variant('s', 'radio'), 'toggle-state': GLib.Variant('i', 0)})
+    entries[101] = dict(entry, label=GLib.Variant('s', 'Nested action'))
+    entries[30]['children-display'] = GLib.Variant('s', 'submenu')
+    entries[102] = dict(entry, label=GLib.Variant('s', 'Scrolled child'))
+
+
+def layout(entry_id):
+    children = [1] if entry_id == 0 and len(entries) == 1 else (
+        list(range(1, 36)) if entry_id == 0 else [101] if entry_id == 1 and 101 in entries
+        else [102] if entry_id == 30 and 102 in entries else [])
+    props = entries.get(entry_id, {'children-display': GLib.Variant('s', 'submenu')})
+    return entry_id, props, [GLib.Variant('(ia{sv}av)', layout(child)) for child in children]
 
 
 def log(text):
@@ -61,13 +79,12 @@ def item_method(connection, sender, path, interface, method, parameters, invocat
 
 def menu_method(connection, sender, path, interface, method, parameters, invocation):
     if method == 'GetLayout':
-        child = GLib.Variant('(ia{sv}av)', (1, entry, []))
-        root = (0, {'children-display': GLib.Variant('s', 'submenu')}, [child])
-        invocation.return_value(GLib.Variant('(u(ia{sv}av))', (1, root)))
+        invocation.return_value(GLib.Variant('(u(ia{sv}av))', (1, layout(parameters.unpack()[0]))))
     elif method == 'GetGroupProperties':
-        invocation.return_value(GLib.Variant('(a(ia{sv}))', ([(1, entry)],)))
+        invocation.return_value(GLib.Variant('(a(ia{sv}))', ([(i, entries[i]) for i in parameters.unpack()[0] if i in entries],)))
     elif method == 'GetProperty':
-        invocation.return_value(GLib.Variant('(v)', (entry.get(parameters.unpack()[1], GLib.Variant('s', '')),)))
+        entry_id, key = parameters.unpack()
+        invocation.return_value(GLib.Variant('(v)', (entries.get(entry_id, {}).get(key, GLib.Variant('s', '')),)))
     elif method == 'Event':
         log(f'MenuEvent {parameters.unpack()[0]} {parameters.unpack()[1]}')
         invocation.return_value(None)

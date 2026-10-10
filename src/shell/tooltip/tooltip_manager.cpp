@@ -30,8 +30,8 @@ namespace {
   constexpr int kMaxTextLines = 3;
   constexpr float kTableMinPeerColumnWidth = 80.0F;
   // macOS tooltips are compact: small text in a snug, lightly rounded bubble.
-  constexpr float kPadH = 8.0F;
-  constexpr float kPadV = 4.0F;
+  constexpr float kPadH = 10.0F;
+  constexpr float kPadV = 6.0F;
   constexpr float kTableColumnGap = Style::spaceMd;
   constexpr float kBorder = Style::borderWidth;
   // Monospace so grid-mode value columns don't reflow on tiny per-tick content changes
@@ -53,14 +53,14 @@ namespace {
     float value = 0.0F;
   };
 
-  TableColumnWidths fitTableColumns(float naturalKeyW, float naturalValueW) {
-    const float availableW = std::max(0.0F, kMaxContentWidth - kTableColumnGap);
+  TableColumnWidths fitTableColumns(float naturalKeyW, float naturalValueW, float maxWidth, float scale) {
+    const float availableW = std::max(0.0F, maxWidth - kTableColumnGap * scale);
     if (availableW <= 0.0F) {
       return {};
     }
 
     const float halfW = availableW * 0.5F;
-    const float peerReserveW = std::min(kTableMinPeerColumnWidth, halfW);
+    const float peerReserveW = std::min(kTableMinPeerColumnWidth * scale, halfW);
     const float columnMaxW = std::max(0.0F, availableW - peerReserveW);
 
     TableColumnWidths widths{
@@ -96,94 +96,48 @@ namespace {
     return widths;
   }
 
-  PopupSurfaceConfig buildTooltipAnchorConfig(const InputArea* area) {
-    const Node* anchorNode = area->tooltipAnchorNode();
-    const Node* boundsNode = anchorNode != nullptr ? anchorNode : area;
-    float absX = 0.0F;
-    float absY = 0.0F;
-    Node::absolutePosition(boundsNode, absX, absY);
-
-    TooltipAnchorInsets inset{};
-    if (area->hasTooltipAnchorInsets()) {
-      inset = area->tooltipAnchorInsets();
-    }
-    const float iconX = absX + inset.left;
-    const float iconY = absY + inset.top;
-    const float iconW = std::max(1.0F, boundsNode->width() - inset.left - inset.right);
-    const float iconH = std::max(1.0F, boundsNode->height() - inset.top - inset.bottom);
-
-    const auto gap = static_cast<std::int32_t>(std::lround(Style::spaceSm));
-
-    float anchorX = absX;
-    float anchorY = absY;
-    float anchorW = boundsNode->width();
-    float anchorH = boundsNode->height();
-    std::uint32_t anchor = XDG_POSITIONER_ANCHOR_BOTTOM;
-    std::uint32_t gravity = XDG_POSITIONER_GRAVITY_BOTTOM;
-    std::int32_t offsetX = 0;
-    auto offsetY = static_cast<std::int32_t>(Style::spaceXs);
-    std::uint32_t constraintAdjustment =
-        XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X;
-
+  PopupSurfaceConfig buildTooltipAnchorConfig(const InputArea* area, float scale) {
+    const Node* bounds = area->tooltipAnchorNode() ? area->tooltipAnchorNode() : area;
+    const auto inset = area->hasTooltipAnchorInsets() ? area->tooltipAnchorInsets() : TooltipAnchorInsets{};
+    float left = 0, top = 0, right = 0, bottom = 0;
+    Node::mapToScene(bounds, inset.left, inset.top, left, top);
+    Node::mapToScene(bounds, bounds->width() - inset.right, bounds->height() - inset.bottom, right, bottom);
+    const auto gap = static_cast<std::int32_t>(std::round(Style::spaceSm * scale));
+    PopupSurfaceConfig config{
+        .anchorX = static_cast<std::int32_t>(std::floor(left)),
+        .anchorY = static_cast<std::int32_t>(std::floor(top)),
+        .anchorWidth = std::max(1, static_cast<std::int32_t>(std::ceil(right) - std::floor(left))),
+        .anchorHeight = std::max(1, static_cast<std::int32_t>(std::ceil(bottom) - std::floor(top))),
+        .anchor = XDG_POSITIONER_ANCHOR_BOTTOM,
+        .gravity = XDG_POSITIONER_GRAVITY_BOTTOM,
+        .constraintAdjustment = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_X
+            | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y
+            | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X
+            | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y,
+        .offsetY = gap,
+    };
     switch (area->tooltipPlacement()) {
     case TooltipPlacement::Above:
-      anchorX = iconX;
-      anchorY = iconY;
-      anchorW = iconW;
-      anchorH = 1.0F;
-      anchor = XDG_POSITIONER_ANCHOR_TOP;
-      gravity = XDG_POSITIONER_GRAVITY_TOP;
-      offsetY = -gap;
-      constraintAdjustment = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X;
-      break;
-    case TooltipPlacement::Below:
-      anchorX = iconX;
-      anchorY = iconY + iconH;
-      anchorW = iconW;
-      anchorH = 1.0F;
-      anchor = XDG_POSITIONER_ANCHOR_BOTTOM;
-      gravity = XDG_POSITIONER_GRAVITY_BOTTOM;
-      offsetY = gap;
-      constraintAdjustment = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X;
+      config.anchor = XDG_POSITIONER_ANCHOR_TOP;
+      config.gravity = XDG_POSITIONER_GRAVITY_TOP;
+      config.offsetY = -gap;
       break;
     case TooltipPlacement::Left:
-      anchorX = iconX;
-      anchorY = iconY;
-      anchorW = 1.0F;
-      anchorH = iconH;
-      anchor = XDG_POSITIONER_ANCHOR_LEFT;
-      gravity = XDG_POSITIONER_GRAVITY_LEFT;
-      offsetX = -gap;
-      constraintAdjustment = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y;
+      config.anchor = XDG_POSITIONER_ANCHOR_LEFT;
+      config.gravity = XDG_POSITIONER_GRAVITY_LEFT;
+      config.offsetX = -gap;
+      config.offsetY = 0;
       break;
     case TooltipPlacement::Right:
-      anchorX = iconX + iconW;
-      anchorY = iconY;
-      anchorW = 1.0F;
-      anchorH = iconH;
-      anchor = XDG_POSITIONER_ANCHOR_RIGHT;
-      gravity = XDG_POSITIONER_GRAVITY_RIGHT;
-      offsetX = gap;
-      constraintAdjustment = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y;
+      config.anchor = XDG_POSITIONER_ANCHOR_RIGHT;
+      config.gravity = XDG_POSITIONER_GRAVITY_RIGHT;
+      config.offsetX = gap;
+      config.offsetY = 0;
       break;
+    case TooltipPlacement::Below:
     case TooltipPlacement::Default:
-      anchorX = iconX;
-      anchorY = iconY + iconH;
-      anchorW = iconW;
-      anchorH = 1.0F;
       break;
     }
-
-    PopupSurfaceConfig config{};
-    config.anchorX = static_cast<std::int32_t>(std::round(anchorX));
-    config.anchorY = static_cast<std::int32_t>(std::round(anchorY));
-    config.anchorWidth = std::max(1, static_cast<std::int32_t>(std::round(anchorW)));
-    config.anchorHeight = std::max(1, static_cast<std::int32_t>(std::round(anchorH)));
-    config.anchor = anchor;
-    config.gravity = gravity;
-    config.constraintAdjustment = constraintAdjustment;
-    config.offsetX = offsetX;
-    config.offsetY = offsetY;
     return config;
   }
 
@@ -217,6 +171,14 @@ void TooltipManager::forceDestroy() {
     m_surface->setSceneRoot(nullptr);
   }
   destroyPopup();
+}
+
+void TooltipManager::showImmediately(InputArea* area, zwlr_layer_surface_v1* parent, wl_output* output) {
+  onHoverChange(area, parent, output);
+  if (m_state == State::Pending) {
+    m_showTimer.stop();
+    showPopup();
+  }
 }
 
 void TooltipManager::shutdown() {
@@ -283,6 +245,8 @@ void TooltipManager::handleHoverChange(InputArea* area) {
     m_showTimer.start(kShowDelay, [this] { showPopup(); });
     break;
   case State::Pending:
+    if (sameArea)
+      break;
     m_showTimer.stop();
     m_showTimer.start(kShowDelay, [this] { showPopup(); });
     break;
@@ -371,7 +335,7 @@ void TooltipManager::syncAnchor(InputArea* area) {
     return;
   }
 
-  auto anchorConfig = buildTooltipAnchorConfig(area);
+  auto anchorConfig = buildTooltipAnchorConfig(area, contentScale());
   anchorConfig.width = m_surface->width();
   anchorConfig.height = m_surface->height();
   m_surface->repositionAnchor(anchorConfig);
@@ -401,7 +365,7 @@ void TooltipManager::showPopup() {
     return;
   }
 
-  auto config = buildTooltipAnchorConfig(m_pendingArea);
+  auto config = buildTooltipAnchorConfig(m_pendingArea, contentScale());
   config.width = contentW;
   config.height = contentH;
   config.grab = false;
@@ -598,7 +562,7 @@ void TooltipManager::refreshPopupContent() {
     return;
   }
 
-  auto anchorConfig = buildTooltipAnchorConfig(m_pendingArea);
+  auto anchorConfig = buildTooltipAnchorConfig(m_pendingArea, contentScale());
   anchorConfig.width = contentW;
   anchorConfig.height = contentH;
   // Leave the new size and position pending on the surface. Committing them now, while the
@@ -641,13 +605,32 @@ float TooltipManager::pendingOutputScale() const {
   return 1.0F;
 }
 
+float TooltipManager::contentScale() const {
+  return m_config ? std::max(0.1F, m_config->config().accessibility.uiScale) : 1.0F;
+}
+
+float TooltipManager::contentMaxWidth() const {
+  const float scale = contentScale();
+  float width = kMaxContentWidth * scale;
+  if (const auto* output = m_wayland ? m_wayland->findOutputByWl(m_pendingOutput) : nullptr;
+      output && output->effectiveLogicalWidth() > 0)
+    width = std::min(
+        width,
+        std::max(
+            1.0F,
+            static_cast<float>(output->effectiveLogicalWidth()) - 2.0F * ((kPadH + Style::spaceSm) * scale + kBorder)
+        )
+    );
+  return width;
+}
+
 TooltipManager::Size TooltipManager::measureContent(Renderer& renderer, const TooltipContent& content) {
   if (m_renderContext == nullptr) {
     return {};
   }
 
-  const float scale = (m_config != nullptr) ? std::max(0.1F, m_config->config().accessibility.uiScale) : 1.0F;
-  const float maxContentWidth = kMaxContentWidth * scale;
+  const float scale = contentScale();
+  const float maxContentWidth = contentMaxWidth();
   const float fontSize = Style::fontSizeCaption * scale;
   const float padH = kPadH * scale;
   const float padV = kPadV * scale;
@@ -676,7 +659,7 @@ TooltipManager::Size TooltipManager::measureContent(Renderer& renderer, const To
       maxValW = std::max(maxValW, vm.width);
       rowH = std::max({rowH, km.bottom - km.top, vm.bottom - vm.top});
     }
-    const TableColumnWidths columns = fitTableColumns(maxKeyW, maxValW);
+    const TableColumnWidths columns = fitTableColumns(maxKeyW, maxValW, maxContentWidth, scale);
     float contentW = columns.key + tableColumnGap + columns.value;
     float contentH = static_cast<float>(rows->size()) * rowH;
     auto w = static_cast<std::uint32_t>(std::ceil(contentW + padH * 2.0F + kBorder * 2.0F));
@@ -703,7 +686,7 @@ void TooltipManager::buildScene(const TooltipContent& content, float w, float h,
   m_sceneRoot->addChild(
       ui::box({
           .fill = colorSpecFromRole(ColorRole::SurfaceVariant),
-          .radius = Style::scaledRadiusSm(),
+          .radius = Style::scaledRadiusSm(contentScale()),
           .width = w,
           .height = h,
           .configure = [](Box& box) {
@@ -712,8 +695,8 @@ void TooltipManager::buildScene(const TooltipContent& content, float w, float h,
       })
   );
 
-  const float scale = (m_config != nullptr) ? std::max(0.1F, m_config->config().accessibility.uiScale) : 1.0F;
-  const float maxContentWidth = kMaxContentWidth * scale;
+  const float scale = contentScale();
+  const float maxContentWidth = contentMaxWidth();
   const float fontSize = Style::fontSizeCaption * scale;
   const float padH = kPadH * scale;
   const float padV = kPadV * scale;
@@ -739,7 +722,7 @@ void TooltipManager::buildScene(const TooltipContent& content, float w, float h,
       maxKeyW = std::max(maxKeyW, km.width);
       maxValW = std::max(maxValW, vm.width);
     }
-    const TableColumnWidths columns = fitTableColumns(maxKeyW, maxValW);
+    const TableColumnWidths columns = fitTableColumns(maxKeyW, maxValW, maxContentWidth, scale);
 
     auto container = ui::column({
         .width = containerW,

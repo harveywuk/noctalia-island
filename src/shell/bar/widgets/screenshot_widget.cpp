@@ -241,6 +241,7 @@ void ScreenshotWidget::openCaptureMenu() {
           .entries = std::move(entries),
           .minMenuWidth = kMenuWidth * m_contentScale,
           .maxMenuWidth = Style::menuAutoMaxWidth * m_contentScale,
+          .contentScale = m_contentScale,
           .maxVisible = maxVisible,
           .anchor =
               PopupAnchorRect{

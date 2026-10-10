@@ -1666,7 +1666,7 @@ void Application::initSessionBusServices() {
         if (m_lockScreen.isActive()) {
           m_lockScreen.requestUpdate();
         }
-        if (shouldRefreshControlCenter()) {
+        if (shouldRefreshControlCenter() || m_panelManager.isOpenPanel("assistant")) {
           m_panelManager.refresh();
         }
       });

@@ -3112,6 +3112,7 @@ void TaskbarWidget::openTaskContextMenu(const TaskModel& task, InputArea& area) 
           .entries = std::move(entries),
           .minMenuWidth = kTaskMenuWidth * m_contentScale,
           .maxMenuWidth = Style::menuAutoMaxWidth * m_contentScale,
+          .contentScale = m_contentScale,
           .maxVisible = 12,
           .anchor =
               PopupAnchorRect{

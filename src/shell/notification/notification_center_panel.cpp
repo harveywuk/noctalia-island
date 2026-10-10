@@ -23,11 +23,11 @@ float NotificationCenterPanel::preferredWidth() const { return scaled(kColumnWid
 float NotificationCenterPanel::preferredHeight() const { return scaled(kFallbackHeight); }
 
 float NotificationCenterPanel::islandWidth(float availableWidth) const {
-  return std::min(scaled(440.0F), availableWidth);
+  return std::min(scaled(PanelManager::instance().islandCompactLayout() ? 444.0F : 528.0F), availableWidth);
 }
 
 float NotificationCenterPanel::islandHeight(float availableHeight) const {
-  const float chrome = scaled(2 * (Style::panelPadding + Style::spaceSm))
+  const float chrome = scaled(2 * (Style::panelPadding + 2.0F))
       + (m_header ? m_header->height() + m_root->gap() : scaled(Style::controlHeightSm));
   return std::min(chrome + m_history.fittedHeight(), std::min(scaled(600.0F), availableHeight * 0.85F));
 }
@@ -43,11 +43,12 @@ void NotificationCenterPanel::create() {
   m_history.setContentScale(scale);
   m_history.setPanelCardOpacity(panelCardOpacity());
 
+  const bool hosted = PanelManager::instance().isIslandOpen();
   auto root = ui::column({
       .out = &m_root,
       .align = FlexAlign::Stretch,
-      .gap = Style::spaceSm * scale,
-      .padding = Style::spaceSm * scale,
+      .gap = Style::spaceLg * scale,
+      .padding = (hosted ? 2.0F : Style::spaceSm) * scale,
   });
 
   auto header = ui::row({
@@ -55,7 +56,6 @@ void NotificationCenterPanel::create() {
       .align = FlexAlign::Center,
       .gap = Style::spaceSm * scale,
   });
-  const bool hosted = PanelManager::instance().isIslandOpen();
   if (!hosted) {
     // Standalone cards have no sheet, so the toolbar needs its own readable surface.
     header->setCardStyle(scale, panelCardOpacity());
@@ -64,7 +64,7 @@ void NotificationCenterPanel::create() {
   header->addChild(
       ui::label({
           .text = i18n::tr("control-center.tabs.notifications"),
-          .fontSize = Style::fontSizeTitle * scale,
+          .fontSize = Style::fontSizeHeader * scale,
           .fontWeight = FontWeight::SemiBold,
           .maxLines = 1,
           .flexGrow = 1.0F,
@@ -74,7 +74,7 @@ void NotificationCenterPanel::create() {
   header->addChild(
       ui::button({
           .out = &m_close,
-          .glyph = hosted ? "chevron-up" : "x",
+          .glyph = "x",
           .glyphSize = Style::fontSizeBody * scale,
           .variant = ButtonVariant::Ghost,
           .tooltip = i18n::tr("notifications.close-history"),
@@ -116,7 +116,7 @@ void NotificationCenterPanel::doLayout(Renderer& renderer, float width, float he
   }
   m_root->setSize(width, height);
   m_root->layout(renderer);
-  const float pad = Style::spaceSm * contentScale();
+  const float pad = (PanelManager::instance().isIslandOpen() ? 2.0F : Style::spaceSm) * contentScale();
   const float bodyHeight = std::max(0.0F, height - pad * 2.0F - m_header->height() - m_root->gap());
   m_history.layout(renderer, std::max(0.0F, width - pad * 2.0F), bodyHeight);
   m_root->layout(renderer);

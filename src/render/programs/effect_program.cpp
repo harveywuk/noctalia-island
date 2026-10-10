@@ -1,5 +1,7 @@
 #include "render/programs/effect_program.h"
 
+#include "render/programs/assistant_orb_fragment.h"
+
 #include <array>
 #include <stdexcept>
 #include <string>
@@ -493,6 +495,7 @@ void EffectProgram::ensureInitialized() {
   initProgram(2, kRainFragment);
   initProgram(3, kCloudFragment);
   initProgram(4, kStarsFragment);
+  initProgram(5, kAssistantOrbFragment);
 }
 
 void EffectProgram::destroy() {
@@ -526,6 +529,10 @@ void EffectProgram::initProgram(std::size_t index, const char* fragSource) {
   pd.bgColorLoc = glGetUniformLocation(id, "u_bg_color");
   pd.radiusLoc = glGetUniformLocation(id, "u_radius");
   pd.alternativeLoc = glGetUniformLocation(id, "u_alternative");
+  pd.orbFaceLoc = glGetUniformLocation(id, "u_orb_face");
+  pd.orbMotionLoc = glGetUniformLocation(id, "u_orb_motion");
+  for (std::size_t i = 0; i < pd.orbColorLoc.size(); ++i)
+    pd.orbColorLoc[i] = glGetUniformLocation(id, ("u_orb_color" + std::to_string(i)).c_str());
 
   if (pd.positionLoc < 0 || pd.surfaceSizeLoc < 0 || pd.transformLoc < 0) {
     throw std::runtime_error("failed to query effect shader locations");
@@ -542,7 +549,9 @@ void EffectProgram::draw(
   // Fog reuses the Cloud shader with alternative=1
   const bool isFog = style.type == EffectType::Fog;
   const auto effectType = isFog ? EffectType::Cloud : style.type;
-  auto idx = static_cast<std::size_t>(effectType) - 1;
+  const auto idx = effectType == EffectType::AssistantOrb ? 5U
+      : effectType == EffectType::Stars                   ? 4U
+                                                          : static_cast<std::size_t>(effectType) - 1;
   if (idx >= kEffectCount || !m_programs[idx].program.isValid()) {
     return;
   }
@@ -580,6 +589,14 @@ void EffectProgram::draw(
   }
   if (pd.alternativeLoc >= 0) {
     glUniform1f(pd.alternativeLoc, isFog ? 1.0F : 0.0F);
+  }
+
+  if (style.type == EffectType::AssistantOrb) {
+    const auto& face = style.orbFace;
+    glUniform3f(pd.orbFaceLoc, face.eyeOpen, face.smile, face.puzzled);
+    glUniform4f(pd.orbMotionLoc, face.energy, face.blink, face.gazeX, face.gazeY);
+    for (std::size_t i = 0; i < face.colors.size(); ++i)
+      glUniform3f(pd.orbColorLoc[i], face.colors[i].r, face.colors[i].g, face.colors[i].b);
   }
 
   auto posAttr = static_cast<GLuint>(pd.positionLoc);

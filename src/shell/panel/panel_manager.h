@@ -19,6 +19,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+namespace control_center {
+  class ArtworkFlowLayer;
+}
 class Island;
 namespace island {
   class CaptureGlow;
@@ -70,6 +73,7 @@ public:
   void initialize(CompositorPlatform& platform, ConfigService* config, RenderContext* renderContext);
   void setIslandHost(Island* island) { m_islandHost = island; }
   bool isIslandOpen() const noexcept { return m_islandSurface.has_value(); }
+  bool islandCompactLayout() const noexcept { return m_islandSurface && m_islandSurface->compactLayout; }
 
   // Optional: invoked from shell UI (e.g. control center) to spawn the standalone settings toplevel.
   void setOpenSettingsWindowCallback(std::function<void(std::string)> callback);
@@ -273,6 +277,9 @@ private:
   Node* m_bgNode = nullptr;
   // The Island's artwork gradient behind an Island-hosted panel's card; see applyIslandReveal.
   Node* m_islandFlow = nullptr;
+  std::unique_ptr<control_center::ArtworkFlowLayer> m_islandFlowLayer;
+  std::string m_islandArtworkPath;
+  Node* m_islandAccent = nullptr;
   island::CaptureGlow* m_islandCaptureGlow = nullptr;
   Node* m_contentNode = nullptr;
   Node* m_detachedRevealClipNode = nullptr;

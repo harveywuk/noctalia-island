@@ -1817,6 +1817,49 @@ namespace settings {
         "launcher ai api key command secret password manager"
     ));
     entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("assistant.voice.settings-enabled.label"),
+        tr("assistant.voice.settings-enabled.description"), {"shell", "launcher", "ai", "voice", "enabled"},
+        ToggleSetting{cfg.shell.launcher.ai.voice.enabled},
+        "assistant local voice microphone dictation speech whisper piper"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("assistant.voice.settings-spoken_replies.label"),
+        tr("assistant.voice.settings-spoken_replies.description"),
+        {"shell", "launcher", "ai", "voice", "spoken_replies"},
+        ToggleSetting{cfg.shell.launcher.ai.voice.spokenReplies},
+        "assistant local voice microphone dictation speech whisper piper"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("assistant.voice.settings-duck_media.label"),
+        tr("assistant.voice.settings-duck_media.description"), {"shell", "launcher", "ai", "voice", "duck_media"},
+        ToggleSetting{cfg.shell.launcher.ai.voice.duckMedia}, "assistant voice media duck music volume"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("assistant.voice.settings-whisper_command.label"),
+        tr("assistant.voice.settings-whisper_command.description"),
+        {"shell", "launcher", "ai", "voice", "whisper_command"},
+        TextSetting{.value = cfg.shell.launcher.ai.voice.whisperCommand, .placeholder = "", .browseFileExtensions = {}},
+        "assistant local voice microphone dictation speech whisper piper"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("assistant.voice.settings-whisper_model.label"),
+        tr("assistant.voice.settings-whisper_model.description"), {"shell", "launcher", "ai", "voice", "whisper_model"},
+        TextSetting{.value = cfg.shell.launcher.ai.voice.whisperModel, .placeholder = "", .browseFileExtensions = {}},
+        "assistant local voice microphone dictation speech whisper piper"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("assistant.voice.settings-piper_command.label"),
+        tr("assistant.voice.settings-piper_command.description"), {"shell", "launcher", "ai", "voice", "piper_command"},
+        TextSetting{.value = cfg.shell.launcher.ai.voice.piperCommand, .placeholder = "", .browseFileExtensions = {}},
+        "assistant local voice microphone dictation speech whisper piper"
+    ));
+    entries.push_back(makeEntry(
+        SettingsSection::Launcher, "launcher", tr("assistant.voice.settings-piper_model.label"),
+        tr("assistant.voice.settings-piper_model.description"), {"shell", "launcher", "ai", "voice", "piper_model"},
+        TextSetting{.value = cfg.shell.launcher.ai.voice.piperModel, .placeholder = "", .browseFileExtensions = {}},
+        "assistant local voice microphone dictation speech whisper piper"
+    ));
+    entries.push_back(makeEntry(
         SettingsSection::Launcher, "launcher", tr("settings.schema.panels.launcher-snippet-expansion.label"),
         tr("settings.schema.panels.launcher-snippet-expansion.description"), {"shell", "launcher", "snippet_expansion"},
         ToggleSetting{cfg.shell.launcher.snippetExpansion}, "launcher snippet expansion keyword typing"

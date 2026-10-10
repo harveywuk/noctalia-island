@@ -1,14 +1,18 @@
 """Notification stacks in the Island and OSD isolation on private Wayland outputs."""
+import array
 import csv
+import math
 import io
 import json
 import os
 import pathlib
 import re
 import subprocess
+import sys
 import time
+import wave
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 
 def prepare(base, cfg, env):
@@ -80,10 +84,10 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         word = matches[0]
         click(int(word['left'])+int(word['width'])//2, int(word['top'])+int(word['height'])//2)
 
-    def notify(app, summary, actions='[]', timeout=0):
+    def notify(app, summary, actions='[]', timeout=0, urgency=2, icon='', body='Ready when you are.'):
         reply = run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications', '--object-path',
                      '/org/freedesktop/Notifications', '--method', 'org.freedesktop.Notifications.Notify',
-                     app, '0', '', summary, 'Ready when you are.', actions, "{'urgency': <byte 2>}", str(timeout)])
+                     app, '0', icon, summary, body, actions, "{'urgency': <byte %d>}" % urgency, str(timeout)])
         return int(re.search(r'uint32 (\d+)', reply).group(1))
 
     def open_history():
@@ -91,7 +95,7 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
 
     def check_hosted(name):
         title = [w for w in words(name) if w['text'] == 'Notifications']
-        assert title and 400 < int(title[0]['left']) < 700 and int(title[0]['top']) < 90, title
+        assert title and 350 < int(title[0]['left']) < 700 and int(title[0]['top']) < 90, title
         layers = json.loads(ctl('-j', 'layers'))['TEST-1']['levels']
         assert not any('panel' in entry.get('namespace', '')
                        for level in layers.values() for entry in level), layers
@@ -159,13 +163,13 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         notify('Mail', 'Older message'); notify('Mail', 'Latest message')
         open_history(); key(15); key(28)
         assert 'Older' in texts('keyboard-expanded-stack')
-        time_word = next(w for w in words('individual-dismiss') if w['text'] == 'now')
-        click(int(time_word['left'])+40, int(time_word['top'])+int(time_word['height'])//2)
+        move(); time_word = next(w for w in words('individual-dismiss') if w['text'] == 'now')
+        click(int(time_word['left'])+int(time_word['width'])//2, int(time_word['top'])+int(time_word['height'])//2)
         text = texts('individual-dismissed')
         assert 'Latest' not in text and 'Older' in text, text
         notify('Calendar', 'First reminder'); notify('Calendar', 'Second reminder'); time.sleep(.3)
-        time_word = next(w for w in words('group-dismiss') if w['text'] == 'now')
-        click(int(time_word['left'])+40, int(time_word['top'])+int(time_word['height'])//2)
+        move(); time_word = next(w for w in words('group-dismiss') if w['text'] == 'now')
+        click(int(time_word['left'])+int(time_word['width'])//2, int(time_word['top'])+int(time_word['height'])//2)
         text = texts('group-dismissed')
         assert 'reminder' not in text and 'Older' in text, text
         # Clear all returns to a compact empty state inside the Island.
@@ -180,14 +184,18 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
                         'notification-signals.log')
         time.sleep(.2)
         note = notify('Calendar', 'Choose a reminder', "['default', 'Open', 'later', 'Later']")
-        open_history(); click_word('Later', 'quick-action')
+        open_history()
+        assert 'Later' not in texts('actions-resting'), 'Actions must stay quiet until a card opens'
+        click_word('Choose', 'open-action-card'); click_word('Later', 'quick-action')
         wait(lambda: 'ActionInvoked' in (out/'notification-signals.log').read_text(), 'Action was not invoked')
         signals = (out/'notification-signals.log').read_text()
         assert str(note) in signals and "'later'" in signals, signals
         move(); assert 'Choose' not in texts('action-return')
         before = signals.count('ActionInvoked')
         notify('Calendar', 'Expired reminder', "['default', 'Open', 'later', 'Later']", timeout=100)
-        open_history(); time.sleep(.3); click_word('Later', 'expired-quick-action')
+        open_history(); time.sleep(.3)
+        click_word('Expired', 'expand-expired-stack')
+        click_word('Expired', 'open-expired-action-card'); click_word('Later', 'expired-quick-action')
         wait(lambda: (out/'notification-signals.log').read_text().count('ActionInvoked') == before+1,
              'Expired notification action was not invoked')
         monitor.terminate(); monitor.wait(timeout=5)
@@ -200,6 +208,89 @@ def run_checks(base, cfg, out, env, run, ctl, dispatch, msg, wait, start, shell)
         time.sleep(.2); key(1); move(); time.sleep(.3)
         assert 'Ephemeral' in texts('unstored-preview')
         msg('notification-clear-active'); msg('notification-clear-history')
+
+        # A focused card can be dismissed without reaching for a pointer target.
+        notify('Mail', 'Keyboard removal'); open_history(); key(15); key(111)
+        assert 'Recent notifications' in texts('keyboard-delete'), 'Delete did not remove the focused card'
+        notify('Mail', 'Swipe removal'); time.sleep(.3)
+        title = next(w for w in words('swipe-start') if w['text'] == 'Swipe')
+        move(int(title['left'])+90, int(title['top'])+5); command(pointer, 'press')
+        for _ in range(6):
+            command(pointer, 'relative -20 0'); time.sleep(.04)
+        shot('swipe-in-progress'); command(pointer, 'release'); time.sleep(.4)
+        assert 'Recent notifications' in texts('swipe-dismissed'), 'Horizontal drag did not remove the card'
+        key(1); move()
+
+        # An ordinary arrival stays compact until hover, with action buttons in the preview.
+        notify('Mail', 'A quieter arrival', "['default', 'Open']", urgency=1)
+        time.sleep(.4)
+        assert osd_bottom('brief-arrival') <= 74, 'Ordinary notification arrived as a full card'
+        move(630, 40); time.sleep(.7)
+        assert 'Open' in texts('hover-preview'), 'Hover did not reveal the notification action'
+        msg('notification-clear-active'); move(); msg('notification-clear-history')
+
+        # Long critical alerts still open immediately, and full text remains scrollable.
+        notify('Alerts', 'Long critical message', body='\n'.join(['Message line '+str(i) for i in range(80)])+'\nFinal detail')
+        time.sleep(.4); assert 'Read more' in texts('critical-preview')
+        click_word('Read', 'open-critical-text')
+        move(650, 350)
+        for _ in range(50):
+            command(pointer, 'scroll 4')
+        time.sleep(.5)
+        assert 'Final' in texts('critical-scrolled'), 'Full critical text was clipped or not scrollable'
+        msg('notification-clear-active'); move(); msg('notification-clear-history')
+
+        # Both densities retain the same text column and generous outside padding.
+        density_path = cfg/'config.toml'
+        comfortable = density_path.read_text()
+        for title in ('First delivery', 'Second delivery', 'Third delivery'):
+            notify('Mail', title, icon=str(repo/'assets/noctalia-wallpaper.png'))
+        notify('Calendar', 'Design review')
+        open_history(); shot('comfortable-history'); key(1); move()
+        density_path.write_text(comfortable.replace('[island]\n', '[island]\ncompact_layout=true\n'))
+        msg('config-reload'); time.sleep(.4); open_history(); shot('compact-history')
+        assert 'Third' in texts('compact-history-text') and 'Design' in texts('compact-history-text')
+        key(1); move(); density_path.write_text(comfortable); msg('config-reload'); time.sleep(.4)
+        msg('notification-clear-history')
+
+        # Playing media keeps its artwork moving through an arrival and its hover preview.
+        density_path.write_text(comfortable.replace('media_gradient=false', 'media_gradient=true').replace('[shell.animation]\nenabled=false', '[shell.animation]\nenabled=true'))
+        msg('config-reload'); time.sleep(.4)
+        tone = array.array('h', (int(8000*math.sin(2*math.pi*440*i/48000)) for i in range(48000)))
+        if sys.byteorder != 'little':
+            tone.byteswap()
+        audio_path = base/'notification-tone.wav'
+        with wave.open(str(audio_path), 'wb') as wav:
+            wav.setparams((1, 2, 48000, 0, 'NONE', 'not compressed'))
+            for _ in range(30):
+                wav.writeframes(tone.tobytes())
+        sound = start(['pw-play', str(audio_path)], 'notification-sound.log')
+        helpers.append(sound)
+        env.update(ISLAND_TEST_ART=(repo/'assets/noctalia-wallpaper.png').as_uri(),
+                   ISLAND_TEST_EVENTS=str(out/'notification-player-events.log'),
+                   ISLAND_TEST_TITLE='Still playing', ISLAND_TEST_ARTIST='Island Ensemble')
+        player = start([sys.executable, str(repo/'tests/fixtures/island_player.py')], 'notification-player.log')
+        helpers.append(player); time.sleep(1.5)
+        notify('Mail', 'Music continues', urgency=1); time.sleep(.5)
+        first = Image.open(shot('media-arrival')).convert('RGB'); time.sleep(.4)
+        second = Image.open(shot('media-arrival-moving')).convert('RGB')
+        strip = (550, 17, 730, 22)
+        assert sum(max(p)>12 for p in first.crop(strip).getdata()) > 300, 'Arrival hid the artwork gradient'
+        assert ImageChops.difference(first.crop(strip), second.crop(strip)).getbbox(), 'Arrival froze the artwork'
+        # The round media bubble has its own audio-driven waveform, then yields back to playback.
+        waveform = second.crop((840, 18, 864, 44))
+        assert sum(max(p)>75 for p in waveform.getdata()) > 35, 'Media waveform did not respond to audio'
+        assert max(second.getpixel((860, 20))) < 12, 'Media bubble was hidden during notification'
+        move(630, 40); time.sleep(.7); shot('media-hover-preview')
+        move(); time.sleep(.7); click(852, 32); move(); time.sleep(.4)
+        assert 'Music continues' not in texts('media-bubble-return'), 'Bubble did not return to the live activity'
+        player.terminate(); player.wait(timeout=5)
+        sound.terminate(); sound.wait(timeout=5); time.sleep(.4)
+        nodes = json.loads(run(['pw-dump']))
+        assert not any(n.get('info', {}).get('props', {}).get('application.name') == 'Noctalia Spectrum'
+                       for n in nodes), 'Notification waveform retained an idle audio stream'
+        msg('notification-clear-active'); msg('notification-clear-history')
+        density_path.write_text(comfortable); msg('config-reload'); time.sleep(.4)
 
         # Shared motion, interruption, and reduced-motion settling.
         path = cfg/'config.toml'

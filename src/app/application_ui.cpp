@@ -1,6 +1,7 @@
 #include "app/main_loop.h"
 #include "application.h"
 #include "application_internal.h"
+#include "cli/schema_msg.h"
 #include "compositors/compositor_detect.h"
 #include "config/config_types.h"
 #include "core/build_info.h"
@@ -79,6 +80,7 @@
 #include "scripting/plugin_panel_shell.h"
 #include "scripting/plugin_registry.h"
 #include "scripting/plugin_runtime_context.h"
+#include "shell/assistant/assistant_panel.h"
 #include "shell/clipboard/clipboard_paste.h"
 #include "shell/control_center/control_center_panel.h"
 #include "shell/greeter/greeter_appearance_sync.h"
@@ -123,6 +125,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <utility>
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 namespace {
   constexpr Logger kLog("app");
@@ -425,6 +428,8 @@ void Application::initInputDispatch() {
       m_lockScreen.onPointerEvent(event);
       return;
     }
+    if (event.type == PointerEvent::Type::Button && event.pressed)
+      TooltipManager::instance().forceDestroy();
     if (m_windowSwitcher.isActive()) {
       if (m_windowSwitcher.onPointerEvent(event)) {
         return;
@@ -485,6 +490,8 @@ void Application::initInputDispatch() {
       m_lockScreen.onKeyboardEvent(event);
       return;
     }
+    if (event.pressed && event.sym == XKB_KEY_Escape)
+      TooltipManager::instance().forceDestroy();
     // Grab popups are modal: while one is open it owns the keyboard and ESC
     // dismisses it before anything behind can react.
     if (ContextMenuPopup::dispatchKeyboardEvent(event)) {
@@ -521,6 +528,9 @@ void Application::initInputDispatch() {
     }
     if (m_settingsWindow.ownsKeyboardSurface(m_wayland.lastKeyboardSurface())) {
       m_settingsWindow.onKeyboardEvent(event);
+      return;
+    }
+    if (m_dock.onKeyboardEvent(event)) {
       return;
     }
     if (m_island.onKeyboardEvent(event)) {
@@ -776,6 +786,26 @@ void Application::initPanelManagerAndPanels() {
       )
   );
   m_panelManager.registerPanel("tray-drawer", std::make_unique<TrayDrawerPanel>(m_trayService.get(), &m_configService));
+  auto assistant = std::make_unique<AssistantPanel>(
+      &m_configService, &m_clipboardService, &m_httpClient, m_mprisService.get(), m_pipewireSpectrum.get(),
+      &m_ipcService, m_pipewireService.get(), m_upowerService.get()
+  );
+  auto* assistantPtr = assistant.get();
+  m_panelManager.registerPanel("assistant", std::move(assistant));
+  m_ipcService.bind(noctalia::cli::msg::assistantVoice, [this, assistantPtr](const std::string& args) -> std::string {
+    const auto action = StringUtils::trim(args);
+    if (action == "status")
+      return assistantPtr->voiceStatus();
+    if (action == "start")
+      return m_ipcService.execute("panel-open assistant /hold-start");
+    if (action == "finish")
+      assistantPtr->finishHeldDictation();
+    else if (action == "cancel")
+      assistantPtr->cancelVoice();
+    else
+      return "error: assistant-voice requires start, finish, cancel or status\n";
+    return "ok\n";
+  });
   m_panelManager.registerPanel("floating-notes", std::make_unique<FloatingNotesPanel>(&m_configService));
   m_panelManager.registerPanel("polkit", std::make_unique<PolkitPanel>(&m_configService, [this]() {
                                  return m_polkitAgent.get();

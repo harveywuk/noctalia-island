@@ -10,6 +10,13 @@ public:
 
   [[nodiscard]] const EffectStyle& style() const noexcept { return m_style; }
 
+  void setOrbFace(const OrbFaceStyle& face) {
+    if (m_style.orbFace == face)
+      return;
+    m_style.orbFace = face;
+    markPaintDirty();
+  }
+
   void setEffectType(EffectType type) {
     if (m_style.type == type) {
       return;

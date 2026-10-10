@@ -4,6 +4,7 @@
 #include "shell/panel/panel_manager.h"
 #include "tests/test_check.h"
 #include "ui/controls/context_menu_popup.h"
+#include "ui/popup_chrome.h"
 #include "wayland/wayland_connection.h"
 
 #include <memory>
@@ -51,6 +52,19 @@ namespace {
 } // namespace
 
 int main() {
+  // Long menus at larger UI scales must fit a logical output, including shadows.
+  const auto large = popup_chrome::computeGeometry(900, 1600, ShellConfig::ShadowConfig{});
+  const auto fitted = popup_chrome::constrainGeometry(large, 800, 600, 12);
+  TEST_CHECK(fitted.surfaceWidth <= 776);
+  TEST_CHECK(fitted.surfaceHeight <= 576);
+  TEST_CHECK(fitted.contentWidth > 0 && fitted.contentHeight > 0);
+  TEST_CHECK(fitted.bleed.left == large.bleed.left && fitted.bleed.down == large.bleed.down);
+  const auto small = popup_chrome::computeGeometry(200, 100, ShellConfig::ShadowConfig{});
+  const auto unchanged = popup_chrome::constrainGeometry(small, 1280, 720, 8);
+  TEST_CHECK(unchanged.surfaceWidth == small.surfaceWidth && unchanged.surfaceHeight == small.surfaceHeight);
+  const auto unknown = popup_chrome::constrainGeometry(large, 0, 0, 8);
+  TEST_CHECK(unknown.surfaceWidth == large.surfaceWidth && unknown.surfaceHeight == large.surfaceHeight);
+
   WaylandConnection wayland;
   RenderContext renderContext;
 

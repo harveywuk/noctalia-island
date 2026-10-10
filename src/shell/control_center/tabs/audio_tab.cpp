@@ -1534,6 +1534,7 @@ void AudioTab::openDeviceMenu(DeviceVolumeCardState& card, const DeviceMenuModel
           .entries = std::move(entries),
           .minMenuWidth = minMenuWidth,
           .maxMenuWidth = maxMenuWidth,
+          .contentScale = scale,
           .maxVisible = 10,
           .anchor =
               PopupAnchorRect{
@@ -1622,6 +1623,7 @@ void AudioTab::openProgramRoutingMenu(Node* anchor, std::uint32_t programStreamI
           .entries = std::move(entries),
           .minMenuWidth = 240.0F * scale,
           .maxMenuWidth = 420.0F * scale,
+          .contentScale = scale,
           .maxVisible = 10,
           .anchor =
               PopupAnchorRect{

@@ -55,6 +55,20 @@ namespace popup_chrome {
     return geometry;
   }
 
+  Geometry constrainGeometry(Geometry geometry, float outputWidth, float outputHeight, float margin) noexcept {
+    const float horizontalBleed = static_cast<float>(geometry.bleed.left + geometry.bleed.right);
+    const float verticalBleed = static_cast<float>(geometry.bleed.up + geometry.bleed.down);
+    if (outputWidth > 0)
+      geometry.contentWidth =
+          std::min(geometry.contentWidth, std::max(1.0F, outputWidth - horizontalBleed - 2 * margin));
+    if (outputHeight > 0)
+      geometry.contentHeight =
+          std::min(geometry.contentHeight, std::max(1.0F, outputHeight - verticalBleed - 2 * margin));
+    geometry.surfaceWidth = extentFor(geometry.contentWidth + horizontalBleed);
+    geometry.surfaceHeight = extentFor(geometry.contentHeight + verticalBleed);
+    return geometry;
+  }
+
   std::int32_t
   adjustedOffsetX(std::int32_t baseOffset, const Geometry& geometry, HorizontalAttachment attachment) noexcept {
     switch (attachment) {

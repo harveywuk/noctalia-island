@@ -201,6 +201,10 @@ namespace noctalia::cli {
       Positional{"id", {}, {}, true, false, false},
       Positional{"context", {}, {}, false, false, false},
   };
+  inline constexpr std::array<std::string_view, 4> kMsgAssistantVoiceChoices{"start", "finish", "cancel", "status"};
+  inline constexpr std::array kMsgAssistantVoicePositionals{
+      Positional{"action", {}, kMsgAssistantVoiceChoices, true, false, false},
+  };
   inline constexpr std::array kMsgPluginPositionals{
       Positional{"author/plugin:entry", {}, {}, true, false, false, "plugin_prefix"},
       Positional{"target[:bar-name]", {}, {}, true, false, false},
@@ -381,6 +385,16 @@ namespace noctalia::cli {
     inline constexpr Command focusSet{"focus-set", "Select a Focus preset", {}, {},
                                       {},          kMsgFocusSetPositionals, {}, false};
     inline constexpr Command focusStatus{"focus-status", "Show Focus and scheduling state", {}, {}, {}, {}, {}, false};
+    inline constexpr Command assistantVoice{
+        "assistant-voice",
+        "Start or finish held dictation, cancel, or inspect voice state",
+        {},
+        {},
+        {},
+        kMsgAssistantVoicePositionals,
+        {},
+        false
+    };
     inline constexpr Command clipboardClear{"clipboard-clear", "Clear clipboard history", {}, {}, {}, {}, {}, false};
     inline constexpr Command clipboardCopy{
         "clipboard-copy", "Copy text to the clipboard", {}, {}, {}, kMsgClipboardCopyPositionals, {}, false
@@ -456,6 +470,8 @@ namespace noctalia::cli {
     inline constexpr Command desktopWidgetsToggleEdit{
         "desktop-widgets-toggle-edit", "Toggle desktop widgets edit mode", {}, {}, {}, {}, {}, false
     };
+    inline constexpr Command dockFocus{"dock-focus", "Focus the dock for keyboard navigation", {}, {}, {}, {}, {},
+                                       false};
     inline constexpr Command dockHide{"dock-hide", "Hide the dock (persists override)", {}, {}, {}, {}, {}, false};
     inline constexpr Command dockReload{"dock-reload", "Reload dock configuration", {}, {}, {}, {}, {}, false};
     inline constexpr Command dockShow{"dock-show", "Show the dock (persists override)", {}, {}, {}, {}, {}, false};
@@ -929,6 +945,7 @@ namespace noctalia::cli {
 
   inline constexpr std::array kMsgSubcommands{
       msg::annotate,
+      msg::assistantVoice,
       msg::barAutoHideSet,
       msg::barHide,
       msg::barLayerSet,
@@ -963,6 +980,7 @@ namespace noctalia::cli {
       msg::desktopWidgetsShow,
       msg::desktopWidgetsToggle,
       msg::desktopWidgetsToggleEdit,
+      msg::dockFocus,
       msg::dockHide,
       msg::dockReload,
       msg::dockShow,

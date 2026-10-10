@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+class Button;
 class Flex;
 class Glyph;
 class Image;
@@ -70,8 +71,8 @@ public:
   // Copies text for launcher-level actions ("Copy Hotkey Command").
   void setCopyTextCallback(std::function<void(std::string)> callback) { m_copyText = std::move(callback); }
 
-  [[nodiscard]] float preferredWidth() const override { return scaled(560.0F); }
-  [[nodiscard]] float preferredHeight() const override { return scaled(500.0F); }
+  [[nodiscard]] float preferredWidth() const override;
+  [[nodiscard]] float preferredHeight() const override { return scaled(540.0F); }
   [[nodiscard]] float fittedHeight() const override;
   [[nodiscard]] float islandWidth(float availableWidth) const override;
   [[nodiscard]] float islandHeight(float availableHeight) const override;
@@ -121,19 +122,21 @@ private:
   // Esc inside a provider view reached from the root search goes back to it; returns false to close.
   bool popToRoot();
   void recordActivation(const LauncherProvider& provider, const std::string& resultId);
-  // Raycast's action panel: a searchable list of the selected result's actions, with key hints,
-  // floating over the results. The search field filters it while it is open.
+  // Contextual actions replace the results; Escape restores query, selection and scroll position.
   struct ActionEntry {
     std::string label;
     std::string hint;
     std::function<void()> run;
+    std::string glyph = "arrow-up-right";
+    bool separatorBefore = false;
   };
   struct ActionRow {
     Flex* row = nullptr;
     InputArea* area = nullptr;
     Label* label = nullptr;
-    Flex* hintCap = nullptr;
-    Label* hint = nullptr;
+    Glyph* glyph = nullptr;
+    Glyph* returnGlyph = nullptr;
+    Separator* separator = nullptr;
   };
   [[nodiscard]] std::vector<ActionEntry> actionEntriesFor(const LauncherResult& result);
   [[nodiscard]] bool openActionsMenu(std::size_t index, float anchorX, float anchorY);
@@ -142,8 +145,8 @@ private:
   void refreshActionPanel();
   void runActionPanelSelection();
   [[nodiscard]] bool actionPanelKey(std::uint32_t sym, std::uint32_t modifiers);
-  [[nodiscard]] float actionPanelHeight(float scale) const;
-  void layoutActionPanel(Renderer& renderer, float width, float height);
+  void buildActionRows();
+  void layoutActionPanel(Renderer& renderer);
   [[nodiscard]] bool dismissTransientUi() override;
   // Raycast's command arguments: once a command that takes arguments is picked (Tab, or Return
   // while a required one is empty), its fields show in a bar under the search field and the
@@ -216,6 +219,8 @@ private:
 
   Flex* m_container = nullptr;
   Input* m_input = nullptr;
+  Image* m_headerImage = nullptr;
+  Glyph* m_headerGlyph = nullptr;
   Segmented* m_categoryFilter = nullptr;
   Flex* m_body = nullptr;
   Flex* m_listColumn = nullptr;
@@ -241,9 +246,8 @@ private:
   Label* m_emptyLabel = nullptr;
   Flex* m_footer = nullptr;
   Label* m_footerKind = nullptr;
-  Label* m_footerPrimary = nullptr;
-  Flex* m_footerActions = nullptr;
-  Separator* m_footerActionsSeparator = nullptr;
+  Button* m_footerActionButton = nullptr;
+  Button* m_footerBack = nullptr;
   // True when the results mix sources (no prefix or scope), so they are grouped into sections.
   bool m_mixedResults = false;
   bool m_anyProviderLoading = false;
@@ -279,6 +283,10 @@ private:
   std::string m_actionFilter;
   std::string m_actionReturnQuery;
   std::size_t m_actionReturnIndex = 0;
+  float m_actionReturnScroll = 0.0F;
+  bool m_actionEnsureVisible = false;
+  ScrollView* m_actionScroll = nullptr;
+  Button* m_actionBack = nullptr;
   Flex* m_actionPanel = nullptr;
   Label* m_actionTitle = nullptr;
   Flex* m_actionList = nullptr;

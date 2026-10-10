@@ -43,6 +43,7 @@ struct AudioNode {
   bool isDefault = false;
   bool available = true;        // false for a device whose active route is unavailable (e.g. unplugged HDMI)
   std::string bluetoothAddress; // BlueZ machine identity, independent of the user-facing label.
+  std::uint64_t serial = 0;     // Distinguishes a new stream reusing a previous node id.
 
   bool operator==(const AudioNode&) const = default;
 };
@@ -137,6 +138,8 @@ public:
 
   // Program/application streams (PipeWire "Stream/*/Audio")
   void setProgramOutputVolume(std::uint32_t id, float volume);
+  // A temporary adjustment, without changing the remembered per-application volume.
+  void setProgramOutputVolumeTemporary(std::uint32_t id, float volume);
   void setProgramOutputMuted(std::uint32_t id, bool muted);
   void moveProgramOutput(std::uint32_t programStreamId, std::uint32_t targetSinkId);
 

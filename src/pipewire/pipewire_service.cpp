@@ -1916,6 +1916,7 @@ void PipeWireService::rebuildState() {
   for (const auto& [id, nd] : m_nodes) {
     AudioNode node;
     node.id = id;
+    node.serial = nd->serial;
     node.name = nd->name;
     node.bluetoothAddress = nd->bluetoothAddress;
     node.description = nd->description;
@@ -2328,6 +2329,14 @@ void PipeWireService::setSourceMuted(std::uint32_t id, bool muted) { setNodeMute
 void PipeWireService::setDefaultSource(std::uint32_t id) { setDefaultNode(id, "default.audio.source"); }
 
 void PipeWireService::setProgramOutputVolume(std::uint32_t id, float volume) { setNodeVolume(id, volume); }
+
+void PipeWireService::setProgramOutputVolumeTemporary(std::uint32_t id, float volume) {
+  const auto it = m_nodes.find(id);
+  if (it == m_nodes.end() || it->second->mediaClass != "Stream/Output/Audio" || !std::isfinite(volume))
+    return;
+  if (applyNodeVolume(id, volume))
+    rebuildState();
+}
 void PipeWireService::setProgramOutputMuted(std::uint32_t id, bool muted) { setNodeMuted(id, muted); }
 
 void PipeWireService::setDefaultNode(std::uint32_t id, const char* key) {

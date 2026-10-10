@@ -1779,6 +1779,20 @@ namespace noctalia::config::schema {
       return s;
     }
 
+    const Schema<ShellConfig::LauncherConfig::AiConfig::VoiceConfig>& shellAssistantVoiceSchema() {
+      using Voice = ShellConfig::LauncherConfig::AiConfig::VoiceConfig;
+      static const Schema<Voice> s = {
+          field(&Voice::enabled, "enabled"),
+          field(&Voice::spokenReplies, "spoken_replies"),
+          field(&Voice::duckMedia, "duck_media"),
+          field(&Voice::whisperCommand, "whisper_command"),
+          field(&Voice::whisperModel, "whisper_model"),
+          field(&Voice::piperCommand, "piper_command"),
+          field(&Voice::piperModel, "piper_model"),
+      };
+      return s;
+    }
+
     const Schema<ShellConfig::LauncherConfig::AiConfig>& shellLauncherAiSchema() {
       static const Schema<ShellConfig::LauncherConfig::AiConfig> s = {
           enumField(&ShellConfig::LauncherConfig::AiConfig::provider, "provider", kAiProviderKinds),
@@ -1786,6 +1800,7 @@ namespace noctalia::config::schema {
           field(&ShellConfig::LauncherConfig::AiConfig::model, "model"),
           field(&ShellConfig::LauncherConfig::AiConfig::apiKey, "api_key"),
           field(&ShellConfig::LauncherConfig::AiConfig::apiKeyCommand, "api_key_command"),
+          subTable(&ShellConfig::LauncherConfig::AiConfig::voice, "voice", shellAssistantVoiceSchema()),
       };
       return s;
     }

@@ -17,4 +17,5 @@ struct IslandPanelSurface {
   TextureHandle flow{};
   bool cupertino = false;
   bool compactLayout = false;
+  bool mediaGradient = false;
 };

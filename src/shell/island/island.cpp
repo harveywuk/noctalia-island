@@ -236,6 +236,7 @@ struct Island::Instance {
     std::string pressedTarget;
     std::function<void(float)> progress;
     island::ProgressOutline* ledRing = nullptr;
+    IslandAudioVisualizer* visualizer = nullptr;
     // 0 tucked under its neighbour, 1 fully apart.
     float reveal = 0;
     AnimationManager::Id morph = 0;
@@ -1108,6 +1109,9 @@ void Island::onOutputChange() {
       inst->surface->setFrameTickCallback([ptr](float dt) {
         if (!ptr->panelHosted && ptr->visualizer)
           ptr->visualizer->onFrameTick(dt);
+        for (auto& split : ptr->splits)
+          if (!ptr->panelHosted && split.visualizer)
+            split.visualizer->onFrameTick(dt);
         if (!ptr->panelHosted && ptr->hoverWidgets)
           ptr->hoverWidgets->tickWidgets(dt);
       });
@@ -1539,6 +1543,8 @@ void Island::geometry(Instance& inst) {
     const float diameter = bubble * (0.72F + 0.28F * std::min(1.0F, std::max(0.0F, reveal)));
     const float centre = inst.width - bubble / 2 + offset;
     split.bubble->setVisible(reveal > 0.001F);
+    if (split.visualizer)
+      split.visualizer->setActive(!inst.panelHosted && inst.visibility > 0.001F && reveal > 0.001F);
     split.bubble->setPosition(x + (centre - diameter / 2) * s, y + (bubble - diameter) * s / 2);
     split.bubble->setSize(diameter * s, diameter * s);
     split.bubble->setRadius(diameter * s / 2);
@@ -1749,6 +1755,18 @@ void Island::prepare(Instance& inst) {
       : inst.captureRemaining > 0                                                  ? island::View::CaptureCountdown
       : inst.captureMenu                                                           ? island::View::CaptureMenu
                                                                                    : normalView;
+  // Ordinary arrivals begin as a glance; hover or keyboard interaction opens their card.
+  // Critical alerts and capture results retain their immediate, full preview.
+  const bool briefNotification = gCupertino
+      && view == island::View::Notification
+      && m_notification
+      && m_notification->urgency != Urgency::Critical
+      && m_notification->category != kRecordingNotificationCategory
+      && m_notification->category != kScreenshotNotificationCategory
+      && !inst.hovered
+      && !inst.keyboardMode
+      && inst.expandedNotification != m_notification->id;
+  const bool notificationMedia = gCupertino && view == island::View::Notification && playing;
   const bool cameraView = view == island::View::Camera;
   const auto& appSessions = cameraView ? m_cameraSessions : m_screenSessions;
   const auto& captureFeedback = cameraView ? inst.cameraFeedback : inst.captureFeedback;
@@ -1780,7 +1798,8 @@ void Island::prepare(Instance& inst) {
       : view == island::View::TimerActivity                   ? island::Activity::Timers
       : view == island::View::AwakeActivity                   ? island::Activity::Awake
                                                               : island::Activity::None;
-  const auto otherActivity = cfg.splitActivities && !recording && primaryActivity != island::Activity::None
+  const auto otherActivity = cfg.splitActivities && !recording && notificationMedia ? island::Activity::Media
+      : cfg.splitActivities && !recording && primaryActivity != island::Activity::None
       ? island::secondaryActivity(
             {player && m_mediaActivity.compact(island::MediaActivity::Clock::now(), cfg.pausedMediaSeconds),
              !downloads.empty(), timerActive, false, awake.has_value()},
@@ -1800,7 +1819,7 @@ void Island::prepare(Instance& inst) {
       !downloads.empty(), timerActive, false, awake.has_value()
   };
   island::Activity thirdActivity = island::Activity::None;
-  if (!laneSplit && otherActivity != island::Activity::None)
+  if (!notificationMedia && !laneSplit && otherActivity != island::Activity::None)
     for (const auto activity : island::activityOrder(cfg.activityPriority))
       if (activity != primaryActivity && activity != otherActivity && runningActivities.contains(activity)) {
         thirdActivity = activity;
@@ -2178,7 +2197,7 @@ void Island::prepare(Instance& inst) {
     if (splitActivity != island::Activity::None) {
       std::string bubbleSignature = std::format("{}|{}|{}|{}", static_cast<int>(splitActivity), d, s, gCupertino);
       if (splitActivity == island::Activity::Media)
-        bubbleSignature += "|" + artPath;
+        bubbleSignature += "|" + artPath + (notificationMedia ? "|waveform" : "|artwork");
       else if (splitActivity == island::Activity::Timers)
         bubbleSignature += "|" + timers.front().plugin + "|" + timers.front().icon;
       else if (splitActivity == island::Activity::Awake)
@@ -2193,6 +2212,9 @@ void Island::prepare(Instance& inst) {
         split.signature = bubbleSignature;
         split.progress = {};
         split.ledRing = nullptr;
+        if (split.visualizer)
+          split.visualizer->setActive(false);
+        split.visualizer = nullptr;
         inst.animations.cancel(split.fade);
         split.fade = 0;
         if (split.outgoing)
@@ -2221,7 +2243,7 @@ void Island::prepare(Instance& inst) {
           centred(std::move(node));
         };
         bool artShown = false;
-        if (splitActivity == island::Activity::Media && !artPath.empty()) {
+        if (splitActivity == island::Activity::Media && !notificationMedia && !artPath.empty()) {
           // Apple's minimal Now Playing view: the album art, round, filling most of the bubble.
           const float size = std::round(d * 0.62F);
           auto image = std::make_unique<Image>();
@@ -2233,7 +2255,14 @@ void Island::prepare(Instance& inst) {
             artShown = true;
           }
         }
-        if (splitActivity == island::Activity::Media && !artShown)
+        if (splitActivity == island::Activity::Media && notificationMedia) {
+          auto waveform = std::make_unique<IslandAudioVisualizer>(m_spectrum, *inst.surface);
+          split.visualizer = waveform.get();
+          const auto tint = m_flow.accent();
+          waveform->setGradient(islandFixed(rgba(tint.r, tint.g, tint.b), 1), islandRole(ColorRole::OnSurface));
+          waveform->setSize(d * 0.44F * s, d * 0.44F * s);
+          centred(std::move(waveform));
+        } else if (splitActivity == island::Activity::Media && !artShown)
           symbol("music", islandRole(ColorRole::OnSurface));
         if (splitActivity == island::Activity::Awake)
           symbol("caffeine-on", islandTint(kAppleOrange, ColorRole::Primary), 0.38F);
@@ -2406,11 +2435,15 @@ void Island::prepare(Instance& inst) {
   );
   const bool paddedCard = gCupertino
       && (expandedView
-          || view == island::View::Notification
+          || (view == island::View::Notification && !briefNotification)
           || view == island::View::CaptureMenu
           || view == island::View::CaptureCountdown);
   if (paddedCard)
     w = island::cardWidth(cfg.compactLayout);
+  if (briefNotification) {
+    w = cfg.compactLayout ? 320.0F : 360.0F;
+    h = cfg.compactLayout ? 56.0F : 64.0F;
+  }
   if (showSwitcher)
     w = std::max({w, 360.0F, 32.0F + 88.0F * static_cast<float>(availableActivities.count())});
   w = island::batteryWidth(w, view, showBattery, showUnread);
@@ -2468,6 +2501,8 @@ void Island::prepare(Instance& inst) {
           inst.splitLead = inst.splitNext;
         else
           inst.compactActivity.promote(split.activity);
+        if (m_notification)
+          dismissNotification();
         refresh();
       });
       split.area = static_cast<InputArea*>(bubble->addChild(std::move(area)));
@@ -3687,13 +3722,34 @@ void Island::prepare(Instance& inst) {
       label(m_osd->value, 60, 12, w - 80, 15);
       progress(m_osd->progress, 60, 43, w - 80);
     }
+  } else if (briefNotification) {
+    const auto n = *m_notification;
+    const float iconSize = cfg.compactLayout ? 28.0F : 32.0F;
+    const float inset = cfg.compactLayout ? 18.0F : 22.0F;
+    if (!notificationIcon(n, inset, (h - iconSize) / 2, iconSize))
+      glyph("bell", inset + (iconSize - 22) / 2, (h - 22) / 2, 22, muted);
+    const float textX = inset + iconSize + 12;
+    auto title = n.summary;
+    std::replace(title.begin(), title.end(), '\n', ' ');
+    std::replace(title.begin(), title.end(), '\r', ' ');
+    label(title, textX, (h - 38) / 2, w - textX - inset, 14, foreground, false, 1, FontWeight::SemiBold);
+    std::string detail = n.appName;
+    if (!n.body.empty())
+      detail += " · " + n.body;
+    std::replace(detail.begin(), detail.end(), '\n', ' ');
+    std::replace(detail.begin(), detail.end(), '\r', ' ');
+    label(detail, textX, (h - 38) / 2 + 23, w - textX - inset, 11, muted);
+    action(0, 0, w, h, "notification", [this, &inst, id = n.id] {
+      inst.expandedNotification = id;
+      refresh();
+    });
   } else if (view == island::View::Notification && m_notification) {
     const auto n = *m_notification;
     const bool expanded = inst.expandedNotification == n.id;
     // The sending app's icon leads the banner at full size, as on a macOS banner, with the app
-    // name, title and body in a column beside it; the text starts at the edge when none resolves.
+    // name, title and body in a column beside it; an unresolved icon gets a quiet bell.
     // The same size as the unread card in the expanded view, so the icon doesn't jump between them.
-    const float appIconSize = 32.0F;
+    const float appIconSize = cfg.compactLayout ? 32.0F : 36.0F;
     const bool recordingResult =
         n.origin == NotificationOrigin::Internal && n.category == kRecordingNotificationCategory;
     // Capture images are attachments, separate from the sender's icon.
@@ -3706,12 +3762,14 @@ void Island::prepare(Instance& inst) {
     Notification iconSource = n;
     if (thumbnail)
       iconSource.imageData.reset();
-    const bool hasAppIcon = notificationIcon(iconSource, 24, 20, appIconSize);
-    const float textX = hasAppIcon ? 24 + appIconSize + 12 : 22;
+    const bool hasAppIcon = notificationIcon(iconSource, 14, 14, appIconSize);
+    if (!hasAppIcon)
+      glyph("bell", 14 + (appIconSize - 22) / 2, 14 + (appIconSize - 22) / 2, 22, muted);
+    const float textX = 14 + appIconSize + 14;
     const float appLabelX = textX;
     // "now" / "5m ago" closes the header row, as on the notification banners.
     constexpr float timeWidth = 56.0F;
-    auto* appLabel = label(n.appName, appLabelX, 14, w - 55 - timeWidth - appLabelX, Style::fontSizeCaption, muted);
+    label(n.appName, appLabelX, 14, w - 55 - timeWidth - appLabelX, Style::fontSizeCaption, muted);
     auto* timeLabel = label(
         formatNotificationTime(n.receivedWallClock.value_or(WallClock::now())), w - 51 - timeWidth, 14, timeWidth,
         Style::fontSizeCaption, muted
@@ -3721,23 +3779,31 @@ void Island::prepare(Instance& inst) {
     control(w - 47, 5, 32, 30, "", "x", i18n::tr("notifications.dismiss"), 18, true, [this] { dismissNotification(); });
     std::vector<std::pair<std::string, std::string>> visibleActions;
     const bool hasDefault = std::ranges::find(n.actions, "default") != n.actions.end();
-    if ((recordingResult || expanded || inst.keyboardMode) && hasDefault)
+    if ((recordingResult || expanded || inst.keyboardMode || inst.hovered) && hasDefault)
       visibleActions.emplace_back(
           "default", i18n::tr(recordingResult ? "notifications.internal.recording-play" : "notifications.actions.open")
       );
     for (std::size_t index = 0; index + 1 < n.actions.size() && visibleActions.size() < 3; index += 2)
       if (n.actions[index] != "default")
         visibleActions.emplace_back(n.actions[index], n.actions[index + 1]);
-    // macOS keeps actions out of sight: hovering shows the one action, or "Options" for several,
-    // in place of the time stamp, and only an opened notification (or keyboard mode) lists them.
-    const bool actionsOpen = recordingResult || expanded || inst.keyboardMode;
+    // Actions belong to the opened preview, with room beneath the message.
+    const bool actionsOpen = recordingResult || expanded || inst.keyboardMode || inst.hovered;
     const bool hasActions = actionsOpen && !visibleActions.empty();
+    const auto moreCount = m_notifications
+        ? std::ranges::count_if(
+              m_notifications->history(),
+              [&](const auto& entry) {
+                return entry.notification.id != n.id && entry.notification.appName == n.appName;
+              }
+          )
+        : 0;
+    const bool showMore = moreCount > 0 && (inst.hovered || inst.keyboardMode || expanded);
     const float maxHeight = std::min(
         expanded ? 640.0F : 360.0F,
         inst.outputHeight / s - 16.0F - 2 * cardGutter - (privacyList.empty() ? 0.0F : 32.0F)
     );
-    const float footerHeight = hasActions ? 46.0F : 16.0F;
-    const float textBottom = maxHeight - footerHeight;
+    const float footerHeight = hasActions ? 54.0F : 24.0F;
+    const float textBottom = maxHeight - footerHeight - 36.0F - (showMore ? 32.0F : 0.0F);
     const bool hasBody = n.body.find_first_not_of(" \t\r\n") != std::string::npos;
     // The thumbnail sits at the card's right, like an attachment on a macOS notification.
     constexpr float thumbnailHeight = 64.0F;
@@ -3748,7 +3814,7 @@ void Island::prepare(Instance& inst) {
           )
         : 0.0F;
     const float textWidth =
-        w - (expanded ? 64.0F : 44.0F) - (textX - 22.0F) - (thumbnailWidth > 0 ? thumbnailWidth + 12.0F : 0.0F);
+        w - 14.0F - textX - (expanded ? 12.0F : 0.0F) - (thumbnailWidth > 0 ? thumbnailWidth + 12.0F : 0.0F);
     auto* summary =
         label(n.summary, textX, 37, textWidth, Style::fontSizeTitle, foreground, false, 0, FontWeight::SemiBold);
     const float fullSummaryHeight = summary->height();
@@ -3762,7 +3828,7 @@ void Island::prepare(Instance& inst) {
     bool truncated = false;
     if (!expanded) {
       summary->setText(previewText(n.summary));
-      const int summaryLines = hasBody ? 4 : 12;
+      const int summaryLines = gCupertino && n.urgency != Urgency::Critical ? 2 : (hasBody ? 4 : 12);
       summary->setMaxLines(summaryLines);
       summary->measure(renderer);
       const float summaryHeight = std::max(0.0F, textBottom - 37.0F - (hasBody ? 32.0F : 0.0F)) * s;
@@ -3775,15 +3841,16 @@ void Island::prepare(Instance& inst) {
     float contentBottom = 37.0F + summary->height() / s;
     Label* body = nullptr;
     if (hasBody) {
-      const float bodyY = contentBottom + 8.0F;
+      const float bodyY = contentBottom + 6.0F;
       body = label(n.body, textX, bodyY, textWidth, 13, muted, false, 0);
       const float fullBodyHeight = body->height();
       if (!expanded) {
         body->setText(previewText(n.body));
         const float bodyHeight = std::max(0.0F, textBottom - bodyY) * s;
-        body->setMaxLines(12);
+        const int bodyLines = gCupertino && n.urgency != Urgency::Critical ? 3 : 12;
+        body->setMaxLines(bodyLines);
         body->measure(renderer);
-        for (int lines = 11; body->height() > bodyHeight && lines >= 1; --lines) {
+        for (int lines = bodyLines - 1; body->height() > bodyHeight && lines >= 1; --lines) {
           body->setMaxLines(lines);
           body->measure(renderer);
         }
@@ -3846,45 +3913,25 @@ void Island::prepare(Instance& inst) {
       refresh();
     };
     if (expanded || truncated) {
-      appLabel->setMinWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
-      appLabel->setMaxWidth(std::max(0.0F, w - 90 - timeWidth - appLabelX) * s);
-      appLabel->measure(renderer);
-      timeLabel->setPosition((w - 86 - timeWidth) * s, timeLabel->y());
-      auto* expandControl = control(
-          w - 82, 5, 32, 30, "", expanded ? "chevron-up" : "chevron-down",
-          i18n::tr(expanded ? "notifications.collapse" : "notifications.expand"), 18, true, toggleExpanded
-      );
+      const auto text = i18n::tr(expanded ? "control-center.notifications.show-less" : "notifications.read-more");
+      auto* expandControl =
+          control(textX, contentBottom + 8, w - textX - 14, 28, text, "", text, 0, true, toggleExpanded);
+      expandControl->setContentAlign(ButtonContentAlign::Start);
+      expandControl->setPadding(0);
       expandControl->inputArea()->setTabFocusKey("notification-expand");
+      contentBottom += 36;
     }
     // A grey capsule sized to its label, as Apple's notification buttons are.
     const auto pillWidth = [&](const std::string& text) {
       const auto metrics = renderer.measureText(text, Style::fontSizeCaption * s);
       return std::ceil(metrics.width / s) + 24.0F;
     };
-    if (!actionsOpen && !visibleActions.empty() && inst.hovered) {
-      const bool single = visibleActions.size() == 1;
-      const std::string text = single ? visibleActions.front().second : i18n::tr("notifications.actions.options");
-      const float width = std::min(pillWidth(text), w / 2.0F);
-      const float right = timeLabel->x() / s + timeWidth;
-      timeLabel->setVisible(false);
-      auto* pillControl = control(
-          right - width, 9, width, 24, text, "", text, 0, true,
-          [this, single, toggleExpanded, id = n.id, key = visibleActions.front().first] {
-            if (single)
-              (void)m_notifications->invokeAction(id, key);
-            else
-              toggleExpanded();
-          }
-      );
-      setIslandVariant(pillControl, ButtonVariant::Default);
-      pillControl->setRadius(12.0F * s);
-    }
     h = contentBottom + footerHeight;
     const float actionsY = contentBottom + 8.0F;
-    float actionX = 22.0F;
+    float actionX = textX;
     for (std::size_t index = 0; hasActions && index < visibleActions.size(); ++index) {
       const auto& [key, text] = visibleActions[index];
-      const float width = std::min(pillWidth(text), w - 22.0F - actionX);
+      const float width = std::min(pillWidth(text), w - 14.0F - actionX);
       if (width <= 24.0F)
         break;
       auto* actionControl = control(actionX, actionsY, width, 30, text, "", text, 0, true, [this, id = n.id, key] {
@@ -3895,12 +3942,23 @@ void Island::prepare(Instance& inst) {
       actionControl->inputArea()->setTabFocusKey("notification-action-" + key);
       actionX += width + 8.0F;
     }
+    if (showMore) {
+      const auto text = i18n::trp("notifications.stack-more", moreCount);
+      auto* more = control(textX, h - 16, w - textX - 14, 28, text, "", text, 0, true, [this, panel] {
+        dismissNotification();
+        panel("notifications");
+      });
+      more->setContentAlign(ButtonContentAlign::Start);
+      more->setPadding(0);
+      more->inputArea()->setTabFocusKey("notification-history");
+      h += 32;
+    }
     if (!expanded)
       action(0, 37, w, contentBottom - 37.0F, "notification", [this, n, panel, truncated, toggleExpanded] {
         if (truncated)
           toggleExpanded();
-        else if (std::ranges::find(n.actions, "default") != n.actions.end())
-          (void)m_notifications->invokeAction(n.id, "default");
+        else if (!n.actions.empty())
+          toggleExpanded();
         else {
           dismissNotification();
           panel("notifications");
@@ -5529,6 +5587,8 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
     split.target.clear();
     split.pressedTarget.clear();
     split.activity = island::Activity::None;
+    if (split.visualizer)
+      split.visualizer->setActive(false);
     split.reveal = 0;
     split.morph = 0;
     split.hovered = false;
@@ -5572,7 +5632,8 @@ Island::acquirePanelSurface(wl_output* output, bool exactOutput, std::string_vie
       inst.scale,
       inst.flowShown ? inst.flowTexture : TextureHandle{},
       inst.config.appearance == IslandAppearance::Cupertino,
-      inst.config.compactLayout
+      inst.config.compactLayout,
+      inst.config.mediaGradient
   };
 }
 
@@ -5704,6 +5765,9 @@ void Island::releasePanelSurface(wl_output* output, float width, float height) {
     inst.surface->setFrameTickCallback([p = ptr.get()](float dt) {
       if (!p->panelHosted && p->visualizer)
         p->visualizer->onFrameTick(dt);
+      for (auto& split : p->splits)
+        if (!p->panelHosted && split.visualizer)
+          split.visualizer->onFrameTick(dt);
       if (!p->panelHosted && p->hoverWidgets)
         p->hoverWidgets->tickWidgets(dt);
     });

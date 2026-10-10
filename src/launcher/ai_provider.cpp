@@ -1,6 +1,7 @@
 #include "launcher/ai_provider.h"
 
 #include "config/config_service.h"
+#include "core/deferred_call.h"
 #include "core/process/process.h"
 #include "i18n/i18n.h"
 #include "util/file_utils.h"
@@ -224,10 +225,19 @@ HttpRequest AiProvider::modelsRequest(Kind kind, std::string_view baseUrl, std::
 HttpRequest AiProvider::chatRequest(
     Kind kind, std::string_view baseUrl, std::string_view apiKey, std::string_view model, std::string_view prompt
 ) {
+  return chatRequest(kind, baseUrl, apiKey, model, std::vector<Message>{{"user", std::string(prompt)}});
+}
+
+HttpRequest AiProvider::chatRequest(
+    Kind kind, std::string_view baseUrl, std::string_view apiKey, std::string_view model,
+    const std::vector<Message>& conversation
+) {
   HttpRequest request;
   request.method = "POST";
   const std::string base = trimSlash(std::string(baseUrl));
-  const nlohmann::json messages = nlohmann::json::array({{{"role", "user"}, {"content", std::string(prompt)}}});
+  auto messages = nlohmann::json::array();
+  for (const auto& message : conversation)
+    messages.push_back({{"role", message.role}, {"content", message.content}});
   switch (kind) {
   case Kind::OpenAi:
     request.url = base + "/chat/completions";
@@ -255,7 +265,9 @@ HttpRequest AiProvider::chatRequest(
     if (!apiKey.empty()) {
       request.headers.push_back("Authorization: Bearer " + std::string(apiKey));
     }
-    request.body = nlohmann::json{{"model", std::string(model)}, {"stream", true}, {"messages", messages}}.dump();
+    request.body = nlohmann::json{
+        {"model", std::string(model)}, {"stream", true}, {"think", false}, {"messages", messages}
+    }.dump();
     break;
   }
   return request;
@@ -319,6 +331,11 @@ std::optional<AiProvider::StreamLine> AiProvider::parseStreamLine(Kind kind, std
             && choice["delta"]["content"].is_string()) {
           out.content = choice["delta"]["content"].get<std::string>();
         }
+        const auto delta = choice.value("delta", nlohmann::json::object());
+        out.processing = !out.content.empty()
+            || (delta.contains("reasoning_content")
+                && delta["reasoning_content"].is_string()
+                && !delta["reasoning_content"].get_ref<const std::string&>().empty());
         out.done = choice.contains("finish_reason") && !choice["finish_reason"].is_null();
       }
       return out;
@@ -352,7 +369,10 @@ std::optional<AiProvider::StreamLine> AiProvider::parseStreamLine(Kind kind, std
 AiProvider::AiProvider(ClipboardService* clipboard, ConfigService* config, HttpClient* httpClient)
     : m_clipboard(clipboard), m_config(config), m_httpClient(httpClient) {}
 
-AiProvider::~AiProvider() { stopStream(); }
+AiProvider::~AiProvider() {
+  m_alive.reset();
+  stopStream();
+}
 
 std::string AiProvider::displayName() const { return i18n::tr("launcher.providers.ai.title"); }
 
@@ -479,18 +499,22 @@ void AiProvider::refreshModels(bool force) const {
   m_modelsLoading = true;
   m_modelsKind = current;
   m_modelsUrl = url;
-  m_httpClient->request(modelsRequest(current, url, key), [this, current](HttpResponse response) {
-    m_modelsLoading = false;
-    m_modelsFetched = std::chrono::steady_clock::now();
-    m_modelsStatus = response.status;
-    m_modelsFailed = !(response.transportOk && response.status == 200);
-    if (!m_modelsFailed) {
-      m_models = parseModels(current, response.body);
-    }
-    if (m_onChanged) {
-      m_onChanged();
-    }
-  });
+  m_httpClient->request(
+      modelsRequest(current, url, key), [this, current, alive = std::weak_ptr<void>(m_alive)](HttpResponse response) {
+        if (alive.expired())
+          return;
+        m_modelsLoading = false;
+        m_modelsFetched = std::chrono::steady_clock::now();
+        m_modelsStatus = response.status;
+        m_modelsFailed = !(response.transportOk && response.status == 200);
+        if (!m_modelsFailed) {
+          m_models = parseModels(current, response.body);
+        }
+        if (m_onChanged) {
+          m_onChanged();
+        }
+      }
+  );
 }
 
 std::string AiProvider::clipboardInput() const {
@@ -678,22 +702,197 @@ std::vector<LauncherResult> AiProvider::queryPrefixed(std::string_view text) con
   return results;
 }
 
-void AiProvider::stopStream() {
-  if (m_session.has_value() && m_session->stream != 0 && m_httpClient != nullptr) {
-    m_httpClient->cancelStream(m_session->stream);
-    m_session->stream = 0;
-    m_session->streaming = false;
+std::string_view AiProvider::question() const { return m_session ? m_session->heading : std::string_view{}; }
+std::string_view AiProvider::answer() const { return m_session ? m_session->answer : std::string_view{}; }
+std::string_view AiProvider::error() const { return m_session ? m_session->error : std::string_view{}; }
+bool AiProvider::streaming() const { return m_session && m_session->streaming; }
+bool AiProvider::interrupted() const { return m_session && m_session->interrupted; }
+
+bool AiProvider::submitQuestion(std::string question) {
+  question = StringUtils::trim(question);
+  if (question.empty() || streaming())
+    return false;
+  question = StringUtils::truncateUtf8(question, kMaxInputChars);
+  std::vector<Message> messages;
+  if (m_session && m_session->kind == kind() && m_session->endpoint == baseUrl() && m_session->model == model()) {
+    messages = m_session->messages;
+    if (m_session->error.empty() && !m_session->interrupted && !m_session->answer.empty())
+      messages.push_back({"assistant", m_session->answer});
+    else if (!messages.empty())
+      messages.pop_back(); // Replace a failed or cancelled question, preserving earlier completed turns.
+  }
+  // Bound context by complete turns, keeping the latest question intact.
+  auto bytes = [&] {
+    std::size_t n = 0;
+    for (const auto& message : messages)
+      n += message.content.size();
+    return n;
+  };
+  while (messages.size() > 10 || (!messages.empty() && bytes() > 48000))
+    messages.erase(messages.begin(), messages.begin() + std::min<std::size_t>(2, messages.size()));
+  messages.push_back({"user", question});
+  ask(question, question, question, std::move(messages));
+  if (m_onChanged)
+    m_onChanged();
+  return true;
+}
+
+void AiProvider::stopConversation() {
+  if (streaming())
+    m_session->interrupted = true;
+  stopStream();
+  if (m_onChanged)
+    m_onChanged();
+}
+
+void AiProvider::clearConversation() {
+  stopStream();
+  m_session.reset();
+  if (m_onChanged)
+    m_onChanged();
+}
+
+void AiProvider::retryConversation() {
+  if (!m_session || streaming())
+    return;
+  const auto copy = *m_session;
+  // Never carry a conversation to a newly selected endpoint or model.
+  std::vector<Message> messages;
+  if (copy.kind == kind() && copy.endpoint == baseUrl() && copy.model == model())
+    messages = copy.messages;
+  else
+    messages.push_back({"user", copy.prompt});
+  ask(copy.view, copy.heading, copy.prompt, std::move(messages));
+  if (m_onChanged)
+    m_onChanged();
+}
+
+// Probe only a local compatible API. Cloud providers never receive these requests.
+std::string AiProvider::localStatusUrl(Kind kind, std::string_view endpoint) {
+  if (kind != Kind::OpenAi)
+    return {};
+  auto* url = curl_url();
+  if (!url)
+    return {};
+  const std::string base(endpoint);
+  std::string result;
+  char* host = nullptr;
+  char* scheme = nullptr;
+  if (curl_url_set(url, CURLUPART_URL, base.c_str(), 0) == CURLUE_OK
+      && curl_url_get(url, CURLUPART_HOST, &host, 0) == CURLUE_OK
+      && curl_url_get(url, CURLUPART_SCHEME, &scheme, 0) == CURLUE_OK) {
+    const std::string_view hostname(host), protocol(scheme);
+    if ((hostname == "127.0.0.1" || hostname == "localhost" || hostname == "[::1]")
+        && (protocol == "http" || protocol == "https"))
+      result = trimSlash(base) + "/status";
+  }
+  curl_free(host);
+  curl_free(scheme);
+  curl_url_cleanup(url);
+  return result;
+}
+
+std::optional<AiProvider::LocalStatus> AiProvider::parseLocalStatus(std::string_view body) {
+  try {
+    const auto data = nlohmann::json::parse(body);
+    if (data.value("service", "") != "strata" || !data.contains("loaded") || !data["loaded"].is_boolean())
+      return std::nullopt;
+    const auto active = data.at("activity").at("in_flight").get<int>();
+    const auto capacity = data.at("concurrency").at("serving").get<int>();
+    if (active < 0 || capacity < 1)
+      return std::nullopt;
+    return LocalStatus{.loaded = data["loaded"].get<bool>(), .busy = active >= capacity};
+  } catch (const nlohmann::json::exception&) {
+    return std::nullopt;
   }
 }
 
-void AiProvider::ask(std::string view, std::string heading, std::string prompt) {
+AiProvider::GenerationStage AiProvider::generationStage() const {
+  return m_session ? m_session->stage : GenerationStage::Thinking;
+}
+
+void AiProvider::stopStatusProbe() {
+  m_statusRefresh.stop();
+  m_statusDeadline.stop();
+  if (m_statusStream && m_httpClient)
+    m_httpClient->cancelStream(m_statusStream);
+  m_statusStream = 0;
+}
+
+void AiProvider::probeLocalStatus(bool beforeSubmit) {
+  if (!m_session || !m_session->streaming || m_session->processing || m_statusStream)
+    return;
+  const auto generation = m_requestGeneration;
+  const auto alive = std::weak_ptr<void>(m_alive);
+  const auto body = std::make_shared<std::string>();
+  const auto finish = [this, alive, generation, beforeSubmit, body](bool success) {
+    if (alive.expired() || generation != m_requestGeneration || !m_session || !m_session->streaming)
+      return;
+    stopStatusProbe();
+    if (!m_session->processing) {
+      const auto status = success ? parseLocalStatus(*body) : std::nullopt;
+      if (status) {
+        if (beforeSubmit)
+          m_session->waiting = status->busy;
+        m_session->stage = !status->loaded ? GenerationStage::LoadingModel
+            : m_session->waiting           ? GenerationStage::Waiting
+                                           : GenerationStage::Thinking;
+        if (!status->loaded)
+          m_statusRefresh.start(std::chrono::milliseconds(750), [this] { probeLocalStatus(false); });
+      } else {
+        m_session->stage = GenerationStage::Thinking;
+      }
+    }
+    if (beforeSubmit)
+      startSessionStream();
+    if (m_onChanged)
+      m_onChanged();
+  };
+  // A missing status endpoint must not delay a normal chat or become an error.
+  m_statusDeadline.start(std::chrono::milliseconds(beforeSubmit ? 450 : 1500), [finish] { finish(false); });
+  m_statusStream = m_httpClient->startStream(
+      {.url = localStatusUrl(m_session->kind, m_session->endpoint), .headers = {"Authorization: Bearer " + apiKey()}},
+      [body](std::string_view chunk) {
+        if (body->size() <= 16384)
+          body->append(chunk.substr(0, 16385 - body->size()));
+      },
+      [this, alive, generation, finish, body](HttpStreamResult result) {
+        if (alive.expired() || generation != m_requestGeneration)
+          return;
+        m_statusStream = 0;
+        finish(result.transportOk && result.status == 200 && body->size() <= 16384);
+      }
+  );
+}
+
+void AiProvider::stopStream() {
+  ++m_requestGeneration;
+  stopStatusProbe();
+  if (!m_session)
+    return;
+  if (m_session->stream != 0 && m_httpClient != nullptr)
+    m_httpClient->cancelStream(m_session->stream);
+  m_session->stream = 0;
+  m_session->streaming = false;
+}
+
+void AiProvider::ask(std::string view, std::string heading, std::string prompt, std::vector<Message> messages) {
   stopStream();
   Session session;
   session.view = std::move(view);
   session.heading = std::move(heading);
   session.prompt = std::move(prompt);
   session.model = model();
+  session.kind = kind();
+  session.endpoint = baseUrl();
+  if (messages.empty())
+    messages.push_back({"user", session.prompt});
+  session.messages = std::move(messages);
   m_session = std::move(session);
+  if (m_config && m_config->config().shell.offlineMode) {
+    m_session->error = i18n::tr("launcher.ai.offline");
+    return;
+  }
   if (m_httpClient == nullptr) {
     m_session->error = i18n::tr("launcher.ai.no-client");
     return;
@@ -709,21 +908,40 @@ void AiProvider::ask(std::string view, std::string heading, std::string prompt) 
     return;
   }
   m_session->streaming = true;
+  if (!localStatusUrl(current, m_session->endpoint).empty())
+    probeLocalStatus(true);
+  else
+    startSessionStream();
+}
+
+void AiProvider::startSessionStream() {
+  if (!m_session || !m_session->streaming)
+    return;
+  const auto current = m_session->kind;
+  const auto key = apiKey();
+  const auto generation = m_requestGeneration;
+  const auto alive = std::weak_ptr<void>(m_alive);
   const auto consume = [this, current](std::string_view line) {
     if (const auto parsed = parseStreamLine(current, line); parsed.has_value()) {
-      if (!parsed->error.empty()) {
-        m_session->error = parsed->error;
-      } else {
-        m_session->answer += parsed->content;
+      m_session->receivedDone |= parsed->done;
+      if (parsed->processing || !parsed->content.empty()) {
+        m_session->processing = true;
+        m_session->stage = GenerationStage::Thinking;
+        m_statusRefresh.stop();
       }
+      if (!parsed->error.empty())
+        m_session->error = parsed->error;
+      else if (m_session->answer.size() + parsed->content.size() <= 131072)
+        m_session->answer += parsed->content;
+      else
+        m_session->error = i18n::tr("assistant.response-limit");
     }
   };
   m_session->stream = m_httpClient->startStream(
-      chatRequest(current, baseUrl(), key, m_session->model, m_session->prompt),
-      [this, consume](std::string_view chunk) {
-        if (!m_session.has_value() || !m_session->streaming) {
+      chatRequest(current, m_session->endpoint, key, m_session->model, m_session->messages),
+      [this, consume, generation, alive](std::string_view chunk) {
+        if (alive.expired() || generation != m_requestGeneration || !m_session || !m_session->streaming)
           return;
-        }
         m_session->lineBuffer.append(chunk);
         std::size_t start = 0;
         for (std::size_t end = m_session->lineBuffer.find('\n', start); end != std::string::npos;
@@ -732,33 +950,42 @@ void AiProvider::ask(std::string view, std::string heading, std::string prompt) 
           start = end + 1;
         }
         m_session->lineBuffer.erase(0, start);
-        if (m_onChanged) {
+        if (m_session->lineBuffer.size() > 262144)
+          m_session->error = i18n::tr("assistant.response-limit");
+        if (!m_session->error.empty()) {
+          m_session->streaming = false;
+          m_session->lineBuffer.clear();
+          // Curl is dispatching a write callback. Remove its handle after dispatch returns.
+          DeferredCall::callLater([this, alive, generation] {
+            if (!alive.expired() && generation == m_requestGeneration)
+              stopStream();
+          });
+        }
+        if (m_onChanged)
           m_onChanged();
-        }
       },
-      [this, consume](HttpStreamResult result) {
-        if (!m_session.has_value()) {
+      [this, consume, generation, alive](HttpStreamResult result) {
+        if (alive.expired() || generation != m_requestGeneration || !m_session)
           return;
-        }
         consume(m_session->lineBuffer);
         m_session->lineBuffer.clear();
         m_session->streaming = false;
         m_session->stream = 0;
-        if (m_session->error.empty() && m_session->answer.empty()) {
-          if (!result.transportOk) {
-            m_session->error = i18n::tr("launcher.ai.unreachable", "service", serviceName(), "url", baseUrl());
-          } else if (result.status != 200) {
+        stopStatusProbe();
+        if (m_session->error.empty()) {
+          if (!result.transportOk)
+            m_session->error = i18n::tr("assistant.connection-lost");
+          else if (result.status != 200)
             m_session->error = "HTTP " + std::to_string(result.status);
-          }
+          else if (!m_session->receivedDone)
+            m_session->error = i18n::tr("assistant.connection-lost");
+          else if (m_session->answer.empty())
+            m_session->error = i18n::tr("assistant.empty-answer");
         }
-        if (m_onChanged) {
+        if (m_onChanged)
           m_onChanged();
-        }
       }
   );
-  if (m_session->stream == 0) {
-    m_session->streaming = false;
-  }
 }
 
 bool AiProvider::activate(const LauncherResult& result) {

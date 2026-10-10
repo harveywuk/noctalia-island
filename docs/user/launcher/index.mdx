@@ -1,6 +1,6 @@
 ---
 title: Launcher
-description: Searching applications, files, clipboard history, snippets, quicklinks and scripts, with Raycast-style actions.
+description: Searching applications, files, clipboard history, snippets, quicklinks and scripts, with contextual actions.
 sidebar:
   order: 5
 ---
@@ -16,11 +16,15 @@ As you type, Noctalia queries all active **Launcher Providers**. Providers can e
 
 Type `/` by itself to show a lightweight overview of available prefixed providers. Activating one inserts its prefix into the launcher input.
 
-### Sections and the action bar
+### Results and spacing
 
-Like Raycast, a global search lists everything it found under **Results**, ranked by relevance, with matching files after them under **Files**. With nothing typed, pinned apps appear under **Favourites**, the last few things you ran (apps, system commands, quicklinks, snippets, scripts, panels) follow under **Suggestions**, and the other applications come after. Prefixed searches keep a single list.
+Search results keep each title above its description, with matching files grouped under **Files**. The selected row shows its Return shortcut and an ellipsis for actions. The footer shows the relevant action shortcut without repeating each result's type.
 
-The bar along the bottom names the selected result's kind and its keys: **Return** runs the primary action (its name, such as **Open Application** or **Paste Snippet**, is shown there) and **Shift + Return** opens the actions menu. When a search has a query, a **Use "…" with…** section at the end offers the fallback commands: **Search the Web**, **Search Files for "…"**, and any search quicklinks listed in `shell.launcher.fallbacks` (for example `["files", "github"]`).
+With nothing typed, pinned apps appear under **Favourites** and recently used items under **Recent**. Without either, the launcher shows a short list of applications to get started. Typing searches the full collection; the optional app grid and category filters retain full browsing.
+
+**Settings → Launcher → Compact** (`shell.launcher.compact`) uses a narrower card and closer rows while retaining descriptions and edge padding. Comfortable is the default. Island-hosted cards resize with the current content and scroll when the list reaches the display's height limit.
+
+A **Use "…" with…** section at the end of a search offers fallback commands: **Search the Web**, **Search Files for "…"**, and search quicklinks listed in `shell.launcher.fallbacks` (for example `["files", "github"]`).
 
 ### Navigation
 
@@ -34,7 +38,11 @@ Commands that take arguments (a script command with `@raycast.argument1`, a sear
 
 ### Action panel
 
-**Shift + Return** (or a right click) opens the action panel over the bottom-right of the results, like Raycast's ⌘K panel: the primary action first with its **↵** hint, then the result's own actions (the first of which **Ctrl + Return** runs directly; for example **Quit Application** and **Copy Name** for a running application, **Show in Folder**, **Copy Path** and **Move to Trash** for files, **Pin** and **Save as Snippet** for clipboard entries, **Close Window** for windows), then **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. While the panel is open the search field filters the actions; **Up** / **Down** move, **Return** runs, **Esc** or **Shift + Return** closes it and brings the search back.
+**Shift + Return**, the selected row's ellipsis, the footer's **Actions** button, or a right click opens actions in place of the results. The selected app's artwork and name stay in the header. Type to filter its actions; **Up** / **Down** move, and **Return** runs the selected action. Long lists scroll with the keyboard or pointer.
+
+The primary action comes first, followed by provider and desktop actions, then launcher actions such as **Pin to Launcher**, **Set Alias…** and **Copy Hotkey Command**. **Ctrl + Return** from the results still runs the provider's first extra action directly.
+
+**Esc**, **Shift + Return**, the header's close button, or **Back to results** restores the search, selection and scroll position. A further Escape follows the normal provider/back behaviour described above.
 
 ### Aliases and hotkeys
 

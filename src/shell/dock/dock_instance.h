@@ -42,6 +42,7 @@ namespace shell::dock {
     float slideHiddenDy = 0.0F;
     Box* shadow = nullptr;
     Box* panel = nullptr;
+    Box* keyboardOutline = nullptr;
     Flex* row = nullptr;
     InputDispatcher inputDispatcher;
     std::vector<shell::dock::DockItemView> items;
@@ -72,9 +73,13 @@ namespace shell::dock {
 
     // Drag-to-reorder state.
     struct DragState {
-      bool active = false;         // drag mode is live
-      bool armed = false;          // hold timer has fired; drag begins on next motion
-      bool pinned = false;         // source item is pinned (only pinned items may be reordered)
+      bool active = false;    // drag mode is live
+      bool armed = false;     // hold timer has fired; drag begins on next motion
+      bool pinned = false;    // source item is pinned
+      bool remove = false;    // released sufficiently far away from the dock
+      bool pinTarget = false; // running app is over the pinned group
+      float startCross = 0.0F;
+      float crossDistance = 0.0F;
       std::size_t sourceIndex = 0; // index into snapshot.items being dragged
       std::size_t targetIndex = 0; // current intended insert position (among pinned items)
       float startMain = 0.0F;      // pointer main-axis position when press was received

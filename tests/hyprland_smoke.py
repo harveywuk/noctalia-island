@@ -67,6 +67,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         (base/'config/user-dirs.dirs').write_text('XDG_VIDEOS_DIR="'+str(out)+'"\n')
         wp=base/'config/wireplumber/wireplumber.conf.d';wp.mkdir(parents=True)
         (wp/'test.conf').write_text('wireplumber.profiles = { main = { hardware.audio = disabled hardware.bluetooth = disabled hardware.video-capture = disabled } }')
+        if '--island-assistant-only' in sys.argv:
+            speech_audio = base/'config/wireplumber/wireplumber.conf.d'
+            speech_audio.mkdir(parents=True, exist_ok=True)
+            (speech_audio/'no-hardware.conf').write_text('wireplumber.profiles = { main = { monitor.alsa = disabled monitor.bluez = disabled } }\n')
         start(['pipewire'],'pipewire.log');wait(lambda:(runtime/'pipewire-0').exists(),'PipeWire start')
         start(['wireplumber'],'wireplumber.log')
         start(['pipewire-pulse'],'pulse.log');wait(lambda:(runtime/'pulse/native').exists(),'Pulse start')
@@ -78,7 +82,7 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
                                        stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
             processes.append(bluetooth)
             assert bluetooth.stdout.readline().strip()=='ok'
-        if any(flag in sys.argv for flag in ('--island-cupertino-only', '--island-battery-glow-only', '--island-connection-only')):
+        if any(flag in sys.argv for flag in ('--island-cupertino-only', '--island-battery-glow-only', '--island-connection-only', '--island-assistant-only')):
             battery=subprocess.Popen([sys.executable,str(REPO/'tests/fixtures/island_battery.py')],env=env,
                                      stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
             processes.append(battery)
@@ -87,9 +91,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
                 from island_connection_smoke import prepare
             elif '--island-battery-glow-only' in sys.argv:
                 from island_battery_glow_smoke import prepare
-            else:
+            elif '--island-cupertino-only' in sys.argv:
                 from island_cupertino_smoke import prepare
-            prepare(base,cfg,env)
+            if '--island-assistant-only' not in sys.argv:
+                prepare(base,cfg,env)
         if '--startup-only' in sys.argv:
             from startup_apps_smoke import prepare
             prepare(base,cfg,env)
@@ -101,6 +106,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             prepare(base,cfg,env)
         if '--island-media-motion-only' in sys.argv:
             from island_media_motion_smoke import prepare
+            prepare(base,cfg,env)
+        if '--island-assistant-only' in sys.argv:
+            from island_assistant_smoke import prepare
             prepare(base,cfg,env)
         if '--island-expanded-only' in sys.argv:
             from island_expanded_smoke import prepare
@@ -114,11 +122,20 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
         if '--lockscreen-only' in sys.argv:
             from lockscreen_smoke import prepare
             prepare(base,cfg,env)
+        if '--launcher-refinement-only' in sys.argv:
+            from launcher_refinement_smoke import prepare
+            prepare(base,cfg,env)
         if '--island-launcher-only' in sys.argv:
             from island_launcher_smoke import prepare
             prepare(base,cfg,env)
         if '--starter-only' in sys.argv:
             from starter_smoke import prepare
+            prepare(base,cfg,env)
+        if '--dock-refinement-only' in sys.argv:
+            from dock_refinement_smoke import prepare
+            prepare(base,cfg,env)
+        if '--menus-only' in sys.argv:
+            from menu_polish_smoke import prepare
             prepare(base,cfg,env)
         if '--dock-motion-only' in sys.argv:
             from dock_motion_smoke import prepare
@@ -197,9 +214,9 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
                 from island_network_smoke import prepare
             prepare(base,cfg,env)
         binary=os.environ.get('NOCTALIA_TEST_BINARY',str(REPO/'build-rishot/noctalia'))
-        if '--performance-only' in sys.argv:
+        if '--performance-only' in sys.argv or '--island-assistant-only' in sys.argv:
             import shutil
-            immutable=base/'noctalia-benchmark'
+            immutable=base/'noctalia-under-test'
             shutil.copy2(binary,immutable)
             binary=str(immutable)
         shell=start([binary],'noctalia.log')
@@ -209,6 +226,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             assert not reply.startswith('error'),reply
             return reply
         wait(lambda:msg('record-status')=='idle','Noctalia IPC')
+        if '--island-assistant-only' in sys.argv:
+            from island_assistant_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell,battery)
+            raise SystemExit(0)
         if '--island-expanded-only' in sys.argv:
             from island_expanded_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
@@ -281,6 +302,10 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             from starter_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
+        if '--launcher-refinement-only' in sys.argv:
+            from launcher_refinement_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
         if '--island-launcher-only' in sys.argv:
             from island_launcher_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
@@ -295,6 +320,14 @@ with tempfile.TemporaryDirectory(prefix='hp-') as tmp:
             raise SystemExit(0)
         if '--dock-preview-only' in sys.argv:
             from dock_preview_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--dock-refinement-only' in sys.argv:
+            from dock_refinement_smoke import run_checks
+            run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
+            raise SystemExit(0)
+        if '--menus-only' in sys.argv:
+            from menu_polish_smoke import run_checks
             run_checks(base,cfg,out,env,run,ctl,dispatch,msg,wait,start,shell)
             raise SystemExit(0)
         if '--dock-motion-only' in sys.argv:

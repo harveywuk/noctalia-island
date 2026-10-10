@@ -14,6 +14,7 @@
 #include "scripting/plugin_id.h"
 #include "shell/bar/bar_corner_shape.h"
 #include "shell/bar/bar_reserved_zone.h"
+#include "shell/control_center/artwork_flow_layer.h"
 #include "shell/island/island.h"
 #include "shell/panel/panel.h"
 #include "shell/panel/panel_surface_style.h"
@@ -1587,8 +1588,13 @@ void PanelManager::destroyPanel() {
   if (m_activePanel != nullptr) {
     m_activePanel->onClose();
   }
+  if (m_islandFlowLayer)
+    m_islandFlowLayer->release();
+  m_islandFlowLayer.reset();
+  m_islandArtworkPath.clear();
   m_bgNode = nullptr;
   m_islandFlow = nullptr;
+  m_islandAccent = nullptr;
   m_islandCaptureGlow = nullptr;
   m_contentNode = nullptr;
   m_detachedRevealClipNode = nullptr;

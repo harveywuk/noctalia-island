@@ -48,7 +48,7 @@ namespace {
   constexpr float kDotMinSize = 4.0F;
   constexpr float kDotAlpha = 0.75F;
   constexpr float kCellPad = 6.0F;
-  constexpr float kLauncherGlyphSizeRatio = 0.8F;
+  constexpr float kLauncherGlyphSizeRatio = 0.50F;
   constexpr float kHoverZoomReferenceFrameMs = 1000.0F / 60.0F;
   // Pointer hit padding (in item pitches) — keep generous so edge icons still magnify.
   constexpr float kHoverZoomInfluence = 2.25F;
@@ -88,8 +88,9 @@ namespace {
   }
 
   [[nodiscard]] float launcherIconBaseY(const DockConfig& cfg, float iconSize) {
-    return cfg.launcherCustomImage.empty() ? kCellPad + (iconSize - iconSize * kLauncherGlyphSizeRatio) * 0.5F
-                                           : kCellPad;
+    (void)cfg;
+    (void)iconSize;
+    return kCellPad;
   }
 
   void applyHoverIconVisual(Node* iconNode, DockEdge edge, float baseX, float baseY, float iconSize, float scale) {
@@ -483,6 +484,10 @@ namespace shell::dock {
       instance.launcherIconNode = static_cast<Image*>(launcherImage.get());
       areaNode->addChild(std::move(launcherImage));
     } else {
+      auto tile = ui::box({.width = iSize, .height = iSize});
+      tile->setPosition(kCellPad, kCellPad);
+      tile->setFill(colorSpecFromRole(ColorRole::OnSurface, 0.055F));
+      tile->setRadius(iSize * 0.23F);
       auto launcherGlyph = ui::glyph({
           .glyphSize = iSize * kLauncherGlyphSizeRatio,
           .color = colorSpecFromRole(ColorRole::OnSurface),
@@ -492,11 +497,12 @@ namespace shell::dock {
             if (!glyph.setGlyph(dockLauncherIconGlyph(cfg))) {
               glyph.setGlyph("grid-dots");
             }
-            glyph.setPosition(kCellPad, launcherIconBaseY(cfg, iSize));
+            glyph.setPosition(0, (iSize - iSize * kLauncherGlyphSizeRatio) * 0.5F);
           },
       });
-      instance.launcherIconNode = static_cast<Glyph*>(launcherGlyph.get());
-      areaNode->addChild(std::move(launcherGlyph));
+      tile->addChild(std::move(launcherGlyph));
+      instance.launcherIconNode = tile.get();
+      areaNode->addChild(std::move(tile));
     }
     instance.launcherArea = areaNode.get();
     instance.launcherVisualScale = cfg.inactiveScale;
@@ -592,8 +598,6 @@ namespace shell::dock {
 
     // Reserve up-front so emplace_back never reallocates while lambdas hold raw pointers.
     instance.items.reserve(itemModels.size());
-    const std::size_t pinnedCount = cfg.pinned.size();
-
     for (std::size_t itemIndex = 0; itemIndex < itemModels.size(); ++itemIndex) {
       const auto& model = itemModels[itemIndex];
       if (itemIndex > 0 && itemIndex == snapshot.pinnedCount) {
@@ -638,6 +642,7 @@ namespace shell::dock {
           .configure = [&renderer, iconPath, iconDecodeTarget,
                         &shell = deps.model.config.config().shell](Image& image) {
             image.setAppIconColorization(effectiveShellAppIconColorizationTint(shell));
+            image.setPadding(static_cast<float>(iconDecodeTarget) * 0.03F);
             if (!iconPath.empty()) {
               image.setSourceFile(renderer, iconPath, iconDecodeTarget, true);
             }
@@ -704,8 +709,6 @@ namespace shell::dock {
       auto* instPtr = &instance;
 
       configureDockTooltip(*areaNode, cfg, dockItemTooltipText(model.entry));
-      if (cfg.windowPreviews && model.running)
-        areaNode->clearTooltip();
       areaNode->setOnEnter([instPtr, clickContext, action](const auto&) {
         if (clickContext->callbacks.hoverPreview)
           clickContext->callbacks.hoverPreview(*instPtr, action);
@@ -715,7 +718,7 @@ namespace shell::dock {
           clickContext->callbacks.leavePreview(*instPtr, action);
       });
       areaNode->setAcceptedButtons(InputArea::buttonMask({BTN_LEFT, BTN_RIGHT}));
-      const bool itemPinned = itemIndex < pinnedCount;
+      const bool itemPinned = itemIndex < snapshot.pinnedCount;
       areaNode->setOnPress([instPtr, clickContext, itemIndex, itemPinned](const InputArea::PointerData& d) {
         if (d.button != BTN_LEFT) {
           return;
@@ -725,11 +728,10 @@ namespace shell::dock {
         auto& drag = instPtr->drag;
         const auto& dockCfg = clickContext->config.config().dock;
         if (d.pressed) {
-          if (!itemPinned) {
-            return;
-          }
+          instPtr->suppressItemClick = false;
           resetDockItemDragState(*instPtr);
-          drag.pinned = true;
+          drag.pinned = itemPinned;
+          drag.startCross = shell::dock::isVerticalEdge(dockCfg.position) ? d.localX : d.localY;
           drag.sourceIndex = itemIndex;
           drag.startMain = pointerMainOnRow(dockCfg, instPtr->items[itemIndex].area, d.localX, d.localY);
           drag.currentMain = drag.startMain;
@@ -763,8 +765,8 @@ namespace shell::dock {
           resetDockItemDragState(*instPtr);
         }
       });
-      areaNode->setOnMotion([instPtr, clickContext, itemIndex, itemPinned](const InputArea::PointerData& d) {
-        if (!itemPinned || instPtr->drag.sourceIndex != itemIndex) {
+      areaNode->setOnMotion([instPtr, clickContext, itemIndex](const InputArea::PointerData& d) {
+        if (instPtr->drag.sourceIndex != itemIndex) {
           return;
         }
         if (!instPtr->drag.armed && !instPtr->drag.active) {
@@ -772,8 +774,14 @@ namespace shell::dock {
         }
 
         const auto& dockCfg = clickContext->config.config().dock;
+        instPtr->drag.crossDistance =
+            (shell::dock::isVerticalEdge(dockCfg.position) ? d.localX : d.localY) - instPtr->drag.startCross;
         const float mainPos = pointerMainOnRow(dockCfg, instPtr->items[itemIndex].area, d.localX, d.localY);
         instPtr->drag.currentMain = mainPos;
+        if (!instPtr->drag.active
+            && std::abs(mainPos - instPtr->drag.startMain) < Style::dragStartThreshold
+            && std::abs(instPtr->drag.crossDistance) < Style::dragStartThreshold)
+          return;
         if (instPtr->drag.active) {
           if (clickContext->callbacks.updateDrag) {
             clickContext->callbacks.updateDrag(*instPtr, mainPos);
@@ -782,7 +790,9 @@ namespace shell::dock {
           clickContext->callbacks.beginDrag(*instPtr, itemIndex, mainPos);
         }
       });
-      areaNode->setOnCancel([instPtr, itemIndex] {
+      areaNode->setOnCancel([instPtr, clickContext, itemIndex] {
+        if (instPtr->drag.sourceIndex == itemIndex && clickContext->callbacks.endDrag)
+          clickContext->callbacks.endDrag(*instPtr, false);
         if (itemIndex < instPtr->items.size() && instPtr->items[itemIndex].motionNode)
           instPtr->items[itemIndex].motionNode->setOpacity(1.0F);
       });
@@ -854,10 +864,7 @@ namespace shell::dock {
     for (std::size_t itemIndex = 0; itemIndex < itemCount; ++itemIndex) {
       auto& item = instance.items[itemIndex];
       const auto& model = snapshot.items[itemIndex];
-      if (cfg.windowPreviews && model.running) {
-        if (item.area->hasTooltip())
-          item.area->clearTooltip();
-      } else if (!item.area->hasTooltip())
+      if (!item.area->hasTooltip())
         configureDockTooltip(*item.area, cfg, dockItemTooltipText(model.entry));
       const bool dragActive = instance.drag.active;
       const bool isDraggedItem = dragActive && itemIndex == instance.drag.sourceIndex;
@@ -1239,7 +1246,7 @@ namespace shell::dock {
   // ── Drag-to-reorder ──────────────────────────────────────────────────────────
 
   std::size_t computeDragTargetIndex(const DockInstance& instance, const DockConfig& cfg, float mainPos) {
-    const std::size_t pinnedCount = cfg.pinned.size();
+    const std::size_t pinnedCount = instance.snapshot.pinnedCount;
     if (pinnedCount == 0 || instance.items.empty()) {
       return 0;
     }
@@ -1268,7 +1275,7 @@ namespace shell::dock {
     const bool vertical = shell::dock::isVerticalEdge(cfg.position);
     const float cellMain = static_cast<float>(cfg.iconSize) + 2.0F * kCellPad;
     const float pitch = cellMain + static_cast<float>(cfg.itemSpacing);
-    const std::size_t pinnedCount = cfg.pinned.size();
+    const std::size_t pinnedCount = instance.snapshot.pinnedCount;
     const std::size_t source = instance.drag.sourceIndex;
     const std::size_t target = instance.drag.targetIndex;
 
@@ -1285,9 +1292,9 @@ namespace shell::dock {
         Node* iconNode =
             item.iconImage != nullptr ? static_cast<Node*>(item.iconImage) : static_cast<Node*>(item.iconGlyph);
         if (iconNode != nullptr) {
-          iconNode->setOpacity(0.85F);
+          iconNode->setOpacity(instance.drag.remove ? 0.3F : 0.85F);
         }
-      } else if (i < pinnedCount) {
+      } else if (i < pinnedCount && !instance.drag.remove && (instance.drag.pinned || instance.drag.pinTarget)) {
         item.area->setZIndex(0);
         const bool before = (i < source && i >= target);
         const bool after = (i > source && i < target);

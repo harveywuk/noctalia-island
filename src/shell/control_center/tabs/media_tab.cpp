@@ -167,6 +167,7 @@ void MediaTab::openPlayerMenu() {
           .entries = std::move(entries),
           .minMenuWidth = minMenuWidth,
           .maxMenuWidth = Style::menuAutoMaxWidth * scale,
+          .contentScale = scale,
           .maxVisible = 10,
           .anchor =
               PopupAnchorRect{

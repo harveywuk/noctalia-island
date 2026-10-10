@@ -3,6 +3,7 @@
 #include "render/animation/animation_manager.h"
 #include "render/scene/input_dispatcher.h"
 #include "ui/popup_chrome.h"
+#include "ui/popup_parent.h"
 
 #include <functional>
 #include <memory>
@@ -10,6 +11,7 @@
 
 class CompositorPlatform;
 class ConfigService;
+class ContextMenuControl;
 class Node;
 class PopupSurface;
 class RenderContext;
@@ -36,6 +38,7 @@ namespace shell::dock {
     InputDispatcher inputDispatcher;
     wl_surface* wlSurface = nullptr;
     bool pointerInside = false;
+    ContextMenuControl* control = nullptr;
     std::vector<zwlr_foreign_toplevel_handle_v1*> handles;
     std::vector<ToplevelInfo> windows;
   };
@@ -54,7 +57,8 @@ namespace shell::dock {
   [[nodiscard]] std::unique_ptr<DockPopup> createItemMenu(
       CompositorPlatform& platform, ConfigService& config, RenderContext& renderContext,
       zwlr_layer_surface_v1* parentLayerSurface, wl_output* output, const DockConfig& dockConfig,
-      const DesktopEntry& entry, const std::vector<ToplevelInfo>& windows, const DockMenuCallbacks& callbacks
+      const DesktopEntry& entry, const std::vector<ToplevelInfo>& windows, const DockMenuCallbacks& callbacks,
+      PopupAnchorRect appAnchor
   );
 
 } // namespace shell::dock

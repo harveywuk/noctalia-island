@@ -30,6 +30,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <unistd.h>
 
@@ -255,6 +256,34 @@ namespace {
         Kind::OpenAi, R"(data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":null}]})"
     );
     TEST_CHECK(openai.has_value() && openai->content == "Hi" && !openai->done);
+    const auto reasoning =
+        AiProvider::parseStreamLine(Kind::OpenAi, R"(data: {"choices":[{"delta":{"reasoning_content":"Working"}}]})");
+    TEST_CHECK(reasoning && reasoning->processing && reasoning->content.empty());
+    const auto role =
+        AiProvider::parseStreamLine(Kind::OpenAi, R"(data: {"choices":[{"delta":{"role":"assistant","content":""}}]})");
+    TEST_CHECK(role && !role->processing);
+    TEST_CHECK(
+        AiProvider::localStatusUrl(Kind::OpenAi, "http://127.0.0.1:8080/v1/") == "http://127.0.0.1:8080/v1/status"
+    );
+    TEST_CHECK(AiProvider::localStatusUrl(Kind::OpenAi, "http://[::1]:8080/v1") == "http://[::1]:8080/v1/status");
+    TEST_CHECK(AiProvider::localStatusUrl(Kind::OpenAi, "https://api.openai.com/v1").empty());
+    TEST_CHECK(AiProvider::localStatusUrl(Kind::OpenAi, "https://localhost.example.com/v1").empty());
+    TEST_CHECK(AiProvider::localStatusUrl(Kind::Ollama, "http://localhost:11434").empty());
+    const auto unloaded = AiProvider::parseLocalStatus(
+        R"({"service":"strata","loaded":false,"activity":{"in_flight":0},"concurrency":{"serving":1}})"
+    );
+    TEST_CHECK(unloaded && !unloaded->loaded && !unloaded->busy);
+    const auto occupied = AiProvider::parseLocalStatus(
+        R"({"service":"strata","loaded":true,"activity":{"in_flight":1},"concurrency":{"serving":1}})"
+    );
+    TEST_CHECK(occupied && occupied->loaded && occupied->busy);
+    const auto parallel = AiProvider::parseLocalStatus(
+        R"({"service":"strata","loaded":true,"activity":{"in_flight":1},"concurrency":{"serving":2}})"
+    );
+    TEST_CHECK(parallel && !parallel->busy);
+    TEST_CHECK(!AiProvider::parseLocalStatus(R"({"service":"different","loaded":false})"));
+    TEST_CHECK(!AiProvider::parseLocalStatus(R"({"service":"strata","loaded":"false"})"));
+    TEST_CHECK(!AiProvider::parseLocalStatus("garbage"));
     const auto openaiStop =
         AiProvider::parseStreamLine(Kind::OpenAi, R"(data: {"choices":[{"delta":{},"finish_reason":"stop"}]})");
     TEST_CHECK(openaiStop.has_value() && openaiStop->content.empty() && openaiStop->done);
@@ -289,6 +318,27 @@ namespace {
     TEST_CHECK(std::ranges::find(claudeChat.headers, "x-api-key: sk-ant") != claudeChat.headers.end());
     TEST_CHECK(std::ranges::find(claudeChat.headers, "anthropic-version: 2023-06-01") != claudeChat.headers.end());
     TEST_CHECK(claudeChat.body.contains("\"max_tokens\""));
+    // Follow-ups must reach each backend as ordered user/assistant turns, not one quoted prompt.
+    const std::vector<AiProvider::Message> conversation{
+        {"user", "What is an island?"}, {"assistant", "Land surrounded by water."}, {"user", "And an archipelago?"}
+    };
+    for (const auto kind : {Kind::Ollama, Kind::OpenAi, Kind::Anthropic}) {
+      const auto request = AiProvider::chatRequest(kind, "http://localhost", "fixture", "test-model", conversation);
+      const auto body = nlohmann::json::parse(request.body);
+      TEST_CHECK(body["messages"].size() == 3);
+      TEST_CHECK(body["messages"][1]["role"] == "assistant");
+      TEST_CHECK(body["messages"][1]["content"] == "Land surrounded by water.");
+      TEST_CHECK(body["messages"][2]["content"] == "And an archipelago?");
+    }
+    AiProvider unavailable(nullptr, nullptr, nullptr);
+    TEST_CHECK(!unavailable.submitQuestion("   "));
+    TEST_CHECK(unavailable.submitQuestion("Keep my question"));
+    TEST_CHECK(unavailable.question() == "Keep my question" && !unavailable.error().empty());
+    unavailable.stopConversation();
+    TEST_CHECK(unavailable.question() == "Keep my question" && !unavailable.streaming());
+    unavailable.clearConversation();
+    TEST_CHECK(unavailable.question().empty() && unavailable.answer().empty() && unavailable.error().empty());
+
     const HttpRequest tags = AiProvider::modelsRequest(Kind::Ollama, "http://127.0.0.1:11434", "");
     TEST_CHECK(tags.url == "http://127.0.0.1:11434/api/tags" && tags.headers.empty());
     TEST_CHECK(

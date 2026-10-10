@@ -8,6 +8,7 @@
 #include "render/render_context.h"
 #include "render/render_target.h"
 #include "render/scene/node.h"
+#include "shell/tooltip/tooltip_manager.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/motion.h"
 #include "ui/node_motion.h"
@@ -45,6 +46,7 @@ ContextMenuPopup::~ContextMenuPopup() {
 
 void ContextMenuPopup::open(ContextMenuPopupRequest request) {
   close();
+  TooltipManager::instance().forceDestroy();
 
   // maxVisible caps the popup viewport; all entries remain reachable via scroll.
   const std::size_t maxVisible =
@@ -68,8 +70,13 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
       menuWidth = std::max(menuWidth, request.minMenuWidth);
     }
   }
-  const auto chrome =
-      popup_chrome::computeGeometry(menuWidth, menuHeight, m_shadowConfig, Style::popupShadowsEnabled());
+  auto chrome = popup_chrome::computeGeometry(menuWidth, menuHeight, m_shadowConfig, Style::popupShadowsEnabled());
+  // Keep the card and its shadow on the output; the scroll view retains all entries.
+  if (const auto* output = m_wayland.findOutputByWl(request.parent.output); output != nullptr)
+    chrome = popup_chrome::constrainGeometry(
+        chrome, static_cast<float>(output->effectiveLogicalWidth()),
+        static_cast<float>(output->effectiveLogicalHeight()), Style::spaceSm * contentScale
+    );
   m_scrollState = {};
   m_scrollView = nullptr;
   m_menu = nullptr;
@@ -80,7 +87,7 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
       .anchor = XDG_POSITIONER_ANCHOR_BOTTOM,
       .gravity = XDG_POSITIONER_GRAVITY_BOTTOM,
       .offsetX = 0,
-      .offsetY = static_cast<std::int32_t>(Style::spaceXs),
+      .offsetY = static_cast<std::int32_t>(std::round(Style::spaceXs * contentScale)),
       .chromeAttachment = popup_chrome::Attachment{
           .horizontal = popup_chrome::HorizontalAttachment::Center, .vertical = popup_chrome::VerticalAttachment::Top
       },
@@ -162,8 +169,9 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
     (void)popup_chrome::addCardBackground(*self->m_sceneRoot, chrome, contentScale);
 
     auto scrollView = std::make_unique<ScrollView>();
-    scrollView->setPosition(chrome.contentX(), chrome.contentY());
-    scrollView->setSize(chrome.contentWidth, chrome.contentHeight);
+    const float edgePadding = ContextMenuControl::kEdgePadding * contentScale;
+    scrollView->setPosition(chrome.contentX(), chrome.contentY() + edgePadding);
+    scrollView->setSize(chrome.contentWidth, std::max(1.0F, chrome.contentHeight - 2.0F * edgePadding));
     scrollView->setContentScale(contentScale);
     scrollView->setViewportPaddingH(0.0F);
     scrollView->setViewportPaddingV(0.0F);
@@ -177,6 +185,7 @@ void ContextMenuPopup::open(ContextMenuPopupRequest request) {
     auto ctrl = std::make_unique<ContextMenuControl>();
     ContextMenuControl* menuPtr = ctrl.get();
     ctrl->setContentScale(contentScale);
+    ctrl->setVerticalPadding(0);
     ctrl->setMenuWidth(chrome.contentWidth);
     // Lay out every entry; ScrollView clips to maxVisible viewport height.
     ctrl->setMaxVisible(entries.size());

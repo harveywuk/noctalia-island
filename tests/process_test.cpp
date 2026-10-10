@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <csignal>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -11,6 +12,8 @@
 #include <print>
 #include <string>
 #include <string_view>
+#include <sys/poll.h>
+#include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 #include <utility>
@@ -36,6 +39,54 @@ namespace {
     }
     quoted += "'";
     return quoted;
+  }
+
+  bool ownedHelperStopsWithParent() {
+    int fds[2];
+    if (::pipe(fds) != 0)
+      return false;
+    const pid_t parent = ::fork();
+    if (parent == 0) {
+      ::close(fds[0]);
+      const bool started = process::runAsync(
+          {"/bin/sh", "-c", "printf '%s' $$; exec sleep 60"},
+          {.stdOut = [fd = fds[1]](std::string_view pid) { (void)::write(fd, pid.data(), pid.size()); }},
+          {.terminateWithParent = true}
+      );
+      if (!started)
+        ::_exit(1);
+      for (;;)
+        ::pause();
+    }
+    ::close(fds[1]);
+    if (parent < 0) {
+      ::close(fds[0]);
+      return false;
+    }
+    pollfd ready{fds[0], POLLIN, 0};
+    char buffer[32]{};
+    const bool received = ::poll(&ready, 1, 3000) > 0 && ::read(fds[0], buffer, sizeof(buffer) - 1) > 0;
+    ::close(fds[0]);
+    ::kill(parent, SIGKILL);
+    ::waitpid(parent, nullptr, 0);
+    const int helper = received ? std::atoi(buffer) : 0;
+    if (!expect(helper > 0, "owned helper did not start"))
+      return false;
+    bool stopped = false;
+    for (int n = 0; n < 100; ++n) {
+      std::ifstream stat("/proc/" + std::to_string(helper) + "/stat");
+      std::string line;
+      std::getline(stat, line);
+      const auto end = line.rfind(')');
+      if (!stat || (end != std::string::npos && end + 2 < line.size() && line[end + 2] == 'Z')) {
+        stopped = true;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (!stopped)
+      ::kill(helper, SIGKILL);
+    return expect(stopped, "owned helper survived its parent");
   }
 
   bool capturedAsyncDeliversCallbacksAndResult() {
@@ -244,7 +295,7 @@ namespace {
 } // namespace
 
 int main() {
-  bool ok = true;
+  bool ok = ownedHelperStopsWithParent();
   ok = expect(!process::runAsync("true", process::RunCallbacks{}), "empty callback set should not launch") && ok;
   ok = capturedAsyncDeliversCallbacksAndResult() && ok;
   ok = capturedAsyncDeliversCompletionOnly() && ok;

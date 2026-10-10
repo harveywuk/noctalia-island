@@ -30,6 +30,7 @@ public:
   // Destroy any live tooltip immediately. Required before destroying a parent
   // layer surface — xdg_popup must die before its parent (Jay enforces this).
   void forceDestroy();
+  void showImmediately(InputArea* area, zwlr_layer_surface_v1* parentLayerSurface, wl_output* output);
 
   void onHoverChange(InputArea* area, zwlr_layer_surface_v1* parentLayerSurface, wl_output* output);
   void onHoverChange(InputArea* area, xdg_surface* parentXdgSurface, wl_output* output);
@@ -63,6 +64,8 @@ private:
   Size measureContent(Renderer& renderer, const TooltipContent& content);
   // Configured render scale of m_pendingOutput, for pre-surface measurement.
   [[nodiscard]] float pendingOutputScale() const;
+  [[nodiscard]] float contentScale() const;
+  [[nodiscard]] float contentMaxWidth() const;
   void buildScene(const TooltipContent& content, float w, float h, float opacity = 0.0F);
   void prepareFrame(bool needsUpdate, bool needsLayout);
 

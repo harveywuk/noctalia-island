@@ -856,8 +856,8 @@ struct DockConfig {
   DockEdge position = DockEdge::Bottom;
   bool activeMonitorOnly = false;    // render only on preferred active output
   std::int32_t iconSize = 48;        // icon size in pixels (before ui_scale)
-  std::int32_t mainAxisPadding = 4;  // inner padding along the icon row (main axis)
-  std::int32_t crossAxisPadding = 4; // inner padding perpendicular to the icon row
+  std::int32_t mainAxisPadding = 8;  // inner padding along the icon row (main axis)
+  std::int32_t crossAxisPadding = 6; // inner padding perpendicular to the icon row
   std::int32_t itemSpacing = 2;      // gap between items
   float backgroundOpacity = 0.88F;
   // Inside outline for the dock background.
@@ -889,7 +889,7 @@ struct DockConfig {
   float magnificationScale = 1.45F;  // max icon scale multiplier at the pointer center
   bool animateLaunch = true;         // brief icon bounce when launching an app
   bool windowPreviews = false;       // optional on-demand window picker on hover
-  std::int32_t previewDelayMs = 450; // delay before opening window previews
+  std::int32_t previewDelayMs = 900; // delay before opening window previews
   std::int32_t hideDelayMs = 200;    // grace period after leaving the dock
   float activeOpacity = 1.0F;        // focused app icon opacity
   float inactiveOpacity = 1.0F;      // non-focused app icon opacity
@@ -897,11 +897,11 @@ struct DockConfig {
   bool showInstanceCount = false;    // show a badge with count when app has >1 window
   bool showBadges = true;            // red unread-count badges that apps publish (LauncherEntry)
   DockLauncherPosition launcherPosition = DockLauncherPosition::None;
-  std::string launcherIcon = "grid-dots";   // Tabler glyph name
-  std::string launcherCustomImage = "";     // image path; overrides launcherIcon glyph when set
-  bool launcherCustomImageColorize = false; // tint the custom image with the icon color role
-  std::vector<std::string> pinned;          // desktop entry IDs to always show
-  std::vector<std::string> monitors;        // connector names to show on; empty = all outputs
+  std::string launcherIcon = "cupertino:rectangle_grid_2x2"; // shell symbol name
+  std::string launcherCustomImage = "";                      // image path; overrides launcherIcon glyph when set
+  bool launcherCustomImageColorize = false;                  // tint the custom image with the icon color role
+  std::vector<std::string> pinned;                           // desktop entry IDs to always show
+  std::vector<std::string> monitors;                         // connector names to show on; empty = all outputs
   bool operator==(const DockConfig&) const = default;
 };
 
@@ -1764,6 +1764,17 @@ struct ShellConfig {
       // or the service's usual environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY).
       std::string apiKey;
       std::string apiKeyCommand;
+
+      struct VoiceConfig {
+        bool enabled = false;
+        bool spokenReplies = true;
+        bool duckMedia = false;
+        std::string whisperCommand = "whisper-cli";
+        std::string whisperModel;
+        std::string piperCommand = "piper";
+        std::string piperModel;
+        bool operator==(const VoiceConfig&) const = default;
+      } voice;
 
       bool operator==(const AiConfig&) const = default;
     } ai;

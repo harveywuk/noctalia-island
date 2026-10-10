@@ -1114,7 +1114,12 @@
       "close": "Close",
       "close-all": "Close All"
     },
-    "launcher": "Launcher"
+    "launcher": "Launcher",
+    "drag": {
+      "remove": "Remove from Dock",
+      "pin": "Keep in Dock",
+      "arrange": "Move to arrange"
+    }
   },
   "internal-apps": {
     "settings": {
@@ -1234,7 +1239,8 @@
     "footer": {
       "actions": "Actions",
       "open": "Open",
-      "open-application": "Open Application"
+      "open-application": "Open Application",
+      "idle": "Start typing, or use the arrow keys"
     },
     "forms": {
       "create-quicklink": "Create Quicklink",
@@ -1423,7 +1429,7 @@
       "files": "Files",
       "results": "Results",
       "windows": "Windows",
-      "suggestions": "Suggestions"
+      "suggestions": "Recent"
     },
     "snippets": {
       "saved": "Saved as snippet",
@@ -1710,6 +1716,7 @@
     },
     "actionpanel": {
       "placeholder": "Search for actions…",
+      "back": "Back to results",
       "empty": "No matching actions",
       "return": "↵",
       "ctrl-return": "Ctrl ↵"
@@ -1827,6 +1834,7 @@
     "stack-more-plural": "{count} more",
     "dismiss": "Dismiss notification",
     "expand": "Read full notification",
+    "read-more": "Read more",
     "collapse": "Collapse notification",
     "actions": {
       "fallback": "Action",
@@ -3791,8 +3799,8 @@
           "label": "Show Categories"
         },
         "launcher-compact": {
-          "description": "Use smaller icons and tighter result rows",
-          "label": "Compact Rows"
+          "description": "Use a narrower launcher and closer rows while keeping descriptions and edge padding",
+          "label": "Compact"
         },
         "launcher-currency-exchange": {
           "description": "Fetch rates from third party online sources",
@@ -7354,6 +7362,124 @@
         "sat": "Sat",
         "sun": "Sun"
       }
+    }
+  },
+  "assistant": {
+    "title": "Noctalia",
+    "placeholder": "Ask anything…",
+    "follow-up": "Ask a follow-up…",
+    "thinking": "Thinking…",
+    "loading-model": "Loading model…",
+    "waiting-strata": "Waiting for Strata…",
+    "close": "Dismiss assistant",
+    "send": "Send question",
+    "copy": "Copy",
+    "copy-shortcut": "Copy answer (Ctrl+Shift+C)",
+    "copied": "Copied",
+    "retry": "Try again",
+    "stop": "Stop",
+    "settings": "Settings",
+    "unavailable": "Couldn’t finish your answer. Your question is still here.",
+    "stopped": "Stopped",
+    "response-limit": "This answer reached its size limit. Try a more specific question.",
+    "connection-lost": "The connection to your assistant was interrupted.",
+    "empty-answer": "The assistant returned an empty answer.",
+    "play-media": "Play media",
+    "pause-media": "Pause media",
+    "panel-title": "Assistant",
+    "voice": {
+      "dictate": "Dictate (Ctrl+D)",
+      "finish": "Finish dictation (Ctrl+D)",
+      "read-aloud": "Read aloud",
+      "listening": "Listening",
+      "transcribing": "Transcribing",
+      "preparing": "Preparing voice",
+      "speaking": "Speaking",
+      "finish-hint": "Press Ctrl+D when you have finished. Review the text, then press Enter.",
+      "files-error": "Could not create temporary audio files.",
+      "process-error": "Could not start the local speech tool.",
+      "setup-dictation": "Set up local dictation in Settings, Launcher, AI voice.",
+      "setup-speech": "Set up a Piper voice in Settings, Launcher, AI voice.",
+      "capture-error": "Could not record audio. Check your microphone and try again.",
+      "no-speech": "No speech was recognised. Please try again.",
+      "transcribe-error": "Local dictation failed. Check the Whisper model and try again.",
+      "speech-error": "Could not generate speech with the selected Piper voice.",
+      "playback-error": "Could not play the spoken reply. Check your audio output.",
+      "settings-enabled": {
+        "label": "Local voice",
+        "description": "Enable keyboard-triggered local dictation and spoken replies."
+      },
+      "settings-spoken_replies": {
+        "label": "Speak dictated replies",
+        "description": "Read answers aloud after questions entered with dictation."
+      },
+      "settings-whisper_command": {
+        "label": "Whisper executable",
+        "description": "Path to whisper-cli. Speech recognition runs on the CPU."
+      },
+      "settings-whisper_model": {
+        "label": "Whisper model",
+        "description": "Local ggml speech recognition model file."
+      },
+      "settings-piper_command": {
+        "label": "Piper executable",
+        "description": "Path to the Piper text-to-speech executable."
+      },
+      "settings-piper_model": {
+        "label": "Piper voice",
+        "description": "Local ONNX voice file, with its matching JSON file beside it."
+      },
+      "settings-duck_media": {
+        "label": "Lower music during voice",
+        "description": "Temporarily lower playing media while listening or speaking. Manual volume changes are kept."
+      },
+      "no-readable-text": "There is no text to read aloud outside the code blocks.",
+      "cancel": "Cancel"
+    },
+    "actions": {
+      "working": "Working…",
+      "timer-duration": "Use a timer duration between 1 second and 24 hours, such as “ten minutes”.",
+      "volume-range": "Use a volume from 0 to 100 percent.",
+      "one-command": "Try one action at a time.",
+      "failed": "Could not confirm the change. Check the shell control before trying again.",
+      "cancelled": "Stopped checking. The action may already have been applied.",
+      "timer-unavailable": "Enable the Timer plugin in Settings to use timer commands.",
+      "timer-active": "A timer is already active. Cancel it before starting another.",
+      "timer-started": "Timer set for {duration}.",
+      "timer-state-unavailable": "The timer's status is unavailable right now.",
+      "timer-none": "No timer is active.",
+      "timer-finished": "The timer has finished.",
+      "timer-remaining": "{duration} remaining.",
+      "timer-paused-remaining": "Timer paused with {duration} remaining.",
+      "timer-paused": "Timer paused.",
+      "timer-resumed": "Timer resumed.",
+      "timer-cancelled": "Timer cancelled.",
+      "no-output": "No audio output is available.",
+      "volume-set": "Volume set to {percent}%.",
+      "no-media": "No media player is available.",
+      "media-unavailable": "This player cannot change playback right now.",
+      "media-paused": "Media paused.",
+      "media-resumed": "Media resumed.",
+      "media-stopped": "Nothing is playing right now.",
+      "media-no-title": "This player hasn't supplied a track title.",
+      "media-track": "{title} by {artist}",
+      "media-playing": "Playing {track}.",
+      "media-current-paused": "Paused: {track}.",
+      "media-next-unavailable": "This player cannot skip to the next track right now.",
+      "media-skipped": "Skipped to the next track.",
+      "battery-none": "No system battery is reported.",
+      "battery-unavailable": "The battery level is unavailable right now.",
+      "battery-level": "Battery at {percent}%.",
+      "battery-charging": "Battery at {percent}%, charging.",
+      "battery-full": "Battery at {percent}%, fully charged.",
+      "focus-unavailable": "Focus status is unavailable right now.",
+      "focus-dnd": "Do Not Disturb is on.",
+      "focus-automatic": "Automatic selection is on.",
+      "focus-off": "Focus off.",
+      "focus-auto": "Automatic Focus restored.",
+      "focus-gaming": "Gaming Focus on.",
+      "focus-sleep": "Sleep Focus on.",
+      "focus-work": "Work Focus on."
     }
   }
 }

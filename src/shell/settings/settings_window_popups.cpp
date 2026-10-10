@@ -401,6 +401,7 @@ void SettingsWindow::openActionsMenu() {
           .entries = std::move(entries),
           .minMenuWidth = 220.0F * scale,
           .maxMenuWidth = Style::menuAutoMaxWidth * scale,
+          .contentScale = scale,
           .maxVisible = 8,
           .anchor =
               PopupAnchorRect{

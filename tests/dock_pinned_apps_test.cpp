@@ -68,5 +68,20 @@ int main() {
   shell::dock::pinned_apps::removeEntry(pinned, chat);
   TEST_CHECK((pinned == std::vector<std::string>{"calendar", "samplechat"}));
 
+  // Moving an existing pin preserves its configured alias and never duplicates it.
+  pinned = {"org.codeberg.dnkl.foot.desktop", "sample-chat", "calendar"};
+  shell::dock::pinned_apps::placeEntry(pinned, chat, &foot);
+  TEST_CHECK((pinned == std::vector<std::string>{"sample-chat", "org.codeberg.dnkl.foot.desktop", "calendar"}));
+  shell::dock::pinned_apps::placeEntry(pinned, chat, &chat);
+  TEST_CHECK(pinned.front() == "sample-chat");
+  shell::dock::pinned_apps::placeEntry(pinned, foot, nullptr);
+  TEST_CHECK((pinned == std::vector<std::string>{"sample-chat", "calendar", "org.codeberg.dnkl.foot.desktop"}));
+  // A running app can enter an empty pinned group or be inserted before an existing app.
+  pinned.clear();
+  shell::dock::pinned_apps::placeEntry(pinned, foot, nullptr);
+  shell::dock::pinned_apps::placeEntry(pinned, chat, &foot);
+  TEST_CHECK((pinned == std::vector<std::string>{chat.id, foot.id}));
+  shell::dock::pinned_apps::removeEntry(pinned, chat);
+  TEST_CHECK((pinned == std::vector<std::string>{foot.id}));
   return 0;
 }

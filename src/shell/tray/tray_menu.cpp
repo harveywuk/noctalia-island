@@ -2,6 +2,7 @@
 
 #include "config/config_service.h"
 #include "core/deferred_call.h"
+#include "core/input/key_symbols.h"
 #include "core/input/keybind_matcher.h"
 #include "core/log.h"
 #include "core/ui_phase.h"
@@ -352,10 +353,60 @@ bool TrayMenu::onKeyboardEvent(const KeyboardEvent& event) {
   if (!m_visible) {
     return false;
   }
-  if (event.pressed && !event.preedit && KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
+  if (!event.pressed || event.preedit)
+    return true;
+  if (KeybindMatcher::matches(KeybindAction::Cancel, event.sym, event.modifiers)) {
     DeferredCall::callLater([this]() { close(); });
+    return true;
   }
-  // The menu holds a modal grab while open — swallow keys so they don't leak.
+  MenuInstance* active = m_instance.get();
+  std::size_t activeLevel = 0;
+  for (std::size_t i = 0; i < m_submenuLevels.size(); ++i) {
+    if (m_submenuLevels[i].instance) {
+      active = m_submenuLevels[i].instance.get();
+      activeLevel = i + 1;
+    }
+  }
+  if (active == nullptr || active->menu == nullptr || active->scrollView == nullptr)
+    return true;
+  auto& menu = *active->menu;
+  if (KeybindMatcher::matches(KeybindAction::Left, event.sym, event.modifiers)) {
+    if (activeLevel > 0)
+      closeSubmenusFrom(activeLevel - 1);
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Validate, event.sym, event.modifiers)) {
+    (void)menu.activateHighlighted();
+    return true;
+  }
+  if (KeybindMatcher::matches(KeybindAction::Right, event.sym, event.modifiers)) {
+    (void)menu.openHighlightedSubmenu();
+    return true;
+  }
+  bool moved = false;
+  if (KeybindMatcher::matches(KeybindAction::Down, event.sym, event.modifiers))
+    moved = menu.moveHighlight(1);
+  else if (KeybindMatcher::matches(KeybindAction::Up, event.sym, event.modifiers))
+    moved = menu.moveHighlight(-1);
+  else if (KeySymbol::isHome(event.sym)) {
+    menu.setHighlightedIndex(ContextMenuControl::kNoHighlight);
+    moved = menu.moveHighlight(1);
+  } else if (KeySymbol::isEnd(event.sym)) {
+    menu.setHighlightedIndex(ContextMenuControl::kNoHighlight);
+    moved = menu.moveHighlight(-1);
+  }
+  if (moved) {
+    const auto index = menu.highlightedIndex();
+    const auto top = menu.rowTop(index);
+    const auto bottom = menu.rowBottom(index);
+    auto& view = *active->scrollView;
+    if (top < view.scrollOffset())
+      view.setScrollOffset(top);
+    else if (bottom > view.scrollOffset() + view.contentViewportHeight())
+      view.setScrollOffset(bottom - view.contentViewportHeight());
+    active->surface->requestRedraw();
+  }
+  // Keep unrelated keys inside the modal menu.
   return true;
 }
 
@@ -656,6 +707,17 @@ float TrayMenu::contentScale() const noexcept { return std::max(0.1F, m_contentS
 
 float TrayMenu::menuWidth() const noexcept { return kMenuWidth * contentScale(); }
 
+popup_chrome::Geometry TrayMenu::menuGeometry(float height, wl_output* output) const {
+  auto chrome =
+      popup_chrome::computeGeometry(menuWidth(), height, popupShadowConfig(m_config), Style::popupShadowsEnabled());
+  if (const auto* info = m_wayland->findOutputByWl(output); info != nullptr)
+    chrome = popup_chrome::constrainGeometry(
+        chrome, static_cast<float>(info->effectiveLogicalWidth()), static_cast<float>(info->effectiveLogicalHeight()),
+        Style::spaceSm * contentScale()
+    );
+  return chrome;
+}
+
 void TrayMenu::ensureSurface() {
   if (m_instance != nullptr) {
     return;
@@ -698,9 +760,7 @@ void TrayMenu::ensureSurface() {
   });
   inst->surface->setDismissedCallback([this]() { close(); });
 
-  const auto chrome = popup_chrome::computeGeometry(
-      menuWidth(), static_cast<float>(surfaceHeightPx()), popupShadowConfig(m_config), Style::popupShadowsEnabled()
-  );
+  const auto chrome = menuGeometry(static_cast<float>(surfaceHeightPx()), output);
   PopupPlacement placement{};
   auto bar = resolveTrayBarConfig(m_config, m_wayland, output);
   if (!m_barPosition.empty()) {
@@ -807,9 +867,7 @@ void TrayMenu::resizeMainSurfaceToEntries() {
     return;
   }
 
-  const auto chrome = popup_chrome::computeGeometry(
-      menuWidth(), static_cast<float>(surfaceHeightPx()), popupShadowConfig(m_config), Style::popupShadowsEnabled()
-  );
+  const auto chrome = menuGeometry(static_cast<float>(surfaceHeightPx()), m_instance->output);
   const auto desiredWidth = chrome.surfaceWidth;
   const auto desiredHeight = chrome.surfaceHeight;
   if (m_instance->surface->width() == desiredWidth && m_instance->surface->height() == desiredHeight) {
@@ -889,6 +947,10 @@ void TrayMenu::buildScene(MenuInstance& inst, uint32_t width, uint32_t height) {
   const auto w = static_cast<float>(width);
   const auto h = static_cast<float>(height);
 
+  const auto highlighted = inst.menu ? inst.menu->highlightedIndex() : ContextMenuControl::kNoHighlight;
+  inst.menu = nullptr;
+  inst.scrollView = nullptr;
+  inst.inputDispatcher.setSceneRoot(nullptr);
   inst.sceneRoot = ui::node({});
   inst.sceneRoot->setSize(w, h);
   if (Style::popupShadowsEnabled()) {
@@ -925,20 +987,26 @@ void TrayMenu::buildScene(MenuInstance& inst, uint32_t width, uint32_t height) {
       .viewportPaddingV = 0.0F,
       .radius = 0.0F,
       .width = inst.chrome.contentWidth,
-      .height = inst.chrome.contentHeight,
+      .height = std::max(1.0F, inst.chrome.contentHeight - 2.0F * ContextMenuControl::kEdgePadding * contentScale()),
       .configure = [this, &inst](ScrollView& view) {
-        view.setPosition(inst.chrome.contentX(), inst.chrome.contentY());
+        view.setPosition(
+            inst.chrome.contentX(), inst.chrome.contentY() + ContextMenuControl::kEdgePadding * contentScale()
+        );
         view.clearFill();
         view.clearBorder();
         view.setScrollbarInsetV(Style::scaledRadiusLg(contentScale()));
       },
   });
+  inst.scrollView = scrollView.get();
   auto menu = std::make_unique<ContextMenuControl>();
+  inst.menu = menu.get();
   menu->setContentScale(contentScale());
+  menu->setVerticalPadding(0);
   menu->setMenuWidth(menuWidth);
   menu->setMaxVisible(entries.size()); // Always lay out all entries for scrolling
   menu->setSubmenuDirection(inst.submenuDirection);
   menu->setEntries(std::move(entries));
+  menu->setHighlightedIndex(highlighted);
   menu->setRedrawCallback([&inst]() {
     if (inst.surface != nullptr) {
       inst.surface->requestRedraw();
@@ -1128,14 +1196,13 @@ void TrayMenu::openSubmenuAtLevel(std::size_t levelIndex, std::int32_t parentEnt
   const auto parentWidth = static_cast<std::int32_t>(std::lround(parentMenu->chrome.contentWidth));
   const auto parentX = parentMenu->surface->configuredX() + parentContentX;
   const float scale = contentScale();
-  const auto rowTop = static_cast<std::int32_t>(std::lround(rowCenterY - Style::controlHeightSm * scale * 0.5F));
-  const auto rowH = std::max(1, static_cast<std::int32_t>(std::lround(Style::controlHeightSm * scale)));
+  const auto rowTop = static_cast<std::int32_t>(
+      std::lround(rowCenterY - parentMenu->scrollState.offset - ContextMenuControl::kRowHeight * scale * 0.5F)
+  );
+  const auto rowH = std::max(1, static_cast<std::int32_t>(std::lround(ContextMenuControl::kRowHeight * scale)));
   const auto subGap = std::max(1, static_cast<std::int32_t>(std::lround(4.0F * scale)));
 
-  const auto chrome = popup_chrome::computeGeometry(
-      menuWidth(), static_cast<float>(submenuHeightPx(level.entries)), popupShadowConfig(m_config),
-      Style::popupShadowsEnabled()
-  );
+  const auto chrome = menuGeometry(static_cast<float>(submenuHeightPx(level.entries)), parentMenu->output);
 
   const auto* wlOutput = m_wayland->findOutputByWl(parentMenu->output);
   const std::int32_t outputWidth = (wlOutput != nullptr && wlOutput->effectiveLogicalWidth() > 0)
@@ -1155,7 +1222,9 @@ void TrayMenu::openSubmenuAtLevel(std::size_t levelIndex, std::int32_t parentEnt
   }
 
   const std::int32_t anchorX = isRight ? parentContentX + parentWidth : parentContentX;
-  const std::int32_t anchorY = static_cast<std::int32_t>(std::lround(parentMenu->chrome.contentY())) + rowTop;
+  const std::int32_t anchorY =
+      static_cast<std::int32_t>(std::lround(parentMenu->chrome.contentY() + ContextMenuControl::kEdgePadding * scale))
+      + rowTop;
   const std::uint32_t anchor = isRight ? XDG_POSITIONER_ANCHOR_TOP_RIGHT : XDG_POSITIONER_ANCHOR_TOP_LEFT;
   const std::uint32_t gravity = isRight ? XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT : XDG_POSITIONER_GRAVITY_BOTTOM_LEFT;
   const std::int32_t offsetX = isRight ? subGap : -subGap;
@@ -1195,7 +1264,7 @@ void TrayMenu::openSubmenuAtLevel(std::size_t levelIndex, std::int32_t parentEnt
       .gravity = gravity,
       .constraintAdjustment = kPopupConstraintAdjust,
       .offsetX = offsetX,
-      .offsetY = 0,
+      .offsetY = -static_cast<std::int32_t>(std::lround(ContextMenuControl::kEdgePadding * scale)),
       .serial = m_wayland->lastInputSerial(),
       .grab = (m_focusGrab == nullptr),
   };
@@ -1246,6 +1315,10 @@ void TrayMenu::buildSubmenuScene(std::size_t levelIndex, MenuInstance& inst, uin
   const auto w = static_cast<float>(width);
   const auto h = static_cast<float>(height);
 
+  const auto highlighted = inst.menu ? inst.menu->highlightedIndex() : ContextMenuControl::kNoHighlight;
+  inst.menu = nullptr;
+  inst.scrollView = nullptr;
+  inst.inputDispatcher.setSceneRoot(nullptr);
   inst.sceneRoot = ui::node({});
   inst.sceneRoot->setSize(w, h);
   if (Style::popupShadowsEnabled()) {
@@ -1286,21 +1359,27 @@ void TrayMenu::buildSubmenuScene(std::size_t levelIndex, MenuInstance& inst, uin
       .viewportPaddingV = 0.0F,
       .radius = 0.0F,
       .width = inst.chrome.contentWidth,
-      .height = inst.chrome.contentHeight,
+      .height = std::max(1.0F, inst.chrome.contentHeight - 2.0F * ContextMenuControl::kEdgePadding * contentScale()),
       .configure = [this, &inst](ScrollView& view) {
-        view.setPosition(inst.chrome.contentX(), inst.chrome.contentY());
+        view.setPosition(
+            inst.chrome.contentX(), inst.chrome.contentY() + ContextMenuControl::kEdgePadding * contentScale()
+        );
         view.clearFill();
         view.clearBorder();
         view.setScrollbarInsetV(Style::scaledRadiusLg(contentScale()));
       },
   });
 
+  inst.scrollView = scrollView.get();
   auto menu = std::make_unique<ContextMenuControl>();
+  inst.menu = menu.get();
   menu->setContentScale(contentScale());
+  menu->setVerticalPadding(0);
   menu->setMenuWidth(menuWidth);
   menu->setMaxVisible(entries.size()); // Always lay out all entries for scrolling
   menu->setSubmenuDirection(inst.submenuDirection);
   menu->setEntries(std::move(entries));
+  menu->setHighlightedIndex(highlighted);
   menu->setRedrawCallback([&inst]() {
     if (inst.surface != nullptr) {
       inst.surface->requestRedraw();

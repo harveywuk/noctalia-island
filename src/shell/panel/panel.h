@@ -2,12 +2,15 @@
 
 #include "config/config_types.h"
 #include "core/ui_phase.h"
+#include "render/core/color.h"
 #include "render/scene/node.h"
 #include "wayland/layer_surface.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -73,6 +76,10 @@ public:
   [[nodiscard]] virtual bool hasDecoration() const { return true; }
   // False keeps a panel on its own surface even when the Island hosts panels.
   [[nodiscard]] virtual bool islandHostable() const noexcept { return true; }
+  // Optional identity colour around a hosted panel. The accent never receives input.
+  [[nodiscard]] virtual std::optional<std::array<Color, 4>> islandAccentColors() const { return std::nullopt; }
+  [[nodiscard]] virtual bool retainsIslandArtwork() const { return false; }
+  [[nodiscard]] virtual std::string islandArtworkSource() const { return {}; }
   [[nodiscard]] virtual LayerShellLayer layer() const { return LayerShellLayer::Top; }
   // Keyboard focus policy. `None` means the panel never takes keyboard focus, so the
   // app the user is typing into keeps it — that also rules out outside-click
