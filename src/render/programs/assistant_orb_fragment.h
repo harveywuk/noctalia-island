@@ -50,7 +50,7 @@ float orbQuestionDistance(vec2 p) {
 }
 
 float orbEyeDistance(vec2 p, float open, float happy) {
-    vec2 size = vec2(0.064, max(0.012, 0.180 * open));
+    vec2 size = vec2(0.064, max(0.012, 0.230 * open));
     float distance = roundedBoxSDF(p, size, min(size.x, size.y));
     float arc = max(abs(p.y + 0.06 * (1.0 - pow(p.x / 0.095, 2.0))) - 0.019,
         abs(p.x) - 0.095);
@@ -64,7 +64,7 @@ void main() {
     p /= vec2(1.0 + energy * 0.025, 1.0 + energy * 0.018);
     float r = length(p);
     float sphere = 1.0 - smoothstep(0.89 - aa, 0.89 + aa, r);
-    float halo = exp(-pow((r - 0.88) / 0.13, 2.0)) * (0.16 + energy * 0.08);
+    float halo = exp(-pow((r - 0.88) / 0.155, 2.0)) * (0.22 + energy * 0.10);
     halo *= 1.0 - smoothstep(1.02, 1.14, r);
     vec3 normal = normalize(vec3(p, sqrt(max(0.0, 0.90 * 0.90 - dot(p, p)))));
 
@@ -99,6 +99,13 @@ void main() {
     float rim = exp(-pow((r - 0.822) / 0.023, 2.0));
     float reflection = rim * (upper * 0.75 + lower * 0.55);
     reflection += exp(-pow((r - 0.775) / 0.035, 2.0)) * upper * 0.14;
+    // A soft spill follows the state palette around the glass, within the same pass.
+    vec2 rimBlend = direction * 0.5 + 0.5;
+    vec3 haloColor = mix(mix(u_orb_color0, u_orb_color1, rimBlend.x),
+        mix(u_orb_color3, u_orb_color2, rimBlend.x), rimBlend.y);
+    float rimGlow = exp(-pow((r - 0.825) / 0.080, 2.0))
+        * (0.07 + upper * 0.14 + lower * 0.10);
+    color += haloColor * rimGlow * (1.0 + energy * 0.25);
     color += mix(u_orb_color0, vec3(0.87, 0.92, 1.0), 0.7) * reflection;
     color += vec3(0.24, 0.3, 0.42) * pow(max(dot(normal, normalize(vec3(0.45, -0.65, 0.58))), 0.0), 32.0) * 0.22;
 
@@ -123,7 +130,7 @@ void main() {
     color = mix(color, vec3(0.88, 0.95, 1.0), mask * 0.96);
 
     float alpha = sphere + (1.0 - sphere) * halo;
-    vec3 rgb = color * sphere + u_orb_color0 * halo * (1.0 - sphere) * 0.55;
+    vec3 rgb = color * sphere + haloColor * halo * (1.0 - sphere) * 0.68;
     gl_FragColor = vec4(rgb * u_bg_color.a, alpha * u_bg_color.a);
 }
 )";

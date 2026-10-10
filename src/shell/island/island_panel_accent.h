@@ -6,7 +6,7 @@
 #include <cmath>
 
 namespace island {
-  // A thin moving identity gradient, feathered outwards to a quiet halo.
+  // A moving identity gradient, feathered outwards into a soft halo.
   class PanelAccent final : public Node {
   public:
     PanelAccent() {
@@ -49,8 +49,8 @@ namespace island {
     }
 
   private:
-    static constexpr float kBand = 1.5F;
-    static constexpr std::array<float, 4> kWeights{0.68F, 0.28F, 0.10F, 0.025F};
+    static constexpr float kBand = 2.0F;
+    static constexpr std::array<float, 6> kWeights{0.72F, 0.46F, 0.28F, 0.15F, 0.07F, 0.02F};
     std::array<CountdownRingNode*, kWeights.size()> m_rings{};
     float m_phase = 0;
   };
